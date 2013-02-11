@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
+import edu.umn.cs.spatialHadoop.ReadFile;
 
 /**
  * The main entry point to all queries.
@@ -49,6 +50,9 @@ public class Main {
                    "Finds the minimal bounding rectangle of an input file",
                    "<path to input file>",
                    "shape:<point|rectangle> - Type of the shape stored in input file");
+      pgd.addClass("readfile", ReadFile.class,
+                   "Retrieve some information about the global index of a file",
+                   "<path to input file>");
 
       pgd.addClass("sample", Sampler.class,
                    "Reads a random sample from the input file",
