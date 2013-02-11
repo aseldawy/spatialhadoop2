@@ -90,7 +90,7 @@ public class Repartition {
       shape.toText(shapeText);
       for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
         if (cellInfos[cellIndex].isIntersected(shape)) {
-          cellId.set((byte)cellInfos[cellIndex].cellId);
+          cellId.set((int) cellInfos[cellIndex].cellId);
           output.collect(cellId, shapeText);
         }
       }
