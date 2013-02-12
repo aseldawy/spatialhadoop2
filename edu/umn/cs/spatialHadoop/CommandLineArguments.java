@@ -36,7 +36,7 @@ public class CommandLineArguments {
   public Rectangle getRectangle() {
     Rectangle rect = null;
     for (String arg : args) {
-      if (arg.startsWith("rect:") || arg.startsWith("rectangle:")) {
+      if (arg.startsWith("rect:") || arg.startsWith("rectangle:") || arg.startsWith("mbr:")) {
         rect = new Rectangle();
         rect.fromText(new Text(arg.substring(arg.indexOf(':')+1)));
       }
