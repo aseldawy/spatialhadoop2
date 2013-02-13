@@ -151,27 +151,36 @@ public class RangeQuery {
   /**
    * Performs a range query using MapReduce
    * @param fs
-   * @param file
+   * @param inputFile
    * @param queryRange
    * @param shape
    * @param output
    * @return
    * @throws IOException
    */
-  public static long rangeQueryMapReduce(FileSystem fs, Path file,
+  public static long rangeQueryMapReduce(FileSystem fs, Path inputFile,
+      Path userOutputPath,
       Shape queryShape, Shape shape, ResultCollector<Shape> output,
-      Text outputPathText)
+      boolean overwrite)
       throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
-    Path outputPath;
-    FileSystem outFs = file.getFileSystem(job);
-    do {
-      outputPath = new Path("/"+file.getName()+
-          ".rangequery_"+(int)(Math.random() * 1000000));
-    } while (outFs.exists(outputPath));
-    if (outputPathText != null)
-      outputPathText.set(outputPath.toString());
+    FileSystem outFs = inputFile.getFileSystem(job);
+    Path outputPath = userOutputPath;
+    if (outputPath == null) {
+      do {
+        outputPath = new Path("/"+inputFile.getName()+
+            ".rangequery_"+(int)(Math.random() * 1000000));
+      } while (outFs.exists(outputPath));
+    } else {
+      if (outFs.exists(outputPath)) {
+        if (overwrite) {
+          outFs.delete(outputPath, true);
+        } else {
+          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
+        }
+      }
+    }
     
     job.setJobName("RangeQuery");
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
@@ -185,7 +194,7 @@ public class RangeQuery {
     job.setMapOutputValueClass(shape.getClass());
     // Decide which map function to use depending on how blocks are indexed
     // And also which input format to use
-    FSDataInputStream in = fs.open(file);
+    FSDataInputStream in = fs.open(inputFile);
     if (in.readLong() == SpatialSite.RTreeFileMarker) {
       // RTree indexed file
       LOG.info("Searching an RTree indexed file");
@@ -208,7 +217,7 @@ public class RangeQuery {
     
     job.setOutputFormat(TextOutputFormat.class);
     
-    ShapeInputFormat.setInputPaths(job, file);
+    ShapeInputFormat.setInputPaths(job, inputFile);
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job
@@ -237,9 +246,10 @@ public class RangeQuery {
       }
     }
     
-    if (outputPathText == null)
+    // If outputPath not set by user, automatically delete it
+    if (userOutputPath == null)
       outFs.delete(outputPath, true);
-    
+
     return resultCount;
   }
   
@@ -287,10 +297,26 @@ public class RangeQuery {
     return resultCount;
   }
   
+  private static void printUsage() {
+    System.out.println("Performs a range query on an input file");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file> - (*) Path to input file");
+    System.out.println("<output file> - Path to output file");
+    System.out.println("rect:<x,y,w,h> - (*) Query rectangle");
+    System.out.println("-overwrite - Overwrite output file without notice");
+  }
+  
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
+    final Path[] paths = cla.getPaths();
+    if (paths.length == 0 || (cla.getRectangle() == null &&
+        cla.getSelectionRatio() < 0.0f)) {
+      printUsage();
+      throw new RuntimeException("Illegal parameters");
+    }
     JobConf conf = new JobConf(FileMBR.class);
-    final Path inputFile = cla.getPath();
+    final Path inputFile = paths[0];
+    final Path outputPath = paths.length > 1 ? paths[1] : null;
     Rectangle queryRange = cla.getRectangle();
     final FileSystem fs = inputFile.getFileSystem(conf);
     int count = cla.getCount();
@@ -299,6 +325,7 @@ public class RangeQuery {
     final Shape stockShape = cla.getShape(true);
     boolean local = cla.isLocal();
     long seed = cla.getSeed();
+    final boolean overwrite = cla.isOverwrite();
 
     final Vector<Long> results = new Vector<Long>();
     
@@ -323,9 +350,9 @@ public class RangeQuery {
             public void run() {
               try {
                 int thread_i = threads.indexOf(this);
-                long result_count = rangeQueryMapReduce(fs, inputFile,
+                long result_count = rangeQueryMapReduce(fs, inputFile, outputPath,
                     query_rectangles.elementAt(thread_i), stockShape,
-                    null, null);
+                    null, overwrite);
                 results.add(result_count);
               } catch (IOException e) {
                 e.printStackTrace();
@@ -366,7 +393,7 @@ public class RangeQuery {
       System.out.println("Result size: "+results);
     } else {
       long resultCount = 
-          rangeQueryMapReduce(fs, inputFile, queryRange, stockShape, null, null);
+          rangeQueryMapReduce(fs, inputFile, outputPath, queryRange, stockShape, null, overwrite);
       System.out.println("Result size: "+resultCount);
     }
     

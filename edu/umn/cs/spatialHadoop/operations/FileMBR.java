@@ -209,6 +209,11 @@ public class FileMBR {
     return new Rectangle(x1, y1, x2-x1, y2-y1);
   }
   
+  private static void printUsage() {
+    System.out.println("Finds the MBR of an input file");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file>: (*) Path to input file");
+  }
   /**
    * @param args
    * @throws IOException 
@@ -217,6 +222,10 @@ public class FileMBR {
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(FileMBR.class);
     Path inputFile = cla.getPath();
+    if (inputFile == null) {
+      printUsage();
+      throw new RuntimeException("Illegal arguments. Input file missing");
+    }
     FileSystem fs = inputFile.getFileSystem(conf);
     Shape stockShape = cla.getShape(true);
     boolean local = cla.isLocal();

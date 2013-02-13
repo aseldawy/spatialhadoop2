@@ -3,7 +3,6 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
@@ -195,17 +194,27 @@ public class SJMR {
     }
   }
 
-  public static<S extends Shape> long sjmr(FileSystem fs, Path[] files,
-      GridInfo gridInfo, S stockShape, OutputCollector<S, S> output) throws IOException {
+  public static<S extends Shape> long sjmr(FileSystem fs, Path[] inputFiles,
+      Path userOutputPath,
+      GridInfo gridInfo, S stockShape, OutputCollector<S, S> output, boolean overwrite) throws IOException {
     JobConf job = new JobConf(SJMR.class);
     
-    Path outputPath;
-    FileSystem outFs = files[0].getFileSystem(job);
-    do {
-      outputPath = new Path("/" + files[0].getName() + ".sjmr_"
-          + (int) (Math.random() * 1000000));
-    } while (outFs.exists(outputPath));
-    outFs.deleteOnExit(outputPath);
+    FileSystem outFs = inputFiles[0].getFileSystem(job);
+    Path outputPath = userOutputPath;
+    if (outputPath == null) {
+      do {
+        outputPath = new Path("/" + inputFiles[0].getName() + ".sjmr_"
+            + (int) (Math.random() * 1000000));
+      } while (outFs.exists(outputPath));
+    } else {
+      if (outFs.exists(outputPath)) {
+        if (overwrite) {
+          outFs.delete(outputPath, true);
+        } else {
+          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
+        }
+      }
+    }
     
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setJobName("SJMR");
@@ -214,8 +223,8 @@ public class SJMR {
     job.setMapOutputValueClass(IndexedText.class);
     job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
     job.setLong("mapred.min.split.size",
-        Math.max(fs.getFileStatus(files[0]).getBlockSize(),
-            fs.getFileStatus(files[1]).getBlockSize()));
+        Math.max(fs.getFileStatus(inputFiles[0]).getBlockSize(),
+            fs.getFileStatus(inputFiles[1]).getBlockSize()));
 
 
     job.setReducerClass(SJMRReduce.class);
@@ -226,17 +235,17 @@ public class SJMR {
     job.setOutputFormat(TextOutputFormat.class);
     
     String commaSeparatedFiles = "";
-    for (int i = 0; i < files.length; i++) {
+    for (int i = 0; i < inputFiles.length; i++) {
       if (i > 0)
         commaSeparatedFiles += ',';
-      commaSeparatedFiles += files[i].toUri().toString();
+      commaSeparatedFiles += inputFiles[i].toUri().toString();
     }
     ShapeLineInputFormat.addInputPaths(job, commaSeparatedFiles);
     
     // Calculate and set the dimensions of the grid to use in the map phase
     long total_size = 0;
     long max_size = 0;
-    for (Path file : files) {
+    for (Path file : inputFiles) {
       long size = fs.getFileStatus(file).getLen();
       total_size += size;
       if (size > max_size) {
@@ -289,21 +298,38 @@ public class SJMR {
     return resultCount;
   }
   
+  private static void printUsage() {
+    System.out.println("Performs a spatial join between two files using the distributed join algorithm");
+    System.out.println("Parameters: (* marks the required parameters)");
+    System.out.println("<input file 1> - (*) Path to the first input file");
+    System.out.println("<input file 2> - (*) Path to the second input file");
+    System.out.println("<output file> - Path to output file");
+    System.out.println("mbr:<x,y,w,h> - MBR of the two files");
+    System.out.println("-overwrite - Overwrite output file without notice");
+  }
+  
   /**
    * @param args
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    Path[] inputPaths = cla.getPaths();
+    Path[] allFiles = cla.getPaths();
+    if (allFiles.length < 2) {
+      printUsage();
+      throw new RuntimeException("Illegal arguments");
+    }
+    Path[] inputFiles = new Path[] {allFiles[0], allFiles[1]};
+    Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
+    boolean overwrite = cla.isOverwrite();
     JobConf conf = new JobConf(DistributedJoin.class);
-    FileSystem fs = inputPaths[0].getFileSystem(conf);
+    FileSystem fs = inputFiles[0].getFileSystem(conf);
     GridInfo gridInfo = cla.getGridInfo();
     Shape stockShape = cla.getShape(true);
     if (gridInfo == null) {
       Rectangle rect = cla.getRectangle();
       if (rect == null) {
-        for (Path path : inputPaths) {
+        for (Path path : inputFiles) {
           Rectangle file_mbr = FileMBR.fileMBRLocal(fs, path, stockShape);
           rect = rect == null ? file_mbr : rect.union(file_mbr);
         }
@@ -312,7 +338,7 @@ public class SJMR {
       gridInfo = new GridInfo(rect.x, rect.y, rect.width, rect.height);
     }
     long t1 = System.currentTimeMillis();
-    long resultSize = sjmr(fs, inputPaths, gridInfo, stockShape, null);
+    long resultSize = sjmr(fs, inputFiles, outputPath, gridInfo, stockShape, null, overwrite);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
     System.out.println("Result size: "+resultSize);

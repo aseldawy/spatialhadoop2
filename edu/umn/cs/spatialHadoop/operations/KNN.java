@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -248,24 +249,24 @@ public class KNN {
   /**
    * A MapReduce version of KNN query.
    * @param fs
-   * @param file
+   * @param outputFile
    * @param queryPoint
    * @param shape
    * @param output
    * @return
    * @throws IOException
    */
-  public static<S extends Shape> long knnMapReduce(FileSystem fs, Path file,
-      Point queryPoint, int k, S shape,
-      OutputCollector<Double, S> output, Text outputPathText)
-      throws IOException {
+  public static <S extends Shape> long knnMapReduce(FileSystem fs,
+      Path outputFile, Path userOutputPath, Point queryPoint, int k, S shape,
+      OutputCollector<Double, S> output, boolean overwrite)
+          throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
-    FileSystem outFs = file.getFileSystem(job);
+    FileSystem outFs = outputFile.getFileSystem(job);
     
     job.setJobName("KNN");
     
-    FSDataInputStream in = fs.open(file);
+    FSDataInputStream in = fs.open(outputFile);
     if (in.readLong() == SpatialSite.RTreeFileMarker) {
       LOG.info("Performing KNN on RTree blocks");
       job.setMapperClass(Map2.class);
@@ -293,10 +294,10 @@ public class KNN {
     job.set(SpatialSite.SHAPE_CLASS, shape.getClass().getName());
     job.setOutputFormat(TextOutputFormat.class);
     
-    ShapeInputFormat.setInputPaths(job, file);
+    ShapeInputFormat.setInputPaths(job, outputFile);
 
     RunningJob runningJob;
-    FileStatus fileStatus = fs.getFileStatus(file);
+    FileStatus fileStatus = fs.getFileStatus(outputFile);
     BlockLocation[] fileBlockLocations =
         fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
 
@@ -310,13 +311,20 @@ public class KNN {
     long resultCount;
     int iterations = 0;
     
-    Path outputPath;
-    do {
-      outputPath = new Path("/"+file.getName()+
-          ".knn_"+(int)(Math.random() * 1000000));
-    } while (outFs.exists(outputPath));
-    if (outputPathText != null)
-      outputPathText.set(outputPath.toString());
+    Path outputPath = userOutputPath;
+    if (outputPath == null) {
+      do {
+        outputPath = new Path("/"+outputFile.getName()+
+            ".knn_"+(int)(Math.random() * 1000000));
+      } while (outFs.exists(outputPath));
+    } else {
+      if (outFs.exists(outputPath)) {
+        if (overwrite)
+          outFs.delete(outputPath, true);
+        else
+          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
+      }
+    }
 
     do {
       // Delete results of last iteration if not first iteration
@@ -408,7 +416,8 @@ public class KNN {
       }
     }
 
-    if (outputPathText == null)
+    // If output file is not set by user, delete it
+    if (userOutputPath == null)
       outFs.delete(outputPath, true);
     TotalIterations.addAndGet(iterations);
     
@@ -459,11 +468,22 @@ public class KNN {
     }
     return resultCount;
   }
+  
+  private static void printUsage() {
+    System.out.println("Performs a KNN query on an input file");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file> - (*) Path to input file");
+    System.out.println("<output file> - Path to output file");
+    System.out.println("k:<k> - (*) Number of neighbors to file");
+    System.out.println("point:<x,y> - (*) Coordinates of the query point");
+    System.out.println("-overwrite - Overwrite output file without notice");
+  }
 
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    JobConf conf = new JobConf(FileMBR.class);
-    final Path inputFile = cla.getPath();
+    Path[] paths = cla.getPaths();
+    Configuration conf = new Configuration();
+    final Path inputFile = paths[0];
     Point queryPoint = cla.getPoint();
     final FileSystem fs = inputFile.getFileSystem(conf);
     final int k = cla.getK();
@@ -475,13 +495,20 @@ public class KNN {
     if (k == 0) {
       LOG.warn("k = 0");
     }
+    final boolean overwrite = cla.isOverwrite();
+    
+    if (paths.length == 1 || (queryPoint == null && count == 0)) {
+      printUsage();
+      throw new RuntimeException("Illegal arguments");
+    }
+    final Path outputPath = paths[1];
     
     final Vector<Long> results = new Vector<Long>();
     
     if (queryPoint != null) {
       // User provided a query, use it
       long resultCount = 
-          knnMapReduce(fs, inputFile, queryPoint, k, shape, null, null);
+          knnMapReduce(fs, inputFile, outputPath, queryPoint, k, shape, null, overwrite);
       System.out.println("Result size: "+resultCount);
     } else {
       // Generate query at random points
@@ -523,8 +550,8 @@ public class KNN {
             try {
               Point query_point =
                   query_points.elementAt(threads.indexOf(this));
-              long result_count = knnMapReduce(fs, inputFile,
-                  query_point, k, shape, null, null);
+              long result_count = knnMapReduce(fs, inputFile, outputPath,
+                  query_point, k, shape, null, overwrite);
               results.add(result_count);
             } catch (IOException e) {
               e.printStackTrace();

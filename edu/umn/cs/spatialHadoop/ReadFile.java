@@ -16,7 +16,17 @@ import org.apache.hadoop.spatial.CellInfo;
  */
 public class ReadFile {
 
+  private static void printUsage() {
+    System.out.println("Displays information about blocks in a file");
+    System.out.println("Parameters:");
+    System.out.println("<input file> - Path to input file");
+  }
+  
   public static void main(String[] args) throws Exception {
+    if (args.length != 1) {
+      printUsage();
+      throw new RuntimeException("Illegal parameters");
+    }
     Configuration conf = new Configuration();
     Path inFile = new Path(args[0]);
     FileSystem fs = inFile.getFileSystem(conf);

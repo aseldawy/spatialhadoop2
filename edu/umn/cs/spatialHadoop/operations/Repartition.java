@@ -440,6 +440,19 @@ public class Repartition {
     }
     writer.close(null);
   }
+  
+  private static void printUsage() {
+    System.out.println("Builds a spatial index on an input file");
+    System.out.println("Parameters (* marks required parameters):");
+    System.out.println("<input file> - (*) Path to input file");
+    System.out.println("<output file> - (*) Path to output file");
+    System.out.println("shape:<point|rectangle|polygon> - (*) Type of shapes stored in input file");
+    System.out.println("global:<grid|rtree> - (*) Type of global index");
+    System.out.println("local:<grid|rtree> - Type of local index");
+    System.out.println("mbr:<x,y,w,h> - MBR of data in input file");
+    System.out.println("blocksize:<size> - Size of blocks in output file");
+    System.out.println("-overwrite - Overwrite output file without noitce");
+  }
 
   /**
 	 * Entry point to the file.
@@ -457,6 +470,10 @@ public class Repartition {
 	 */
 	public static void main(String[] args) throws Exception {
     CommandLineArguments cla = new CommandLineArguments(args);
+    if (cla.getPaths().length < 2 || cla.getGIndex() == null) {
+      printUsage();
+      throw new RuntimeException("Illegal arguments");
+    }
     Path inputPath = cla.getPaths()[0];
     Path outputPath = cla.getPaths()[1];
     

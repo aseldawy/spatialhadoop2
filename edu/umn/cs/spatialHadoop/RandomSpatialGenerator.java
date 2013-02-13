@@ -223,7 +223,20 @@ public class RandomSpatialGenerator {
       ((Polygon)shape).set(xpoints, ypoints, npoints);
     }
   }
-
+  
+  private static void printUsage() {
+    System.out.println("Generates a file with random shapes");
+    System.out.println("Parameters (* marks required parameters):");
+    System.out.println("<output file> - Path to the file to generate. If omitted, file is generated to stdout.");
+    System.out.println("mbr:<x,y,w,h> - (*) The MBR of the generated data. Originated at (x,y) with dimensions (w,h)");
+    System.out.println("shape:<point|(rectangle)|polygon> - Type of shapes in generated file");
+    System.out.println("blocksize:<size> - Block size in the generated file");
+    System.out.println("global:<grid|rtree> - Type of global index in generated file");
+    System.out.println("local:<grid|rtree> - Type of local index in generated file");
+    System.out.println("seed:<s> - Use a specific seed to generate the file");
+    System.out.println("-overwrite - Overwrite output file without notice");
+  }
+  
   /**
    * @param args
    * @throws IOException 
@@ -231,9 +244,14 @@ public class RandomSpatialGenerator {
   public static void main(String[] args) throws IOException {
     JobConf conf = new JobConf(RandomSpatialGenerator.class);
     CommandLineArguments cla = new CommandLineArguments(args);
+    Rectangle mbr = cla.getRectangle();
+    if (mbr == null) {
+      printUsage();
+      throw new RuntimeException("Set MBR of the generated file using rect:<x,y,w,h>");
+    }
+
     Path outputFile = cla.getPath();
     FileSystem fs = outputFile != null? outputFile.getFileSystem(conf) : null;
-    Rectangle mbr = cla.getRectangle();
     Shape stockShape = cla.getShape(false);
     long blocksize = cla.getBlockSize();
     int rectSize = cla.getRectSize();
@@ -246,16 +264,11 @@ public class RandomSpatialGenerator {
     String lindex = cla.getLIndex();
     boolean overwrite = cla.isOverwrite();
 
-    if (mbr == null) {
-      System.err.println("Must provide the area in which to generate the file");
-      fs.close();
-      throw new RuntimeException("Set MBR of the generated file using rect:<x,y,w,h>");
-    }
     
     if (outputFile != null) {
       System.out.print("Generating a file ");
       System.out.print("with gindex:"+gindex+" ");
-      System.out.print("with lindex:"+gindex+" ");
+      System.out.print("with lindex:"+lindex+" ");
       System.out.println("file of size: "+totalSize);
       System.out.println("To: " + outputFile);
       System.out.println("In the range: " + mbr);
