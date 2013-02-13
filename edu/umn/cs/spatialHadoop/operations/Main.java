@@ -18,7 +18,7 @@ public class Main {
     try {
       
       pgd.addClass("rangequery", RangeQuery.class,
-          "Finds all objects in the query range given by rect:x1,y1,w,h");
+          "Finds all objects in the query range given by a rectangle");
 
       pgd.addClass("knn", KNN.class,
           "Finds the k nearest neighbor in a file to a point");

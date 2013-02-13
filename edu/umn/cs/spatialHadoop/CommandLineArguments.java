@@ -226,7 +226,7 @@ public class CommandLineArguments {
       }
     }
     
-    if (autodetect && shapeType.getLength() == 0) {
+    if (autodetect && shapeType.getLength() == 0 && getPath() != null) {
       // Shape type not found in parameters. Try to infer from a line in input
       // file
       Path in_file = getPath();
