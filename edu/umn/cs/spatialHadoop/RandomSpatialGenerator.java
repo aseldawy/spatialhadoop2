@@ -203,9 +203,9 @@ public class RandomSpatialGenerator {
     } else if (shape instanceof Rectangle) {
       long x = ((Rectangle)shape).x = Math.abs(random.nextLong()) % mbr.width + mbr.x;
       long y = ((Rectangle)shape).y = Math.abs(random.nextLong()) % mbr.height + mbr.y;
-      ((Rectangle)shape).width = Math.min(Math.abs(random.nextLong()) % rectSize,
+      ((Rectangle)shape).width = Math.min(Math.abs(random.nextLong()) % rectSize+1,
           mbr.width + mbr.x - x);
-      ((Rectangle)shape).height = Math.min(Math.abs(random.nextLong()) % rectSize,
+      ((Rectangle)shape).height = Math.min(Math.abs(random.nextLong()) % rectSize+1,
           mbr.height + mbr.y - y);
     } else if (shape instanceof Polygon) {
       int npoints = random.nextInt(maxPoints - minPoints + 1) + minPoints;
@@ -215,9 +215,9 @@ public class RandomSpatialGenerator {
       int x = xpoints[0] = (int) (Math.abs(random.nextInt((int)mbr.width)) + mbr.x);
       int y = ypoints[0] = (int) (Math.abs(random.nextInt((int)mbr.height)) + mbr.y);
       for (int i = 1; i < npoints; i++) {
-        xpoints[i] = (int) Math.min(Math.abs(random.nextInt(rectSize)),
+        xpoints[i] = (int) Math.min(Math.abs(random.nextInt(rectSize)+1),
             mbr.width + mbr.x - x);
-        ypoints[i] = (int) Math.min(Math.abs(random.nextInt(rectSize)),
+        ypoints[i] = (int) Math.min(Math.abs(random.nextInt(rectSize)+1),
             mbr.height + mbr.y - y);
       }
       ((Polygon)shape).set(xpoints, ypoints, npoints);
