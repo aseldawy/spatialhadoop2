@@ -3,8 +3,10 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Random;
+import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -95,6 +97,16 @@ public class KNN {
       TextSerializerHelper.serializeDouble(distance, t, ',');
       t.append(text.getBytes(), 0, text.getLength());
       return t;
+    }
+    
+    @Override
+    public int hashCode() {
+      return this.text.hashCode();
+    }
+    
+    @Override
+    public boolean equals(Object obj) {
+      return this.text.equals(((TextWithDistance)obj).text);
     }
     
     @Override
@@ -196,14 +208,41 @@ public class KNN {
    *
    */
   public static class KNNObjects extends PriorityQueue<TextWithDistance> {
-
+    /**
+     * A hashset of all elements currently in the heap. Used to avoid inserting
+     * the same object twice.
+     */
+    Set<TextWithDistance> allElements = new HashSet<TextWithDistance>();
+    /**Capacity of the queue*/
+    private int capacity;
+    
     public KNNObjects(int k) {
+      this.capacity = k;
       super.initialize(k);
     }
     
+    /**
+     * Keep elements sorted by distance in descending order (Max heap)
+     */
     @Override
     protected boolean lessThan(Object a, Object b) {
       return ((TextWithDistance)a).distance >= ((TextWithDistance)b).distance;
+    }
+    
+    @Override
+    public boolean insert(TextWithDistance newElement) {
+      // Skip element if already there
+      if (allElements.contains(newElement))
+        return false;
+      boolean overflow = this.size() == capacity;
+      Object overflowItem = this.top();
+      boolean inserted = super.insert(newElement);
+      if (inserted) {
+        if (overflow)
+          allElements.remove(overflowItem);
+        allElements.add(newElement);
+      }
+      return inserted;
     }
   }
   
