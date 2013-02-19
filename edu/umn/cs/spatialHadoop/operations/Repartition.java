@@ -475,6 +475,13 @@ public class Repartition {
       throw new RuntimeException("Illegal arguments");
     }
     Path inputPath = cla.getPaths()[0];
+    FileSystem fs = inputPath.getFileSystem(new Configuration());
+    
+    if (!fs.exists(inputPath)) {
+      printUsage();
+      throw new RuntimeException("Input file does not exist");
+    }
+    
     Path outputPath = cla.getPaths()[1];
     
     String gindex = cla.getGIndex();
@@ -487,7 +494,6 @@ public class Repartition {
     CellInfo[] cells = cla.getCells();
     
     Rectangle input_mbr = cla.getRectangle();
-    FileSystem fs = inputPath.getFileSystem(new Configuration());
     if (input_mbr == null && cells == null) {
       input_mbr = FileMBR.fileMBRLocal(fs, inputPath, stockShape);
     }

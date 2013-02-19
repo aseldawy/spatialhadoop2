@@ -525,6 +525,10 @@ public class KNN {
     final Path inputFile = paths[0];
     Point queryPoint = cla.getPoint();
     final FileSystem fs = inputFile.getFileSystem(conf);
+    if (!fs.exists(inputFile)) {
+      printUsage();
+      throw new RuntimeException("Input file does not exist");
+    }
     final int k = cla.getK();
     int count = cla.getCount();
     int concurrency = cla.getConcurrency();

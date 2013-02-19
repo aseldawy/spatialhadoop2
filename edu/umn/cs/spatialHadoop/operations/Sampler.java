@@ -509,6 +509,11 @@ public class Sampler {
     JobConf conf = new JobConf(Sampler.class);
     Path[] inputFiles = cla.getPaths();
     FileSystem fs = inputFiles[0].getFileSystem(conf);
+    
+    if (!fs.exists(inputFiles[0])) {
+      throw new RuntimeException("Input file does not exist");
+    }
+    
     int count = cla.getCount();
     long size = cla.getSize();
     double ratio = cla.getSelectionRatio();

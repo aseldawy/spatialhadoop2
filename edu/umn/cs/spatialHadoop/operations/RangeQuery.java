@@ -316,9 +316,13 @@ public class RangeQuery {
     }
     JobConf conf = new JobConf(FileMBR.class);
     final Path inputFile = paths[0];
+    final FileSystem fs = inputFile.getFileSystem(conf);
+    if (!fs.exists(inputFile)) {
+      printUsage();
+      throw new RuntimeException("Input file does not exist");
+    }
     final Path outputPath = paths.length > 1 ? paths[1] : null;
     Rectangle queryRange = cla.getRectangle();
-    final FileSystem fs = inputFile.getFileSystem(conf);
     int count = cla.getCount();
     final float ratio = cla.getSelectionRatio();
     int concurrency = cla.getConcurrency();

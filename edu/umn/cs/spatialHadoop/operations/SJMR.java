@@ -317,13 +317,19 @@ public class SJMR {
     Path[] allFiles = cla.getPaths();
     if (allFiles.length < 2) {
       printUsage();
-      throw new RuntimeException("Illegal arguments");
+      throw new RuntimeException("Input files missing");
     }
     Path[] inputFiles = new Path[] {allFiles[0], allFiles[1]};
-    Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
-    boolean overwrite = cla.isOverwrite();
     JobConf conf = new JobConf(DistributedJoin.class);
     FileSystem fs = inputFiles[0].getFileSystem(conf);
+    
+    if (!fs.exists(inputFiles[0]) || !fs.exists(inputFiles[1])) {
+      printUsage();
+      throw new RuntimeException("Input file does not exist");
+    }
+
+    Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
+    boolean overwrite = cla.isOverwrite();
     GridInfo gridInfo = cla.getGridInfo();
     Shape stockShape = cla.getShape(true);
     if (gridInfo == null) {

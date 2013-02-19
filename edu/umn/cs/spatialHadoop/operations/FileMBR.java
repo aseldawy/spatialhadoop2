@@ -226,7 +226,13 @@ public class FileMBR {
       printUsage();
       throw new RuntimeException("Illegal arguments. Input file missing");
     }
+    
     FileSystem fs = inputFile.getFileSystem(conf);
+    if (!fs.exists(inputFile)) {
+      printUsage();
+      throw new RuntimeException("Input file does not exist");
+    }
+
     Shape stockShape = cla.getShape(true);
     boolean local = cla.isLocal();
     Rectangle mbr = local ? fileMBRLocal(fs, inputFile, stockShape) :

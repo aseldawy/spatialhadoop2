@@ -426,11 +426,18 @@ public class DistributedJoin {
     String repartition = cla.getRepartition();
     if (allFiles.length < 2) {
       printUsage();
-      throw new RuntimeException("Illegal arguments");
+      throw new RuntimeException("Missing input files");
     }
+    
     Path[] inputFiles = new Path[] {allFiles[0], allFiles[1]};
-    Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
     FileSystem fs = allFiles[0].getFileSystem(conf);
+    if (!fs.exists(inputFiles[0]) || !fs.exists(inputFiles[1])) {
+      printUsage();
+      throw new RuntimeException("Input file does not exist");
+    }
+    
+    
+    Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
     boolean overwrite = cla.isOverwrite();
 
     long result_size;

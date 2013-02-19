@@ -152,6 +152,9 @@ public class Tail {
     JobConf conf = new JobConf(Sampler.class);
     Path inputFile = cla.getPath();
     FileSystem fs = inputFile.getFileSystem(conf);
+    if (!fs.exists(inputFile)) {
+      throw new RuntimeException("Input file does not exist");
+    }
     int count = cla.getCount();
     TextSerializable stockObject = cla.getShape(true);
     if (stockObject == null)

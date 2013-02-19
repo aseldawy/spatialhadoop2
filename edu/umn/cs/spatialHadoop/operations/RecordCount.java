@@ -212,6 +212,9 @@ public class RecordCount {
     JobConf conf = new JobConf(RecordCount.class);
     Path inputFile = cla.getPath();
     FileSystem fs = inputFile.getFileSystem(conf);
+    if (!fs.exists(inputFile)) {
+      throw new RuntimeException("Input file does not exist");
+    }
     boolean local = cla.isLocal();
     boolean random = cla.isRandom();
     long lineCount;
