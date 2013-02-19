@@ -344,4 +344,9 @@ public class CommandLineArguments {
     String factor = get("closeness");
     return factor == null? -1.0 : Double.parseDouble(factor);
   }
+  
+  public long getOffset() {
+    String offset = get("offset");
+    return offset == null? -1 : Long.parseLong(offset);
+  }
 }

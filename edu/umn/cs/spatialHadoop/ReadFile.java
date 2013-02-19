@@ -1,7 +1,9 @@
 package edu.umn.cs.spatialHadoop;
 
-import java.util.HashMap;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Map;
+import java.util.TreeMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
@@ -23,7 +25,9 @@ public class ReadFile {
   }
   
   public static void main(String[] args) throws Exception {
-    if (args.length != 1) {
+    CommandLineArguments cla = new CommandLineArguments(args);
+    Path input = cla.getPath();
+    if (input == null) {
       printUsage();
       throw new RuntimeException("Illegal parameters");
     }
@@ -31,36 +35,37 @@ public class ReadFile {
     Path inFile = new Path(args[0]);
     FileSystem fs = inFile.getFileSystem(conf);
     
-    Map<CellInfo, Integer> blocks_per_cell = new HashMap<CellInfo, Integer>();
-    int heap_blocks = 0;
-    
     long length = fs.getFileStatus(inFile).getLen();
     
-    BlockLocation[] fileBlockLocations = fs.getFileBlockLocations(fs.getFileStatus(inFile), 0, length);
-    for (BlockLocation blk : fileBlockLocations) {
-      if (blk.getCellInfo() != null) {
-        if (blocks_per_cell.containsKey(blk.getCellInfo())) {
-          int count = blocks_per_cell.get(blk.getCellInfo());
-          blocks_per_cell.put(blk.getCellInfo(), count + 1);
-        } else {
-          blocks_per_cell.put(blk.getCellInfo(), 1);
+    BlockLocation[] locations = cla.getOffset() == -1 ?
+        fs.getFileBlockLocations(fs.getFileStatus(inFile), 0, length) :
+        fs.getFileBlockLocations(fs.getFileStatus(inFile), cla.getOffset(), 1);
+    Arrays.sort(locations, new Comparator<BlockLocation>() {
+      @Override
+      public int compare(BlockLocation o1, BlockLocation o2) {
+        if (o1.getCellInfo() == null && o2.getCellInfo() != null) {
+          return -1;
         }
-      } else {
-        heap_blocks++;
+        if (o1.getCellInfo() != null && o2.getCellInfo() == null) {
+          return 1;
+        }
+        if (o1.getCellInfo() == null && o2.getCellInfo() == null) {
+          return o1.getOffset() < o2.getOffset() ? -1 : 1;
+        }
+        if (o1.getCellInfo() != null && o2.getCellInfo() != null) {
+          return o1.getCellInfo().compareTo(o2.getCellInfo());
+        }
+        return 0;
       }
-    }
-    if (blocks_per_cell.isEmpty()) {
-      System.out.println("No spatial blocks");
-    } else {
-      for (Map.Entry<CellInfo, Integer> map_entry : blocks_per_cell.entrySet()) {
-        System.out.println(map_entry.getKey()+" -- "+map_entry.getValue());
-      }
-    }
-    if (heap_blocks == 0) {
-      System.out.println("No heap blocks");
-    } else {
-      System.out.println(heap_blocks+" heap blocks");
-    }
+    });
     
+    for (int i = 0; i < locations.length; i++) {
+      if (i == 0 || !locations[i].equals(locations[i-1])) {
+        System.out.println(locations[i].getCellInfo() == null?
+            "Heap file" :
+            locations[i].getCellInfo());
+      }
+      System.out.println("   ["+locations[i].getOffset()+","+locations[i].getLength()+"]");
+    }
   }
 }
