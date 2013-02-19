@@ -540,11 +540,11 @@ public class KNN {
     }
     final boolean overwrite = cla.isOverwrite();
     
-    if (paths.length == 1 || (queryPoint == null && count == 0)) {
+    if (queryPoint == null && count == 0) {
       printUsage();
       throw new RuntimeException("Illegal arguments");
     }
-    final Path outputPath = paths[1];
+    final Path outputPath = paths.length > 1 ? paths[1] : null;
     
     final Vector<Long> results = new Vector<Long>();
     
