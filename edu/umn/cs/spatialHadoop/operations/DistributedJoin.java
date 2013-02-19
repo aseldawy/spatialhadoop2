@@ -331,7 +331,7 @@ public class DistributedJoin {
       Path userOutputPath,
       Shape stockShape,
       OutputCollector<Shape, Shape> output, boolean overwrite) throws IOException {
-    
+    Path[] originalInputFiles = inputFiles.clone();
     FileSystem outFs = inputFiles[0].getFileSystem(new Configuration());
     Path outputPath = userOutputPath;
     if (outputPath == null) {
@@ -390,6 +390,13 @@ public class DistributedJoin {
     boolean need_repartition = cost_with_repartition < cost_without_repartition;
     if (need_repartition) {
       repartitionStep(fs, inputFiles, stockShape);
+    }
+    
+    // Restore inputFiles to the original order by user
+    if (inputFiles[1] != originalInputFiles[1]) {
+      Path temp = inputFiles[0];
+      inputFiles[0] = inputFiles[1];
+      inputFiles[1] = temp;
     }
     
     // Redistribute join the larger file and the partitioned file
