@@ -9,7 +9,6 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -40,7 +39,6 @@ import org.apache.hadoop.spatial.ResultCollector2;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.SpatialAlgorithms;
 import org.apache.hadoop.spatial.SpatialSite;
-import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
@@ -194,9 +192,9 @@ public class SJMR {
     }
   }
 
-  public static<S extends Shape> long sjmr(FileSystem fs, Path[] inputFiles,
-      Path userOutputPath,
-      GridInfo gridInfo, S stockShape, OutputCollector<S, S> output, boolean overwrite) throws IOException {
+  public static <S extends Shape> long sjmr(FileSystem fs, Path[] inputFiles,
+      Path userOutputPath, GridInfo gridInfo, S stockShape, boolean overwrite)
+      throws IOException {
     JobConf job = new JobConf(SJMR.class);
     
     FileSystem outFs = inputFiles[0].getFileSystem(job);
@@ -271,30 +269,6 @@ public class SJMR {
     Counter outputRecordCounter = counters.findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
     final long resultCount = outputRecordCounter.getValue();
 
-    // Read job result
-    if (output != null) {
-      @SuppressWarnings("unchecked")
-      S s1 = stockShape, s2 = (S) stockShape.clone();
-      FileStatus[] results = outFs.listStatus(outputPath);
-      for (FileStatus fileStatus : results) {
-        if (fileStatus.getLen() > 0
-            && fileStatus.getPath().getName().startsWith("part-")) {
-          // Report every single result as a pair of shapes
-          LineReader lineReader = new LineReader(outFs.open(fileStatus
-              .getPath()));
-          Text text = new Text();
-          while (lineReader.readLine(text) > 0) {
-            String str = text.toString();
-            String[] parts = str.split("\t", 2);
-            s1.fromText(new Text(parts[0]));
-            s2.fromText(new Text(parts[1]));
-            output.collect(s1, s2);
-          }
-          lineReader.close();
-        }
-      }
-    }
-    
     return resultCount;
   }
   
@@ -344,7 +318,7 @@ public class SJMR {
       gridInfo = new GridInfo(rect.x, rect.y, rect.width, rect.height);
     }
     long t1 = System.currentTimeMillis();
-    long resultSize = sjmr(fs, inputFiles, outputPath, gridInfo, stockShape, null, overwrite);
+    long resultSize = sjmr(fs, inputFiles, outputPath, gridInfo, stockShape, overwrite);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
     System.out.println("Result size: "+resultSize);

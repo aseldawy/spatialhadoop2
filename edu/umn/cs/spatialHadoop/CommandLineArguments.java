@@ -44,6 +44,18 @@ public class CommandLineArguments {
     return rect;
   }
   
+  public Rectangle[] getRectangles() {
+    Vector<Rectangle> rectangles = new Vector<Rectangle>();
+    for (String arg : args) {
+      if (arg.startsWith("rect:") || arg.startsWith("rectangle:") || arg.startsWith("mbr:")) {
+        Rectangle rect = new Rectangle();
+        rect.fromText(new Text(arg.substring(arg.indexOf(':')+1)));
+        rectangles.add(rect);
+      }
+    }
+    return rectangles.toArray(new Rectangle[rectangles.size()]);
+  }
+  
   public Path[] getPaths() {
     Vector<Path> inputPaths = new Vector<Path>();
     for (String arg : args) {
@@ -83,6 +95,18 @@ public class CommandLineArguments {
       }
     }
     return point;
+  }
+
+  public Point[] getPoints() {
+    Vector<Point> points = new Vector<Point>();
+    for (String arg : args) {
+      if (arg.startsWith("point:")) {
+        Point point = new Point();
+        point.fromText(new Text(arg.substring(arg.indexOf(':')+1)));
+        points.add(point);
+      }
+    }
+    return points.toArray(new Point[points.size()]);
   }
 
   public boolean isOverwrite() {

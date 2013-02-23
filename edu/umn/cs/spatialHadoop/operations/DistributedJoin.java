@@ -13,7 +13,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.DoubleWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
@@ -46,7 +45,6 @@ import org.apache.hadoop.spatial.SimpleSpatialIndex;
 import org.apache.hadoop.spatial.SpatialAlgorithms;
 import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.IndexedSortable;
-import org.apache.hadoop.util.LineReader;
 import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
@@ -229,9 +227,9 @@ public class DistributedJoin {
    * @return
    * @throws IOException 
    */
-  public static <S extends Shape> long joinStep(FileSystem fs, Path[] inputFiles,
-      Path userOutputPath,
-      S stockShape, OutputCollector<S, S> output, boolean overwrite) throws IOException {
+  public static <S extends Shape> long joinStep(FileSystem fs,
+      Path[] inputFiles, Path userOutputPath, S stockShape, boolean overwrite)
+      throws IOException {
     long t1 = System.currentTimeMillis();
 
     JobConf job = new JobConf(DistributedJoin.class);
@@ -286,29 +284,6 @@ public class DistributedJoin {
         .findCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
     System.out.println("Number of map tasks "+mapTaskCountCounter.getValue());
     
-    S s1 = stockShape;
-    @SuppressWarnings("unchecked")
-    S s2 = (S) stockShape.clone();
-    // Read job result
-    FileStatus[] results = outFs.listStatus(outputPath);
-    for (FileStatus fileStatus : results) {
-      if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-        if (output != null) {
-          // Report every single result as a pair of shapes
-          LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
-          Text text = new Text();
-          while (lineReader.readLine(text) > 0) {
-            String str = text.toString();
-            String[] parts = str.split("\t", 2);
-            s1.fromText(new Text(parts[0]));
-            s2.fromText(new Text(parts[1]));
-            output.collect(s1, s2);
-          }
-          lineReader.close();
-        }
-      }
-    }
-
     if (userOutputPath == null)
       outFs.delete(outputPath, true);
     long t2 = System.currentTimeMillis();
@@ -327,10 +302,9 @@ public class DistributedJoin {
    * @throws IOException
    */
   @SuppressWarnings("unchecked")
-  public static long distributedJoinSmart(FileSystem fs, final Path[] inputFiles,
-      Path userOutputPath,
-      Shape stockShape,
-      OutputCollector<Shape, Shape> output, boolean overwrite) throws IOException {
+  public static long distributedJoinSmart(FileSystem fs,
+      final Path[] inputFiles, Path userOutputPath, Shape stockShape,
+      boolean overwrite) throws IOException {
     Path[] originalInputFiles = inputFiles.clone();
     FileSystem outFs = inputFiles[0].getFileSystem(new Configuration());
     Path outputPath = userOutputPath;
@@ -401,7 +375,7 @@ public class DistributedJoin {
     
     // Redistribute join the larger file and the partitioned file
     long result_size = DistributedJoin.joinStep(fs, inputFiles, outputPath, stockShape,
-        output, overwrite);
+        overwrite);
     
     if (userOutputPath == null)
       outFs.delete(outputPath, true);
@@ -442,12 +416,12 @@ public class DistributedJoin {
 
     long result_size;
     if (repartition == null || repartition.equals("auto")) {
-      result_size = distributedJoinSmart(fs, inputFiles, outputPath, stockShape, null, overwrite);
+      result_size = distributedJoinSmart(fs, inputFiles, outputPath, stockShape, overwrite);
     } else if (repartition.equals("yes")) {
       repartitionStep(fs, allFiles, stockShape);
-      result_size = joinStep(fs, inputFiles, outputPath, stockShape, null, overwrite);
+      result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite);
     } else if (repartition.equals("no")) {
-      result_size = joinStep(fs, inputFiles, outputPath, stockShape, null, overwrite);
+      result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite);
     } else {
       throw new RuntimeException("Illegal parameter repartition:"+repartition);
     }

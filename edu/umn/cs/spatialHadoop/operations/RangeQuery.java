@@ -6,7 +6,6 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
@@ -34,7 +33,6 @@ import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.SpatialSite;
-import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
@@ -159,9 +157,7 @@ public class RangeQuery {
    * @throws IOException
    */
   public static long rangeQueryMapReduce(FileSystem fs, Path inputFile,
-      Path userOutputPath,
-      Shape queryShape, Shape shape, ResultCollector<Shape> output,
-      boolean overwrite)
+      Path userOutputPath, Shape queryShape, Shape shape, boolean overwrite)
       throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
@@ -225,26 +221,6 @@ public class RangeQuery {
     Counters counters = runningJob.getCounters();
     Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
     final long resultCount = outputRecordCounter.getValue();
-    
-    // Read job result
-    if (output != null) {
-      Text line = new Text();
-      FileStatus[] results = outFs.listStatus(outputPath);
-      for (FileStatus fileStatus : results) {
-        if (fileStatus.getLen() > 0
-            && fileStatus.getPath().getName().startsWith("part-")) {
-          // Report every single result
-          LineReader lineReader = new LineReader(outFs.open(fileStatus
-              .getPath()));
-          line.clear();
-          while (lineReader.readLine(line) > 0) {
-            shape.fromText(line);
-            output.collect(shape);
-          }
-          lineReader.close();
-        }
-      }
-    }
     
     // If outputPath not set by user, automatically delete it
     if (userOutputPath == null)
@@ -322,84 +298,58 @@ public class RangeQuery {
       throw new RuntimeException("Input file does not exist");
     }
     final Path outputPath = paths.length > 1 ? paths[1] : null;
-    Rectangle queryRange = cla.getRectangle();
-    int count = cla.getCount();
-    final float ratio = cla.getSelectionRatio();
+    final Rectangle[] queryRanges = cla.getRectangles();
     int concurrency = cla.getConcurrency();
     final Shape stockShape = cla.getShape(true);
-    boolean local = cla.isLocal();
-    long seed = cla.getSeed();
     final boolean overwrite = cla.isOverwrite();
 
-    final Vector<Long> results = new Vector<Long>();
-    
-    if (ratio >= 0.0 && ratio <= 1.0f) {
-      final Rectangle queryMBR = queryRange != null?
-          queryRange :
-            (local ? FileMBR.fileMBRLocal(fs, inputFile, stockShape) :
-              FileMBR.fileMBRMapReduce(fs, inputFile, stockShape));
-      final Vector<Thread> threads = new Vector<Thread>();
-      final Vector<Rectangle> query_rectangles = new Vector<Rectangle>();
-      Sampler.sampleLocal(fs, inputFile, count, seed, new ResultCollector<Shape>(){
-        @Override
-        public void collect(final Shape value) {
-          Rectangle query_rectangle = new Rectangle();
-          query_rectangle.width = (long) (queryMBR.width * ratio);
-          query_rectangle.height = (long) (queryMBR.height * ratio);
-          query_rectangle.x = value.getMBR().x - query_rectangle.width / 2;
-          query_rectangle.y = value.getMBR().y - query_rectangle.height / 2;
-          query_rectangles.add(query_rectangle);
-          threads.add(new Thread() {
-            @Override
-            public void run() {
-              try {
-                int thread_i = threads.indexOf(this);
-                long result_count = rangeQueryMapReduce(fs, inputFile, outputPath,
-                    query_rectangles.elementAt(thread_i), stockShape,
-                    null, overwrite);
-                results.add(result_count);
-              } catch (IOException e) {
-                e.printStackTrace();
-              }
-            }
-          });
-        }
-      }, stockShape);
+    final long[] results = new long[queryRanges.length];
+    final Vector<Thread> threads = new Vector<Thread>();
 
-      long t1 = System.currentTimeMillis();
-      do {
-        // Ensure that there is at least MaxConcurrentThreads running
-        int i = 0;
-        while (i < concurrency && i < threads.size()) {
-          Thread.State state = threads.elementAt(i).getState(); 
-          if (state == Thread.State.TERMINATED) {
-            // Thread already terminated, remove from the queue
-            threads.remove(i);
-          } else if (state == Thread.State.NEW) {
-            // Start the thread and move to next one
-            threads.elementAt(i++).start();
-          } else {
-            // Thread is still running, skip over it
-            i++;
-          }
-        }
-        if (!threads.isEmpty()) {
+    for (int i = 0; i < queryRanges.length; i++) {
+      threads.add(new Thread() {
+        @Override
+        public void run() {
           try {
-            // Sleep for 10 seconds or until the first thread terminates
-            threads.firstElement().join(10000);
-          } catch (InterruptedException e) {
+            int thread_i = threads.indexOf(this);
+            long result_count = rangeQueryMapReduce(fs, inputFile, outputPath,
+                queryRanges[thread_i], stockShape, overwrite);
+            results[thread_i] = result_count;
+          } catch (IOException e) {
             e.printStackTrace();
           }
         }
-      } while (!threads.isEmpty());
-      long t2 = System.currentTimeMillis();
-      System.out.println("Time for "+count+" jobs is "+(t2-t1)+" millis");
-      System.out.println("Result size: "+results);
-    } else {
-      long resultCount = 
-          rangeQueryMapReduce(fs, inputFile, outputPath, queryRange, stockShape, null, overwrite);
-      System.out.println("Result size: "+resultCount);
+      });
     }
-    
+
+    long t1 = System.currentTimeMillis();
+    do {
+      // Ensure that there is at least MaxConcurrentThreads running
+      int i = 0;
+      while (i < concurrency && i < threads.size()) {
+        Thread.State state = threads.elementAt(i).getState(); 
+        if (state == Thread.State.TERMINATED) {
+          // Thread already terminated, remove from the queue
+          threads.remove(i);
+        } else if (state == Thread.State.NEW) {
+          // Start the thread and move to next one
+          threads.elementAt(i++).start();
+        } else {
+          // Thread is still running, skip over it
+          i++;
+        }
+      }
+      if (!threads.isEmpty()) {
+        try {
+          // Sleep for 10 seconds or until the first thread terminates
+          threads.firstElement().join(10000);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+      }
+    } while (!threads.isEmpty());
+    long t2 = System.currentTimeMillis();
+    System.out.println("Time for "+queryRanges.length+" jobs is "+(t2-t1)+" millis");
+    System.out.println("Result size: "+results);
   }
 }

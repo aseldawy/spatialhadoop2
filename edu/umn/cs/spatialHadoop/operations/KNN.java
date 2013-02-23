@@ -5,7 +5,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Random;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,7 +45,6 @@ import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.Circle;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.RTree;
-import org.apache.hadoop.spatial.ResultCollector;
 import org.apache.hadoop.spatial.ResultCollector2;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.SpatialSite;
@@ -297,8 +295,7 @@ public class KNN {
    */
   public static <S extends Shape> long knnMapReduce(FileSystem fs,
       Path outputFile, Path userOutputPath, Point queryPoint, int k, S shape,
-      OutputCollector<Double, S> output, boolean overwrite)
-          throws IOException {
+      boolean overwrite) throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
     FileSystem outFs = outputFile.getFileSystem(job);
@@ -436,25 +433,6 @@ public class KNN {
       range_for_this_iteration = range_for_next_iteration;
     } while (additional_blocks_2b_processed > 0);
     
-    // Read job result
-    if (output != null) {
-      FileStatus[] results = outFs.listStatus(outputPath);
-      for (FileStatus result_file : results) {
-        if (result_file.getLen() > 0 && result_file.getPath().getName().startsWith("part-")) {
-          // Report every single result as a pair of shape with distance
-          LineReader lineReader = new LineReader(outFs.open(result_file.getPath()));
-          Text line = new Text();
-          line.clear();
-          while (lineReader.readLine(line) > 0) {
-            t.fromText(line);
-            shape.fromText(t.text);
-            output.collect(t.distance, shape);
-          }
-          lineReader.close();
-        }
-      }
-    }
-
     // If output file is not set by user, delete it
     if (userOutputPath == null)
       outFs.delete(outputPath, true);
@@ -523,117 +501,76 @@ public class KNN {
     Path[] paths = cla.getPaths();
     Configuration conf = new Configuration();
     final Path inputFile = paths[0];
-    Point queryPoint = cla.getPoint();
+    final Point[] queryPoints = cla.getPoints();
     final FileSystem fs = inputFile.getFileSystem(conf);
     if (!fs.exists(inputFile)) {
       printUsage();
       throw new RuntimeException("Input file does not exist");
     }
     final int k = cla.getK();
-    int count = cla.getCount();
     int concurrency = cla.getConcurrency();
     final Shape shape = cla.getShape(true);
-    final double closenessFactor = cla.getClosenessFactor();
-    long seed = cla.getSeed();
     if (k == 0) {
       LOG.warn("k = 0");
     }
     final boolean overwrite = cla.isOverwrite();
-    
-    if (queryPoint == null && count == 0) {
+
+    if (queryPoints.length == 0) {
       printUsage();
       throw new RuntimeException("Illegal arguments");
     }
     final Path outputPath = paths.length > 1 ? paths[1] : null;
-    
+
     final Vector<Long> results = new Vector<Long>();
-    
-    if (queryPoint != null) {
-      // User provided a query, use it
-      long resultCount = 
-          knnMapReduce(fs, inputFile, outputPath, queryPoint, k, shape, null, overwrite);
-      System.out.println("Result size: "+resultCount);
-    } else {
-      // Generate query at random points
-      final Vector<Thread> threads = new Vector<Thread>();
-      final Vector<Point> query_points = new Vector<Point>();
-      if (closenessFactor == -1.0) {
-        // Get query points from file
-        Sampler.sampleLocal(fs, inputFile, count, seed, new ResultCollector<Shape>(){
-          @Override
-          public void collect(final Shape value) {
-            query_points.add(new Point(value.getMBR().x, value.getMBR().y));
-          }
-        }, shape);
-      } else {
-        // Get query points according to its closeness to grid intersections
-        FileStatus fileStatus = fs.getFileStatus(inputFile);
-        BlockLocation[] blockLocations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
-        Random random = new Random(seed);
-        for (int i = 0; i < count; i++) {
-          int i_block = random.nextInt(blockLocations.length);
-          int direction = random.nextInt(4);
-          // Get center point (x, y)
-          long cx = blockLocations[i_block].getCellInfo().getXMid();
-          long cy = blockLocations[i_block].getCellInfo().getYMid();
-          long cw = blockLocations[i_block].getCellInfo().width;
-          long ch = blockLocations[i_block].getCellInfo().height;
-          int signx = ((direction & 1) == 0)? 1 : -1;
-          int signy = ((direction & 2) == 1)? 1 : -1;
-          long x = (long) (cx + cw * closenessFactor / 2 * signx);
-          long y = (long) (cy + ch * closenessFactor / 2 * signy);
-          query_points.add(new Point(x, y));
-        }
-      }
 
-      for (int i = 0; i < query_points.size(); i++) {
-        threads.add(new Thread() {
-          @Override
-          public void run() {
-            try {
-              Point query_point =
-                  query_points.elementAt(threads.indexOf(this));
-              long result_count = knnMapReduce(fs, inputFile, outputPath,
-                  query_point, k, shape, null, overwrite);
-              results.add(result_count);
-            } catch (IOException e) {
-              e.printStackTrace();
-            }
-          }
-        });
-      }
-
-      
-      long t1 = System.currentTimeMillis();
-      do {
-        // Ensure that there is at least MaxConcurrentThreads running
-        int i = 0;
-        while (i < concurrency && i < threads.size()) {
-          Thread.State state = threads.elementAt(i).getState(); 
-          if (state == Thread.State.TERMINATED) {
-            // Thread already terminated, remove from the queue
-            threads.remove(i);
-          } else if (state == Thread.State.NEW) {
-            // Start the thread and move to next one
-            threads.elementAt(i++).start();
-          } else {
-            // Thread is still running, skip over it
-            i++;
-          }
-        }
-        if (!threads.isEmpty()) {
+    // Generate query at random points
+    final Vector<Thread> threads = new Vector<Thread>();
+    for (int i = 0; i < queryPoints.length; i++) {
+      threads.add(new Thread() {
+        @Override
+        public void run() {
           try {
-            // Sleep for 10 seconds or until the first thread terminates
-            threads.firstElement().join(10000);
-          } catch (InterruptedException e) {
+            Point query_point = queryPoints[threads.indexOf(this)];
+            long result_count = knnMapReduce(fs, inputFile, outputPath,
+                query_point, k, shape, overwrite);
+            results.add(result_count);
+          } catch (IOException e) {
             e.printStackTrace();
           }
         }
-      } while (!threads.isEmpty());
-      long t2 = System.currentTimeMillis();
-      System.out.println("Time for "+count+" jobs is "+(t2-t1)+" millis");
-      System.out.println("Result size: "+results);
+      });
     }
-    System.out.println("Total iterations: "+TotalIterations);
+
+    long t1 = System.currentTimeMillis();
+    do {
+      // Ensure that there is at least MaxConcurrentThreads running
+      int i = 0;
+      while (i < concurrency && i < threads.size()) {
+        Thread.State state = threads.elementAt(i).getState();
+        if (state == Thread.State.TERMINATED) {
+          // Thread already terminated, remove from the queue
+          threads.remove(i);
+        } else if (state == Thread.State.NEW) {
+          // Start the thread and move to next one
+          threads.elementAt(i++).start();
+        } else {
+          // Thread is still running, skip over it
+          i++;
+        }
+      }
+      if (!threads.isEmpty()) {
+        try {
+          // Sleep for 10 seconds or until the first thread terminates
+          threads.firstElement().join(10000);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+      }
+    } while (!threads.isEmpty());
+    long t2 = System.currentTimeMillis();
+    System.out.println("Time for " + queryPoints.length + " jobs is "
+        + (t2 - t1) + " millis");
+    System.out.println("Result size: " + results);
+    System.out.println("Total iterations: " + TotalIterations);
   }
 }
