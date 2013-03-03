@@ -242,13 +242,10 @@ public class CommandLineArguments {
    * @return
    */
   public Shape getShape(boolean autodetect) {
+    String shapeTypeStr = get("shape");
     final Text shapeType = new Text();
-    for (String arg : args) {
-      if (arg.startsWith("shape:")) {
-        byte[] temp = arg.substring(arg.indexOf(':')+1).toLowerCase().getBytes();
-        shapeType.set(temp);
-      }
-    }
+    if (shapeTypeStr != null)
+      shapeType.set(shapeTypeStr.toLowerCase().getBytes());
     
     if (autodetect && shapeType.getLength() == 0 && getPath() != null) {
       // Shape type not found in parameters. Try to infer from a line in input
@@ -287,7 +284,7 @@ public class CommandLineArguments {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
         Class<? extends Shape> shapeClass =
-            Class.forName(shapeType.toString()).asSubclass(Shape.class);
+            Class.forName(shapeTypeStr).asSubclass(Shape.class);
         stockShape = shapeClass.newInstance();
       } catch (ClassNotFoundException e) {
       } catch (InstantiationException e) {
