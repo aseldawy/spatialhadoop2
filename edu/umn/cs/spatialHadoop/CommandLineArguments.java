@@ -280,7 +280,7 @@ public class CommandLineArguments {
       stockShape = new TigerShape();
     } else if (shapeType.toString().startsWith("poly")) {
       stockShape = new Polygon();
-    } else {
+    } else if (shapeTypeStr != null) {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
         Class<? extends Shape> shapeClass =
@@ -292,7 +292,7 @@ public class CommandLineArguments {
       }
     }
     if (stockShape == null)
-      LOG.warn("unknown shape type: "+shapeType);
+      LOG.warn("unknown shape type: "+shapeTypeStr);
     
     return stockShape;
   }

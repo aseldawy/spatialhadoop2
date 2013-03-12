@@ -36,8 +36,10 @@ import org.apache.hadoop.mapred.spatial.BinarySpatialInputFormat;
 import org.apache.hadoop.mapred.spatial.BlockFilter;
 import org.apache.hadoop.mapred.spatial.DefaultBlockFilter;
 import org.apache.hadoop.mapred.spatial.PairWritable;
+import org.apache.hadoop.mapred.spatial.RTreeRecordReader;
 import org.apache.hadoop.mapred.spatial.ShapeArrayRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
+import org.apache.hadoop.spatial.RTree;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector2;
 import org.apache.hadoop.spatial.Shape;
@@ -135,6 +137,41 @@ public class DistributedJoin {
     }
   }
 
+  
+  /**
+   * Reads a pair of arrays of shapes
+   * @author eldawy
+   *
+   */
+  public static class DJRecordReaderRTree<S extends Shape> extends BinaryRecordReader<CellInfo, RTree<S>> {
+    public DJRecordReaderRTree(Configuration conf, CombineFileSplit fileSplits) throws IOException {
+      super(conf, fileSplits);
+    }
+    
+    @Override
+    protected RecordReader<CellInfo, RTree<S>> createRecordReader(
+        Configuration conf, CombineFileSplit split, int i) throws IOException {
+      FileSplit fsplit = new FileSplit(split.getPath(i),
+          split.getStartOffsets()[i],
+          split.getLength(i), split.getLocations());
+      return new RTreeRecordReader<S>(conf, fsplit);
+    }
+  }
+
+  /**
+   * Input format that returns a record reader that reads a pair of arrays of
+   * shapes
+   * @author eldawy
+   *
+   */
+  public static class DJInputFormatRTree<S extends Shape> extends BinarySpatialInputFormat<CellInfo, RTree<S>> {
+    
+    @Override
+    public RecordReader<PairWritable<CellInfo>, PairWritable<RTree<S>>> getRecordReader(
+        InputSplit split, JobConf job, Reporter reporter) throws IOException {
+      return new DJRecordReaderRTree<S>(job, (CombineFileSplit)split);
+    }
+  }
   /**
    * Repartition the smaller (first) file to match the partitioning of the
    * larger file.
