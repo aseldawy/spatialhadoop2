@@ -42,7 +42,10 @@ public class Main {
 
       pgd.addClass("generate", RandomSpatialGenerator.class,
           "Generates a random file containing spatial data");
-      
+
+      pgd.addClass("union", Union.class,
+          "Computes the union of categorized shapes");
+
       pgd.driver(args);
       
       // Success
