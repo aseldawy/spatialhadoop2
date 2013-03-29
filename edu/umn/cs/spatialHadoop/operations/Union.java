@@ -213,14 +213,7 @@ public class Union {
     TextOutputFormat.setOutputPath(job, output);
 
     // Start job
-    RunningJob runningJob = JobClient.runJob(job);
-    Counters counters = runningJob.getCounters();
-    for (Counters.Group group : counters) {
-      System.out.println(group.getName()+":");
-      for (Counter counter: group) {
-        System.out.println(counter.getName()+": "+counter.getValue());
-      }
-    }
+    JobClient.runJob(job);
   }
 
   /**

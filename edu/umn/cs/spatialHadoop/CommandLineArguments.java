@@ -16,6 +16,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Text2;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.GridInfo;
+import org.apache.hadoop.spatial.JTSShape;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.Polygon;
 import org.apache.hadoop.spatial.Rectangle;
@@ -280,6 +281,8 @@ public class CommandLineArguments {
       stockShape = new TigerShape();
     } else if (shapeType.toString().startsWith("poly")) {
       stockShape = new Polygon();
+    } else if (shapeType.toString().startsWith("jts")) {
+      stockShape = new JTSShape();
     } else if (shapeTypeStr != null) {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
