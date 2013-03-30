@@ -54,10 +54,10 @@ public class FileMBR {
     public void reduce(NullWritable dummy, Iterator<Rectangle> values,
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
             throws IOException {
-      long x1 = Long.MAX_VALUE;
-      long y1 = Long.MAX_VALUE;
-      long x2 = Long.MIN_VALUE;
-      long y2 = Long.MIN_VALUE;
+      double x1 = Double.MAX_VALUE;
+      double y1 = Double.MAX_VALUE;
+      double x2 = Double.MIN_VALUE;
+      double y2 = Double.MIN_VALUE;
       
       while (values.hasNext()) {
         Rectangle rect = values.next();
@@ -87,10 +87,10 @@ public class FileMBR {
         fs.getFileStatus(file), 0, fs.getFileStatus(file).getLen());
     if (fileBlockLocations[0].getCellInfo() != null) {
       boolean heap_file = false;
-      long x1 = Long.MAX_VALUE;
-      long y1 = Long.MAX_VALUE;
-      long x2 = Long.MIN_VALUE;
-      long y2 = Long.MIN_VALUE;
+      double x1 = Double.MAX_VALUE;
+      double y1 = Double.MAX_VALUE;
+      double x2 = Double.MIN_VALUE;
+      double y2 = Double.MIN_VALUE;
       for (BlockLocation blockLocation : fileBlockLocations) {
         Rectangle rect = blockLocation.getCellInfo();
         if (blockLocation.getCellInfo() == null) {
@@ -167,10 +167,10 @@ public class FileMBR {
         fs.getFileStatus(file), 0, fs.getFileStatus(file).getLen());
     if (fileBlockLocations[0].getCellInfo() != null) {
       boolean heap_file = false;
-      long x1 = Long.MAX_VALUE;
-      long y1 = Long.MAX_VALUE;
-      long x2 = Long.MIN_VALUE;
-      long y2 = Long.MIN_VALUE;
+      double x1 = Double.MAX_VALUE;
+      double y1 = Double.MAX_VALUE;
+      double x2 = Double.MIN_VALUE;
+      double y2 = Double.MIN_VALUE;
       for (BlockLocation blockLocation : fileBlockLocations) {
         Rectangle rect = blockLocation.getCellInfo();
         if (blockLocation.getCellInfo() == null) {
@@ -191,10 +191,10 @@ public class FileMBR {
     ShapeRecordReader<Shape> shapeReader =
         new ShapeRecordReader<Shape>(fs.open(file), 0, file_size);
 
-    long x1 = Long.MAX_VALUE;
-    long y1 = Long.MAX_VALUE;
-    long x2 = Long.MIN_VALUE;
-    long y2 = Long.MIN_VALUE;
+    double x1 = Double.MAX_VALUE;
+    double y1 = Double.MAX_VALUE;
+    double x2 = Double.MIN_VALUE;
+    double y2 = Double.MIN_VALUE;
     
     CellInfo key = shapeReader.createKey();
 

@@ -201,8 +201,8 @@ public class RandomSpatialGenerator {
       ((Point)shape).x = Math.abs(random.nextLong()) % mbr.width + mbr.x;
       ((Point)shape).y = Math.abs(random.nextLong()) % mbr.height + mbr.y;
     } else if (shape instanceof Rectangle) {
-      long x = ((Rectangle)shape).x = Math.abs(random.nextLong()) % mbr.width + mbr.x;
-      long y = ((Rectangle)shape).y = Math.abs(random.nextLong()) % mbr.height + mbr.y;
+      double x = ((Rectangle)shape).x = Math.abs(random.nextLong()) % mbr.width + mbr.x;
+      double y = ((Rectangle)shape).y = Math.abs(random.nextLong()) % mbr.height + mbr.y;
       ((Rectangle)shape).width = Math.min(Math.abs(random.nextLong()) % rectSize+1,
           mbr.width + mbr.x - x);
       ((Rectangle)shape).height = Math.min(Math.abs(random.nextLong()) % rectSize+1,

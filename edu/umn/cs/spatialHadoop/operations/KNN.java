@@ -161,7 +161,7 @@ public class KNN {
     public void map(CellInfo cell, S shape,
         OutputCollector<NullWritable, TextWithDistance> output,
         Reporter reporter) throws IOException {
-      outputValue.distance = (long)shape.distanceTo(queryPoint.x, queryPoint.y);
+      outputValue.distance = shape.distanceTo(queryPoint.x, queryPoint.y);
       outputValue.text.clear();
       shape.toText(outputValue.text);
       output.collect(Dummy, outputValue);
@@ -178,9 +178,9 @@ public class KNN {
     public void map(CellInfo cellInfo, RTree<S> shapes,
         final OutputCollector<NullWritable, TextWithDistance> output,
         Reporter reporter) throws IOException {
-      shapes.knn(queryPoint.x, queryPoint.y, k, new ResultCollector2<S, Long>() {
+      shapes.knn(queryPoint.x, queryPoint.y, k, new ResultCollector2<S, Double>() {
         @Override
-        public void collect(S shape, Long distance) {
+        public void collect(S shape, Double distance) {
           try {
             outputValue.distance = distance;
             outputValue.text.clear();
