@@ -46,6 +46,9 @@ public class Main {
       pgd.addClass("union", Union.class,
           "Computes the union of categorized shapes");
 
+      pgd.addClass("plot", Plot.class,
+          "Plots a file to an image");
+
       pgd.driver(args);
       
       // Success
