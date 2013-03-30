@@ -373,4 +373,18 @@ public class CommandLineArguments {
     String offset = get("offset");
     return offset == null? -1 : Long.parseLong(offset);
   }
+
+  public boolean isBorders() {
+    return is("borders");
+  }
+
+  public int getWidth(int default_width) {
+    String width = get("width");
+    return width == null ? default_width : Integer.parseInt(width);
+  }
+
+  public int getHeight(int default_height) {
+    String height = get("height");
+    return height == null ? default_height : Integer.parseInt(height);
+  }
 }

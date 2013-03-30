@@ -237,7 +237,7 @@ public class Repartition {
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
   
     job.setReducerClass(Reduce.class);
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
   
     // Set default parameters for reading input file
     job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());

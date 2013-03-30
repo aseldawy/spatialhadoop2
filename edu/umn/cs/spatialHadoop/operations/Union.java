@@ -20,8 +20,6 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.TextSerializerHelper;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.Counters;
-import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LineRecordReader;
@@ -30,13 +28,14 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.JTSShape;
 import org.apache.hadoop.spatial.SpatialSite;
+import org.postgis.jts.JtsBinaryWriter;
 
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
@@ -70,7 +69,7 @@ public class Union {
   }
   
   static class UnionMapper extends MapReduceBase
-      implements Mapper<LongWritable, Text, IntWritable, Text> {
+      implements Mapper<CellInfo, Text, IntWritable, Text> {
     /**
      * Maps each shape by ID to a category
      */
@@ -94,7 +93,7 @@ public class Union {
     }
     
     @Override
-    public void map(LongWritable key, Text line,
+    public void map(CellInfo key, Text line,
         OutputCollector<IntWritable, Text> output, Reporter reporter)
         throws IOException {
       byte[] bytes = line.getBytes();
@@ -160,6 +159,9 @@ public class Union {
       GeometryCollection geo_collection = new GeometryCollection(geometries,
           geometries[0].getFactory());
       Geometry union = geo_collection.buffer(0);
+      geo_collection = null;
+      geometries = null;
+      shapes = null;
       temp_out.clear();
       output.collect(category, new JTSShape(union).toText(temp_out));
     }
@@ -205,7 +207,7 @@ public class Union {
     job.setMapOutputValueClass(Text.class);
 
     // Set input and output
-    job.setInputFormat(TextInputFormat.class);
+    job.setInputFormat(ShapeLineInputFormat.class);
     TextInputFormat.addInputPath(job, shapeFile);
     DistributedCache.addCacheFile(categoryFile.toUri(), job);
     
@@ -263,12 +265,15 @@ public class Union {
     long t3 = System.currentTimeMillis();
 
     // 3- Find the union of each category
+    JtsBinaryWriter jts_binary_writer = new JtsBinaryWriter();
     Map<Integer, Geometry> final_result = new HashMap<Integer, Geometry>();
     for (Map.Entry<Integer, Vector<Geometry>> category :
           categoryShapes.entrySet()) {
       if (!category.getValue().isEmpty()) {
         Geometry[] geometries = category.getValue().toArray(
             new Geometry[category.getValue().size()]);
+        for (Geometry geom : geometries)
+          System.out.println(jts_binary_writer.writeHexed(geom));
         GeometryCollection geom_collection = new GeometryCollection(geometries,
             geometries[0].getFactory());
         Geometry union = geom_collection.buffer(0);
