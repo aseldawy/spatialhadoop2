@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop;
 
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -59,7 +60,12 @@ public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable>
       progress.progress();
       int tile_x = (int) ((cell.x - fileMbr.x) * image_width / fileMbr.width);
       int tile_y = (int) ((cell.y - fileMbr.y) * image_height / fileMbr.height);
-      Graphics graphics = image.getGraphics();
+      Graphics2D graphics;
+      try {
+        graphics = image.createGraphics();
+      } catch (Throwable e) {
+        graphics = new SimpleGraphics(image);
+      }
       graphics.drawImage(value.getImage(), tile_x, tile_y, null);
       graphics.dispose();
     }
@@ -70,9 +76,7 @@ public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable>
       ImageIO.write(image, "png", output);
       output.close();
     }
-    
   }
-
 
   @Override
   public RecordWriter<CellInfo, ImageWritable> getRecordWriter(

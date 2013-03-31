@@ -1,7 +1,11 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -34,8 +38,6 @@ import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.SpatialSite;
-
-import sun.org.mozilla.javascript.WrappedException;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
@@ -326,7 +328,7 @@ public class RangeQuery {
                   queryRanges[thread_i], stockShape, overwrite);
               results[thread_i] = result_count;
             } catch (IOException e) {
-              throw new WrappedException(e);
+              throw new RuntimeException(e);
             }
         }
       };
@@ -362,6 +364,11 @@ public class RangeQuery {
     } while (!threads.isEmpty());
     long t2 = System.currentTimeMillis();
     System.out.println("Time for "+queryRanges.length+" jobs is "+(t2-t1)+" millis");
-    System.out.println("Result size: "+Arrays.asList(results));
+    
+    System.out.print("Result size: [");
+    for (long result : results) {
+      System.out.print(result+", ");
+    }
+    System.out.println("]");
   }
 }

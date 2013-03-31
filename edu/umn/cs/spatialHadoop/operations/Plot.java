@@ -39,6 +39,7 @@ import com.vividsolutions.jts.geom.Polygon;
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
+import edu.umn.cs.spatialHadoop.SimpleGraphics;
 
 public class Plot {
   /**Logger*/
@@ -104,8 +105,6 @@ public class Plot {
       imageHeight = ImageOutputFormat.getImageHeight(job);
       show_borders = job.getBoolean(ShowBorders, false);
       
-      // FIXME: We should use the correct units to calculate this
-      // Currently JTSShape use different units
       this.scale2 = (double)imageWidth * imageHeight /
           ((double)fileMbr.width * fileMbr.height);
     }
@@ -114,105 +113,126 @@ public class Plot {
     public void reduce(CellInfo cellInfo, Iterator<Shape> values,
         OutputCollector<CellInfo, ImageWritable> output, Reporter reporter)
         throws IOException {
-      // Initialize the image
-      int image_x1 = (int) ((cellInfo.x - fileMbr.x) * imageWidth / fileMbr.width);
-      int image_y1 = (int) ((cellInfo.y - fileMbr.y) * imageHeight / fileMbr.height);
-      int image_x2 = (int) (((cellInfo.x + cellInfo.width) - fileMbr.x) * imageWidth / fileMbr.width);
-      int image_y2 = (int) (((cellInfo.y + cellInfo.height) - fileMbr.y) * imageHeight / fileMbr.height);
-      int tile_width = image_x2 - image_x1;
-      int tile_height = image_y2 - image_y1;
-      BufferedImage image = new BufferedImage(tile_width, tile_height,
-          BufferedImage.TYPE_INT_ARGB);
-      Graphics2D graphics = image.createGraphics();
-      Color bg_color = new Color(0,0,0,0);
-      bg_color = Color.WHITE;
-      graphics.setBackground(bg_color);
-      graphics.clearRect(0, 0, tile_width, tile_height);
-      
-      if (show_borders) {
-        graphics.setColor(Color.BLACK);
-        graphics.drawRect(0, 0, tile_width, tile_height);
-      }
-      
-      graphics.setColor(Color.BLUE);
-      
-      // Plot all shapes on that image
-      while (values.hasNext()) {
-        Shape s = values.next();
-        // TODO draw the shape according to its type
+      try {
+        // Initialize the image
+        int image_x1 = (int) ((cellInfo.x - fileMbr.x) * imageWidth / fileMbr.width);
+        int image_y1 = (int) ((cellInfo.y - fileMbr.y) * imageHeight / fileMbr.height);
+        int image_x2 = (int) (((cellInfo.x + cellInfo.width) - fileMbr.x) * imageWidth / fileMbr.width);
+        int image_y2 = (int) (((cellInfo.y + cellInfo.height) - fileMbr.y) * imageHeight / fileMbr.height);
+        int tile_width = image_x2 - image_x1;
+        int tile_height = image_y2 - image_y1;
+        BufferedImage image = new BufferedImage(tile_width, tile_height,
+            BufferedImage.TYPE_INT_ARGB);
+        Color bg_color = new Color(0,0,0,0);
+        Color stroke_color = Color.BLUE;
+
+        Graphics2D graphics;
+        try {
+          graphics = image.createGraphics();
+        } catch (Throwable e) {
+          graphics = new SimpleGraphics(image);
+        }
+        graphics.setBackground(bg_color);
+        graphics.clearRect(0, 0, tile_width, tile_height);
         
-        if (s instanceof Point) {
-          Point pt = (Point) s;
-          int x = (int) ((pt.x - fileMbr.x) * imageWidth / fileMbr.width);
-          int y = (int) ((pt.y - fileMbr.x) * imageWidth / fileMbr.width);
-          graphics.drawLine(x, y, x, y);
-        } else if (s instanceof Rectangle) {
-          Rectangle r = (Rectangle) s;
-          int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
-          int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
-          int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
-          int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
-          graphics.drawRect(s_x1 - image_x1, s_y1 - image_y1,
-              s_x2 - s_x1 + 1, s_y2-s_y1 + 1);
-        } else if (s instanceof JTSShape) {
-          JTSShape jts_shape = (JTSShape) s;
-          Geometry geom = jts_shape.getGeom();
-          Color shape_color = graphics.getColor();
-          for (int i_geom = 0; i_geom < geom.getNumGeometries(); i_geom++) {
-            Geometry sub_geom = geom.getGeometryN(i_geom);
-            double sub_geom_alpha = sub_geom.getArea() * scale2;
-            int color_alpha = sub_geom_alpha > 1.0 ? 255 : (int) Math.round(sub_geom_alpha * 255);
+        if (show_borders) {
+          graphics.setColor(Color.BLACK);
+          graphics.drawRect(0, 0, tile_width-1, tile_height-1);
+        }
+        
+        graphics.setColor(stroke_color);
+        
+        // Plot all shapes on that image
+        while (values.hasNext()) {
+          Shape s = values.next();
+          // Draw the shape according to its type
+          
+          if (s instanceof Point) {
+            Point pt = (Point) s;
+            int x = (int) ((pt.x - fileMbr.x) * imageWidth / fileMbr.width);
+            int y = (int) ((pt.y - fileMbr.x) * imageWidth / fileMbr.width);
+            
+            image.setRGB(x, y, stroke_color.getRGB());
+          } else if (s instanceof Rectangle) {
+            Rectangle r = (Rectangle) s;
+            int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
+            int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
+            int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
+            int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
+            graphics.drawRect(s_x1 - image_x1, s_y1 - image_y1,
+                s_x2 - s_x1 + 1, s_y2-s_y1 + 1);
+          } else if (s instanceof JTSShape) {
+            JTSShape jts_shape = (JTSShape) s;
+            Geometry geom = jts_shape.getGeom();
+            Color shape_color = graphics.getColor();
+            for (int i_geom = 0; i_geom < geom.getNumGeometries(); i_geom++) {
+              Geometry sub_geom = geom.getGeometryN(i_geom);
+              double sub_geom_alpha = sub_geom.getEnvelope().getArea() * scale2;
+              int color_alpha = sub_geom_alpha > 1.0 ? 255 : (int) Math.round(sub_geom_alpha * 255);
 
-            // FIXME: When scale2 is fixed, remove the next assignment
-            color_alpha = 255;
-            if (color_alpha == 0)
-              continue;
+              if (color_alpha == 0)
+                continue;
 
-            Coordinate[][] coordss;
-            if (sub_geom instanceof Polygon) {
-              Polygon poly = (Polygon) sub_geom;
+              Coordinate[][] coordss;
+              if (sub_geom instanceof Polygon) {
+                Polygon poly = (Polygon) sub_geom;
 
-              coordss = new Coordinate[1+poly.getNumInteriorRing()][];
-              coordss[0] = poly.getExteriorRing().getCoordinates();
-              for (int i = 0; i < poly.getNumInteriorRing(); i++) {
-                coordss[i+1] = poly.getInteriorRingN(i).getCoordinates();
+                coordss = new Coordinate[1+poly.getNumInteriorRing()][];
+                coordss[0] = poly.getExteriorRing().getCoordinates();
+                for (int i = 0; i < poly.getNumInteriorRing(); i++) {
+                  coordss[i+1] = poly.getInteriorRingN(i).getCoordinates();
+                }
+              } else {
+                coordss = new Coordinate[1][];
+                coordss[0] = sub_geom.getCoordinates();
               }
-            } else {
-              coordss = new Coordinate[1][];
-              coordss[0] = sub_geom.getCoordinates();
-            }
 
-            for (Coordinate[] coords : coordss) {
-              int[] xpoints = new int[coords.length];
-              int[] ypoints = new int[coords.length];
-              int npoints = 0;
+              for (Coordinate[] coords : coordss) {
+                int[] xpoints = new int[coords.length];
+                int[] ypoints = new int[coords.length];
+                int npoints = 0;
 
-              // Transform all points in the polygon to image coordinates
-              xpoints[npoints] = (int) ((coords[0].x - fileMbr.x) * imageWidth / fileMbr.width);
-              ypoints[npoints] = (int) ((coords[0].y - fileMbr.y) * imageHeight / fileMbr.height);
-              npoints++;
-              for (int i_coord = 1; i_coord < coords.length; i_coord++) {
-                int x = (int) ((coords[i_coord].x - fileMbr.x) * imageWidth / fileMbr.width);
-                int y = (int) ((coords[i_coord].y - fileMbr.y) * imageHeight / fileMbr.height);
-                if (x != xpoints[npoints-1] || y != ypoints[npoints-1]) {
-                  xpoints[npoints] = x;
-                  ypoints[npoints] = y;
-                  npoints++;
+                // Transform all points in the polygon to image coordinates
+                xpoints[npoints] = (int) Math.round((coords[0].x - fileMbr.x) * imageWidth / fileMbr.width) - image_x1;
+                ypoints[npoints] = (int) Math.round((coords[0].y - fileMbr.y) * imageHeight / fileMbr.height) - image_y1;
+                npoints++;
+                for (int i_coord = 1; i_coord < coords.length; i_coord++) {
+                  int x = (int) Math.round((coords[i_coord].x - fileMbr.x) * imageWidth / fileMbr.width) - image_x1;
+                  int y = (int) Math.round((coords[i_coord].y - fileMbr.y) * imageHeight / fileMbr.height) - image_y1;
+                  if (x != xpoints[npoints-1] || y != ypoints[npoints-1]) {
+                    xpoints[npoints] = x;
+                    ypoints[npoints] = y;
+                    npoints++;
+                  }
+                }
+                // Draw the polygon
+                if (color_alpha > 0) {
+                  graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+                  graphics.drawPolygon(xpoints, ypoints, npoints);
                 }
               }
-              // Draw the polygon
-              if (color_alpha > 0) {
-                graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
-                graphics.drawPolygon(xpoints, ypoints, npoints);
-              }
             }
+          } else {
+            LOG.warn("Cannot draw a shape of type: "+s.getClass());
+            Rectangle r = s.getMBR();
+            int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
+            int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
+            int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
+            int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
+            if (s_x1 - image_x1 >=0 && s_x1 - image_x1 < tile_width &&
+                s_y1 - image_y1 >=0 && s_y1 - image_y1 < tile_height)
+            graphics.drawRect(s_x1 - image_x1, s_y1 - image_y1,
+                s_x2 - s_x1 + 1, s_y2-s_y1 + 1);
           }
         }
+        graphics.dispose();
+        
+        sharedValue.setImage(image);
+        output.collect(cellInfo, sharedValue);
+      } catch (RuntimeException e) {
+        e.printStackTrace();
+        throw e;
       }
-      graphics.dispose();
-      
-      sharedValue.setImage(image);
-      output.collect(cellInfo, sharedValue);
     }
   }
   
