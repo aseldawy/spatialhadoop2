@@ -5,6 +5,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Random;
 import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -501,7 +502,9 @@ public class KNN {
     Path[] paths = cla.getPaths();
     Configuration conf = new Configuration();
     final Path inputFile = paths[0];
-    final Point[] queryPoints = cla.getPoints();
+    int count = cla.getCount();
+    double closeness = cla.getClosenessFactor();
+    final Point[] queryPoints = closeness < 0 ? cla.getPoints() : new Point[count];
     final FileSystem fs = inputFile.getFileSystem(conf);
     if (!fs.exists(inputFile)) {
       printUsage();
@@ -522,6 +525,28 @@ public class KNN {
     final Path outputPath = paths.length > 1 ? paths[1] : null;
 
     final Vector<Long> results = new Vector<Long>();
+    
+    if (closeness >= 0) {
+      // Get query points according to its closeness to grid intersections
+      FileStatus fileStatus = fs.getFileStatus(inputFile);
+      BlockLocation[] blockLocations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
+      long seed = cla.getSeed();
+      Random random = new Random(seed);
+      for (int i = 0; i < count; i++) {
+        int i_block = random.nextInt(blockLocations.length);
+        int direction = random.nextInt(4);
+        // Get center point (x, y)
+        double cx = blockLocations[i_block].getCellInfo().getXMid();
+        double cy = blockLocations[i_block].getCellInfo().getYMid();
+        double cw = blockLocations[i_block].getCellInfo().width;
+        double ch = blockLocations[i_block].getCellInfo().height;
+        int signx = ((direction & 1) == 0)? 1 : -1;
+        int signy = ((direction & 2) == 1)? 1 : -1;
+        double x = cx + cw * closeness / 2 * signx;
+        double y = cy + ch * closeness / 2 * signy;
+        queryPoints[i] = new Point(x, y);
+      }
+    }
 
     // Generate query at random points
     final Vector<Thread> threads = new Vector<Thread>();

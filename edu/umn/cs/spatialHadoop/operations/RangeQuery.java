@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -33,6 +34,8 @@ import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.SpatialSite;
+
+import sun.org.mozilla.javascript.WrappedException;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
@@ -305,21 +308,30 @@ public class RangeQuery {
 
     final long[] results = new long[queryRanges.length];
     final Vector<Thread> threads = new Vector<Thread>();
+    
+    Thread.UncaughtExceptionHandler h = new Thread.UncaughtExceptionHandler() {
+      public void uncaughtException(Thread th, Throwable ex) {
+        ex.printStackTrace();
+        throw new RuntimeException("Error running a thread");
+      }
+    };
 
     for (int i = 0; i < queryRanges.length; i++) {
-      threads.add(new Thread() {
+      Thread t = new Thread() {
         @Override
         public void run() {
-          try {
-            int thread_i = threads.indexOf(this);
-            long result_count = rangeQueryMapReduce(fs, inputFile, outputPath,
-                queryRanges[thread_i], stockShape, overwrite);
-            results[thread_i] = result_count;
-          } catch (IOException e) {
-            e.printStackTrace();
-          }
+            try {
+              int thread_i = threads.indexOf(this);
+              long result_count = rangeQueryMapReduce(fs, inputFile, outputPath,
+                  queryRanges[thread_i], stockShape, overwrite);
+              results[thread_i] = result_count;
+            } catch (IOException e) {
+              throw new WrappedException(e);
+            }
         }
-      });
+      };
+      t.setUncaughtExceptionHandler(h);
+      threads.add(t);
     }
 
     long t1 = System.currentTimeMillis();
@@ -350,6 +362,6 @@ public class RangeQuery {
     } while (!threads.isEmpty());
     long t2 = System.currentTimeMillis();
     System.out.println("Time for "+queryRanges.length+" jobs is "+(t2-t1)+" millis");
-    System.out.println("Result size: "+results);
+    System.out.println("Result size: "+Arrays.asList(results));
   }
 }

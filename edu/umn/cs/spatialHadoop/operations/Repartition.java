@@ -312,20 +312,18 @@ public class Repartition {
         outFileSystem.getConf().getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
     
     LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
+    ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
+      @Override
+      public void collect(Point value) {
+        sample.add(value);
+      }
+    };
     if (local) {
-      Sampler.sampleLocalWithRatio(fs, files, sample_ratio, System.currentTimeMillis(), new ResultCollector<S>(){
-        @Override
-        public void collect(S value) {
-          sample.add(new Point(value.getMBR().getX1(), value.getMBR().getY1()));
-        }
-      }, stockShape);
+      Sampler.sampleLocalWithRatio(fs, files, sample_ratio,
+          System.currentTimeMillis(), resultCollector, stockShape, new Point());
     } else {
-      Sampler.sampleMapReduceWithRatio(fs, files, sample_ratio, System.currentTimeMillis(), new ResultCollector<S>(){
-        @Override
-        public void collect(S value) {
-          sample.add(new Point(value.getMBR().getX1(), value.getMBR().getY1()));
-        }
-      }, stockShape);
+      Sampler.sampleMapReduceWithRatio(fs, files, sample_ratio,
+          System.currentTimeMillis(), resultCollector, stockShape, new Point());
     }
     LOG.info("Finished reading a sample of size: "+sample.size()+" records");
     Rectangle[] rectangles = RTree.packInRectangles(gridInfo,

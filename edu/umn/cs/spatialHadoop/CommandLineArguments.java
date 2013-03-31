@@ -266,7 +266,7 @@ public class CommandLineArguments {
               shapeType.set("tiger".getBytes());
             }
           }
-        }, new Text2());
+        }, new Text2(), new Text2());
       } catch (IOException e) {
         e.printStackTrace();
       }
@@ -386,5 +386,43 @@ public class CommandLineArguments {
   public int getHeight(int default_height) {
     String height = get("height");
     return height == null ? default_height : Integer.parseInt(height);
+  }
+
+  public Shape getOutputShape() {
+    String shapeTypeStr = get("outshape");
+    if (shapeTypeStr == null)
+      shapeTypeStr = get("outputshape");
+    if (shapeTypeStr == null)
+      shapeTypeStr = get("output_shape");
+    final Text shapeType = new Text();
+    if (shapeTypeStr != null)
+      shapeType.set(shapeTypeStr.toLowerCase().getBytes());
+    
+    Shape stockShape = null;
+    if (shapeType.toString().startsWith("rect")) {
+      stockShape = new Rectangle();
+    } else if (shapeType.toString().startsWith("point")) {
+      stockShape = new Point();
+    } else if (shapeType.toString().startsWith("tiger")) {
+      stockShape = new TigerShape();
+    } else if (shapeType.toString().startsWith("poly")) {
+      stockShape = new Polygon();
+    } else if (shapeType.toString().startsWith("jts")) {
+      stockShape = new JTSShape();
+    } else if (shapeTypeStr != null) {
+      // Use the shapeType as a class name and try to instantiate it dynamically
+      try {
+        Class<? extends Shape> shapeClass =
+            Class.forName(shapeTypeStr).asSubclass(Shape.class);
+        stockShape = shapeClass.newInstance();
+      } catch (ClassNotFoundException e) {
+      } catch (InstantiationException e) {
+      } catch (IllegalAccessException e) {
+      }
+    }
+    if (stockShape == null)
+      LOG.warn("unknown shape type: "+shapeTypeStr);
+    
+    return stockShape;
   }
 }
