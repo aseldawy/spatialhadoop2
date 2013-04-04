@@ -14,6 +14,8 @@ import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -30,6 +32,7 @@ import org.apache.hadoop.spatial.JTSShape;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.Shape;
+import org.apache.hadoop.spatial.SimpleSpatialIndex;
 import org.apache.hadoop.spatial.SpatialSite;
 
 import com.vividsolutions.jts.geom.Coordinate;
@@ -47,6 +50,8 @@ public class Plot {
   
   /**Whether or not to show partition borders (boundaries) in generated image*/
   private static final String ShowBorders = "plot.show_borders";
+  private static final String ShowBlockCount = "plot.show_block_count";
+  private static final String ShowRecordCount = "plot.show_record_count";
 
   /**
    * If the processed block is already partitioned (via global index), then
@@ -93,17 +98,30 @@ public class Plot {
     
     private Rectangle fileMbr;
     private int imageWidth, imageHeight;
-    private boolean show_borders;
+    private boolean showBorders;
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
+    private boolean showBlockCount;
+    private boolean showRecordCount;
+    private Path[] inputPaths;
+    private FileSystem inFs;
 
     @Override
     public void configure(JobConf job) {
+      System.setProperty("java.awt.headless", "true");
       super.configure(job);
+      inputPaths = FileInputFormat.getInputPaths(job);
+      try {
+        inFs = inputPaths[0].getFileSystem(job);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
       fileMbr = ImageOutputFormat.getFileMBR(job);
       imageWidth = ImageOutputFormat.getImageWidth(job);
       imageHeight = ImageOutputFormat.getImageHeight(job);
-      show_borders = job.getBoolean(ShowBorders, false);
+      showBorders = job.getBoolean(ShowBorders, false);
+      showBlockCount = job.getBoolean(ShowBlockCount, false);
+      showRecordCount = job.getBoolean(ShowRecordCount, false);
       
       this.scale2 = (double)imageWidth * imageHeight /
           ((double)fileMbr.width * fileMbr.height);
@@ -121,6 +139,8 @@ public class Plot {
         int image_y2 = (int) (((cellInfo.y + cellInfo.height) - fileMbr.y) * imageHeight / fileMbr.height);
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
+        if (tile_width == 0 || tile_height == 0)
+          return;
         BufferedImage image = new BufferedImage(tile_width, tile_height,
             BufferedImage.TYPE_INT_ARGB);
         Color bg_color = new Color(0,0,0,0);
@@ -134,25 +154,22 @@ public class Plot {
         }
         graphics.setBackground(bg_color);
         graphics.clearRect(0, 0, tile_width, tile_height);
-        
-        if (show_borders) {
-          graphics.setColor(Color.BLACK);
-          graphics.drawRect(0, 0, tile_width-1, tile_height-1);
-        }
-        
         graphics.setColor(stroke_color);
         
+        int recordCount = 0;
         // Plot all shapes on that image
         while (values.hasNext()) {
+          recordCount++;
           Shape s = values.next();
           // Draw the shape according to its type
           
           if (s instanceof Point) {
             Point pt = (Point) s;
             int x = (int) ((pt.x - fileMbr.x) * imageWidth / fileMbr.width);
-            int y = (int) ((pt.y - fileMbr.x) * imageWidth / fileMbr.width);
+            int y = (int) ((pt.y - fileMbr.y) * imageHeight / fileMbr.height);
             
-            image.setRGB(x, y, stroke_color.getRGB());
+            if (x >= 0 && x < imageWidth && y >= 0 && y < imageHeight)
+              graphics.fillRect(x, y, 1, 1);
           } else if (s instanceof Rectangle) {
             Rectangle r = (Rectangle) s;
             int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
@@ -225,6 +242,32 @@ public class Plot {
                 s_x2 - s_x1 + 1, s_y2-s_y1 + 1);
           }
         }
+        if (showBorders) {
+          graphics.setColor(Color.BLACK);
+          graphics.drawRect(0, 0, tile_width, tile_height);
+          String info = "";
+          if (showRecordCount) {
+            info += "rc:"+recordCount;
+          }
+          if (showBlockCount) {
+            int blockCount = 0;
+            for (Path inputPath : inputPaths) {
+              FileStatus fileStatus = inFs.getFileStatus(inputPath);
+              BlockLocation[] blocks = inFs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
+              for (BlockLocation block : blocks) {
+                if (block.getCellInfo().equals(cellInfo)) {
+                  blockCount++;
+                }
+              }
+            }
+            if (info.length() != 0)
+              info += ", ";
+            info += "bc:"+blockCount;
+          }
+          if (info.length() > 0) {
+            graphics.drawString(info, 0, graphics.getFontMetrics().getHeight());
+          }
+        }
         graphics.dispose();
         
         sharedValue.setImage(image);
@@ -237,7 +280,8 @@ public class Plot {
   }
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
-      Shape shape, int width, int height, boolean borders)  throws IOException {
+      Shape shape, int width, int height, boolean showBorders,
+      boolean showBlockCount, boolean showRecordCount)  throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
     
@@ -259,6 +303,8 @@ public class Plot {
       gridInfo.calculateCellDimensions(inFileStatus.getLen(),
           inFileStatus.getBlockSize());
       cellInfos = gridInfo.getAllCells();
+      // Doesn't make sense to show any partition information in a heap file
+      showBorders = showBlockCount = showRecordCount = false;
     } else {
       // A grid file, use its cells
       Set<CellInfo> all_cells = new HashSet<CellInfo>();
@@ -284,17 +330,39 @@ public class Plot {
     ImageOutputFormat.setFileMBR(job, fileMbr);
     ImageOutputFormat.setImageWidth(job, width);
     ImageOutputFormat.setImageHeight(job, height);
-    job.setBoolean(ShowBorders, borders);
+    job.setBoolean(ShowBorders, showBorders);
+    job.setBoolean(ShowBlockCount, showBorders);
+    job.setBoolean(ShowRecordCount, showBorders);
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     
-    // TODO change TextOutputFormat to ImageOutputFormat (to be created)
     job.setOutputFormat(ImageOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
     
     JobClient.runJob(job);
+    
+    // Rename output file
+    // Combine all output files into one file as we do with grid files
+    FileSystem outFs = outFile.getFileSystem(job);
+    Path temp = new Path(outFile.toUri().getPath()+"_temp");
+    outFs.rename(outFile, temp);
+    FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.toUri().getPath().contains("part-");
+      }
+    });
+    // TODO if more than one output image, merge them into one image (overlay)
+    for (int i = 0; i < resultFiles.length; i++) {
+      FileStatus resultFile = resultFiles[i];
+      if (i == 0)
+        outFs.rename(resultFile.getPath(), outFile);
+      else
+        outFs.rename(resultFile.getPath(), new Path(outFile.toUri().getPath()+"_"+i));
+    }
+    outFs.delete(temp, true);
   }
   
   private static void printUsage() {
@@ -303,9 +371,12 @@ public class Plot {
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("shape:<point|rectangle|polygon|jts> - (*) Type of shapes stored in input file");
-    System.out.println("image:<w,h> - Maximum width and height of the image (1000,1000)");
-    System.out.println("color:<c> - Main color used to draw the picture (black)");
+    System.out.println("width:<w> - Maximum width of the image (1000,1000)");
+    System.out.println("height:<h> - Maximum height of the image (1000,1000)");
+//    System.out.println("color:<c> - Main color used to draw the picture (black)");
     System.out.println("-borders: For globally indexed files, draws the borders of partitions");
+//    System.out.println("-showblockcount: For globally indexed files, draws the borders of partitions");
+    System.out.println("-showrecordcount: Show number of records in each partition");
     System.out.println("-overwrite: Override output file without notice");
   }
 
@@ -314,6 +385,7 @@ public class Plot {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
+    System.setProperty("java.awt.headless", "true");
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(Plot.class);
     Path[] files = cla.getPaths();
@@ -339,13 +411,15 @@ public class Plot {
         throw new RuntimeException("Output file exists and overwrite flag is not set");
     }
 
-    boolean borders = cla.isBorders();
+    boolean showBorders = cla.isBorders();
+    boolean showBlockCount = cla.isShowBlockCount();
+    boolean showRecordCount = cla.isShowRecordCount();
     Shape shape = cla.getShape(true);
     
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
     
-    plotMapReduce(inputFile, outputFile, shape, width, height, borders);
+    plotMapReduce(inputFile, outputFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
   }
 
 }

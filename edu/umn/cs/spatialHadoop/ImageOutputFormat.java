@@ -1,6 +1,5 @@
 package edu.umn.cs.spatialHadoop;
 
-import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -8,6 +7,8 @@ import java.io.OutputStream;
 
 import javax.imageio.ImageIO;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -21,6 +22,7 @@ import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.Progressable;
 
 public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable> {
+  private static final Log LOG = LogFactory.getLog(ImageOutputFormat.class);
   
   /**MBR of the input file*/
   private static final String InputFileMBR = "plot.file_mbr";
@@ -46,6 +48,7 @@ public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable>
 
     ImageRecordWriter(Path out, FileSystem outFs,
         int width, int height, Rectangle fileMbr) {
+      System.setProperty("java.awt.headless", "true");
       this.out = out;
       this.outFs = outFs;
       this.image_width = width;

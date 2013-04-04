@@ -315,7 +315,7 @@ public class Repartition {
     ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
       @Override
       public void collect(Point value) {
-        sample.add(value);
+        sample.add(value.clone());
       }
     };
     if (local) {

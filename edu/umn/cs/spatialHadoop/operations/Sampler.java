@@ -174,11 +174,22 @@ public class Sampler {
    */
   public static <T extends TextSerializable, O extends TextSerializable> int sampleLocalWithSize(
       FileSystem fs, Path[] files, long total_size, long seed,
-      final ResultCollector<O> output, T inObj, final O outObj) throws IOException {
+      final ResultCollector<O> output, final T inObj, final O outObj) throws IOException {
     int average_record_size = 1024; // A wild guess for record size
     final LongWritable current_sample_size = new LongWritable();
     int sample_count = 0;
-    
+   
+    final ResultCollector<T> converter = createConverter(output, inObj, outObj);
+
+    final ResultCollector<Text2> counter = new ResultCollector<Text2>() {
+      @Override
+      public void collect(Text2 r) {
+        current_sample_size.set(current_sample_size.get() + r.getLength());
+        inObj.fromText(r);
+        converter.collect(inObj);
+      }
+    };
+
     while (current_sample_size.get() < total_size) {
       int count = (int) ((total_size - current_sample_size.get()) / average_record_size);
       if (count < 10)
@@ -186,13 +197,13 @@ public class Sampler {
       
       if (count < BIG_SAMPLE) {
         
-        sample_count += sampleLocalByCount(fs, files, count, seed, output, inObj, outObj);
+        sample_count += sampleLocalByCount(fs, files, count, seed, counter, new Text2(), new Text2());
         // Change the seed to get different sample next time.
         // Still we need to ensure that repeating the program will generate
         // the same value
         seed += sample_count;
       } else {
-        sample_count += sampleLocalBig(fs, files, count, seed, output, inObj, outObj);
+        sample_count += sampleLocalBig(fs, files, count, seed, counter, new Text2(), new Text2());
         seed += sample_count;
       }
       // Update average_records_size
@@ -201,6 +212,19 @@ public class Sampler {
     return sample_count;
   }
 
+  /**
+   * Creates a proxy ResultCollector that takes as input objects of type T
+   * and converts them to objects of type O.
+   * It returns an object with a collect method that takes as input an object
+   * of type T (i.e., inObj). This object converts the given object to the
+   * type O (i.e., outObj) and sends the result to the method in output#collect.
+   * @param <O>
+   * @param <T>
+   * @param output
+   * @param inObj
+   * @param outObj
+   * @return
+   */
   private static <O extends TextSerializable, T extends TextSerializable> ResultCollector<T> createConverter(
       final ResultCollector<O> output, T inObj, final O outObj) {
     if (output == null)
@@ -239,6 +263,15 @@ public class Sampler {
         public void collect(T r) {
           text.clear();
           r.toText(text);
+          output.collect(outObj);
+        }
+      };
+    } else if (inObj instanceof Text) {
+      final Text text = (Text) inObj;
+      return new ResultCollector<T>() {
+        @Override
+        public void collect(T r) {
+          outObj.fromText(text);
           output.collect(outObj);
         }
       };
@@ -396,6 +429,8 @@ public class Sampler {
   int sampleLocalBig(
       FileSystem fs, Path[] files, int count, long seed,
       ResultCollector<O> output, T inObj, O outObj) throws IOException {
+    if (fs.getGlobalIndex(fs.getFileStatus(files[0])) == null)
+      return sampleLocalByCount(fs, files, count, seed, output, inObj, outObj);
     ResultCollector<T> converter = createConverter(output, inObj, outObj);
     long[] files_start_offset = new long[files.length+1]; // Prefix sum of files sizes
     long total_length = 0;
@@ -540,7 +575,6 @@ public class Sampler {
     return records_returned;
   }
 
-  
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(Sampler.class);
@@ -577,6 +611,7 @@ public class Sampler {
       sampleMapReduceWithRatio(fs, inputFiles, ratio, seed, output, stockObject, outputShape);
     } else {
       if (count < BIG_SAMPLE) {
+        // Good for small files and the only way to sample heap files
         sampleLocalByCount(fs, inputFiles, count, seed, output, stockObject, outputShape);
       } else {
         sampleLocalBig(fs, inputFiles, count, seed, output, stockObject, outputShape);

@@ -54,20 +54,23 @@ public class FileMBR {
     public void reduce(NullWritable dummy, Iterator<Rectangle> values,
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
             throws IOException {
-      double x1 = Double.MAX_VALUE;
-      double y1 = Double.MAX_VALUE;
-      double x2 = Double.MIN_VALUE;
-      double y2 = Double.MIN_VALUE;
-      
-      while (values.hasNext()) {
+      if (values.hasNext()) {
         Rectangle rect = values.next();
-        if (rect.getX1() < x1) x1 = rect.getX1();
-        if (rect.getY1() < y1) y1 = rect.getY1();
-        if (rect.getX2() > x2) x2 = rect.getX2();
-        if (rect.getY2() > y2) y2 = rect.getY2();
+        
+        double y1 = rect.getY1();
+        double x2 = rect.getX2();
+        double y2 = rect.getY2();
+        double x1 = rect.getX1();
+
+        while (values.hasNext()) {
+          rect = values.next();
+          if (rect.getX1() < x1) x1 = rect.getX1();
+          if (rect.getY1() < y1) y1 = rect.getY1();
+          if (rect.getX2() > x2) x2 = rect.getX2();
+          if (rect.getY2() > y2) y2 = rect.getY2();
+        }
+        output.collect(dummy, new Rectangle(x1, y1, x2 - x1, y2 - y1));
       }
-      
-      output.collect(dummy, new Rectangle(x1, y1, x2 - x1, y2 - y1));
     }
   }
   
@@ -87,10 +90,11 @@ public class FileMBR {
         fs.getFileStatus(file), 0, fs.getFileStatus(file).getLen());
     if (fileBlockLocations[0].getCellInfo() != null) {
       boolean heap_file = false;
-      double x1 = Double.MAX_VALUE;
-      double y1 = Double.MAX_VALUE;
-      double x2 = Double.MIN_VALUE;
-      double y2 = Double.MIN_VALUE;
+      BlockLocation firstBlock = fileBlockLocations[0];
+      double x1 = firstBlock.getCellInfo().getX1();
+      double y1 = firstBlock.getCellInfo().getY1();
+      double x2 = firstBlock.getCellInfo().getX2();
+      double y2 = firstBlock.getCellInfo().getY2();
       for (BlockLocation blockLocation : fileBlockLocations) {
         Rectangle rect = blockLocation.getCellInfo();
         if (blockLocation.getCellInfo() == null) {
@@ -167,10 +171,12 @@ public class FileMBR {
         fs.getFileStatus(file), 0, fs.getFileStatus(file).getLen());
     if (fileBlockLocations[0].getCellInfo() != null) {
       boolean heap_file = false;
-      double x1 = Double.MAX_VALUE;
-      double y1 = Double.MAX_VALUE;
-      double x2 = Double.MIN_VALUE;
-      double y2 = Double.MIN_VALUE;
+      BlockLocation firstBlock = fileBlockLocations[0];
+      double x1 = firstBlock.getCellInfo().getX1();
+      double y1 = firstBlock.getCellInfo().getY1();
+      double x2 = firstBlock.getCellInfo().getX2();
+      double y2 = firstBlock.getCellInfo().getY2();
+
       for (BlockLocation blockLocation : fileBlockLocations) {
         Rectangle rect = blockLocation.getCellInfo();
         if (blockLocation.getCellInfo() == null) {
@@ -191,21 +197,27 @@ public class FileMBR {
     ShapeRecordReader<Shape> shapeReader =
         new ShapeRecordReader<Shape>(fs.open(file), 0, file_size);
 
-    double x1 = Double.MAX_VALUE;
-    double y1 = Double.MAX_VALUE;
-    double x2 = Double.MIN_VALUE;
-    double y2 = Double.MIN_VALUE;
     
     CellInfo key = shapeReader.createKey();
+    
+    if (!shapeReader.next(key, stockShape)) {
+      shapeReader.close();
+      return null;
+    }
+      
+    Rectangle rect = stockShape.getMBR();
+    double x1 = rect.getX1();
+    double y1 = rect.getY1();
+    double x2 = rect.getX2();
+    double y2 = rect.getY2();
 
     while (shapeReader.next(key, stockShape)) {
-      Rectangle rect = stockShape.getMBR();
+      rect = stockShape.getMBR();
       if (rect.getX1() < x1) x1 = rect.getX1();
       if (rect.getY1() < y1) y1 = rect.getY1();
       if (rect.getX2() > x2) x2 = rect.getX2();
       if (rect.getY2() > y2) y2 = rect.getY2();
     }
-    shapeReader.close();
     return new Rectangle(x1, y1, x2-x1, y2-y1);
   }
   

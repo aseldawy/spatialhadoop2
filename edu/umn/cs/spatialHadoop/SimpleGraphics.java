@@ -358,7 +358,24 @@ public class SimpleGraphics extends Graphics2D {
   protected void setPixel(int x, int y, int rgb) {
     if (x >= 0 && y >= 0 && x < image.getWidth() && y < image.getHeight()) {
       int offset = y * image.getWidth() + x;
-      pixels[offset] = rgb;
+      int d_alpha = pixels[offset] >>> 24;
+      int s_alpha = rgb >>> 24;
+      if (d_alpha == 0) {
+        pixels[offset] = rgb;
+      } else if (s_alpha != 0) {
+        int r_alpha = s_alpha + d_alpha * (255 - s_alpha) / 256;
+        int r_pixel = 0;
+        for (int i = 0; i < 3; i++) {
+          int s_component = (rgb >>> (8 * i)) & 0xff;
+          int d_component = (pixels[offset] >>> (8 * i)) & 0xff;
+          int merge_component = (s_component * s_alpha +
+              d_component * d_alpha * (255-s_alpha) / 256)
+              / r_alpha;
+          r_pixel |= merge_component << (8 * i);
+        }
+        r_pixel |= r_alpha << 24;
+        pixels[offset] = r_pixel;
+      }
     }
   }
 
@@ -390,26 +407,38 @@ public class SimpleGraphics extends Graphics2D {
       // Draw an orthogonal line
       dumpRect(x1, y1, x2 - x1 + 1, y2 - y1 + 1, color);
     } else {
-      int dy = y2 - y1;
-      int dx = x2 - x1;
+      int dx = Math.abs(x2 - x1);
+      int dy = Math.abs(y2 - y1);
       if (dx > dy) {
+        if (x1 > x2) {
+          // Ensure that x1 <= x2
+          x1 ^= x2; x2 ^= x1; x1 ^= x2;
+          y1 ^= y2; y2 ^= y1; y1 ^= y2;
+        }
+        int incy = y1 < y2? 1 : -1;
         int p = dy - dx / 2;
         int y = y1;
         for (int x = x1; x <= x2; x++) {
           setPixel(x, y, color.getRGB());
           if (p > 0) {
-            y++;
+            y += incy;
             p += dy - dx;
           } else
             p += dy;
         }
       } else {
+        if (y1 > y2) {
+          // Ensure that y1 < y2
+          x1 ^= x2; x2 ^= x1; x1 ^= x2;
+          y1 ^= y2; y2 ^= y1; y1 ^= y2;
+        }
+        int incx = x1 < x2? 1 : -1;
         int p = dx - dy / 2;
         int x = x1;
         for (int y = y1; y <= y2; y++) {
           setPixel(x, y, color.getRGB());
           if (p > 0) {
-            x++;
+            x += incx;
             p += dx - dy;
           } else
             p += dx;
@@ -440,7 +469,10 @@ public class SimpleGraphics extends Graphics2D {
     if (y + height > image.getHeight())
       height -= y + height - image.getHeight();
     if (x + width > image.getWidth())
-      width -= x + width - image.getWidth();
+      width = image.getWidth() - x;
+    if (x >= image.getWidth() || y >= image.getHeight() ||
+        width < 0 || height < 0)
+      return;
     while (height-- > 0) {
       int offset = y * image.getWidth() + x;
       Arrays.fill(pixels, offset, offset + width, color.getRGB());
@@ -616,6 +648,8 @@ public class SimpleGraphics extends Graphics2D {
     g.setColor(new Color(0, 0, 0, 255));
     g.drawLine(0, 0, 50, 10);
     g.drawLine(0, 0, 10, 50);
+    g.drawLine(50, 50, 80, 30);
+    g.drawLine(50, 50, 30, 80);
     
     BufferedImage image2 = new BufferedImage(30, 30, BufferedImage.TYPE_INT_ARGB);
 //    Graphics2D g2 = new SimpleGraphics(image2);
@@ -623,7 +657,7 @@ public class SimpleGraphics extends Graphics2D {
     g2.setBackground(new Color(0, 255, 0, 128));
     g2.clearRect(0, 0, 30, 30);
     g2.dispose();
-    g.drawImage(image2, 50, 50, null);
+    g.drawImage(image2, 70, 70, null);
     g.drawImage(image2, 0, 0, null);
     
     g.dispose();

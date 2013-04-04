@@ -425,4 +425,12 @@ public class CommandLineArguments {
     
     return stockShape;
   }
+
+  public boolean isShowBlockCount() {
+    return is("showblockcount");
+  }
+
+  public boolean isShowRecordCount() {
+    return is("showrecordcount");
+  }
 }
