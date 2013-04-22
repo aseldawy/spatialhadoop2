@@ -4,12 +4,16 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
+import javax.imageio.ImageIO;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -26,13 +30,13 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.hadoop.mapred.spatial.GridOutputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
+import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.GridInfo;
 import org.apache.hadoop.spatial.JTSShape;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SimpleSpatialIndex;
 import org.apache.hadoop.spatial.SpatialSite;
 
 import com.vividsolutions.jts.geom.Coordinate;
@@ -279,6 +283,85 @@ public class Plot {
     }
   }
   
+  public static void drawShape(Graphics2D graphics, Shape s, Rectangle fileMbr,
+      int imageWidth, int imageHeight, double scale2) {
+    if (s instanceof Point) {
+      Point pt = (Point) s;
+      int x = (int) ((pt.x - fileMbr.x) * imageWidth / fileMbr.width);
+      int y = (int) ((pt.y - fileMbr.y) * imageHeight / fileMbr.height);
+      
+      if (x >= 0 && x < imageWidth && y >= 0 && y < imageHeight)
+        graphics.fillRect(x, y, 1, 1);
+    } else if (s instanceof Rectangle) {
+      Rectangle r = (Rectangle) s;
+      int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
+      int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
+      int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
+      int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
+      graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
+    } else if (s instanceof JTSShape) {
+      JTSShape jts_shape = (JTSShape) s;
+      Geometry geom = jts_shape.getGeom();
+      Color shape_color = graphics.getColor();
+      for (int i_geom = 0; i_geom < geom.getNumGeometries(); i_geom++) {
+        Geometry sub_geom = geom.getGeometryN(i_geom);
+        double sub_geom_alpha = sub_geom.getEnvelope().getArea() * scale2;
+        int color_alpha = sub_geom_alpha > 1.0 ? 255 : (int) Math.round(sub_geom_alpha * 255);
+
+        if (color_alpha == 0)
+          continue;
+
+        Coordinate[][] coordss;
+        if (sub_geom instanceof Polygon) {
+          Polygon poly = (Polygon) sub_geom;
+
+          coordss = new Coordinate[1+poly.getNumInteriorRing()][];
+          coordss[0] = poly.getExteriorRing().getCoordinates();
+          for (int i = 0; i < poly.getNumInteriorRing(); i++) {
+            coordss[i+1] = poly.getInteriorRingN(i).getCoordinates();
+          }
+        } else {
+          coordss = new Coordinate[1][];
+          coordss[0] = sub_geom.getCoordinates();
+        }
+
+        for (Coordinate[] coords : coordss) {
+          int[] xpoints = new int[coords.length];
+          int[] ypoints = new int[coords.length];
+          int npoints = 0;
+
+          // Transform all points in the polygon to image coordinates
+          xpoints[npoints] = (int) Math.round((coords[0].x - fileMbr.x) * imageWidth / fileMbr.width);
+          ypoints[npoints] = (int) Math.round((coords[0].y - fileMbr.y) * imageHeight / fileMbr.height);
+          npoints++;
+          for (int i_coord = 1; i_coord < coords.length; i_coord++) {
+            int x = (int) Math.round((coords[i_coord].x - fileMbr.x) * imageWidth / fileMbr.width);
+            int y = (int) Math.round((coords[i_coord].y - fileMbr.y) * imageHeight / fileMbr.height);
+            if (x != xpoints[npoints-1] || y != ypoints[npoints-1]) {
+              xpoints[npoints] = x;
+              ypoints[npoints] = y;
+              npoints++;
+            }
+          }
+          // Draw the polygon
+          if (color_alpha > 0) {
+            graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+            graphics.drawPolygon(xpoints, ypoints, npoints);
+          }
+        }
+      }
+    } else {
+      LOG.warn("Cannot draw a shape of type: "+s.getClass());
+      Rectangle r = s.getMBR();
+      int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
+      int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
+      int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
+      int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
+      if (s_x1 >= 0 && s_x1 < imageWidth && s_y1 >= 0 && s_y1 < imageHeight)
+        graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
+    }
+  }
+  
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, boolean showBorders,
       boolean showBlockCount, boolean showRecordCount)  throws IOException {
@@ -365,6 +448,51 @@ public class Plot {
     outFs.delete(temp, true);
   }
   
+  static <S extends Shape> void plotLocal(Path inFile, Path outFile,
+      S shape, int width, int height, boolean showBorders,
+      boolean showBlockCount, boolean showRecordCount) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(new Configuration());
+    Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
+    
+    // Adjust width and height to maintain aspect ratio
+    if ((double)fileMbr.width / fileMbr.height > (double) width / height) {
+      // Fix width and change height
+      height = (int) (fileMbr.height * width / fileMbr.width);
+    } else {
+      width = (int) (fileMbr.width * height / fileMbr.height);
+    }
+    
+    double scale2 = (double) width * height
+        / ((double) fileMbr.width * fileMbr.height);
+
+    // Create an image
+    BufferedImage image = new BufferedImage(width, height,
+        BufferedImage.TYPE_INT_ARGB);
+    Graphics2D graphics = image.createGraphics();
+    Color bg_color = new Color(0,0,0,0);
+    bg_color = Color.WHITE;
+    graphics.setBackground(bg_color);
+    graphics.clearRect(0, 0, width, height);
+    Color stroke_color = Color.BLACK;
+    graphics.setColor(stroke_color);
+
+    long fileLength = inFs.getFileStatus(inFile).getLen();
+    ShapeRecordReader<S> reader =
+      new ShapeRecordReader<S>(inFs.open(inFile), 0, fileLength);
+    
+    CellInfo cell = reader.createKey();
+    while (reader.next(cell, shape)) {
+      drawShape(graphics, shape, fileMbr, width, height, scale2);
+    }
+    
+    reader.close();
+    graphics.dispose();
+    FileSystem outFs = outFile.getFileSystem(new Configuration());
+    OutputStream out = outFs.create(outFile, true);
+    ImageIO.write(image, "png", out);
+    out.close();
+  }
+  
   private static void printUsage() {
     System.out.println("Plots all shapes to an image");
     System.out.println("Parameters: (* marks required parameters)");
@@ -394,19 +522,19 @@ public class Plot {
       throw new RuntimeException("Illegal arguments. File names missing");
     }
     
-    Path inputFile = files[0];
-    FileSystem inFs = inputFile.getFileSystem(conf);
-    if (!inFs.exists(inputFile)) {
+    Path inFile = files[0];
+    FileSystem inFs = inFile.getFileSystem(conf);
+    if (!inFs.exists(inFile)) {
       printUsage();
       throw new RuntimeException("Input file does not exist");
     }
     
     boolean overwrite = cla.isOverwrite();
-    Path outputFile = files[1];
-    FileSystem outFs = outputFile.getFileSystem(conf);
-    if (outFs.exists(outputFile)) {
+    Path outFile = files[1];
+    FileSystem outFs = outFile.getFileSystem(conf);
+    if (outFs.exists(outFile)) {
       if (overwrite)
-        outFs.delete(outputFile, true);
+        outFs.delete(outFile, true);
       else
         throw new RuntimeException("Output file exists and overwrite flag is not set");
     }
@@ -418,8 +546,12 @@ public class Plot {
     
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
-    
-    plotMapReduce(inputFile, outputFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
+
+    if (cla.isLocal()) {
+      plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
+    } else {
+      plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
+    }
   }
 
 }
