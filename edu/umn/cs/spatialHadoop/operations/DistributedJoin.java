@@ -79,26 +79,50 @@ public class DistributedJoin {
         Reporter reporter) throws IOException {
       final Rectangle mapperMBR = key.first.getIntersection(key.second);
 
-      // Join two arrays
-      ArrayWritable ar1 = (ArrayWritable) value.first;
-      ArrayWritable ar2 = (ArrayWritable) value.second;
-      SpatialAlgorithms.SpatialJoin_planeSweep(
-          (Shape[])ar1.get(), (Shape[])ar2.get(),
-          new ResultCollector2<Shape, Shape>() {
-            @Override
-            public void collect(Shape x, Shape y) {
-              Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
-              // Employ reference point duplicate avoidance technique 
-              if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y)) {
-                try {
-                  output.collect(x, y);
-                } catch (IOException e) {
-                  e.printStackTrace();
+      if (value.first instanceof ArrayWritable && value.second instanceof ArrayWritable) {
+        // Join two arrays using the plane sweep algorithm
+        ArrayWritable ar1 = (ArrayWritable) value.first;
+        ArrayWritable ar2 = (ArrayWritable) value.second;
+        SpatialAlgorithms.SpatialJoin_planeSweep(
+            (Shape[])ar1.get(), (Shape[])ar2.get(),
+            new ResultCollector2<Shape, Shape>() {
+              @Override
+              public void collect(Shape x, Shape y) {
+                Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
+                // Employ reference point duplicate avoidance technique 
+                if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y)) {
+                  try {
+                    output.collect(x, y);
+                  } catch (IOException e) {
+                    e.printStackTrace();
+                  }
                 }
               }
             }
+        );
+      } else if (value.first instanceof RTree && value.second instanceof RTree) {
+        // Join two R-trees
+        @SuppressWarnings("unchecked")
+        RTree<Shape> r1 = (RTree<Shape>) value.first;
+        @SuppressWarnings("unchecked")
+        RTree<Shape> r2 = (RTree<Shape>) value.second;
+        RTree.spatialJoin(r1, r2, new ResultCollector2<Shape, Shape>() {
+          @Override
+          public void collect(Shape r, Shape s) {
+            Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
+            if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y)) {
+              try {
+                output.collect(r, s);
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
+            }
           }
-      );
+        });
+      } else {
+        throw new RuntimeException("Cannot join " + value.first.getClass()
+            + " with " + value.second.getClass());
+      }
     }
   }
   
@@ -210,6 +234,7 @@ public class DistributedJoin {
         // Always use the cell of the larger file
         cellSet.add(y.getCellInfo());
         Rectangle intersection = x.getCellInfo().getIntersection(y.getCellInfo());
+        LOG.info("Intersection: "+intersection);                                                                                  
         matched_area.set(matched_area.get() +
             (double)intersection.width * intersection.height);
       }
@@ -246,7 +271,7 @@ public class DistributedJoin {
   
     // Continue with the join step
     if (fs.exists(partitioned_file)) {
-      // An output file might not existent if the two files are disjoing
+      // An output file might not existent if the two files are disjoint
 
       // Replace the smaller file with its repartitioned copy
       files[0] = partitioned_file;
