@@ -489,18 +489,22 @@ public class Repartition {
     boolean local = cla.isLocal();
     long blockSize = cla.getBlockSize();
     Shape stockShape = cla.getShape(true);
+    LOG.info("Shape: "+stockShape.getClass());
     CellInfo[] cells = cla.getCells();
-    
+
     Rectangle input_mbr = cla.getRectangle();
     if (input_mbr == null && cells == null) {
-      input_mbr = FileMBR.fileMBRLocal(fs, inputPath, stockShape);
+      LOG.info("Calculating file MBR");
+      input_mbr = local ? FileMBR.fileMBRLocal(fs, inputPath, stockShape) : 
+        FileMBR.fileMBRMapReduce(fs, inputPath, stockShape);
+      LOG.info("File MBR is "+input_mbr);
     }
     
     long t1 = System.currentTimeMillis();
     if (cells != null) {
       if (blockSize == 0) {
         // Calculate block size based on overlap between given cells and
-        // file mbr
+        // file MBR
         if (input_mbr == null)
           input_mbr = local ? FileMBR.fileMBRLocal(fs, inputPath, stockShape) :
             FileMBR.fileMBRMapReduce(fs, inputPath, stockShape);
