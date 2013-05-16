@@ -48,6 +48,11 @@ public class Sampler {
   /**The threshold in number of samples after which the BIG version is used*/
   private static final int BIG_SAMPLE = 10000;
   
+  private static final String InClass =
+      "edu.umn.cs.spatialHadoop.operations.Sampler.InClass";
+  private static final String OutClass =
+      "edu.umn.cs.spatialHadoop.operations.Sampler.OutClass";
+  
   /**Random seed to use by all mappers to ensure unique result per seed*/
   private static final String RANDOM_SEED =
       "edu.umn.cs.spatialHadoop.oeprations.Sampler.RandomSeed";
@@ -63,18 +68,72 @@ public class Sampler {
     
     /**Random number generator to use*/
     private Random random;
+
+    private Shape inShape;
+    
+    enum Conversion {None, ShapeToPoint, ShapeToRect};
+    Conversion conversion;
     
     @Override
     public void configure(JobConf job) {
       sampleRatio = job.getFloat(SAMPLE_RATIO, 0.01f);
       random = new Random(job.getLong(RANDOM_SEED, System.currentTimeMillis()));
+      try {
+        Class<? extends TextSerializable> inClass =
+            job.getClass(InClass, null).asSubclass(TextSerializable.class);
+        Class<? extends TextSerializable> outClass =
+            job.getClass(OutClass, null).asSubclass(TextSerializable.class);
+
+        if (inClass == outClass) {
+          conversion = Conversion.None;
+        } else {
+          TextSerializable inObj = inClass.newInstance();
+          TextSerializable outObj = outClass.newInstance();
+
+          if (inObj instanceof Shape && outObj instanceof Point) {
+            inShape = (Shape) inObj;
+            conversion = Conversion.ShapeToPoint;
+          } else if (inObj instanceof Shape && outObj instanceof Rectangle) {
+            inShape = (Shape) inObj;
+            conversion = Conversion.ShapeToRect;
+          } else if (outObj instanceof Text) {
+            conversion = Conversion.None;
+          } else {
+            throw new RuntimeException("Don't know how to convert from: "+
+                inClass+" to "+outClass);
+          }
+        }
+      } catch (InstantiationException e) {
+        e.printStackTrace();
+      } catch (IllegalAccessException e) {
+        e.printStackTrace();
+      }
     }
     
     public void map(CellInfo cell, Text line,
         OutputCollector<NullWritable, Text> output, Reporter reporter)
             throws IOException {
-      if (random.nextFloat() < sampleRatio)
-        output.collect(dummyKey, line);
+      if (random.nextFloat() < sampleRatio) {
+        switch (conversion) {
+        case None:
+          output.collect(dummyKey, line);
+          break;
+        case ShapeToPoint:
+          inShape.fromText(line);
+          Point center = inShape.getMBR().getCenterPoint();
+          line.clear();
+          center.toText(line);
+          output.collect(dummyKey, line);
+          break;
+        case ShapeToRect:
+          inShape.fromText(line);
+          Rectangle mbr = inShape.getMBR();
+          line.clear();
+          mbr.toText(line);
+          output.collect(dummyKey, line);
+          break;
+        }
+      }
     }
   }
 
@@ -114,6 +173,8 @@ public class Sampler {
     job.setJobName("Sample");
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(Text.class);
+    job.setClass(InClass, inObj.getClass(), TextSerializable.class);
+    job.setClass(OutClass, outObj.getClass(), TextSerializable.class);
     
     job.setMapperClass(Map.class);
     job.setLong(RANDOM_SEED, seed);
@@ -135,7 +196,6 @@ public class Sampler {
     // Read job result
     int result_size = 0;
     if (output != null) {
-      ResultCollector<T> converter = createConverter(output, inObj, outObj);
       Text line = new Text();
       FileStatus[] results = outFs.listStatus(outputPath);
       
@@ -144,8 +204,10 @@ public class Sampler {
           LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
           try {
             while (lineReader.readLine(line) > 0) {
-              inObj.fromText(line);
-              converter.collect(inObj);
+              if (output != null) {
+                outObj.fromText(line);
+                output.collect(outObj);
+              }
               result_size++;
             }
           } catch (RuntimeException e) {
