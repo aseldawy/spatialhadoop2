@@ -16,13 +16,17 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Text2;
 import org.apache.hadoop.io.TextSerializable;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.Point;
@@ -153,13 +157,14 @@ public class Sampler {
    * @param fs
    * @param files
    * @param ratio
+   * @param threshold - Maximum number of elements to be sampled
    * @param output
    * @param inObj
    * @return
    * @throws IOException
    */
   public static <T extends TextSerializable, O extends TextSerializable> int sampleMapReduceWithRatio(
-      FileSystem fs, Path[] files, double ratio, long seed,
+      FileSystem fs, Path[] files, double ratio, long threshold, long seed,
       final ResultCollector<O> output, T inObj, O outObj) throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
@@ -191,7 +196,15 @@ public class Sampler {
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job
-    JobClient.runJob(job);
+    RunningJob run_job = JobClient.runJob(job);
+    
+    Counters counters = run_job.getCounters();
+    Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
+    final long resultCount = outputRecordCounter.getValue();
+    // Ratio of records to return from output based on the threshold
+    // Note that any number greater than or equal to one will cause all
+    // elements to be returned
+    final double selectRatio = (double)threshold / resultCount;
     
     // Read job result
     int result_size = 0;
@@ -204,11 +217,13 @@ public class Sampler {
           LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
           try {
             while (lineReader.readLine(line) > 0) {
-              if (output != null) {
-                outObj.fromText(line);
-                output.collect(outObj);
+              if (Math.random() < selectRatio) {
+                if (output != null) {
+                  outObj.fromText(line);
+                  output.collect(outObj);
+                }
+                result_size++;
               }
-              result_size++;
             }
           } catch (RuntimeException e) {
             e.printStackTrace();
@@ -670,7 +685,9 @@ public class Sampler {
     if (size != 0) {
       sampleLocalWithSize(fs, inputFiles, size, seed, output, stockObject, outputShape);
     } else if (ratio != -1.0) {
-      sampleMapReduceWithRatio(fs, inputFiles, ratio, seed, output, stockObject, outputShape);
+      long threshold = count == 1? Long.MAX_VALUE : count;
+      sampleMapReduceWithRatio(fs, inputFiles, ratio, threshold, seed,
+          output, stockObject, outputShape);
     } else {
       if (count < BIG_SAMPLE) {
         // Good for small files and the only way to sample heap files
