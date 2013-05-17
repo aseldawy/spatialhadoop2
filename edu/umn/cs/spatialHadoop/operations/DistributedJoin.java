@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -77,29 +78,55 @@ public class DistributedJoin {
         final PairWritable<? extends Writable> value,
         final OutputCollector<Shape, Shape> output,
         Reporter reporter) throws IOException {
-      final Rectangle mapperMBR = key.first.getIntersection(key.second);
+      final Rectangle mapperMBR = key.first.cellId != -1 && key.second.cellId != -1?
+          key.first.getIntersection(key.second) : null;
 
       if (value.first instanceof ArrayWritable && value.second instanceof ArrayWritable) {
         // Join two arrays using the plane sweep algorithm
-        ArrayWritable ar1 = (ArrayWritable) value.first;
-        ArrayWritable ar2 = (ArrayWritable) value.second;
-        SpatialAlgorithms.SpatialJoin_planeSweep(
-            (Shape[])ar1.get(), (Shape[])ar2.get(),
-            new ResultCollector2<Shape, Shape>() {
-              @Override
-              public void collect(Shape x, Shape y) {
-                Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
+        if (mapperMBR != null) {
+          // Only join shapes in the intersection rectangle
+          ArrayList<Shape> r = new ArrayList<Shape>();
+          ArrayList<Shape> s = new ArrayList<Shape>();
+          for (Shape shape : (Shape[])((ArrayWritable) value.first).get()) {
+            if (mapperMBR.isIntersected(shape))
+              r.add(shape);
+          }
+          for (Shape shape : (Shape[])((ArrayWritable) value.second).get()) {
+            if (mapperMBR.isIntersected(shape))
+              s.add(shape);
+          }
+          SpatialAlgorithms.SpatialJoin_planeSweep(r, s, new ResultCollector2<Shape, Shape>() {
+            @Override
+            public void collect(Shape r, Shape s) {
+              try {
+                Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
                 // Employ reference point duplicate avoidance technique 
-                if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y)) {
+                if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y))
+                  output.collect(r, s);
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
+            }
+          });
+        } else {
+          ArrayWritable ar1 = (ArrayWritable) value.first;
+          ArrayWritable ar2 = (ArrayWritable) value.second;
+          SpatialAlgorithms.SpatialJoin_planeSweep(
+              (Shape[])ar1.get(), (Shape[])ar2.get(),
+              new ResultCollector2<Shape, Shape>() {
+                @Override
+                public void collect(Shape x, Shape y) {
                   try {
+                    // No need to do reference point technique because input
+                    // blocks are not indexed (mapperMBR is null)
                     output.collect(x, y);
                   } catch (IOException e) {
                     e.printStackTrace();
                   }
                 }
               }
-            }
-        );
+              );
+        }
       } else if (value.first instanceof RTree && value.second instanceof RTree) {
         // Join two R-trees
         @SuppressWarnings("unchecked")
@@ -109,13 +136,17 @@ public class DistributedJoin {
         RTree.spatialJoin(r1, r2, new ResultCollector2<Shape, Shape>() {
           @Override
           public void collect(Shape r, Shape s) {
-            Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
-            if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y)) {
-              try {
+            try {
+              if (mapperMBR == null) {
                 output.collect(r, s);
-              } catch (IOException e) {
-                e.printStackTrace();
+              } else {
+                // Reference point duplicate avoidance technique
+                Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
+                if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y))
+                  output.collect(r, s);
               }
+            } catch (IOException e) {
+              e.printStackTrace();
             }
           }
         });
