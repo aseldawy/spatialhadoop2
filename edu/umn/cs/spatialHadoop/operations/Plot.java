@@ -15,10 +15,13 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.hdfs.web.resources.OverwriteParam;
+import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -369,7 +372,10 @@ public class Plot {
     job.setJobName("Plot");
     
     job.setMapperClass(PlotMap.class);
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setReducerClass(PlotReduce.class);
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
     job.setMapOutputKeyClass(CellInfo.class);
     job.set(SpatialSite.SHAPE_CLASS, shape.getClass().getName());
     job.setMapOutputValueClass(shape.getClass());
@@ -437,14 +443,33 @@ public class Plot {
         return path.toUri().getPath().contains("part-");
       }
     });
-    // TODO if more than one output image, merge them into one image (overlay)
-    for (int i = 0; i < resultFiles.length; i++) {
-      FileStatus resultFile = resultFiles[i];
-      if (i == 0)
-        outFs.rename(resultFile.getPath(), outFile);
-      else
-        outFs.rename(resultFile.getPath(), new Path(outFile.toUri().getPath()+"_"+i));
+    
+    if (resultFiles.length == 1) {
+      // Only one output file
+      outFs.rename(resultFiles[0].getPath(), outFile);
+    } else {
+      // Merge all images into one image (overlay)
+      BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+      for (FileStatus resultFile : resultFiles) {
+        FSDataInputStream imageFile = outFs.open(resultFile.getPath());
+        BufferedImage tileImage = ImageIO.read(imageFile);
+        imageFile.close();
+
+        Graphics2D graphics;
+        try {
+          graphics = finalImage.createGraphics();
+        } catch (Throwable e) {
+          graphics = new SimpleGraphics(finalImage);
+        }
+        graphics.drawImage(tileImage, 0, 0, null);
+        graphics.dispose();
+      }
+      
+      // Finally, write the resulting image to the given output path
+      OutputStream outputImage = outFs.create(outFile);
+      ImageIO.write(finalImage, "png", outputImage);
     }
+    
     outFs.delete(temp, true);
   }
   
