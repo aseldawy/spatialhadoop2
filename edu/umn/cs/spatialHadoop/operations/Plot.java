@@ -381,7 +381,7 @@ public class Plot {
     job.setMapOutputValueClass(shape.getClass());
     
     FileSystem inFs = inFile.getFileSystem(job);
-    Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
+    Rectangle fileMbr = FileMBR.fileMBRMapReduce(inFs, inFile, shape);
     FileStatus inFileStatus = inFs.getFileStatus(inFile);
     
     CellInfo[] cellInfos;
