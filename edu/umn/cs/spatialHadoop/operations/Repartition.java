@@ -280,19 +280,7 @@ public class Repartition {
         pathsToConcat.add(partFile);
       }
     }
-    
-    LOG.info("Concatenating: "+pathsToConcat+" into "+outPath);
-    if (outFs.exists(outPath))
-      outFs.delete(outPath, true);
-    if (pathsToConcat.size() == 1) {
-      outFs.rename(pathsToConcat.firstElement(), outPath);
-    } else if (!pathsToConcat.isEmpty()) {
-      Path target = pathsToConcat.lastElement();
-      pathsToConcat.remove(pathsToConcat.size()-1);
-      outFs.concat(target,
-          pathsToConcat.toArray(new Path[pathsToConcat.size()]));
-      outFs.rename(target, outPath);
-    }
+    // TODO Write a master file that contains all the global index
   }
   
   public static <S extends Shape> CellInfo[] packInRectangles(
