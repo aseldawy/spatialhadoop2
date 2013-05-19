@@ -20,7 +20,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.hdfs.web.resources.OverwriteParam;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.JobClient;
@@ -65,7 +64,7 @@ public class Plot {
    * the output is the same as input (Identity map function). If the input
    * partition is not partitioned (a heap file), then the given shape is output
    * to all overlapping partitions.
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
    */
   public static class PlotMap extends MapReduceBase 
@@ -420,8 +419,8 @@ public class Plot {
     ImageOutputFormat.setImageWidth(job, width);
     ImageOutputFormat.setImageHeight(job, height);
     job.setBoolean(ShowBorders, showBorders);
-    job.setBoolean(ShowBlockCount, showBorders);
-    job.setBoolean(ShowRecordCount, showBorders);
+    job.setBoolean(ShowBlockCount, showBlockCount);
+    job.setBoolean(ShowRecordCount, showRecordCount);
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
