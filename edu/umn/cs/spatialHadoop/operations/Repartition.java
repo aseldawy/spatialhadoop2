@@ -298,6 +298,11 @@ public class Repartition {
     
     double sample_ratio =
         outFileSystem.getConf().getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
+    long sample_size =
+      outFileSystem.getConf().getLong(SpatialSite.SAMPLE_SIZE, 100*1024*1024);
+    
+    // 24 is the estimated size in bytes needed to store each sample point 
+    long sample_count = sample_size / 24;
     
     LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
     ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
@@ -310,7 +315,7 @@ public class Repartition {
       Sampler.sampleLocalWithRatio(fs, files, sample_ratio,
           System.currentTimeMillis(), resultCollector, stockShape, new Point());
     } else {
-      Sampler.sampleMapReduceWithRatio(fs, files, sample_ratio,
+      Sampler.sampleMapReduceWithRatio(fs, files, sample_ratio, sample_count,
           System.currentTimeMillis(), resultCollector, stockShape, new Point());
     }
     LOG.info("Finished reading a sample of size: "+sample.size()+" records");
