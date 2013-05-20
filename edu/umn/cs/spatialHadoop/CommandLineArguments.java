@@ -153,7 +153,7 @@ public class CommandLineArguments {
     return get("repartition");
   }
   
-  protected boolean is(String flag) {
+  public boolean is(String flag) {
     String expected_arg = "-"+flag;
     for (String arg : args) {
       if (arg.equals(expected_arg))
@@ -424,13 +424,5 @@ public class CommandLineArguments {
       LOG.warn("unknown shape type: "+shapeTypeStr);
     
     return stockShape;
-  }
-
-  public boolean isShowBlockCount() {
-    return is("showblockcount");
-  }
-
-  public boolean isShowRecordCount() {
-    return is("showrecordcount");
   }
 }

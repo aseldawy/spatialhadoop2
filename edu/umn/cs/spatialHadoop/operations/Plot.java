@@ -58,6 +58,7 @@ public class Plot {
   private static final String ShowBorders = "plot.show_borders";
   private static final String ShowBlockCount = "plot.show_block_count";
   private static final String ShowRecordCount = "plot.show_record_count";
+  private static final String CompactCells = "plot.compact_cells";
 
   /**
    * If the processed block is already partitioned (via global index), then
@@ -88,6 +89,7 @@ public class Plot {
           if (cellInfo.isIntersected(shape))
             output.collect(cellInfo, shape);
       } else {
+        // Input is already partitioned
         // Output shape to containing cell only
         output.collect(cell, shape);
       }
@@ -95,8 +97,8 @@ public class Plot {
   }
   
   /**
-   * The combiner class draws an image for contents (shapes) in each cell info
-   * @author eldawy
+   * The reducer class draws an image for contents (shapes) in each cell info
+   * @author Ahmed Eldawy
    *
    */
   public static class PlotReduce extends MapReduceBase
@@ -111,6 +113,7 @@ public class Plot {
     private boolean showRecordCount;
     private Path[] inputPaths;
     private FileSystem inFs;
+    private boolean compactCells;
 
     @Override
     public void configure(JobConf job) {
@@ -128,6 +131,7 @@ public class Plot {
       showBorders = job.getBoolean(ShowBorders, false);
       showBlockCount = job.getBoolean(ShowBlockCount, false);
       showRecordCount = job.getBoolean(ShowRecordCount, false);
+      compactCells = job.getBoolean(CompactCells, false);
       
       this.scale2 = (double)imageWidth * imageHeight /
           ((double)fileMbr.width * fileMbr.height);
@@ -161,96 +165,62 @@ public class Plot {
         graphics.setBackground(bg_color);
         graphics.clearRect(0, 0, tile_width, tile_height);
         graphics.setColor(stroke_color);
-        
+        graphics.translate(-image_x1, -image_y1);
+
         int recordCount = 0;
-        // Plot all shapes on that image
-        while (values.hasNext()) {
+        
+        double data_x1 = cellInfo.getX1(), data_y1 = cellInfo.getY1(),
+            data_x2 = cellInfo.getX2(), data_y2 = cellInfo.getY2();
+        if (values.hasNext()) {
           recordCount++;
           Shape s = values.next();
-          // Draw the shape according to its type
+          drawShape(graphics, s, fileMbr, imageWidth, imageHeight, scale2);
+          if (compactCells) {
+            Rectangle mbr = s.getMBR();
+            data_x1 = mbr.getX1();
+            data_y1 = mbr.getY1();
+            data_x2 = mbr.getX2();
+            data_y2 = mbr.getY2();
+          }
           
-          if (s instanceof Point) {
-            Point pt = (Point) s;
-            int x = (int) ((pt.x - fileMbr.x) * imageWidth / fileMbr.width);
-            int y = (int) ((pt.y - fileMbr.y) * imageHeight / fileMbr.height);
-            
-            if (x >= 0 && x < imageWidth && y >= 0 && y < imageHeight)
-              graphics.fillRect(x, y, 1, 1);
-          } else if (s instanceof Rectangle) {
-            Rectangle r = (Rectangle) s;
-            int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
-            int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
-            int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
-            int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
-            graphics.drawRect(s_x1 - image_x1, s_y1 - image_y1,
-                s_x2 - s_x1 + 1, s_y2-s_y1 + 1);
-          } else if (s instanceof JTSShape) {
-            JTSShape jts_shape = (JTSShape) s;
-            Geometry geom = jts_shape.getGeom();
-            Color shape_color = graphics.getColor();
-            for (int i_geom = 0; i_geom < geom.getNumGeometries(); i_geom++) {
-              Geometry sub_geom = geom.getGeometryN(i_geom);
-              double sub_geom_alpha = sub_geom.getEnvelope().getArea() * scale2;
-              int color_alpha = sub_geom_alpha > 1.0 ? 255 : (int) Math.round(sub_geom_alpha * 255);
+          while (values.hasNext()) {
+            recordCount++;
+            s = values.next();
+            drawShape(graphics, s, fileMbr, imageWidth, imageHeight, scale2);
 
-              if (color_alpha == 0)
-                continue;
-
-              Coordinate[][] coordss;
-              if (sub_geom instanceof Polygon) {
-                Polygon poly = (Polygon) sub_geom;
-
-                coordss = new Coordinate[1+poly.getNumInteriorRing()][];
-                coordss[0] = poly.getExteriorRing().getCoordinates();
-                for (int i = 0; i < poly.getNumInteriorRing(); i++) {
-                  coordss[i+1] = poly.getInteriorRingN(i).getCoordinates();
-                }
-              } else {
-                coordss = new Coordinate[1][];
-                coordss[0] = sub_geom.getCoordinates();
-              }
-
-              for (Coordinate[] coords : coordss) {
-                int[] xpoints = new int[coords.length];
-                int[] ypoints = new int[coords.length];
-                int npoints = 0;
-
-                // Transform all points in the polygon to image coordinates
-                xpoints[npoints] = (int) Math.round((coords[0].x - fileMbr.x) * imageWidth / fileMbr.width) - image_x1;
-                ypoints[npoints] = (int) Math.round((coords[0].y - fileMbr.y) * imageHeight / fileMbr.height) - image_y1;
-                npoints++;
-                for (int i_coord = 1; i_coord < coords.length; i_coord++) {
-                  int x = (int) Math.round((coords[i_coord].x - fileMbr.x) * imageWidth / fileMbr.width) - image_x1;
-                  int y = (int) Math.round((coords[i_coord].y - fileMbr.y) * imageHeight / fileMbr.height) - image_y1;
-                  if (x != xpoints[npoints-1] || y != ypoints[npoints-1]) {
-                    xpoints[npoints] = x;
-                    ypoints[npoints] = y;
-                    npoints++;
-                  }
-                }
-                // Draw the polygon
-                if (color_alpha > 0) {
-                  graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
-                  graphics.drawPolygon(xpoints, ypoints, npoints);
-                }
-              }
+            if (compactCells) {
+              Rectangle mbr = s.getMBR();
+              if (mbr.getX1() < data_x1)
+                data_x1 = mbr.getX1();
+              if (mbr.getY1() < data_y1)
+                data_y1 = mbr.getY1();
+              if (mbr.getX2() > data_x2)
+                data_x2 = mbr.getX2();
+              if (mbr.getY2() > data_y2)
+                data_y2 = mbr.getY2();
             }
-          } else {
-            LOG.warn("Cannot draw a shape of type: "+s.getClass());
-            Rectangle r = s.getMBR();
-            int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
-            int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
-            int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
-            int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
-            if (s_x1 - image_x1 >=0 && s_x1 - image_x1 < tile_width &&
-                s_y1 - image_y1 >=0 && s_y1 - image_y1 < tile_height)
-            graphics.drawRect(s_x1 - image_x1, s_y1 - image_y1,
-                s_x2 - s_x1 + 1, s_y2-s_y1 + 1);
           }
         }
+        
+        if (compactCells) {
+          // Ensure that the drawn rectangle fits in the partition
+          if (data_x1 < cellInfo.getX1())
+            data_x1 = cellInfo.getX1();
+          if (data_y1 < cellInfo.getY1())
+            data_y1 = cellInfo.getY1();
+          if (data_x2 > cellInfo.getX2())
+            data_x2 = cellInfo.getX2();
+          if (data_y2 > cellInfo.getY2())
+            data_y2 = cellInfo.getY2();
+        }
+
         if (showBorders) {
           graphics.setColor(Color.BLACK);
-          graphics.drawRect(0, 0, tile_width, tile_height);
+          int rect_x1 = (int) ((data_x1 - fileMbr.x) * imageWidth / fileMbr.width);
+          int rect_y1 = (int) ((data_y1 - fileMbr.y) * imageHeight / fileMbr.height);
+          int rect_x2 = (int) ((data_x2 - fileMbr.x) * imageWidth / fileMbr.width);
+          int rect_y2 = (int) ((data_y2 - fileMbr.y) * imageHeight / fileMbr.height);
+          graphics.drawRect(rect_x1, rect_y1, rect_x2-rect_x1-1, rect_y2-rect_y1-1);
           String info = "";
           if (showRecordCount) {
             info += "rc:"+recordCount;
@@ -366,7 +336,7 @@ public class Plot {
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount)  throws IOException {
+      boolean showBlockCount, boolean showRecordCount, boolean compactCells)  throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
     
@@ -421,6 +391,7 @@ public class Plot {
     job.setBoolean(ShowBorders, showBorders);
     job.setBoolean(ShowBlockCount, showBlockCount);
     job.setBoolean(ShowRecordCount, showRecordCount);
+    job.setBoolean(CompactCells, compactCells);
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
@@ -474,7 +445,8 @@ public class Plot {
   
   static <S extends Shape> void plotLocal(Path inFile, Path outFile,
       S shape, int width, int height, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount) throws IOException {
+      boolean showBlockCount, boolean showRecordCount, boolean compactCells)
+          throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
     
@@ -527,8 +499,9 @@ public class Plot {
     System.out.println("height:<h> - Maximum height of the image (1000,1000)");
 //    System.out.println("color:<c> - Main color used to draw the picture (black)");
     System.out.println("-borders: For globally indexed files, draws the borders of partitions");
-//    System.out.println("-showblockcount: For globally indexed files, draws the borders of partitions");
+    System.out.println("-showblockcount: For globally indexed files, draws the borders of partitions");
     System.out.println("-showrecordcount: Show number of records in each partition");
+    System.out.println("-compact: Shrink partition boundaries to fit contents");
     System.out.println("-overwrite: Override output file without notice");
   }
 
@@ -563,18 +536,19 @@ public class Plot {
         throw new RuntimeException("Output file exists and overwrite flag is not set");
     }
 
-    boolean showBorders = cla.isBorders();
-    boolean showBlockCount = cla.isShowBlockCount();
-    boolean showRecordCount = cla.isShowRecordCount();
+    boolean showBorders = cla.is("borders");
+    boolean showBlockCount = cla.is("showblockcount");
+    boolean showRecordCount = cla.is("showrecordcount");
+    boolean compactCells = cla.is("compact");
     Shape shape = cla.getShape(true);
     
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
 
     if (cla.isLocal()) {
-      plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
+      plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
     } else {
-      plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
+      plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
     }
   }
 
