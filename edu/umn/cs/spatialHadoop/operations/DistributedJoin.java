@@ -13,7 +13,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
-import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
@@ -78,8 +77,11 @@ public class DistributedJoin {
         final PairWritable<? extends Writable> value,
         final OutputCollector<Shape, Shape> output,
         Reporter reporter) throws IOException {
-      final Rectangle mapperMBR = key.first.cellId != -1 && key.second.cellId != -1?
-          key.first.getIntersection(key.second) : null;
+      final Rectangle mapperMBR = key.first.cellId == -1
+          && key.second.cellId == -1 ? null // Both blocks are heap blocks
+          : (key.first.cellId == -1 ? key.second // Second block is indexed
+              : (key.second.cellId == -1 ? key.first // First block is indexed
+                  : (key.first.getIntersection(key.second)))); // Both indexed
 
       if (value.first instanceof ArrayWritable && value.second instanceof ArrayWritable) {
         // Join two arrays using the plane sweep algorithm
@@ -227,9 +229,31 @@ public class DistributedJoin {
       return new DJRecordReaderRTree<S>(job, (CombineFileSplit)split);
     }
   }
+  
   /**
-   * Repartition the smaller (first) file to match the partitioning of the
-   * larger file.
+   * Select a file to repartition based on some heuristics.
+   * If only one file is indexed, the non-indexed file is repartitioned.
+   * If both files are indexed, the smaller file is repartitioned.
+   * @return the index in the given array of the file to be repartitioned.
+   *   -1 if all files are non-indexed
+   * @throws IOException 
+   */
+  protected static int selectRepartition(FileSystem fs, final Path[] files) throws IOException {
+    int largest_partitioned_file = -1;
+    long largest_size = 0;
+    
+    for (int i = 0; i < files.length; i++) {
+      FileStatus fstatus = fs.getFileStatus(files[i]);
+      if (fs.getGlobalIndex(fstatus) != null && fstatus.getLen() > largest_size) {
+        largest_partitioned_file = i;
+        largest_size = fstatus.getLen();
+      }
+    }
+    return largest_partitioned_file == -1 ? -1 : 1 - largest_partitioned_file;
+  }
+  
+  /**
+   * Repartition a file to match the partitioning of the other file.
    * @param fs
    * @param files
    * @param stockShape
@@ -237,65 +261,32 @@ public class DistributedJoin {
    * @param gIndexes
    * @throws IOException
    */
-  @SuppressWarnings("unchecked")
   protected static void repartitionStep(FileSystem fs, final Path[] files,
-      Shape stockShape) throws IOException {
-    
-    final FileStatus[] fStatus = new FileStatus[files.length];
-    SimpleSpatialIndex<BlockLocation>[] gIndexes =
-        new SimpleSpatialIndex[files.length];
-    
-    for (int i_file = 0; i_file < files.length; i_file++) {
-      fStatus[i_file] = fs.getFileStatus(files[i_file]);
-      gIndexes[i_file] = fs.getGlobalIndex(fStatus[i_file]);
-    }
+      int file_to_repartition, Shape stockShape) throws IOException {
     
     // Do the repartition step
     long t1 = System.currentTimeMillis();
   
-    // Get the partitions to use for partitioning the smaller file
-    
-    // Do a spatial join between partitions of the two files to find
-    // overlapping partitions.
-    final Set<CellInfo> cellSet = new HashSet<CellInfo>();
-    final DoubleWritable matched_area = new DoubleWritable(0);
-    SimpleSpatialIndex.spatialJoin(gIndexes[0], gIndexes[1], new ResultCollector2<BlockLocation, BlockLocation>() {
-      @Override
-      public void collect(BlockLocation x, BlockLocation y) {
-        // Always use the cell of the larger file
-        cellSet.add(y.getCellInfo());
-        Rectangle intersection = x.getCellInfo().getIntersection(y.getCellInfo());
-        LOG.info("Intersection: "+intersection);                                                                                  
-        matched_area.set(matched_area.get() +
-            (double)intersection.width * intersection.height);
-      }
-    });
-    
-    // Estimate output file size of repartition based on the ratio of
-    // matched area to smaller file area
-    Rectangle smaller_file_mbr = FileMBR.fileMBRLocal(fs, files[1], stockShape);
-    long estimatedRepartitionedFileSize = (long) (fStatus[0].getLen() *
-        matched_area.get() / (smaller_file_mbr.width * smaller_file_mbr.height));
-    LOG.info("Estimated repartitioned file size: "+estimatedRepartitionedFileSize);
-    // Choose a good block size for repartitioned file to make every partition
-    // fits in one block
-    long blockSize = estimatedRepartitionedFileSize / cellSet.size();
-    // Adjust blockSize to a multiple of bytes per checksum
-    int bytes_per_checksum =
-        new Configuration().getInt("io.bytes.per.checksum", 512);
-    blockSize = (long) (Math.ceil((double)blockSize / bytes_per_checksum) *
-        bytes_per_checksum);
-    LOG.info("Using a block size of "+blockSize);
-    
     // Repartition the smaller file
     Path partitioned_file;
     do {
-      partitioned_file = new Path("/"+files[0].getName()+
+      partitioned_file = new Path("/"+files[file_to_repartition].getName()+
           ".repartitioned_"+(int)(Math.random() * 1000000));
     } while (fs.exists(partitioned_file));
+    
+    // Get the cells to use for repartitioning
+    Set<CellInfo> cellSet = new HashSet<CellInfo>();
+    // Get the global index of the file that is not partitioned
+    SimpleSpatialIndex<BlockLocation> globalIndex =
+        fs.getGlobalIndex(fs.getFileStatus(files[1-file_to_repartition]));
+    for (BlockLocation block : globalIndex) {
+      cellSet.add(block.getCellInfo());
+    }
+    
+    LOG.info("Repartitioning "+files[file_to_repartition]+" => "+partitioned_file);
     // Repartition the smaller file with no local index
-    Repartition.repartitionMapReduce(files[0], partitioned_file,
-        stockShape, blockSize, cellSet.toArray(new CellInfo[cellSet.size()]),
+    Repartition.repartitionMapReduce(files[file_to_repartition], partitioned_file,
+        stockShape, 0, cellSet.toArray(new CellInfo[cellSet.size()]),
         null, true);
     long t2 = System.currentTimeMillis();
     System.out.println("Repartition time "+(t2-t1)+" millis");
@@ -305,7 +296,8 @@ public class DistributedJoin {
       // An output file might not existent if the two files are disjoint
 
       // Replace the smaller file with its repartitioned copy
-      files[0] = partitioned_file;
+      files[file_to_repartition] = partitioned_file;
+
       // Delete temporary repartitioned file upon exit
       fs.deleteOnExit(partitioned_file);
     }
@@ -364,6 +356,7 @@ public class DistributedJoin {
         commaSeparatedFiles += ',';
       commaSeparatedFiles += inputFiles[i].toUri().toString();
     }
+    LOG.info("Joining "+inputFiles[0]+" X "+inputFiles[1]);
     DJInputFormatArray.addInputPaths(job, commaSeparatedFiles);
     TextOutputFormat.setOutputPath(job, outputPath);
     
@@ -398,6 +391,7 @@ public class DistributedJoin {
   public static long distributedJoinSmart(FileSystem fs,
       final Path[] inputFiles, Path userOutputPath, Shape stockShape,
       boolean overwrite) throws IOException {
+    // TODO revisit the case of joining indexed with non-indexed files.
     Path[] originalInputFiles = inputFiles.clone();
     FileSystem outFs = inputFiles[0].getFileSystem(new Configuration());
     Path outputPath = userOutputPath;
@@ -456,7 +450,8 @@ public class DistributedJoin {
     LOG.info("Cost without repartition is estimated to "+cost_without_repartition);
     boolean need_repartition = cost_with_repartition < cost_without_repartition;
     if (need_repartition) {
-      repartitionStep(fs, inputFiles, stockShape);
+      int file_to_repartition = selectRepartition(fs, inputFiles);
+      repartitionStep(fs, inputFiles, file_to_repartition, stockShape);
     }
     
     // Restore inputFiles to the original order by user
@@ -511,7 +506,8 @@ public class DistributedJoin {
     if (repartition == null || repartition.equals("auto")) {
       result_size = distributedJoinSmart(fs, inputFiles, outputPath, stockShape, overwrite);
     } else if (repartition.equals("yes")) {
-      repartitionStep(fs, allFiles, stockShape);
+      int file_to_repartition = selectRepartition(fs, inputFiles);
+      repartitionStep(fs, inputFiles, file_to_repartition, stockShape);
       result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite);
     } else if (repartition.equals("no")) {
       result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite);
