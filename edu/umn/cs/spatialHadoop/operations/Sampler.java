@@ -2,6 +2,7 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -368,14 +369,7 @@ public class Sampler {
   public static <T extends TextSerializable, O extends TextSerializable>
   int sampleLocal(FileSystem fs, Path file, int count, long seed,
       ResultCollector<O> output, T inObj, O outObj) throws IOException {
-    if (fs.getFileStatus(file).isDir()) {
-      // Retrieve all visible files in the directory
-      FileStatus[] fileStatus = fs.listStatus(file, hiddenFileFilter);
-      Path[] paths = new Path[fileStatus.length];
-      return sampleLocalByCount(fs, paths, count, seed, output, inObj, outObj);
-    } else {
-      return sampleLocalByCount(fs, new Path[] {file}, count, seed, output, inObj, outObj);
-    }
+    return sampleLocalByCount(fs, new Path[] {file}, count, seed, output, inObj, outObj);
   }
   
   /**
@@ -391,6 +385,22 @@ public class Sampler {
   int sampleLocalByCount(
       FileSystem fs, Path[] files, int count, long seed,
       ResultCollector<O> output, T inObj, O outObj) throws IOException {
+    ArrayList<Path> data_files = new ArrayList<Path>();
+    for (Path file : files) {
+      if (fs.getFileStatus(file).isDir()) {
+        // Directory, process all data files in this directory (visible files)
+        FileStatus[] fileStatus = fs.listStatus(file, hiddenFileFilter);
+        for (FileStatus f : fileStatus) {
+          data_files.add(f.getPath());
+        }
+      } else {
+        // File, process this file
+        data_files.add(file);
+      }
+    }
+    
+    files = data_files.toArray(new Path[data_files.size()]);
+    
     ResultCollector<T> converter = createConverter(output, inObj, outObj);
     long[] files_start_offset = new long[files.length+1]; // Prefix sum of files sizes
     long total_length = 0;
