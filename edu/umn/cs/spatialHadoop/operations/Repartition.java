@@ -24,13 +24,13 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.spatial.GridOutputFormat;
-import org.apache.hadoop.mapred.spatial.GridRecordWriter;
 import org.apache.hadoop.mapred.spatial.RTreeGridOutputFormat;
-import org.apache.hadoop.mapred.spatial.RTreeGridRecordWriter;
 import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.GridInfo;
+import org.apache.hadoop.spatial.GridRecordWriter;
+import org.apache.hadoop.spatial.RTreeGridRecordWriter;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.RTree;
 import org.apache.hadoop.spatial.Rectangle;
@@ -237,7 +237,7 @@ public class Repartition {
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
   
     job.setReducerClass(Reduce.class);
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
+    job.setNumReduceTasks(Math.max(1, (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10));
   
     // Set default parameters for reading input file
     job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
@@ -399,12 +399,13 @@ public class Repartition {
         throw new RuntimeException("Output file '" + out
             + "' already exists and overwrite flag is not set");
     }
+    outFs.mkdirs(out);
     
     ShapeRecordWriter<Shape> writer;
     if (lindex == null) {
-      writer = new GridRecordWriter(outFs, out, cells, overwrite);
+      writer = new GridRecordWriter<Shape>(out, null, cells);
     } else if (lindex.equals("grid") || lindex.equals("rtree")) {
-      writer = new RTreeGridRecordWriter(outFs, out, cells, overwrite);
+      writer = new RTreeGridRecordWriter<Shape>(out, null, cells);
       writer.setStockObject(stockShape);
     } else {
       throw new RuntimeException("Unupoorted local idnex: "+lindex);
@@ -417,7 +418,7 @@ public class Repartition {
       blockSize = inFileStatus.getBlockSize();
     }
     if (blockSize != 0)
-      ((GridRecordWriter)writer).setBlockSize(blockSize);
+      ((GridRecordWriter<Shape>)writer).setBlockSize(blockSize);
     
     long length = inFileStatus.getLen();
     FSDataInputStream datain = inFs.open(in);

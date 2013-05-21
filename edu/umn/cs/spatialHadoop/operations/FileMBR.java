@@ -23,6 +23,7 @@ import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.Shape;
+import org.apache.hadoop.spatial.SimpleSpatialIndex;
 import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.LineReader;
 
@@ -30,7 +31,7 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
 /**
  * Finds the minimal bounding rectangle for a file.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class FileMBR {
@@ -85,30 +86,10 @@ public class FileMBR {
    */
   public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
       Path file, S stockShape) throws IOException {
-    // Try to get file MBR from the MBRs of blocks
-    BlockLocation[] fileBlockLocations = fs.getFileBlockLocations(
-        fs.getFileStatus(file), 0, fs.getFileStatus(file).getLen());
-    if (fileBlockLocations[0].getCellInfo() != null) {
-      boolean heap_file = false;
-      BlockLocation firstBlock = fileBlockLocations[0];
-      double x1 = firstBlock.getCellInfo().getX1();
-      double y1 = firstBlock.getCellInfo().getY1();
-      double x2 = firstBlock.getCellInfo().getX2();
-      double y2 = firstBlock.getCellInfo().getY2();
-      for (BlockLocation blockLocation : fileBlockLocations) {
-        Rectangle rect = blockLocation.getCellInfo();
-        if (blockLocation.getCellInfo() == null) {
-          heap_file = true;
-          break;
-        }
-        if (rect.getX1() < x1) x1 = rect.getX1();
-        if (rect.getY1() < y1) y1 = rect.getY1();
-        if (rect.getX2() > x2) x2 = rect.getX2();
-        if (rect.getY2() > y2) y2 = rect.getY2();
-      }
-      if (!heap_file) {
-        return new Rectangle(x1, y1, x2-x1, y2-y1);
-      }
+    // Quickly get file MBR if it is globally indexed
+    SimpleSpatialIndex<CellInfo> globalIndex = SpatialSite.getGlobalIndex(fs, file);
+    if (globalIndex != null) {
+      return globalIndex.getMBR();
     }
     JobConf job = new JobConf(FileMBR.class);
     
@@ -236,13 +217,13 @@ public class FileMBR {
     Path inputFile = cla.getPath();
     if (inputFile == null) {
       printUsage();
-      throw new RuntimeException("Illegal arguments. Input file missing");
+      return;
     }
     
     FileSystem fs = inputFile.getFileSystem(conf);
     if (!fs.exists(inputFile)) {
       printUsage();
-      throw new RuntimeException("Input file does not exist");
+      return;
     }
 
     Shape stockShape = cla.getShape(true);

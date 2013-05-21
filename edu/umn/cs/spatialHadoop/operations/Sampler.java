@@ -41,7 +41,7 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
 /**
  * Reads a random sample of a file.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class Sampler {

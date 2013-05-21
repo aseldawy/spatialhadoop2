@@ -11,10 +11,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.spatial.GridRecordWriter;
-import org.apache.hadoop.mapred.spatial.RTreeGridRecordWriter;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.GridInfo;
+import org.apache.hadoop.spatial.GridRecordWriter;
+import org.apache.hadoop.spatial.RTreeGridRecordWriter;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.Polygon;
 import org.apache.hadoop.spatial.Rectangle;
@@ -67,6 +67,15 @@ public class RandomSpatialGenerator {
       Shape shape, final long totalSize, final Rectangle mbr, int rectSize,
       long seed,
       long blocksize, String gindex, String lindex, boolean overwrite) throws IOException {
+    if (outFS.exists(outFilePath)) {
+      if (overwrite) {
+        outFS.delete(outFilePath, true);
+      } else {
+        throw new RuntimeException("Output file already exists and -overwrite flag is not set");
+      }
+    }
+    outFS.mkdirs(outFilePath);
+    
     GridInfo gridInfo = new GridInfo(mbr.x, mbr.y, mbr.width, mbr.height);
     Configuration conf = outFS.getConf();
     final double IndexingOverhead =
@@ -91,14 +100,12 @@ public class RandomSpatialGenerator {
     
     ShapeRecordWriter<Shape> recordWriter;
     if (lindex == null) {
-      recordWriter = new GridRecordWriter(outFS, outFilePath, cellInfo,
-          overwrite);
-      ((GridRecordWriter)recordWriter).setBlockSize(blocksize);
+      recordWriter = new GridRecordWriter<Shape>(outFilePath, null, cellInfo);
+      ((GridRecordWriter<Shape>)recordWriter).setBlockSize(blocksize);
     } else if (lindex.equals("rtree")) {
-      recordWriter = new RTreeGridRecordWriter(outFS, outFilePath, cellInfo,
-          overwrite);
+      recordWriter = new RTreeGridRecordWriter<Shape>(outFilePath, null, cellInfo);
       recordWriter.setStockObject(shape);
-      ((RTreeGridRecordWriter)recordWriter).setBlockSize(blocksize);
+      ((RTreeGridRecordWriter<Shape>)recordWriter).setBlockSize(blocksize);
     } else {
       throw new RuntimeException("Unsupported local index: " + lindex);
     }
