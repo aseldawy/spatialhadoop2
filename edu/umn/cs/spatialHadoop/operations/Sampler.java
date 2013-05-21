@@ -9,6 +9,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.MemoryInputStream;
 import org.apache.hadoop.io.NullWritable;
@@ -17,6 +18,7 @@ import org.apache.hadoop.io.Text2;
 import org.apache.hadoop.io.TextSerializable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
+import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -26,7 +28,6 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.TextOutputFormat;
-import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.Point;
@@ -47,19 +48,15 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 public class Sampler {
 
   /**Name of the configuration line for sample ratio*/
-  private static final String SAMPLE_RATIO =
-      "edu.umn.cs.spatialHadoop.operations.Sampler.SampleRatio";
+  private static final String SAMPLE_RATIO = "sampler.SampleRatio";
   /**The threshold in number of samples after which the BIG version is used*/
   private static final int BIG_SAMPLE = 10000;
   
-  private static final String InClass =
-      "edu.umn.cs.spatialHadoop.operations.Sampler.InClass";
-  private static final String OutClass =
-      "edu.umn.cs.spatialHadoop.operations.Sampler.OutClass";
+  private static final String InClass = "sampler.InClass";
+  private static final String OutClass = "sampler.OutClass";
   
   /**Random seed to use by all mappers to ensure unique result per seed*/
-  private static final String RANDOM_SEED =
-      "edu.umn.cs.spatialHadoop.oeprations.Sampler.RandomSeed";
+  private static final String RANDOM_SEED = "sampler.RandomSeed";
   
   public static class Map extends MapReduceBase implements
   Mapper<CellInfo, Text, NullWritable, Text> {
@@ -249,13 +246,15 @@ public class Sampler {
    * @return
    * @throws IOException
    */
-  public static <T extends TextSerializable, O extends TextSerializable> int sampleLocalWithSize(
+  public static <T extends TextSerializable, O extends TextSerializable> int
+    sampleLocalWithSize(
       FileSystem fs, Path[] files, long total_size, long seed,
-      final ResultCollector<O> output, final T inObj, final O outObj) throws IOException {
+      final ResultCollector<O> output, final T inObj, final O outObj)
+      throws IOException {
     int average_record_size = 1024; // A wild guess for record size
     final LongWritable current_sample_size = new LongWritable();
     int sample_count = 0;
-   
+
     final ResultCollector<T> converter = createConverter(output, inObj, outObj);
 
     final ResultCollector<Text2> counter = new ResultCollector<Text2>() {
@@ -358,20 +357,35 @@ public class Sampler {
     }
   }
 
+  private static final PathFilter hiddenFileFilter = new PathFilter(){
+    public boolean accept(Path p){
+      String name = p.getName(); 
+      return !name.startsWith("_") && !name.startsWith("."); 
+    }
+  }; 
+
+  
   public static <T extends TextSerializable, O extends TextSerializable>
   int sampleLocal(FileSystem fs, Path file, int count, long seed,
       ResultCollector<O> output, T inObj, O outObj) throws IOException {
-    return sampleLocalByCount(fs, new Path[] {file}, count, seed, output, inObj, outObj);
+    if (fs.getFileStatus(file).isDir()) {
+      // Retrieve all visible files in the directory
+      FileStatus[] fileStatus = fs.listStatus(file, hiddenFileFilter);
+      Path[] paths = new Path[fileStatus.length];
+      return sampleLocalByCount(fs, paths, count, seed, output, inObj, outObj);
+    } else {
+      return sampleLocalByCount(fs, new Path[] {file}, count, seed, output, inObj, outObj);
+    }
   }
   
   /**
-   * Reads a sample of the given file and returns the number of items
-   * read.
+   * Reads a sample of the given file and returns the number of items read.
+   * 
    * @param fs
    * @param file
    * @param count
    * @return
-   * @throws IOException 
+   * @throws IOException
    */
   public static <T extends TextSerializable, O extends TextSerializable>
   int sampleLocalByCount(
@@ -385,7 +399,7 @@ public class Sampler {
       total_length += fs.getFileStatus(files[i_file]).getLen();
     }
     files_start_offset[files.length] = total_length;
-    
+
     // Generate offsets to read from and make sure they are ordered to minimize
     // seeks between different HDFS blocks
     Random random = new Random(seed);
@@ -397,7 +411,7 @@ public class Sampler {
 
     int record_i = 0; // Number of records read so far
     int records_returned = 0;
-    
+
     int file_i = 0; // Index of the current file being sampled
     while (record_i < count) {
       // Skip to the file that contains the next sample
@@ -408,86 +422,49 @@ public class Sampler {
       // in this file
       FSDataInputStream current_file_in = fs.open(files[file_i]);
       long current_file_size = files_start_offset[file_i+1] - files_start_offset[file_i];
-      long current_file_block_size = fs.getFileStatus(files[file_i]).getBlockSize();
-      
+
       // Keep sampling as long as records offsets are within this file
       while (record_i < count &&
           (offsets[record_i] -= files_start_offset[file_i]) < current_file_size) {
-        long current_block_start_offset = offsets[record_i] -
-            (offsets[record_i] % current_file_block_size);
-        long current_block_end_offset = Math.min(total_length,
-            current_block_start_offset + current_file_block_size);
-        int current_block_size = (int) (current_block_end_offset - current_block_start_offset);
         // Seek to this block and check its type
-        current_file_in.seek(current_block_start_offset);
+        current_file_in.seek(offsets[record_i]);
         // The start and end offsets of data within this block
         // offsets are calculated relative to file start
-        long data_start_offset = current_block_start_offset;
+        long data_start_offset = 0;
         if (current_file_in.readLong() == SpatialSite.RTreeFileMarker) {
-          // This block is an RTree block. Update the start offset to point
+          // This file is an RTree file. Update the start offset to point
           // to the first byte after the header
-          data_start_offset =
-              current_block_start_offset + RTree.getHeaderSize(current_file_in);
+          data_start_offset = RTree.getHeaderSize(current_file_in);
         } 
-        // Get the end offset of data by searching for the last non-empty line
-        // We perform an exponential search starting from the last offset in
-        // block. This assumes that all empty lines occur at the end
-        long data_end_offset = current_block_end_offset;
-        int check_offset = 1;
-        while (check_offset < current_block_size) {
-          current_file_in.seek(data_end_offset - check_offset * 2);
-          byte b1 = current_file_in.readByte();
-          byte b2 = current_file_in.readByte();
-          if (b1 != '\n' || b2 != '\n') {
-            // We found a non-empty line. Perform a binary search till we find
-            // the last non-empty line
-            long l = data_end_offset - check_offset * 2;
-            long h = data_end_offset - check_offset;
-            while (l < h) {
-              long m = (l + h) / 2;
-              current_file_in.seek(m);
-              b1 = current_file_in.readByte(); b2 = current_file_in.readByte();
-              if (b1 == '\n' && b2 == '\n') {
-                // This is an empty line, check before that
-                h = m-1;
-              } else {
-                // This is a non-empty line, check after that
-                l = m+1;
-              }
-            }
-            // Skip the last line too to ensure to ensure that the mapped position
-            // will be before some line in the block
-            current_file_in.seek(l);
-            data_end_offset = Tail.tail(current_file_in, 1, null, null);
-            break;
-          }
-          check_offset *= 2;
-        }
+        // Get the end offset of data by searching for the beginning of the
+        // last line
+        long data_end_offset = files_start_offset[file_i]
+            - (file_i == 0 ? 0 : files_start_offset[file_i - 1]);
+        // Skip the last line too to ensure to ensure that the mapped position
+        // will be before some line in the block
+        current_file_in.seek(data_end_offset);
+        data_end_offset = Tail.tail(current_file_in, 1, null, null);
         long block_fill_size = data_end_offset - data_start_offset;
 
-        // Consider all positions in this block
-        while (record_i < count &&
-            offsets[record_i] < current_block_end_offset) {
-          // Map file position to element index in this tree assuming fixed
-          // size records
-          long element_offset_in_block =
-              (offsets[record_i] - current_block_start_offset) *
-              block_fill_size / current_block_size;
-          current_file_in.seek(data_start_offset + element_offset_in_block);
-          LineReader reader = new LineReader(current_file_in, 1024);
-          // Read the first line after that offset
-          Text line = new Text();
-          reader.readLine(line); // Skip the rest of the current line
-          reader.readLine(line); // Read next line
+        // Map file position to element index in this tree assuming fixed
+        // size records
+        long element_offset_in_file =
+            (offsets[record_i] - data_start_offset) *
+            block_fill_size / (data_end_offset - data_start_offset) + data_start_offset;
+        current_file_in.seek(element_offset_in_file);
+        LineReader reader = new LineReader(current_file_in, 4096);
+        // Read the first line after that offset
+        Text line = new Text();
+        reader.readLine(line); // Skip the rest of the current line
+        reader.readLine(line); // Read next line
 
-          // Report this element to output
-          if (converter != null) {
-            inObj.fromText(line);
-            converter.collect(inObj);
-          }
-          record_i++;
-          records_returned++;
+        // Report this element to output
+        if (converter != null) {
+          inObj.fromText(line);
+          converter.collect(inObj);
         }
+        record_i++;
+        records_returned++;
       }
       current_file_in.close();
     }
