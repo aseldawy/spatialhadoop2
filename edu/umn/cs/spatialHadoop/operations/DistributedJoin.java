@@ -62,9 +62,9 @@ public class DistributedJoin {
 
   public static class SpatialJoinFilter extends DefaultBlockFilter {
     @Override
-    public void selectBlockPairs(SimpleSpatialIndex<BlockLocation> gIndex1,
-        SimpleSpatialIndex<BlockLocation> gIndex2,
-        ResultCollector2<BlockLocation, BlockLocation> output) {
+    public void selectCellPairs(SimpleSpatialIndex<CellInfo> gIndex1,
+        SimpleSpatialIndex<CellInfo> gIndex2,
+        ResultCollector2<CellInfo, CellInfo> output) {
       // Do a spatial join between the two global indexes
       SimpleSpatialIndex.spatialJoin(gIndex1, gIndex2, output);
     }

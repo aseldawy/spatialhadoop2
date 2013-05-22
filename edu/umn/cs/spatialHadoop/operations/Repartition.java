@@ -265,6 +265,7 @@ public class Repartition {
         GridOutputFormat.encodeCells(cellInfos));
     job.setBoolean(GridOutputFormat.OVERWRITE, overwrite);
   
+    System.out.println("Job: "+job);
     JobClient.runJob(job);
     
     // Combine all output files into one file as we do with grid files
