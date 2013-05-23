@@ -39,11 +39,12 @@ import org.apache.hadoop.mapred.spatial.PairWritable;
 import org.apache.hadoop.mapred.spatial.RTreeRecordReader;
 import org.apache.hadoop.mapred.spatial.ShapeArrayRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
+import org.apache.hadoop.spatial.GlobalIndex;
+import org.apache.hadoop.spatial.Partition;
 import org.apache.hadoop.spatial.RTree;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector2;
 import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SimpleSpatialIndex;
 import org.apache.hadoop.spatial.SpatialAlgorithms;
 import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.IndexedSortable;
@@ -62,11 +63,11 @@ public class DistributedJoin {
 
   public static class SpatialJoinFilter extends DefaultBlockFilter {
     @Override
-    public void selectCellPairs(SimpleSpatialIndex<CellInfo> gIndex1,
-        SimpleSpatialIndex<CellInfo> gIndex2,
-        ResultCollector2<CellInfo, CellInfo> output) {
+    public void selectCellPairs(GlobalIndex<Partition> gIndex1,
+        GlobalIndex<Partition> gIndex2,
+        ResultCollector2<Partition, Partition> output) {
       // Do a spatial join between the two global indexes
-      SimpleSpatialIndex.spatialJoin(gIndex1, gIndex2, output);
+      GlobalIndex.spatialJoin(gIndex1, gIndex2, output);
     }
   }
   
@@ -277,7 +278,7 @@ public class DistributedJoin {
     // Get the cells to use for repartitioning
     Set<CellInfo> cellSet = new HashSet<CellInfo>();
     // Get the global index of the file that is not partitioned
-    SimpleSpatialIndex<BlockLocation> globalIndex =
+    GlobalIndex<BlockLocation> globalIndex =
         fs.getGlobalIndex(fs.getFileStatus(files[1-file_to_repartition]));
     for (BlockLocation block : globalIndex) {
       cellSet.add(block.getCellInfo());
@@ -341,7 +342,6 @@ public class DistributedJoin {
     job.setMapperClass(RedistributeJoinMap.class);
     job.setMapOutputKeyClass(stockShape.getClass());
     job.setMapOutputValueClass(stockShape.getClass());
-    job.setBoolean(SpatialSite.AutoCombineSplits, true);
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
     job.setNumReduceTasks(0); // No reduce needed for this task
 
@@ -437,12 +437,12 @@ public class DistributedJoin {
     };
     
     new QuickSort().sort(filesSortable, 0, inputFiles.length);
-    SimpleSpatialIndex<BlockLocation>[] gIndexes =
-        new SimpleSpatialIndex[fStatus.length];
+    GlobalIndex<BlockLocation>[] gIndexes =
+        new GlobalIndex[fStatus.length];
     for (int i_file = 0; i_file < fStatus.length; i_file++)
       gIndexes[i_file] = fs.getGlobalIndex(fStatus[i_file]);
     
-    cost_without_repartition = SimpleSpatialIndex.spatialJoin(gIndexes[0],
+    cost_without_repartition = GlobalIndex.spatialJoin(gIndexes[0],
         gIndexes[1], null);
     // Cost of repartition + cost of join
     cost_with_repartition = gIndexes[0].size() * 3 + gIndexes[1].size();

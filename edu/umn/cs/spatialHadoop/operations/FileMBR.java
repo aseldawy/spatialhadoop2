@@ -21,9 +21,10 @@ import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
+import org.apache.hadoop.spatial.GlobalIndex;
+import org.apache.hadoop.spatial.Partition;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SimpleSpatialIndex;
 import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.LineReader;
 
@@ -87,7 +88,7 @@ public class FileMBR {
   public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
       Path file, S stockShape) throws IOException {
     // Quickly get file MBR if it is globally indexed
-    SimpleSpatialIndex<CellInfo> globalIndex = SpatialSite.getGlobalIndex(fs, file);
+    GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(fs, file);
     if (globalIndex != null) {
       return globalIndex.getMBR();
     }

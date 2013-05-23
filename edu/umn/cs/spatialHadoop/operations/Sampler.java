@@ -5,6 +5,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Random;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -45,6 +47,7 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
  *
  */
 public class Sampler {
+  private static final Log LOG = LogFactory.getLog(Sampler.class);
 
   /**Name of the configuration line for sample ratio*/
   private static final String SAMPLE_RATIO = "sampler.SampleRatio";
@@ -423,33 +426,31 @@ public class Sampler {
       FSDataInputStream current_file_in = fs.open(files[file_i]);
       long current_file_size = files_start_offset[file_i+1] - files_start_offset[file_i];
 
+      // The start and end offsets of data within this block
+      // offsets are calculated relative to file start
+      long data_start_offset = 0;
+      if (current_file_in.readLong() == SpatialSite.RTreeFileMarker) {
+        // This file is an RTree file. Update the start offset to point
+        // to the first byte after the header
+        data_start_offset = 8 + RTree.getHeaderSize(current_file_in);
+      } 
+      // Get the end offset of data by searching for the beginning of the
+      // last line
+      long data_end_offset = current_file_size;
+      // Skip the last line too to ensure to ensure that the mapped position
+      // will be before some line in the block
+      current_file_in.seek(data_end_offset);
+      data_end_offset = Tail.tail(current_file_in, 1, null, null);
+      long file_data_size = data_end_offset - data_start_offset;
+
       // Keep sampling as long as records offsets are within this file
       while (record_i < count &&
-          (offsets[record_i] -= files_start_offset[file_i]) < current_file_size) {
-        // Seek to this block and check its type
-        current_file_in.seek(offsets[record_i]);
-        // The start and end offsets of data within this block
-        // offsets are calculated relative to file start
-        long data_start_offset = 0;
-        if (current_file_in.readLong() == SpatialSite.RTreeFileMarker) {
-          // This file is an RTree file. Update the start offset to point
-          // to the first byte after the header
-          data_start_offset = RTree.getHeaderSize(current_file_in);
-        } 
-        // Get the end offset of data by searching for the beginning of the
-        // last line
-        long data_end_offset = current_file_size;
-        // Skip the last line too to ensure to ensure that the mapped position
-        // will be before some line in the block
-        current_file_in.seek(data_end_offset);
-        data_end_offset = Tail.tail(current_file_in, 1, null, null);
-        long block_fill_size = data_end_offset - data_start_offset;
-
+          (offsets[record_i] - files_start_offset[file_i]) < current_file_size) {
+        offsets[record_i] -= files_start_offset[file_i];
         // Map file position to element index in this tree assuming fixed
         // size records
-        long element_offset_in_file =
-            (offsets[record_i] - data_start_offset) *
-            block_fill_size / (data_end_offset - data_start_offset) + data_start_offset;
+        long element_offset_in_file = offsets[record_i] * file_data_size
+            / current_file_size + data_start_offset;
         current_file_in.seek(element_offset_in_file);
         LineReader reader = new LineReader(current_file_in, 4096);
         // Read the first line after that offset

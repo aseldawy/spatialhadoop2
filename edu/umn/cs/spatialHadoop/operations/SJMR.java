@@ -257,7 +257,6 @@ public class SJMR {
     int num_cells = (int) (total_size / outFs.getDefaultBlockSize());
     gridInfo.calculateCellDimensions(num_cells);
     cellsInfo = gridInfo.getAllCells();
-    job.setBoolean(SpatialSite.AutoCombineSplits, false);
     job.set(GridOutputFormat.OUTPUT_CELLS,
         GridOutputFormat.encodeCells(cellsInfo));
     

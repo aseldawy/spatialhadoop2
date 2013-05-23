@@ -1,20 +1,15 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
@@ -43,7 +38,7 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
 /**
  * Performs a range query over a spatial file.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class RangeQuery {
@@ -64,7 +59,8 @@ public class RangeQuery {
    *
    * @param <T>
    */
-  public static class RangeQueryMap<T extends Shape> extends MapReduceBase {
+  public static class RangeQueryMap extends MapReduceBase implements
+      Mapper<CellInfo, Writable, NullWritable, Shape> {
     /**A shape that is used to filter input*/
     private Shape queryShape;
 
@@ -91,65 +87,51 @@ public class RangeQuery {
     /**
      * Map function for non-indexed blocks
      */
-    public void map(CellInfo cellInfo, T shape,
-        OutputCollector<NullWritable, T> output, Reporter reporter)
+    public void map(final CellInfo cellInfo, final Writable value,
+        final OutputCollector<NullWritable, Shape> output, Reporter reporter)
             throws IOException {
-      if (shape.isIntersected(queryShape)) {
-        boolean report_result = false;
-        if (cellInfo.cellId == -1) {
-          // A heap block, report right away
-          report_result = true;
-        } else {
-          // Check for duplicate avoidance using reference point technique
-          Rectangle intersection =
-              queryShape.getMBR().getIntersection(shape.getMBR());
-          report_result = cellInfo.contains(intersection.x, intersection.y);
+      if (value instanceof Shape) {
+        Shape shape = (Shape) value;
+        if (shape.isIntersected(queryShape)) {
+          boolean report_result = false;
+          if (cellInfo.cellId == -1) {
+            // A heap block, report right away
+            report_result = true;
+          } else {
+            // Check for duplicate avoidance using reference point technique
+            Rectangle intersection =
+                queryShape.getMBR().getIntersection(shape.getMBR());
+            report_result = cellInfo.contains(intersection.x, intersection.y);
+          }
+          if (report_result)
+            output.collect(dummy, shape);
         }
-        if (report_result)
-          output.collect(dummy, shape);
+      } else if (value instanceof RTree) {
+        RTree<Shape> shapes = (RTree<Shape>) value;
+        shapes.search(queryShape.getMBR(), new ResultCollector<Shape>() {
+          @Override
+          public void collect(Shape shape) {
+            try {
+              boolean report_result = false;
+              if (cellInfo.cellId == -1) {
+                // A heap block, report right away
+                report_result = true;
+              } else {
+                // Check for duplicate avoidance using reference point technique
+                Rectangle intersection =
+                    queryShape.getMBR().getIntersection(shape.getMBR());
+                report_result = cellInfo.contains(intersection.x, intersection.y);
+              }
+              if (report_result)
+                output.collect(dummy, shape);
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+          }
+        });
       }
     }
-    
-    /**
-     * Map function for RTree indexed blocks
-     * @param shapeId
-     * @param shapes
-     * @param output
-     * @param reporter
-     */
-    public void map(final CellInfo cellInfo, RTree<T> shapes,
-        final OutputCollector<NullWritable, T> output, Reporter reporter) {
-      shapes.search(queryShape.getMBR(), new ResultCollector<T>() {
-        @Override
-        public void collect(T shape) {
-          try {
-            boolean report_result = false;
-            if (cellInfo.cellId == -1) {
-              // A heap block, report right away
-              report_result = true;
-            } else {
-              // Check for duplicate avoidance using reference point technique
-              Rectangle intersection =
-                  queryShape.getMBR().getIntersection(shape.getMBR());
-              report_result = cellInfo.contains(intersection.x, intersection.y);
-            }
-            if (report_result)
-              output.collect(dummy, shape);
-          } catch (IOException e) {
-            e.printStackTrace();
-          }
-        }
-      });
-    }
   }
-  
-  /** Mapper for non-indexed blocks */
-  public static class Map1<T extends Shape> extends RangeQueryMap<T> implements
-      Mapper<CellInfo, T, NullWritable, T> { }
-
-  /** Mapper for RTree indexed blocks */
-  public static class Map2<T extends Shape> extends RangeQueryMap<T> implements
-      Mapper<CellInfo, RTree<T>, NullWritable, T> { }
   
   /**
    * Performs a range query using MapReduce
@@ -170,7 +152,7 @@ public class RangeQuery {
     Path outputPath = userOutputPath;
     if (outputPath == null) {
       do {
-        outputPath = new Path("/"+inputFile.getName()+
+        outputPath = new Path(inputFile.toUri().getPath()+
             ".rangequery_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outputPath));
     } else {
@@ -186,7 +168,6 @@ public class RangeQuery {
     job.setJobName("RangeQuery");
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setBoolean(SpatialSite.AutoCombineSplits, false);
     job.setNumReduceTasks(0);
     job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     RangeFilter.setQueryRange(job, queryShape); // Set query range for filter
@@ -195,19 +176,16 @@ public class RangeQuery {
     job.setMapOutputValueClass(shape.getClass());
     // Decide which map function to use depending on how blocks are indexed
     // And also which input format to use
-    FSDataInputStream in = fs.open(inputFile);
-    if (in.readLong() == SpatialSite.RTreeFileMarker) {
+    if (SpatialSite.isRTree(fs, inputFile)) {
       // RTree indexed file
       LOG.info("Searching an RTree indexed file");
-      job.setMapperClass(Map2.class);
       job.setInputFormat(RTreeInputFormat.class);
     } else {
       // A file with no local index
       LOG.info("Searching a non local-indexed file");
-      job.setMapperClass(Map1.class);
       job.setInputFormat(ShapeInputFormat.class);
     }
-    in.close();
+    job.setMapperClass(RangeQueryMap.class);
 
     // Set query range for the map function
     job.set(QUERY_SHAPE_CLASS, queryShape.getClass().getName());

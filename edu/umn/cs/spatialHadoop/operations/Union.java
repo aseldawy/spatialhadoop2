@@ -196,7 +196,6 @@ public class Union {
     // Set map and reduce
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setBoolean(SpatialSite.AutoCombineSplits, false);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
     
     job.setMapperClass(UnionMapper.class);

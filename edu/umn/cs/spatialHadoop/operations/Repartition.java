@@ -1,6 +1,8 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Iterator;
 import java.util.Vector;
 
@@ -11,6 +13,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
@@ -30,9 +33,9 @@ import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.GridInfo;
 import org.apache.hadoop.spatial.GridRecordWriter;
-import org.apache.hadoop.spatial.RTreeGridRecordWriter;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.RTree;
+import org.apache.hadoop.spatial.RTreeGridRecordWriter;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector;
 import org.apache.hadoop.spatial.Shape;
@@ -233,7 +236,6 @@ public class Repartition {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(Text.class);
-    job.setBoolean(SpatialSite.AutoCombineSplits, true);
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
   
     job.setReducerClass(Reduce.class);
@@ -268,22 +270,30 @@ public class Repartition {
     System.out.println("Job: "+job);
     JobClient.runJob(job);
     
-    // Combine all output files into one file as we do with grid files
-    Vector<Path> pathsToConcat = new Vector<Path>();
-    FileStatus[] resultFiles = outFs.listStatus(outPath);
-    for (int i = 0; i < resultFiles.length; i++) {
-      FileStatus resultFile = resultFiles[i];
-      if (resultFile.getLen() > 0 &&
-          resultFile.getLen() % resultFile.getBlockSize() == 0) {
-        Path partFile = new Path(outPath.toUri().getPath()+"_"+i);
-        outFs.rename(resultFile.getPath(), partFile);
-        LOG.info("Rename "+resultFile.getPath()+" -> "+partFile);
-        pathsToConcat.add(partFile);
+    // Concatenate all master files into one file
+    FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.getName().contains("_master");
       }
+    });
+    Path dest = new Path(outPath, "_master");
+    OutputStream concatOut = outFs.create(dest);
+    byte[] buffer = new byte[4096];
+    for (FileStatus f : resultFiles) {
+      InputStream in = outFs.open(f.getPath());
+      int bytes_read;
+      do {
+        bytes_read = in.read(buffer);
+        if (bytes_read > 0)
+          concatOut.write(buffer, 0, bytes_read);
+      } while (bytes_read > 0);
+      in.close();
+      outFs.delete(f.getPath(), false);
     }
-    // TODO Write a master file that contains all the global index
+    concatOut.close();
   }
-  
+
   public static <S extends Shape> CellInfo[] packInRectangles(
       FileSystem inFileSystem, Path inputPath, FileSystem outFileSystem,
       GridInfo gridInfo, S stockShape, boolean local) throws IOException {
@@ -404,9 +414,9 @@ public class Repartition {
     
     ShapeRecordWriter<Shape> writer;
     if (lindex == null) {
-      writer = new GridRecordWriter<Shape>(out, null, cells);
+      writer = new GridRecordWriter<Shape>(out, null, null, cells);
     } else if (lindex.equals("grid") || lindex.equals("rtree")) {
-      writer = new RTreeGridRecordWriter<Shape>(out, null, cells);
+      writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells);
       writer.setStockObject(stockShape);
     } else {
       throw new RuntimeException("Unupoorted local idnex: "+lindex);
