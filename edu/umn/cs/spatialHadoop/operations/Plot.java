@@ -476,7 +476,7 @@ public class Plot {
     ShapeRecordReader<S> reader =
       new ShapeRecordReader<S>(inFs.open(inFile), 0, fileLength);
     
-    CellInfo cell = reader.createKey();
+    Rectangle cell = reader.createKey();
     while (reader.next(cell, shape)) {
       drawShape(graphics, shape, fileMbr, width, height, scale2);
     }

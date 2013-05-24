@@ -18,8 +18,8 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.util.LineReader;
 
@@ -32,7 +32,7 @@ import edu.umn.cs.spatialHadoop.Estimator;
  * is a text file, it counts number of lines. If it's a grid file with no local
  * index, it counts number of non-empty lines. If it's a grid file with RTree
  * index, it counts total number of records stored in all RTrees.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class RecordCount {
@@ -91,10 +91,10 @@ public class RecordCount {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setNumReduceTasks(1);
     
-    job.setInputFormat(TextInputFormat.class);
+    job.setInputFormat(ShapeLineInputFormat.class);
     job.setOutputFormat(TextOutputFormat.class);
     
-    TextInputFormat.setInputPaths(job, file);
+    ShapeLineInputFormat.setInputPaths(job, file);
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job

@@ -180,7 +180,7 @@ public class FileMBR {
         new ShapeRecordReader<Shape>(fs.open(file), 0, file_size);
 
     
-    CellInfo key = shapeReader.createKey();
+    Rectangle key = shapeReader.createKey();
     
     if (!shapeReader.next(key, stockShape)) {
       shapeReader.close();

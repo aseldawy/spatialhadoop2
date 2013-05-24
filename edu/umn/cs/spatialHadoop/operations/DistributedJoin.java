@@ -165,13 +165,13 @@ public class DistributedJoin {
    * @author eldawy
    *
    */
-  public static class DJRecordReaderArray extends BinaryRecordReader<CellInfo, ArrayWritable> {
+  public static class DJRecordReaderArray extends BinaryRecordReader<Rectangle, ArrayWritable> {
     public DJRecordReaderArray(Configuration conf, CombineFileSplit fileSplits) throws IOException {
       super(conf, fileSplits);
     }
     
     @Override
-    protected RecordReader<CellInfo, ArrayWritable> createRecordReader(
+    protected RecordReader<Rectangle, ArrayWritable> createRecordReader(
         Configuration conf, CombineFileSplit split, int i) throws IOException {
       FileSplit fsplit = new FileSplit(split.getPath(i),
           split.getStartOffsets()[i],
@@ -186,10 +186,10 @@ public class DistributedJoin {
    * @author eldawy
    *
    */
-  public static class DJInputFormatArray extends BinarySpatialInputFormat<CellInfo, ArrayWritable> {
+  public static class DJInputFormatArray extends BinarySpatialInputFormat<Rectangle, ArrayWritable> {
     
     @Override
-    public RecordReader<PairWritable<CellInfo>, PairWritable<ArrayWritable>> getRecordReader(
+    public RecordReader<PairWritable<Rectangle>, PairWritable<ArrayWritable>> getRecordReader(
         InputSplit split, JobConf job, Reporter reporter) throws IOException {
       return new DJRecordReaderArray(job, (CombineFileSplit)split);
     }
@@ -201,13 +201,13 @@ public class DistributedJoin {
    * @author eldawy
    *
    */
-  public static class DJRecordReaderRTree<S extends Shape> extends BinaryRecordReader<CellInfo, RTree<S>> {
+  public static class DJRecordReaderRTree<S extends Shape> extends BinaryRecordReader<Rectangle, RTree<S>> {
     public DJRecordReaderRTree(Configuration conf, CombineFileSplit fileSplits) throws IOException {
       super(conf, fileSplits);
     }
     
     @Override
-    protected RecordReader<CellInfo, RTree<S>> createRecordReader(
+    protected RecordReader<Rectangle, RTree<S>> createRecordReader(
         Configuration conf, CombineFileSplit split, int i) throws IOException {
       FileSplit fsplit = new FileSplit(split.getPath(i),
           split.getStartOffsets()[i],
@@ -222,10 +222,10 @@ public class DistributedJoin {
    * @author eldawy
    *
    */
-  public static class DJInputFormatRTree<S extends Shape> extends BinarySpatialInputFormat<CellInfo, RTree<S>> {
+  public static class DJInputFormatRTree<S extends Shape> extends BinarySpatialInputFormat<Rectangle, RTree<S>> {
     
     @Override
-    public RecordReader<PairWritable<CellInfo>, PairWritable<RTree<S>>> getRecordReader(
+    public RecordReader<PairWritable<Rectangle>, PairWritable<RTree<S>>> getRecordReader(
         InputSplit split, JobConf job, Reporter reporter) throws IOException {
       return new DJRecordReaderRTree<S>(job, (CombineFileSplit)split);
     }

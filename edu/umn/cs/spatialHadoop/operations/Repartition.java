@@ -434,7 +434,7 @@ public class Repartition {
     long length = inFileStatus.getLen();
     FSDataInputStream datain = inFs.open(in);
     ShapeRecordReader<S> reader = new ShapeRecordReader<S>(datain, 0, length);
-    CellInfo c = reader.createKey();
+    Rectangle c = reader.createKey();
     
     NullWritable dummy = NullWritable.get();
     

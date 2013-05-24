@@ -231,12 +231,12 @@ public class RangeQuery {
         new ShapeRecordReader<S>(fs.open(file), 0, file_size);
 
     long resultCount = 0;
-    CellInfo cell = shapeReader.createKey();
+    Rectangle cell = shapeReader.createKey();
 
     while (shapeReader.next(cell, shape)) {
       if (shape.isIntersected(queryRange)) {
         boolean report_result;
-        if (cell.cellId == -1) {
+        if (cell.width < 0) {
           report_result = true;
         } else {
           // Check for duplicate avoidance

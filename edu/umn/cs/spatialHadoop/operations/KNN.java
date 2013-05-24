@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Random;
@@ -14,7 +15,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -44,8 +44,11 @@ import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.Circle;
+import org.apache.hadoop.spatial.GlobalIndex;
+import org.apache.hadoop.spatial.Partition;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.RTree;
+import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector2;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.SpatialSite;
@@ -287,7 +290,7 @@ public class KNN {
   /**
    * A MapReduce version of KNN query.
    * @param fs
-   * @param outputFile
+   * @param inputPath
    * @param queryPoint
    * @param shape
    * @param output
@@ -295,16 +298,13 @@ public class KNN {
    * @throws IOException
    */
   public static <S extends Shape> long knnMapReduce(FileSystem fs,
-      Path outputFile, Path userOutputPath, Point queryPoint, int k, S shape,
+      Path inputPath, Path userOutputPath, Point queryPoint, int k, S shape,
       boolean overwrite) throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
-    FileSystem outFs = outputFile.getFileSystem(job);
-    
     job.setJobName("KNN");
     
-    FSDataInputStream in = fs.open(outputFile);
-    if (in.readLong() == SpatialSite.RTreeFileMarker) {
+    if (SpatialSite.isRTree(fs, inputPath)) {
       LOG.info("Performing KNN on RTree blocks");
       job.setMapperClass(Map2.class);
       job.setInputFormat(RTreeInputFormat.class);
@@ -315,7 +315,7 @@ public class KNN {
       job.setCombinerClass(KNNReduce.class);
       job.setInputFormat(ShapeInputFormat.class);
     }
-    in.close();
+    ShapeInputFormat.setInputPaths(job, inputPath);
     
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
@@ -329,14 +329,8 @@ public class KNN {
     job.setNumReduceTasks(1);
     
     job.set(SpatialSite.SHAPE_CLASS, shape.getClass().getName());
-    job.setOutputFormat(TextOutputFormat.class);
-    
-    ShapeInputFormat.setInputPaths(job, outputFile);
 
     RunningJob runningJob;
-    FileStatus fileStatus = fs.getFileStatus(outputFile);
-    BlockLocation[] fileBlockLocations =
-        fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
 
     job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     
@@ -348,10 +342,12 @@ public class KNN {
     long resultCount;
     int iterations = 0;
     
+    FileSystem outFs = userOutputPath == null ? FileSystem.get(job) :
+      userOutputPath.getFileSystem(job);
     Path outputPath = userOutputPath;
     if (outputPath == null) {
       do {
-        outputPath = new Path("/"+outputFile.getName()+
+        outputPath = new Path(inputPath.getName()+
             ".knn_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outputPath));
     } else {
@@ -362,14 +358,16 @@ public class KNN {
           throw new RuntimeException("Output path already exists and -overwrite flag is not set");
       }
     }
+    job.setOutputFormat(TextOutputFormat.class);
+    TextOutputFormat.setOutputPath(job, outputPath);
+    
+    GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(fs, inputPath);
 
     do {
       // Delete results of last iteration if not first iteration
       if (outputPath != null)
         outFs.delete(outputPath, true);
         
-      TextOutputFormat.setOutputPath(job, outputPath);
-      
       LOG.info("Running iteration: "+(++iterations));
       RangeFilter.setQueryRange(job, range_for_this_iteration);
 
@@ -387,10 +385,10 @@ public class KNN {
         // Did not find enough results in the query space
         // Increase the distance by doubling the maximum distance
         double maximum_distance = 0;
-        for (BlockLocation l : fileBlockLocations) {
-          if (l.getCellInfo().isIntersected(range_for_this_iteration)) {
+        for (Partition p : globalIndex) {
+          if (p.isIntersected(range_for_this_iteration)) {
             double distance =
-                l.getCellInfo().getMaxDistanceTo(queryPoint.x, queryPoint.y);
+                p.getMaxDistanceTo(queryPoint.x, queryPoint.y);
             if (distance > maximum_distance)
               maximum_distance = distance;
           }
@@ -407,7 +405,7 @@ public class KNN {
         FileStatus[] results = outFs.listStatus(outputPath);
         for (FileStatus result_file : results) {
           if (result_file.getLen() > 0 && result_file.getPath().getName().startsWith("part-")) {
-            in = outFs.open(result_file.getPath());
+            InputStream in = outFs.open(result_file.getPath());
             LineReader reader = new LineReader(in);
             Text first_line = new Text();
             reader.readLine(first_line);
@@ -424,10 +422,9 @@ public class KNN {
       // Calculate the number of blocks to be processed to check the
       // terminating condition;
       additional_blocks_2b_processed = 0;
-      for (BlockLocation l : fileBlockLocations) {
-        if (l.getCellInfo() != null &&
-            l.getCellInfo().isIntersected(range_for_next_iteration) &&
-            !(l.getCellInfo().isIntersected(range_for_this_iteration))) {
+      for (Partition p : globalIndex) {
+        if (p.isIntersected(range_for_next_iteration) &&
+            !(p.isIntersected(range_for_this_iteration))) {
           additional_blocks_2b_processed++;
         }
       }
@@ -450,7 +447,7 @@ public class KNN {
     ShapeRecordReader<S> shapeReader =
         new ShapeRecordReader<S>(fs.open(file), 0, file_size);
 
-    CellInfo key = shapeReader.createKey();
+    Rectangle key = shapeReader.createKey();
     
     TextWithDistance[] knn = new TextWithDistance[k];
 
