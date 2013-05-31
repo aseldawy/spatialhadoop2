@@ -532,11 +532,12 @@ public class KNN {
       for (int i = 0; i < count; i++) {
         int i_block = random.nextInt(blockLocations.length);
         int direction = random.nextInt(4);
+        // Generate a point in the given direction
         // Get center point (x, y)
-        double cx = blockLocations[i_block].getCellInfo().getXMid();
-        double cy = blockLocations[i_block].getCellInfo().getYMid();
-        double cw = blockLocations[i_block].getCellInfo().width;
-        double ch = blockLocations[i_block].getCellInfo().height;
+        double cx = (blockLocations[i_block].getCellInfo().x1 + blockLocations[i_block].getCellInfo().x2) / 2;
+        double cy = (blockLocations[i_block].getCellInfo().y1 + blockLocations[i_block].getCellInfo().y2) / 2;
+        double cw = blockLocations[i_block].getCellInfo().x2 - blockLocations[i_block].getCellInfo().x1;
+        double ch = blockLocations[i_block].getCellInfo().y2 - blockLocations[i_block].getCellInfo().y1;
         int signx = ((direction & 1) == 0)? 1 : -1;
         int signy = ((direction & 2) == 1)? 1 : -1;
         double x = cx + cw * closeness / 2 * signx;

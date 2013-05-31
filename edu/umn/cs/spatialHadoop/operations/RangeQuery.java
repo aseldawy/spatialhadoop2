@@ -27,7 +27,6 @@ import org.apache.hadoop.mapred.spatial.RTreeInputFormat;
 import org.apache.hadoop.mapred.spatial.RangeFilter;
 import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
-import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.RTree;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector;
@@ -60,9 +59,10 @@ public class RangeQuery {
    * @param <T>
    */
   public static class RangeQueryMap extends MapReduceBase implements
-      Mapper<CellInfo, Writable, NullWritable, Shape> {
+      Mapper<Rectangle, Writable, NullWritable, Shape> {
     /**A shape that is used to filter input*/
     private Shape queryShape;
+    private Rectangle queryMbr;
 
     @Override
     public void configure(JobConf job) {
@@ -73,6 +73,7 @@ public class RangeQuery {
             Class.forName(queryShapeClassName).asSubclass(Shape.class);
         queryShape = queryShapeClass.newInstance();
         queryShape.fromText(new Text(job.get(QUERY_SHAPE)));
+        queryMbr = queryShape.getMBR();
       } catch (ClassNotFoundException e) {
         e.printStackTrace();
       } catch (InstantiationException e) {
@@ -87,40 +88,40 @@ public class RangeQuery {
     /**
      * Map function for non-indexed blocks
      */
-    public void map(final CellInfo cellInfo, final Writable value,
+    public void map(final Rectangle cellMbr, final Writable value,
         final OutputCollector<NullWritable, Shape> output, Reporter reporter)
             throws IOException {
       if (value instanceof Shape) {
         Shape shape = (Shape) value;
         if (shape.isIntersected(queryShape)) {
           boolean report_result = false;
-          if (cellInfo.cellId == -1) {
+          if (cellMbr.isValid()) {
+            // Check for duplicate avoidance using reference point technique
+            double reference_x = Math.max(queryMbr.x1, shape.getMBR().x1);
+            double reference_y = Math.max(queryMbr.y1, shape.getMBR().y1);
+            report_result = cellMbr.contains(reference_x, reference_y);
+          } else {
             // A heap block, report right away
             report_result = true;
-          } else {
-            // Check for duplicate avoidance using reference point technique
-            Rectangle intersection =
-                queryShape.getMBR().getIntersection(shape.getMBR());
-            report_result = cellInfo.contains(intersection.x, intersection.y);
           }
+          
           if (report_result)
             output.collect(dummy, shape);
         }
       } else if (value instanceof RTree) {
         RTree<Shape> shapes = (RTree<Shape>) value;
-        shapes.search(queryShape.getMBR(), new ResultCollector<Shape>() {
+        shapes.search(queryMbr, new ResultCollector<Shape>() {
           @Override
           public void collect(Shape shape) {
             try {
               boolean report_result = false;
-              if (cellInfo.cellId == -1) {
+              if (cellMbr.isValid()) {
+                // Check for duplicate avoidance using reference point technique
+                Rectangle intersection = queryMbr.getIntersection(shape.getMBR());
+                report_result = cellMbr.contains(intersection.x1, intersection.y1);
+              } else {
                 // A heap block, report right away
                 report_result = true;
-              } else {
-                // Check for duplicate avoidance using reference point technique
-                Rectangle intersection =
-                    queryShape.getMBR().getIntersection(shape.getMBR());
-                report_result = cellInfo.contains(intersection.x, intersection.y);
               }
               if (report_result)
                 output.collect(dummy, shape);
@@ -236,13 +237,13 @@ public class RangeQuery {
     while (shapeReader.next(cell, shape)) {
       if (shape.isIntersected(queryRange)) {
         boolean report_result;
-        if (cell.width < 0) {
-          report_result = true;
-        } else {
+        if (cell.isValid()) {
           // Check for duplicate avoidance
           Rectangle intersection_mbr =
               queryRange.getMBR().getIntersection(shape.getMBR());
-          report_result = cell.contains(intersection_mbr.x, intersection_mbr.y);
+          report_result = cell.contains(intersection_mbr.x1, intersection_mbr.y1);
+        } else {
+          report_result = true;
         }
         if (report_result) {
           resultCount++;

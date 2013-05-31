@@ -134,7 +134,7 @@ public class Plot {
       compactCells = job.getBoolean(CompactCells, false);
       
       this.scale2 = (double)imageWidth * imageHeight /
-          ((double)fileMbr.width * fileMbr.height);
+          ((double)(fileMbr.x2 - fileMbr.x1) * (fileMbr.y2 - fileMbr.y1));
     }
 
     @Override
@@ -143,10 +143,10 @@ public class Plot {
         throws IOException {
       try {
         // Initialize the image
-        int image_x1 = (int) ((cellInfo.x - fileMbr.x) * imageWidth / fileMbr.width);
-        int image_y1 = (int) ((cellInfo.y - fileMbr.y) * imageHeight / fileMbr.height);
-        int image_x2 = (int) (((cellInfo.x + cellInfo.width) - fileMbr.x) * imageWidth / fileMbr.width);
-        int image_y2 = (int) (((cellInfo.y + cellInfo.height) - fileMbr.y) * imageHeight / fileMbr.height);
+        int image_x1 = (int) ((cellInfo.x1 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+        int image_y1 = (int) ((cellInfo.y1 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+        int image_x2 = (int) (((cellInfo.x2) - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+        int image_y2 = (int) (((cellInfo.y2) - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
         if (tile_width == 0 || tile_height == 0)
@@ -169,18 +169,18 @@ public class Plot {
 
         int recordCount = 0;
         
-        double data_x1 = cellInfo.getX1(), data_y1 = cellInfo.getY1(),
-            data_x2 = cellInfo.getX2(), data_y2 = cellInfo.getY2();
+        double data_x1 = cellInfo.x1, data_y1 = cellInfo.y1,
+            data_x2 = cellInfo.x2, data_y2 = cellInfo.y2;
         if (values.hasNext()) {
           recordCount++;
           Shape s = values.next();
           drawShape(graphics, s, fileMbr, imageWidth, imageHeight, scale2);
           if (compactCells) {
             Rectangle mbr = s.getMBR();
-            data_x1 = mbr.getX1();
-            data_y1 = mbr.getY1();
-            data_x2 = mbr.getX2();
-            data_y2 = mbr.getY2();
+            data_x1 = mbr.x1;
+            data_y1 = mbr.y1;
+            data_x2 = mbr.x2;
+            data_y2 = mbr.y2;
           }
           
           while (values.hasNext()) {
@@ -190,36 +190,36 @@ public class Plot {
 
             if (compactCells) {
               Rectangle mbr = s.getMBR();
-              if (mbr.getX1() < data_x1)
-                data_x1 = mbr.getX1();
-              if (mbr.getY1() < data_y1)
-                data_y1 = mbr.getY1();
-              if (mbr.getX2() > data_x2)
-                data_x2 = mbr.getX2();
-              if (mbr.getY2() > data_y2)
-                data_y2 = mbr.getY2();
+              if (mbr.x1 < data_x1)
+                data_x1 = mbr.x1;
+              if (mbr.y1 < data_y1)
+                data_y1 = mbr.y1;
+              if (mbr.x2 > data_x2)
+                data_x2 = mbr.x2;
+              if (mbr.y2 > data_y2)
+                data_y2 = mbr.y2;
             }
           }
         }
         
         if (compactCells) {
           // Ensure that the drawn rectangle fits in the partition
-          if (data_x1 < cellInfo.getX1())
-            data_x1 = cellInfo.getX1();
-          if (data_y1 < cellInfo.getY1())
-            data_y1 = cellInfo.getY1();
-          if (data_x2 > cellInfo.getX2())
-            data_x2 = cellInfo.getX2();
-          if (data_y2 > cellInfo.getY2())
-            data_y2 = cellInfo.getY2();
+          if (data_x1 < cellInfo.x1)
+            data_x1 = cellInfo.x1;
+          if (data_y1 < cellInfo.y1)
+            data_y1 = cellInfo.y1;
+          if (data_x2 > cellInfo.x2)
+            data_x2 = cellInfo.x2;
+          if (data_y2 > cellInfo.y2)
+            data_y2 = cellInfo.y2;
         }
 
         if (showBorders) {
           graphics.setColor(Color.BLACK);
-          int rect_x1 = (int) ((data_x1 - fileMbr.x) * imageWidth / fileMbr.width);
-          int rect_y1 = (int) ((data_y1 - fileMbr.y) * imageHeight / fileMbr.height);
-          int rect_x2 = (int) ((data_x2 - fileMbr.x) * imageWidth / fileMbr.width);
-          int rect_y2 = (int) ((data_y2 - fileMbr.y) * imageHeight / fileMbr.height);
+          int rect_x1 = (int) ((data_x1 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+          int rect_y1 = (int) ((data_y1 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+          int rect_x2 = (int) ((data_x2 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+          int rect_y2 = (int) ((data_y2 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
           graphics.drawRect(rect_x1, rect_y1, rect_x2-rect_x1-1, rect_y2-rect_y1-1);
           String info = "";
           if (showRecordCount) {
@@ -259,17 +259,17 @@ public class Plot {
       int imageWidth, int imageHeight, double scale2) {
     if (s instanceof Point) {
       Point pt = (Point) s;
-      int x = (int) ((pt.x - fileMbr.x) * imageWidth / fileMbr.width);
-      int y = (int) ((pt.y - fileMbr.y) * imageHeight / fileMbr.height);
+      int x = (int) ((pt.x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+      int y = (int) ((pt.y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
       
       if (x >= 0 && x < imageWidth && y >= 0 && y < imageHeight)
         graphics.fillRect(x, y, 1, 1);
     } else if (s instanceof Rectangle) {
       Rectangle r = (Rectangle) s;
-      int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
-      int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
-      int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
-      int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
+      int s_x1 = (int) ((r.x1 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+      int s_y1 = (int) ((r.y1 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+      int s_x2 = (int) (((r.x2) - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+      int s_y2 = (int) (((r.y2) - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
       graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
     } else if (s instanceof JTSShape) {
       JTSShape jts_shape = (JTSShape) s;
@@ -303,12 +303,12 @@ public class Plot {
           int npoints = 0;
 
           // Transform all points in the polygon to image coordinates
-          xpoints[npoints] = (int) Math.round((coords[0].x - fileMbr.x) * imageWidth / fileMbr.width);
-          ypoints[npoints] = (int) Math.round((coords[0].y - fileMbr.y) * imageHeight / fileMbr.height);
+          xpoints[npoints] = (int) Math.round((coords[0].x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+          ypoints[npoints] = (int) Math.round((coords[0].y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
           npoints++;
           for (int i_coord = 1; i_coord < coords.length; i_coord++) {
-            int x = (int) Math.round((coords[i_coord].x - fileMbr.x) * imageWidth / fileMbr.width);
-            int y = (int) Math.round((coords[i_coord].y - fileMbr.y) * imageHeight / fileMbr.height);
+            int x = (int) Math.round((coords[i_coord].x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+            int y = (int) Math.round((coords[i_coord].y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
             if (x != xpoints[npoints-1] || y != ypoints[npoints-1]) {
               xpoints[npoints] = x;
               ypoints[npoints] = y;
@@ -325,10 +325,10 @@ public class Plot {
     } else {
       LOG.warn("Cannot draw a shape of type: "+s.getClass());
       Rectangle r = s.getMBR();
-      int s_x1 = (int) ((r.x - fileMbr.x) * imageWidth / fileMbr.width);
-      int s_y1 = (int) ((r.y - fileMbr.y) * imageHeight / fileMbr.height);
-      int s_x2 = (int) (((r.x + r.width) - fileMbr.x) * imageWidth / fileMbr.width);
-      int s_y2 = (int) (((r.y + r.height) - fileMbr.y) * imageHeight / fileMbr.height);
+      int s_x1 = (int) ((r.x1 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+      int s_y1 = (int) ((r.y1 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+      int s_x2 = (int) (((r.x2) - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+      int s_y2 = (int) (((r.y2) - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
       if (s_x1 >= 0 && s_x1 < imageWidth && s_y1 >= 0 && s_y1 < imageHeight)
         graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
     }
@@ -356,8 +356,8 @@ public class Plot {
     CellInfo[] cellInfos;
     if (inFs.getGlobalIndex(inFileStatus) == null) {
       // A heap file. The map function should partition the file
-      GridInfo gridInfo = new GridInfo(fileMbr.x, fileMbr.y, fileMbr.width,
-          fileMbr.height);
+      GridInfo gridInfo = new GridInfo(fileMbr.x1, fileMbr.y1, fileMbr.x2,
+          fileMbr.y2);
       gridInfo.calculateCellDimensions(inFileStatus.getLen(),
           inFileStatus.getBlockSize());
       cellInfos = gridInfo.getAllCells();
@@ -379,11 +379,11 @@ public class Plot {
         GridOutputFormat.encodeCells(cellInfos));
     
     // Adjust width and height to maintain aspect ratio
-    if ((double)fileMbr.width / fileMbr.height > (double) width / height) {
+    if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
       // Fix width and change height
-      height = (int) (fileMbr.height * width / fileMbr.width);
+      height = (int) ((fileMbr.y2 - fileMbr.y1) * width / (fileMbr.x2 - fileMbr.x1));
     } else {
-      width = (int) (fileMbr.width * height / fileMbr.height);
+      width = (int) ((fileMbr.x2 - fileMbr.x1) * height / (fileMbr.y2 - fileMbr.y1));
     }
     ImageOutputFormat.setFileMBR(job, fileMbr);
     ImageOutputFormat.setImageWidth(job, width);
@@ -451,15 +451,15 @@ public class Plot {
     Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
     
     // Adjust width and height to maintain aspect ratio
-    if ((double)fileMbr.width / fileMbr.height > (double) width / height) {
+    if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
       // Fix width and change height
-      height = (int) (fileMbr.height * width / fileMbr.width);
+      height = (int) ((fileMbr.y2 - fileMbr.y1) * width / (fileMbr.x2 - fileMbr.x1));
     } else {
-      width = (int) (fileMbr.width * height / fileMbr.height);
+      width = (int) ((fileMbr.x2 - fileMbr.x1) * height / (fileMbr.y2 - fileMbr.y1));
     }
     
     double scale2 = (double) width * height
-        / ((double) fileMbr.width * fileMbr.height);
+        / ((double) (fileMbr.x2 - fileMbr.x1) * (fileMbr.y2 - fileMbr.y1));
 
     // Create an image
     BufferedImage image = new BufferedImage(width, height,

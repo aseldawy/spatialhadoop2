@@ -14,9 +14,8 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.GridInfo;
 import org.apache.hadoop.spatial.GridRecordWriter;
-import org.apache.hadoop.spatial.RTreeGridRecordWriter;
 import org.apache.hadoop.spatial.Point;
-import org.apache.hadoop.spatial.Polygon;
+import org.apache.hadoop.spatial.RTreeGridRecordWriter;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.ShapeRecordWriter;
@@ -76,7 +75,7 @@ public class RandomSpatialGenerator {
     }
     outFS.mkdirs(outFilePath);
     
-    GridInfo gridInfo = new GridInfo(mbr.x, mbr.y, mbr.width, mbr.height);
+    GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     Configuration conf = outFS.getConf();
     final double IndexingOverhead =
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);
@@ -205,29 +204,15 @@ public class RandomSpatialGenerator {
   private static void generateShape(Shape shape, Rectangle mbr, int rectSize,
       Random random, int minPoints, int maxPoints) {
     if (shape instanceof Point) {
-      ((Point)shape).x = Math.abs(random.nextLong()) % mbr.width + mbr.x;
-      ((Point)shape).y = Math.abs(random.nextLong()) % mbr.height + mbr.y;
+      ((Point)shape).x = random.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
+      ((Point)shape).y = random.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1;
     } else if (shape instanceof Rectangle) {
-      double x = ((Rectangle)shape).x = Math.abs(random.nextLong()) % mbr.width + mbr.x;
-      double y = ((Rectangle)shape).y = Math.abs(random.nextLong()) % mbr.height + mbr.y;
-      ((Rectangle)shape).width = Math.min(Math.abs(random.nextLong()) % rectSize+1,
-          mbr.width + mbr.x - x);
-      ((Rectangle)shape).height = Math.min(Math.abs(random.nextLong()) % rectSize+1,
-          mbr.height + mbr.y - y);
-    } else if (shape instanceof Polygon) {
-      int npoints = random.nextInt(maxPoints - minPoints + 1) + minPoints;
-      int xpoints[] = new int[npoints];
-      int ypoints[] = new int[npoints];
-      
-      int x = xpoints[0] = (int) (Math.abs(random.nextInt((int)mbr.width)) + mbr.x);
-      int y = ypoints[0] = (int) (Math.abs(random.nextInt((int)mbr.height)) + mbr.y);
-      for (int i = 1; i < npoints; i++) {
-        xpoints[i] = (int) Math.min(Math.abs(random.nextInt(rectSize)+1),
-            mbr.width + mbr.x - x);
-        ypoints[i] = (int) Math.min(Math.abs(random.nextInt(rectSize)+1),
-            mbr.height + mbr.y - y);
-      }
-      ((Polygon)shape).set(xpoints, ypoints, npoints);
+      ((Rectangle)shape).x1 = random.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
+      ((Rectangle)shape).y1 = random.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1;
+      ((Rectangle)shape).x2 = Math.min(mbr.x2, ((Rectangle)shape).x1 + random.nextInt(rectSize));
+      ((Rectangle)shape).y2 = Math.min(mbr.y2, ((Rectangle)shape).y1 + random.nextInt(rectSize));
+    } else {
+      throw new RuntimeException("Cannot generate random shapes of type: "+shape.getClass());
     }
   }
   

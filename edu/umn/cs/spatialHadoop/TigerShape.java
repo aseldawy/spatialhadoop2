@@ -104,10 +104,10 @@ public class TigerShape extends Rectangle {
   @Override
   public Text toText(Text text) {
     TextSerializerHelper.serializeLong(id, text, ',');
-    TextSerializerHelper.serializeDouble((double)getX1() / Precision, text, ',');
-    TextSerializerHelper.serializeDouble((double)getY1() / Precision, text, ',');
-    TextSerializerHelper.serializeDouble((double)getX2() / Precision, text, ',');
-    TextSerializerHelper.serializeDouble((double)getY2() / Precision, text, ',');
+    TextSerializerHelper.serializeDouble((double)x1 / Precision, text, ',');
+    TextSerializerHelper.serializeDouble((double)y1 / Precision, text, ',');
+    TextSerializerHelper.serializeDouble((double)x2 / Precision, text, ',');
+    TextSerializerHelper.serializeDouble((double)y2 / Precision, text, ',');
     // TODO handle the case when extraInfo contains a new line character
     if (extraInfoLength > 0)
       text.append(extraInfo, 0, extraInfoLength);
@@ -117,14 +117,10 @@ public class TigerShape extends Rectangle {
   @Override
   public void fromText(Text text) {
     this.id = TextSerializerHelper.consumeLong(text, ',');
-    double x1 = TextSerializerHelper.consumeDouble(text, ',');
-    double y1 = TextSerializerHelper.consumeDouble(text, ',');
-    double x2 = TextSerializerHelper.consumeDouble(text, ',');;
-    double y2 = TextSerializerHelper.consumeDouble(text, ',');
-    this.x = Math.round(x1 * Precision);
-    this.y = Math.round(y1 * Precision);
-    this.width = Math.round(x2 * Precision) - this.x;
-    this.height = Math.round(y2 * Precision) - this.y;
+    this.x1 = TextSerializerHelper.consumeDouble(text, ',');
+    this.y1 = TextSerializerHelper.consumeDouble(text, ',');
+    this.x2 = TextSerializerHelper.consumeDouble(text, ',');;
+    this.y2 = TextSerializerHelper.consumeDouble(text, ',');
     extraInfoLength = text.getLength();
     if (extraInfo == null || extraInfo.length < extraInfoLength) {
       // Get the next power of two for the new extraInfoLength

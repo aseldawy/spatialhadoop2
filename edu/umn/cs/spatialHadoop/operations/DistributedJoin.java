@@ -104,7 +104,7 @@ public class DistributedJoin {
               try {
                 Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
                 // Employ reference point duplicate avoidance technique 
-                if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y))
+                if (mapperMBR.contains(intersectionMBR.x1, intersectionMBR.y1))
                   output.collect(r, s);
               } catch (IOException e) {
                 e.printStackTrace();
@@ -145,7 +145,7 @@ public class DistributedJoin {
               } else {
                 // Reference point duplicate avoidance technique
                 Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
-                if (mapperMBR.contains(intersectionMBR.x, intersectionMBR.y))
+                if (mapperMBR.contains(intersectionMBR.x1, intersectionMBR.y1))
                   output.collect(r, s);
               }
             } catch (IOException e) {

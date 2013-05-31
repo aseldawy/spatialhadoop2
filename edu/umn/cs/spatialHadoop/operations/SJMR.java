@@ -180,7 +180,7 @@ public class SJMR {
         public void collect(S x, S y) {
           try {
             Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
-            if (cellInfo.contains(intersectionMBR.x, intersectionMBR.y)) {
+            if (cellInfo.contains(intersectionMBR.x1, intersectionMBR.y1)) {
               // Report to the reduce result collector
               output.collect(x, y);
             }
@@ -314,7 +314,7 @@ public class SJMR {
         }
         LOG.info("Automatically calculated MBR: "+rect);
       }
-      gridInfo = new GridInfo(rect.x, rect.y, rect.width, rect.height);
+      gridInfo = new GridInfo(rect.x1, rect.y1, rect.x2, rect.y2);
     }
     long t1 = System.currentTimeMillis();
     long resultSize = sjmr(fs, inputFiles, outputPath, gridInfo, stockShape, overwrite);

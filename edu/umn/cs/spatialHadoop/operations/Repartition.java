@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Vector;
 
@@ -58,7 +59,7 @@ public class Repartition {
    *
    */
   public static class RepartitionMap<T extends Shape> extends MapReduceBase
-      implements Mapper<CellInfo, T, IntWritable, Text> {
+      implements Mapper<Rectangle, T, IntWritable, Text> {
     /**List of cells used by the mapper*/
     private CellInfo[] cellInfos;
     
@@ -83,12 +84,9 @@ public class Repartition {
      * @param reporter
      * @throws IOException
      */
-    public void map(
-        CellInfo dummy,
-        T shape,
-        OutputCollector<IntWritable, Text> output,
-        Reporter reporter) throws IOException {
-
+    public void map(Rectangle dummy, T shape,
+        OutputCollector<IntWritable, Text> output, Reporter reporter)
+        throws IOException {
       shapeText.clear();
       shape.toText(shapeText);
       for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
@@ -181,15 +179,15 @@ public class Repartition {
     if (gindex == null) {
       throw new RuntimeException("Unsupported global index: "+gindex);
     } else if (gindex.equals("grid")) {
-      GridInfo gridInfo = new GridInfo(input_mbr.x, input_mbr.y,
-          input_mbr.width, input_mbr.height);
+      GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
+          input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
     } else if (gindex.equals("rtree")) {
       // Create a dummy grid info used to find number of columns and rows for
       // the r-tree packing algorithm
-      GridInfo gridInfo = new GridInfo(input_mbr.x, input_mbr.y,
-          input_mbr.width, input_mbr.height);
+      GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
+          input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       // Pack in rectangles using an RTree
       cellInfos = packInRectangles(inFs, inFile, outFs, gridInfo, stockShape, false);
@@ -365,15 +363,15 @@ public class Repartition {
     if (gindex == null) {
       throw new RuntimeException("Unsupported global index: "+gindex);
     } else if (gindex.equals("grid")) {
-      GridInfo gridInfo = new GridInfo(input_mbr.x, input_mbr.y,
-          input_mbr.width, input_mbr.height);
+      GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
+          input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
     } else if (gindex.equals("rtree")) {
       // Create a dummy grid info used to find number of columns and rows for
       // the r-tree packing algorithm
-      GridInfo gridInfo = new GridInfo(input_mbr.x, input_mbr.y,
-          input_mbr.width, input_mbr.height);
+      GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
+          input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       // Pack in rectangles using an RTree
       cellInfos = packInRectangles(inFs, inFile, outFs, gridInfo, stockShape, true);
@@ -516,10 +514,10 @@ public class Repartition {
         double overlap_area = 0;
         for (CellInfo cell : cells) {
           Rectangle overlap = input_mbr.getIntersection(cell);
-          overlap_area += overlap.width * overlap.height;
+          overlap_area += (overlap.x2 - overlap.x1) * (overlap.y2 - overlap.y1);
         }
         long estimatedRepartitionedFileSize = (long) (fs.getFileStatus(
-            inputPath).getLen() * overlap_area / (input_mbr.width * input_mbr.height));
+            inputPath).getLen() * overlap_area / ((input_mbr.x2 - input_mbr.x1) * (input_mbr.y2 - input_mbr.y1)));
         blockSize = estimatedRepartitionedFileSize / cells.length;
         // Adjust blockSize to be a multiple of bytes per checksum
         int bytes_per_checksum =

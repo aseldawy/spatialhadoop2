@@ -61,8 +61,8 @@ public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable>
     @Override
     public void write(CellInfo cell, ImageWritable value) throws IOException {
       progress.progress();
-      int tile_x = (int) ((cell.x - fileMbr.x) * image_width / fileMbr.width);
-      int tile_y = (int) ((cell.y - fileMbr.y) * image_height / fileMbr.height);
+      int tile_x = (int) ((cell.x1 - fileMbr.x1) * image_width / (fileMbr.x2 - fileMbr.x1));
+      int tile_y = (int) ((cell.y1 - fileMbr.y1) * image_height / (fileMbr.y2 - fileMbr.y1));
       Graphics2D graphics;
       try {
         graphics = image.createGraphics();

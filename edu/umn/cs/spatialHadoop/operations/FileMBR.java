@@ -20,7 +20,6 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
-import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.GlobalIndex;
 import org.apache.hadoop.spatial.Partition;
 import org.apache.hadoop.spatial.Rectangle;
@@ -40,12 +39,12 @@ public class FileMBR {
   private static final Rectangle MBR = new Rectangle();
 
   public static class Map extends MapReduceBase implements
-      Mapper<CellInfo, Shape, NullWritable, Rectangle> {
-    public void map(CellInfo dummy, Shape shape,
+      Mapper<Rectangle, Shape, NullWritable, Rectangle> {
+    public void map(Rectangle dummy, Shape shape,
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
         throws IOException {
       Rectangle mbr = shape.getMBR();
-      MBR.set(mbr.x, mbr.y, mbr.width, mbr.height);
+      MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
       output.collect(Dummy, MBR);
     }
   }
@@ -59,19 +58,19 @@ public class FileMBR {
       if (values.hasNext()) {
         Rectangle rect = values.next();
         
-        double y1 = rect.getY1();
-        double x2 = rect.getX2();
-        double y2 = rect.getY2();
-        double x1 = rect.getX1();
+        double x1 = rect.x1;
+        double y1 = rect.y1;
+        double x2 = rect.x2;
+        double y2 = rect.y2;
 
         while (values.hasNext()) {
           rect = values.next();
-          if (rect.getX1() < x1) x1 = rect.getX1();
-          if (rect.getY1() < y1) y1 = rect.getY1();
-          if (rect.getX2() > x2) x2 = rect.getX2();
-          if (rect.getY2() > y2) y2 = rect.getY2();
+          if (rect.x1 < x1) x1 = rect.x1;
+          if (rect.y1 < y1) y1 = rect.y1;
+          if (rect.x2 > x2) x2 = rect.x2;
+          if (rect.y2 > y2) y2 = rect.y2;
         }
-        output.collect(dummy, new Rectangle(x1, y1, x2 - x1, y2 - y1));
+        output.collect(dummy, new Rectangle(x1, y1, x2, y2));
       }
     }
   }
@@ -94,10 +93,11 @@ public class FileMBR {
     }
     JobConf job = new JobConf(FileMBR.class);
     
-    Path outputPath =
-        new Path(file.toUri().getPath()+".mbr_"+(int)(Math.random()*1000000));
-    FileSystem outFs = outputPath.getFileSystem(job);
-    outFs.delete(outputPath, true);
+    Path outputPath;
+    FileSystem outFs = FileSystem.get(job);
+    do {
+      outputPath = new Path(file.toUri().getPath()+".mbr_"+(int)(Math.random()*1000000));
+    } while (outFs.exists(outputPath));
     
     job.setJobName("FileMBR");
     job.setMapOutputKeyClass(NullWritable.class);
@@ -154,10 +154,10 @@ public class FileMBR {
     if (fileBlockLocations[0].getCellInfo() != null) {
       boolean heap_file = false;
       BlockLocation firstBlock = fileBlockLocations[0];
-      double x1 = firstBlock.getCellInfo().getX1();
-      double y1 = firstBlock.getCellInfo().getY1();
-      double x2 = firstBlock.getCellInfo().getX2();
-      double y2 = firstBlock.getCellInfo().getY2();
+      double x1 = firstBlock.getCellInfo().x1;
+      double y1 = firstBlock.getCellInfo().y1;
+      double x2 = firstBlock.getCellInfo().x2;
+      double y2 = firstBlock.getCellInfo().y2;
 
       for (BlockLocation blockLocation : fileBlockLocations) {
         Rectangle rect = blockLocation.getCellInfo();
@@ -165,13 +165,13 @@ public class FileMBR {
           heap_file = true;
           break;
         }
-        if (rect.getX1() < x1) x1 = rect.getX1();
-        if (rect.getY1() < y1) y1 = rect.getY1();
-        if (rect.getX2() > x2) x2 = rect.getX2();
-        if (rect.getY2() > y2) y2 = rect.getY2();
+        if (rect.x1 < x1) x1 = rect.x1;
+        if (rect.y1 < y1) y1 = rect.y1;
+        if (rect.x2 > x2) x2 = rect.x2;
+        if (rect.y1 > y2) y2 = rect.y2;
       }
       if (!heap_file) {
-        return new Rectangle(x1, y1, x2-x1, y2-y1);
+        return new Rectangle(x1, y1, x2, y2);
       }
     }
     long file_size = fs.getFileStatus(file).getLen();
@@ -188,17 +188,17 @@ public class FileMBR {
     }
       
     Rectangle rect = stockShape.getMBR();
-    double x1 = rect.getX1();
-    double y1 = rect.getY1();
-    double x2 = rect.getX2();
-    double y2 = rect.getY2();
+    double x1 = rect.x1;
+    double y1 = rect.y1;
+    double x2 = rect.x2;
+    double y2 = rect.y2;
 
     while (shapeReader.next(key, stockShape)) {
       rect = stockShape.getMBR();
-      if (rect.getX1() < x1) x1 = rect.getX1();
-      if (rect.getY1() < y1) y1 = rect.getY1();
-      if (rect.getX2() > x2) x2 = rect.getX2();
-      if (rect.getY2() > y2) y2 = rect.getY2();
+      if (rect.x1 < x1) x1 = rect.x1;
+      if (rect.y1 < y1) y1 = rect.y1;
+      if (rect.x2 > x2) x2 = rect.x2;
+      if (rect.y2 > y2) y2 = rect.y2;
     }
     return new Rectangle(x1, y1, x2-x1, y2-y1);
   }
