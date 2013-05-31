@@ -19,6 +19,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.TextSerializable;
@@ -42,13 +43,13 @@ import org.apache.hadoop.mapred.spatial.RTreeInputFormat;
 import org.apache.hadoop.mapred.spatial.RangeFilter;
 import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
-import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.Circle;
 import org.apache.hadoop.spatial.GlobalIndex;
 import org.apache.hadoop.spatial.Partition;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.RTree;
 import org.apache.hadoop.spatial.Rectangle;
+import org.apache.hadoop.spatial.ResultCollector;
 import org.apache.hadoop.spatial.ResultCollector2;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.SpatialSite;
@@ -59,7 +60,7 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
 /**
  * Performs k Nearest Neighbor (kNN) query over a spatial file.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class KNN {
@@ -73,7 +74,7 @@ public class KNN {
   public static final String QUERY_POINT =
       "edu.umn.cs.spatialHadoop.operations.KNN.QueryPoint";
 
-  public static final String K = "edu.umn.cs.spatialHadoop.operations.KNN.K";
+  public static final String K = "KNN.K";
 
   public static class TextWithDistance implements Writable, Cloneable, TextSerializable {
     public double distance; 
@@ -162,7 +163,7 @@ public class KNN {
      * @param reporter
      * @throws IOException
      */
-    public void map(CellInfo cell, S shape,
+    public void map(Rectangle cell, S shape,
         OutputCollector<NullWritable, TextWithDistance> output,
         Reporter reporter) throws IOException {
       outputValue.distance = shape.distanceTo(queryPoint.x, queryPoint.y);
@@ -179,7 +180,7 @@ public class KNN {
      * @param reporter
      * @throws IOException
      */
-    public void map(CellInfo cellInfo, RTree<S> shapes,
+    public void map(Rectangle cellInfo, RTree<S> shapes,
         final OutputCollector<NullWritable, TextWithDistance> output,
         Reporter reporter) throws IOException {
       shapes.knn(queryPoint.x, queryPoint.y, k, new ResultCollector2<S, Double>() {
@@ -199,10 +200,10 @@ public class KNN {
   }
   
   public static class Map1<S extends Shape> extends KNNMap<S>
-    implements Mapper<CellInfo, S, NullWritable, TextWithDistance> {}
+    implements Mapper<Rectangle, S, NullWritable, TextWithDistance> {}
 
   public static class Map2<S extends Shape> extends KNNMap<S>
-    implements Mapper<CellInfo, RTree<S>, NullWritable, TextWithDistance> {}
+    implements Mapper<Rectangle, RTree<S>, NullWritable, TextWithDistance> {}
 
   /**
    * Keeps KNN objects ordered by their distance descending
@@ -298,7 +299,7 @@ public class KNN {
    * @throws IOException
    */
   public static <S extends Shape> long knnMapReduce(FileSystem fs,
-      Path inputPath, Path userOutputPath, Point queryPoint, int k, S shape,
+      Path inputPath, Path userOutputPath, final Point queryPoint, int k, S shape,
       boolean overwrite) throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
@@ -338,7 +339,7 @@ public class KNN {
     final TextWithDistance t = new TextWithDistance();
     
     Shape range_for_this_iteration = new Point(queryPoint.x, queryPoint.y);
-    int additional_blocks_2b_processed;
+    final IntWritable additional_blocks_2b_processed = new IntWritable(0);
     long resultCount;
     int iterations = 0;
     
@@ -379,57 +380,74 @@ public class KNN {
       Counter outputRecordCounter = counters.findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
       resultCount = outputRecordCounter.getValue();
       
-      Circle range_for_next_iteration;
-      if (resultCount < k) {
-        LOG.info("Found only "+resultCount+" results");
-        // Did not find enough results in the query space
-        // Increase the distance by doubling the maximum distance
-        double maximum_distance = 0;
-        for (Partition p : globalIndex) {
-          if (p.isIntersected(range_for_this_iteration)) {
-            double distance =
-                p.getMaxDistanceTo(queryPoint.x, queryPoint.y);
-            if (distance > maximum_distance)
-              maximum_distance = distance;
+      if (globalIndex != null) {
+        Circle range_for_next_iteration;
+        if (resultCount < k) {
+          LOG.info("Found only "+resultCount+" results");
+          // Did not find enough results in the query space
+          // Increase the distance by doubling the maximum distance among all
+          // partitions that were processed
+          final DoubleWritable maximum_distance = new DoubleWritable(0);
+          int matched_partitions = globalIndex.rangeQuery(range_for_this_iteration, new ResultCollector<Partition>() {
+            @Override
+            public void collect(Partition p) {
+              double distance =
+                  p.getMaxDistanceTo(queryPoint.x, queryPoint.y);
+              if (distance > maximum_distance.get())
+                maximum_distance.set(distance);
+            }
+          });
+          if (matched_partitions == 0) {
+            // The query point is outside the search space
+            // Set the range to include the closest partition
+            globalIndex.knn(queryPoint.x, queryPoint.y, 1, new ResultCollector2<Partition, Double>() {
+              @Override
+              public void collect(Partition r, Double s) {
+                maximum_distance.set(s);
+              }
+            });
           }
-        }
-        range_for_next_iteration =
-            new Circle(queryPoint.x, queryPoint.y, maximum_distance*2);
-        LOG.info("Expanding to "+maximum_distance*2);
-      } else {
-        // Calculate the new test range which is a circle centered at the
-        // query point and distance to the k^{th} neighbor
-
-        // Get distance to the kth neighbor
-        final DoubleWritable distance_to_kth_neighbor = new DoubleWritable();
-        FileStatus[] results = outFs.listStatus(outputPath);
-        for (FileStatus result_file : results) {
-          if (result_file.getLen() > 0 && result_file.getPath().getName().startsWith("part-")) {
-            InputStream in = outFs.open(result_file.getPath());
-            LineReader reader = new LineReader(in);
-            Text first_line = new Text();
-            reader.readLine(first_line);
-            t.fromText(first_line);
-            distance_to_kth_neighbor.set(t.distance);
-            in.close();
+          range_for_next_iteration =
+              new Circle(queryPoint.x, queryPoint.y, maximum_distance.get()*2);
+          LOG.info("Expanding to "+maximum_distance.get()*2);
+        } else {
+          // Calculate the new test range which is a circle centered at the
+          // query point and distance to the k^{th} neighbor
+          
+          // Get distance to the kth neighbor
+          final DoubleWritable distance_to_kth_neighbor = new DoubleWritable();
+          FileStatus[] results = outFs.listStatus(outputPath);
+          for (FileStatus result_file : results) {
+            if (result_file.getLen() > 0 && result_file.getPath().getName().startsWith("part-")) {
+              InputStream in = outFs.open(result_file.getPath());
+              LineReader reader = new LineReader(in);
+              Text first_line = new Text();
+              reader.readLine(first_line);
+              t.fromText(first_line);
+              distance_to_kth_neighbor.set(t.distance);
+              in.close();
+            }
           }
+          range_for_next_iteration = new Circle(queryPoint.x, queryPoint.y,
+              distance_to_kth_neighbor.get());
+          LOG.info("Expanding to kth neighbor: "+distance_to_kth_neighbor);
         }
-        range_for_next_iteration = new Circle(queryPoint.x, queryPoint.y,
-            distance_to_kth_neighbor.get());
-        LOG.info("Expanding to kth neighbor: "+distance_to_kth_neighbor);
+        
+        // Calculate the number of blocks to be processed to check the
+        // terminating condition;
+        additional_blocks_2b_processed.set(0);
+        final Shape temp = range_for_this_iteration;
+        globalIndex.rangeQuery(range_for_next_iteration, new ResultCollector<Partition>() {
+          @Override
+          public void collect(Partition p) {
+            if (!(p.isIntersected(temp))) {
+              additional_blocks_2b_processed.set(additional_blocks_2b_processed.get() + 1);
+            }
+          }
+        });
+        range_for_this_iteration = range_for_next_iteration;
       }
-      
-      // Calculate the number of blocks to be processed to check the
-      // terminating condition;
-      additional_blocks_2b_processed = 0;
-      for (Partition p : globalIndex) {
-        if (p.isIntersected(range_for_next_iteration) &&
-            !(p.isIntersected(range_for_this_iteration))) {
-          additional_blocks_2b_processed++;
-        }
-      }
-      range_for_this_iteration = range_for_next_iteration;
-    } while (additional_blocks_2b_processed > 0);
+    } while (additional_blocks_2b_processed.get() > 0);
     
     // If output file is not set by user, delete it
     if (userOutputPath == null)
