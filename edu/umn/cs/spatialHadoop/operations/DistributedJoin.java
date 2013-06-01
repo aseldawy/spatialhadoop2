@@ -8,7 +8,6 @@ import java.util.Set;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -72,16 +71,16 @@ public class DistributedJoin {
   }
   
   public static class RedistributeJoinMap extends MapReduceBase
-  implements Mapper<PairWritable<CellInfo>, PairWritable<? extends Writable>, Shape, Shape> {
+  implements Mapper<PairWritable<Rectangle>, PairWritable<? extends Writable>, Shape, Shape> {
     public void map(
-        final PairWritable<CellInfo> key,
+        final PairWritable<Rectangle> key,
         final PairWritable<? extends Writable> value,
         final OutputCollector<Shape, Shape> output,
         Reporter reporter) throws IOException {
-      final Rectangle mapperMBR = key.first.cellId == -1
-          && key.second.cellId == -1 ? null // Both blocks are heap blocks
-          : (key.first.cellId == -1 ? key.second // Second block is indexed
-              : (key.second.cellId == -1 ? key.first // First block is indexed
+      final Rectangle mapperMBR = !key.first.isValid()
+          && !key.second.isValid() ? null // Both blocks are heap blocks
+          : (!key.first.isValid() ? key.second // Second block is indexed
+              : (!key.second.isValid() ? key.first // First block is indexed
                   : (key.first.getIntersection(key.second)))); // Both indexed
 
       if (value.first instanceof ArrayWritable && value.second instanceof ArrayWritable) {
@@ -102,9 +101,10 @@ public class DistributedJoin {
             @Override
             public void collect(Shape r, Shape s) {
               try {
-                Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
+                double intersectionX = Math.max(r.getMBR().x1, s.getMBR().x1);
+                double intersectionY = Math.max(r.getMBR().y1, s.getMBR().y1);
                 // Employ reference point duplicate avoidance technique 
-                if (mapperMBR.contains(intersectionMBR.x1, intersectionMBR.y1))
+                if (mapperMBR.contains(intersectionX, intersectionY))
                   output.collect(r, s);
               } catch (IOException e) {
                 e.printStackTrace();
@@ -160,25 +160,6 @@ public class DistributedJoin {
     }
   }
   
-  /**
-   * Reads a pair of arrays of shapes
-   * @author eldawy
-   *
-   */
-  public static class DJRecordReaderArray extends BinaryRecordReader<Rectangle, ArrayWritable> {
-    public DJRecordReaderArray(Configuration conf, CombineFileSplit fileSplits) throws IOException {
-      super(conf, fileSplits);
-    }
-    
-    @Override
-    protected RecordReader<Rectangle, ArrayWritable> createRecordReader(
-        Configuration conf, CombineFileSplit split, int i) throws IOException {
-      FileSplit fsplit = new FileSplit(split.getPath(i),
-          split.getStartOffsets()[i],
-          split.getLength(i), split.getLocations());
-      return new ShapeArrayRecordReader(conf, fsplit);
-    }
-  }
 
   /**
    * Input format that returns a record reader that reads a pair of arrays of
@@ -187,50 +168,70 @@ public class DistributedJoin {
    *
    */
   public static class DJInputFormatArray extends BinarySpatialInputFormat<Rectangle, ArrayWritable> {
-    
+
+    /**
+     * Reads a pair of arrays of shapes
+     * @author Ahmed Eldawy
+     *
+     */
+    public static class DJRecordReader extends BinaryRecordReader<Rectangle, ArrayWritable> {
+      public DJRecordReader(Configuration conf, CombineFileSplit fileSplits) throws IOException {
+        super(conf, fileSplits);
+      }
+      
+      @Override
+      protected RecordReader<Rectangle, ArrayWritable> createRecordReader(
+          Configuration conf, CombineFileSplit split, int i) throws IOException {
+        FileSplit fsplit = new FileSplit(split.getPath(i),
+            split.getStartOffsets()[i],
+            split.getLength(i), split.getLocations());
+        return new ShapeArrayRecordReader(conf, fsplit);
+      }
+    }
+
     @Override
     public RecordReader<PairWritable<Rectangle>, PairWritable<ArrayWritable>> getRecordReader(
         InputSplit split, JobConf job, Reporter reporter) throws IOException {
-      return new DJRecordReaderArray(job, (CombineFileSplit)split);
+      return new DJRecordReader(job, (CombineFileSplit)split);
     }
   }
 
-  
-  /**
-   * Reads a pair of arrays of shapes
-   * @author eldawy
-   *
-   */
-  public static class DJRecordReaderRTree<S extends Shape> extends BinaryRecordReader<Rectangle, RTree<S>> {
-    public DJRecordReaderRTree(Configuration conf, CombineFileSplit fileSplits) throws IOException {
-      super(conf, fileSplits);
-    }
-    
-    @Override
-    protected RecordReader<Rectangle, RTree<S>> createRecordReader(
-        Configuration conf, CombineFileSplit split, int i) throws IOException {
-      FileSplit fsplit = new FileSplit(split.getPath(i),
-          split.getStartOffsets()[i],
-          split.getLength(i), split.getLocations());
-      return new RTreeRecordReader<S>(conf, fsplit);
-    }
-  }
 
   /**
    * Input format that returns a record reader that reads a pair of arrays of
    * shapes
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
    */
   public static class DJInputFormatRTree<S extends Shape> extends BinarySpatialInputFormat<Rectangle, RTree<S>> {
-    
+
+    /**
+     * Reads a pair of arrays of shapes
+     * @author Ahmed Eldawy
+     *
+     */
+    public static class DJRecordReader<S extends Shape> extends BinaryRecordReader<Rectangle, RTree<S>> {
+      public DJRecordReader(Configuration conf, CombineFileSplit fileSplits) throws IOException {
+        super(conf, fileSplits);
+      }
+      
+      @Override
+      protected RecordReader<Rectangle, RTree<S>> createRecordReader(
+          Configuration conf, CombineFileSplit split, int i) throws IOException {
+        FileSplit fsplit = new FileSplit(split.getPath(i),
+            split.getStartOffsets()[i],
+            split.getLength(i), split.getLocations());
+        return new RTreeRecordReader<S>(conf, fsplit);
+      }
+    }
+
     @Override
     public RecordReader<PairWritable<Rectangle>, PairWritable<RTree<S>>> getRecordReader(
         InputSplit split, JobConf job, Reporter reporter) throws IOException {
-      return new DJRecordReaderRTree<S>(job, (CombineFileSplit)split);
+      return new DJRecordReader<S>(job, (CombineFileSplit)split);
     }
   }
-  
+
   /**
    * Select a file to repartition based on some heuristics.
    * If only one file is indexed, the non-indexed file is repartitioned.
@@ -245,7 +246,7 @@ public class DistributedJoin {
     
     for (int i = 0; i < files.length; i++) {
       FileStatus fstatus = fs.getFileStatus(files[i]);
-      if (fs.getGlobalIndex(fstatus) != null && fstatus.getLen() > largest_size) {
+      if (SpatialSite.getGlobalIndex(fs, files[i]) != null && fstatus.getLen() > largest_size) {
         largest_partitioned_file = i;
         largest_size = fstatus.getLen();
       }
@@ -271,24 +272,28 @@ public class DistributedJoin {
     // Repartition the smaller file
     Path partitioned_file;
     do {
-      partitioned_file = new Path("/"+files[file_to_repartition].getName()+
+      partitioned_file = new Path(files[file_to_repartition].getName()+
           ".repartitioned_"+(int)(Math.random() * 1000000));
     } while (fs.exists(partitioned_file));
     
     // Get the cells to use for repartitioning
-    Set<CellInfo> cellSet = new HashSet<CellInfo>();
+    Set<Rectangle> cellSet = new HashSet<Rectangle>();
     // Get the global index of the file that is not partitioned
-    GlobalIndex<BlockLocation> globalIndex =
-        fs.getGlobalIndex(fs.getFileStatus(files[1-file_to_repartition]));
-    for (BlockLocation block : globalIndex) {
-      cellSet.add(block.getCellInfo());
+    GlobalIndex<Partition> globalIndex =
+        SpatialSite.getGlobalIndex(fs, files[1-file_to_repartition]);
+    for (Partition partition : globalIndex) {
+      cellSet.add(new Rectangle(partition));
     }
     
     LOG.info("Repartitioning "+files[file_to_repartition]+" => "+partitioned_file);
     // Repartition the smaller file with no local index
-    Repartition.repartitionMapReduce(files[file_to_repartition], partitioned_file,
-        stockShape, 0, cellSet.toArray(new CellInfo[cellSet.size()]),
-        null, true);
+    CellInfo[] cells = new CellInfo[cellSet.size()];
+    int i = 0;
+    for (Rectangle rect : cellSet) {
+      cells[i++] = new CellInfo(i, rect);
+    }
+    Repartition.repartitionMapReduce(files[file_to_repartition],
+        partitioned_file, stockShape, 0, cells, null, true);
     long t2 = System.currentTimeMillis();
     System.out.println("Repartition time "+(t2-t1)+" millis");
   
@@ -324,7 +329,7 @@ public class DistributedJoin {
     Path outputPath = userOutputPath;
     if (outputPath == null) {
       do {
-        outputPath = new Path("/"+inputFiles[0].getName()+
+        outputPath = new Path(inputFiles[0].getName()+
             ".dj_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outputPath));
     } else {
@@ -391,13 +396,12 @@ public class DistributedJoin {
   public static long distributedJoinSmart(FileSystem fs,
       final Path[] inputFiles, Path userOutputPath, Shape stockShape,
       boolean overwrite) throws IOException {
-    // TODO revisit the case of joining indexed with non-indexed files.
     Path[] originalInputFiles = inputFiles.clone();
     FileSystem outFs = inputFiles[0].getFileSystem(new Configuration());
     Path outputPath = userOutputPath;
     if (outputPath == null) {
       do {
-        outputPath = new Path("/"+inputFiles[0].getName()+
+        outputPath = new Path(inputFiles[0].getName()+
             ".dj_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outputPath));
     } else {
@@ -437,15 +441,19 @@ public class DistributedJoin {
     };
     
     new QuickSort().sort(filesSortable, 0, inputFiles.length);
-    GlobalIndex<BlockLocation>[] gIndexes =
-        new GlobalIndex[fStatus.length];
-    for (int i_file = 0; i_file < fStatus.length; i_file++)
-      gIndexes[i_file] = fs.getGlobalIndex(fStatus[i_file]);
+    GlobalIndex<Partition>[] gIndexes = new GlobalIndex[fStatus.length];
+    int[] numBlocks = new int[fStatus.length];
+    for (int i_file = 0; i_file < fStatus.length; i_file++) {
+      gIndexes[i_file] = SpatialSite.getGlobalIndex(outFs, fStatus[i_file].getPath());
+      numBlocks[i_file] = outFs.getFileBlockLocations(fStatus[i_file], 0, fStatus[i_file].getLen()).length;
+    }
     
-    cost_without_repartition = GlobalIndex.spatialJoin(gIndexes[0],
-        gIndexes[1], null);
-    // Cost of repartition + cost of join
-    cost_with_repartition = gIndexes[0].size() * 3 + gIndexes[1].size();
+    cost_without_repartition = gIndexes[0] != null && gIndexes[1] != null ?
+        GlobalIndex.spatialJoin(gIndexes[0], gIndexes[1], null) :
+        (numBlocks[0] * numBlocks[1]);
+    // Total cost = Cost of repartition (2 * numBlocks[0]) +
+    //    cost of join (numBlocks[0] + numBlocks[1])
+    cost_with_repartition = numBlocks[0] * 3 + numBlocks[1];
     LOG.info("Cost with repartition is estimated to "+cost_with_repartition);
     LOG.info("Cost without repartition is estimated to "+cost_without_repartition);
     boolean need_repartition = cost_with_repartition < cost_without_repartition;
