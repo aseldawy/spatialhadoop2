@@ -55,7 +55,7 @@ public class Repartition {
   
   /**
    * The map class maps each object to all cells it overlaps with.
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
    */
   public static class RepartitionMap<T extends Shape> extends MapReduceBase
@@ -84,15 +84,21 @@ public class Repartition {
      * @param reporter
      * @throws IOException
      */
-    public void map(Rectangle dummy, T shape,
+    public void map(Rectangle cellMbr, T shape,
         OutputCollector<IntWritable, Text> output, Reporter reporter)
         throws IOException {
-      shapeText.clear();
-      shape.toText(shapeText);
-      for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
-        if (cellInfos[cellIndex].isIntersected(shape)) {
-          cellId.set((int) cellInfos[cellIndex].cellId);
-          output.collect(cellId, shapeText);
+      Rectangle shape_mbr = shape.getMBR();
+      // Only send shape to output if its lowest corner lies in the cellMBR
+      // This ensures that a replicated shape in an already partitioned file
+      // doesn't get send to output from all partitions
+      if (cellMbr.isValid() && cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
+        shapeText.clear();
+        shape.toText(shapeText);
+        for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
+          if (cellInfos[cellIndex].isIntersected(shape)) {
+            cellId.set((int) cellInfos[cellIndex].cellId);
+            output.collect(cellId, shapeText);
+          }
         }
       }
     }

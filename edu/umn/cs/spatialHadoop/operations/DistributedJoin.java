@@ -54,7 +54,7 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 /**
  * Performs a spatial join between two or more files using the redistribute-join
  * algorithm.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class DistributedJoin {
@@ -72,6 +72,7 @@ public class DistributedJoin {
   
   public static class RedistributeJoinMap extends MapReduceBase
   implements Mapper<PairWritable<Rectangle>, PairWritable<? extends Writable>, Shape, Shape> {
+    
     public void map(
         final PairWritable<Rectangle> key,
         final PairWritable<? extends Writable> value,
@@ -144,8 +145,12 @@ public class DistributedJoin {
                 output.collect(r, s);
               } else {
                 // Reference point duplicate avoidance technique
-                Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
-                if (mapperMBR.contains(intersectionMBR.x1, intersectionMBR.y1))
+                // The reference point is the lowest corner of the intersection
+                // rectangle (the point with the least dimensions of both x and
+                // y in the intersection rectangle)
+                double intersectionX = Math.max(r.getMBR().x1, s.getMBR().x1);
+                double intersectionY = Math.max(r.getMBR().y1, s.getMBR().y1);
+                if (mapperMBR.contains(intersectionX, intersectionY))
                   output.collect(r, s);
               }
             } catch (IOException e) {
