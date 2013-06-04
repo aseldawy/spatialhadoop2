@@ -275,7 +275,7 @@ public class Repartition {
         return path.getName().contains("_partitions");
       }
     });
-    destPath = new Path(outPath, "_partitions");
+    destPath = new Path(outPath, "_partitions.png");
     BufferedImage destImage = null;
     for (FileStatus f : resultFiles) {
       InputStream in = outFs.open(f.getPath());
