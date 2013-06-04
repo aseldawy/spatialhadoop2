@@ -443,7 +443,7 @@ public class Plot {
     outFs.delete(temp, true);
   }
   
-  static <S extends Shape> void plotLocal(Path inFile, Path outFile,
+  public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
       S shape, int width, int height, boolean showBorders,
       boolean showBlockCount, boolean showRecordCount, boolean compactCells)
           throws IOException {
@@ -488,6 +488,20 @@ public class Plot {
     ImageIO.write(image, "png", out);
     out.close();
   }
+  
+  public static <S extends Shape> void plot(Path inFile, Path outFile,
+      S shape, int width, int height, boolean showBorders,
+      boolean showBlockCount, boolean showRecordCount, boolean compactCells)
+          throws IOException {
+    FileSystem inFs = inFile.getFileSystem(new Configuration());
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    if (inFs.getFileBlockLocations(inFStatus, 0, inFStatus.getLen()).length > 3) {
+      plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
+    } else {
+      plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
+    }
+  }
+
   
   private static void printUsage() {
     System.out.println("Plots all shapes to an image");

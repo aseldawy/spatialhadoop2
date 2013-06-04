@@ -9,6 +9,7 @@ import java.util.Random;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.spatial.CellInfo;
@@ -99,10 +100,10 @@ public class RandomSpatialGenerator {
     
     ShapeRecordWriter<Shape> recordWriter;
     if (lindex == null) {
-      recordWriter = new GridRecordWriter<Shape>(outFilePath, null, null, cellInfo);
+      recordWriter = new GridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gridInfo.equals("rtree"));
       ((GridRecordWriter<Shape>)recordWriter).setBlockSize(blocksize);
     } else if (lindex.equals("rtree")) {
-      recordWriter = new RTreeGridRecordWriter<Shape>(outFilePath, null, null, cellInfo);
+      recordWriter = new RTreeGridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gridInfo.equals("rtree"));
       recordWriter.setStockObject(shape);
       ((RTreeGridRecordWriter<Shape>)recordWriter).setBlockSize(blocksize);
     } else {
@@ -126,7 +127,7 @@ public class RandomSpatialGenerator {
       if (text.getLength() + NEW_LINE.length + generatedSize > totalSize)
         break;
       
-      recordWriter.write(shape, text);
+      recordWriter.write(NullWritable.get(), shape);
       
       generatedSize += text.getLength() + NEW_LINE.length;
     }

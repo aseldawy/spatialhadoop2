@@ -1,11 +1,13 @@
 package edu.umn.cs.spatialHadoop.operations;
 
+import java.awt.Graphics;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Arrays;
-import java.util.Iterator;
 import java.util.Vector;
+
+import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -17,7 +19,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
@@ -25,7 +26,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.spatial.GridOutputFormat;
 import org.apache.hadoop.mapred.spatial.RTreeGridOutputFormat;
@@ -59,15 +59,12 @@ public class Repartition {
    *
    */
   public static class RepartitionMap<T extends Shape> extends MapReduceBase
-      implements Mapper<Rectangle, T, IntWritable, Text> {
+      implements Mapper<Rectangle, T, IntWritable, T> {
     /**List of cells used by the mapper*/
     private CellInfo[] cellInfos;
     
     /**Used to output intermediate records*/
     private IntWritable cellId = new IntWritable();
-    
-    /**Text representation of a shape*/
-    private Text shapeText = new Text();
     
     @Override
     public void configure(JobConf job) {
@@ -85,46 +82,19 @@ public class Repartition {
      * @throws IOException
      */
     public void map(Rectangle cellMbr, T shape,
-        OutputCollector<IntWritable, Text> output, Reporter reporter)
+        OutputCollector<IntWritable, T> output, Reporter reporter)
         throws IOException {
       Rectangle shape_mbr = shape.getMBR();
       // Only send shape to output if its lowest corner lies in the cellMBR
       // This ensures that a replicated shape in an already partitioned file
       // doesn't get send to output from all partitions
-      if (cellMbr.isValid() && cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
-        shapeText.clear();
-        shape.toText(shapeText);
+      if (!cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
         for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
           if (cellInfos[cellIndex].isIntersected(shape)) {
             cellId.set((int) cellInfos[cellIndex].cellId);
-            output.collect(cellId, shapeText);
+            output.collect(cellId, shape);
           }
         }
-      }
-    }
-  }
-  
-  /**
-   * The reducer writes records to the cell they belong to. It also  finializes
-   * the cell by writing a <code>null</code> object after all objects.
-   * @author eldawy
-   *
-   */
-  public static class Reduce extends MapReduceBase implements
-  Reducer<IntWritable, Text, IntWritable, Text> {
-    @Override
-    public void reduce(IntWritable cellId, Iterator<Text> values,
-        OutputCollector<IntWritable, Text> output, Reporter reporter)
-            throws IOException {
-      IntWritable cid = new IntWritable(cellId.get());
-      // Initial check which avoids closing the cell for empty partitions
-      if (values.hasNext()) {
-        while (values.hasNext()) {
-          Text value = values.next();
-          output.collect(cid, value);
-        }
-        // Close this cell as we will not write any more data to it
-        output.collect(cid, new Text());
       }
     }
   }
@@ -202,7 +172,7 @@ public class Repartition {
     }
     
     repartitionMapReduce(inFile, outPath, stockShape, blockSize, cellInfos,
-        lindex, overwrite);
+        gindex, lindex, overwrite);
   }
   
   /**
@@ -216,8 +186,8 @@ public class Repartition {
    * @throws IOException
    */
   public static void repartitionMapReduce(Path inFile, Path outPath,
-      Shape stockShape, long blockSize, CellInfo[] cellInfos, String lindex,
-      boolean overwrite) throws IOException {
+      Shape stockShape, long blockSize, CellInfo[] cellInfos, String gindex,
+      String lindex, boolean overwrite) throws IOException {
     JobConf job = new JobConf(Repartition.class);
     job.setJobName("Repartition");
     FileSystem outFs = outPath.getFileSystem(job);
@@ -234,15 +204,16 @@ public class Repartition {
     // Decide which map function to use depending on how blocks are indexed
     // And also which input format to use
     job.setMapperClass(RepartitionMap.class);
-    job.setInputFormat(ShapeInputFormat.class);
+    job.setMapOutputKeyClass(IntWritable.class);
+    job.setMapOutputValueClass(stockShape.getClass());
     ShapeInputFormat.setInputPaths(job, inFile);
+    job.setInputFormat(ShapeInputFormat.class);
+    job.setBoolean(SpatialSite.PACK_CELLS, gindex.equals("rtree"));
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(Text.class);
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
-  
-    job.setReducerClass(Reduce.class);
+
+    // Do not set a reduce function. Use the default identity reduce function
     job.setNumReduceTasks(Math.max(1, (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10));
   
     // Set default parameters for reading input file
@@ -281,8 +252,8 @@ public class Repartition {
         return path.getName().contains("_master");
       }
     });
-    Path dest = new Path(outPath, "_master");
-    OutputStream concatOut = outFs.create(dest);
+    Path destPath = new Path(outPath, "_master");
+    OutputStream destOut = outFs.create(destPath);
     byte[] buffer = new byte[4096];
     for (FileStatus f : resultFiles) {
       InputStream in = outFs.open(f.getPath());
@@ -290,12 +261,40 @@ public class Repartition {
       do {
         bytes_read = in.read(buffer);
         if (bytes_read > 0)
-          concatOut.write(buffer, 0, bytes_read);
+          destOut.write(buffer, 0, bytes_read);
       } while (bytes_read > 0);
       in.close();
       outFs.delete(f.getPath(), false);
     }
-    concatOut.close();
+    destOut.close();
+    
+    // Overlay all partition images into one image
+    resultFiles = outFs.listStatus(outPath, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.getName().contains("_partitions");
+      }
+    });
+    destPath = new Path(outPath, "_partitions");
+    BufferedImage destImage = null;
+    for (FileStatus f : resultFiles) {
+      InputStream in = outFs.open(f.getPath());
+      BufferedImage oneImage = ImageIO.read(in);
+      
+      if (destImage == null) {
+        destImage = oneImage;
+      } else {
+        Graphics g = destImage.getGraphics();
+        g.drawImage(oneImage, 0, 0, null);
+        g.dispose();
+      }
+      
+      in.close();
+      outFs.delete(f.getPath(), false);
+    }
+    destOut = outFs.create(destPath);
+    ImageIO.write(destImage, "png", destOut);
+    destOut.close();
   }
 
   public static <S extends Shape> CellInfo[] packInRectangles(
@@ -385,7 +384,7 @@ public class Repartition {
       throw new RuntimeException("Unsupported global index: "+gindex);
     }
     
-    repartitionLocal(inFile, outPath, stockShape, blockSize, cellInfos,
+    repartitionLocal(inFile, outPath, stockShape, blockSize, cellInfos, gindex,
         lindex, overwrite);
   }
 
@@ -402,7 +401,7 @@ public class Repartition {
    * @throws IOException 
    */
   public static <S extends Shape> void repartitionLocal(Path in, Path out,
-      S stockShape, long blockSize, CellInfo[] cells, String lindex,
+      S stockShape, long blockSize, CellInfo[] cells, String gindex, String lindex,
       boolean overwrite) throws IOException {
     FileSystem inFs = in.getFileSystem(new Configuration());
     FileSystem outFs = out.getFileSystem(new Configuration());
@@ -418,9 +417,9 @@ public class Repartition {
     
     ShapeRecordWriter<Shape> writer;
     if (lindex == null) {
-      writer = new GridRecordWriter<Shape>(out, null, null, cells);
+      writer = new GridRecordWriter<Shape>(out, null, null, cells, gindex.equals("rtree"));
     } else if (lindex.equals("grid") || lindex.equals("rtree")) {
-      writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells);
+      writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells, gindex.equals("rtree"));
       writer.setStockObject(stockShape);
     } else {
       throw new RuntimeException("Unupoorted local idnex: "+lindex);
@@ -534,10 +533,10 @@ public class Repartition {
       }
       if (local)
         repartitionLocal(inputPath, outputPath, stockShape,
-            blockSize, cells, lindex, overwrite);
+            blockSize, cells, gindex, lindex, overwrite);
       else
         repartitionMapReduce(inputPath, outputPath, stockShape,
-            blockSize, cells, lindex, overwrite);
+            blockSize, cells, gindex, lindex, overwrite);
     } else {
       if (local)
         repartitionLocal(inputPath, outputPath, stockShape,

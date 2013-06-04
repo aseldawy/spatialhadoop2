@@ -298,7 +298,7 @@ public class DistributedJoin {
       cells[i++] = new CellInfo(i, rect);
     }
     Repartition.repartitionMapReduce(files[file_to_repartition],
-        partitioned_file, stockShape, 0, cells, null, true);
+        partitioned_file, stockShape, 0, cells, null, null, true);
     long t2 = System.currentTimeMillis();
     System.out.println("Repartition time "+(t2-t1)+" millis");
   
