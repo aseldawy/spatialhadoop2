@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Do not modify this file directly.  Instead, copy entries that you -->
+<!-- wish to modify from this file into spatial-site.xml and change them -->
+<!-- there.  If spatial-site.xml does not already exist, create it.      -->
+
+<configuration>
+
+<!--- global properties -->
+
+<property>
+  <name>spatialHadoop.storage.RTreeDegree</name>
+  <value>11</value>
+  <description>Default degree of RTrees built in blocks</description>
+</property>
+
+<property>
+  <name>spatialHadoop.storage.RTreeBlockSize</name>
+  <value>33554432</value>
+  <description>Default block size for RTree files</description>
+</property>
+
+<property>
+  <name>spatialHadoop.storage.RTreeBuildMode</name>
+  <value>fast</value>
+  <description>Which mode to use when building the RTree. Could be "fast" or "light"</description>
+</property>
+
+<property>
+  <name>spatialHadoop.mapred.MaxShapesPerRead</name>
+  <value>1000000</value>
+  <description>Maximum number of shapes to read in one read operation and return when reading a file as array</description>
+</property>
+
+</configuration>
