@@ -18,8 +18,8 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.TextOutputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
+import org.apache.hadoop.mapred.spatial.TextOutputFormat;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.util.LineReader;
 
