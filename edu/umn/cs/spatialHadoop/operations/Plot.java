@@ -495,7 +495,7 @@ public class Plot {
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFs.getFileBlockLocations(inFStatus, 0, inFStatus.getLen()).length > 3) {
+    if (inFStatus.isDir() || inFs.getFileBlockLocations(inFStatus, 0, inFStatus.getLen()).length > 3) {
       plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
     } else {
       plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);

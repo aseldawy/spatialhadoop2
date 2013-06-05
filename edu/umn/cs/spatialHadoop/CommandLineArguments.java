@@ -1,27 +1,27 @@
 package edu.umn.cs.spatialHadoop;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.BlockLocation;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Text2;
 import org.apache.hadoop.spatial.CellInfo;
+import org.apache.hadoop.spatial.GlobalIndex;
 import org.apache.hadoop.spatial.GridInfo;
 import org.apache.hadoop.spatial.JTSShape;
+import org.apache.hadoop.spatial.Partition;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.Polygon;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.ResultCollector;
 import org.apache.hadoop.spatial.Shape;
+import org.apache.hadoop.spatial.SpatialSite;
 
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 
@@ -308,16 +308,33 @@ public class CommandLineArguments {
     FileSystem fs;
     try {
       fs = path.getFileSystem(new Configuration());
-      FileStatus fileStatus = fs.getFileStatus(path);
-      BlockLocation[] fileBlockLocations =
-          fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
-      Set<CellInfo> cellSet = new HashSet<CellInfo>();
-      for (BlockLocation block : fileBlockLocations) {
-        if (block.getCellInfo() != null)
-          cellSet.add(block.getCellInfo());
-      }
-      if (cellSet.isEmpty())
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, path);
+      if (gindex == null)
         return null;
+      
+      // Find all partitions of the given file. If two partitions overlap,
+      // we consider the union of them. This case corresponds to an R-tree
+      // index where a partition is stored as multiple R-tree. Since we compact
+      // each R-tree when it is stored, different compactions might lead to
+      // different partitions all overlapping the same area. In this case, we
+      // union them to ensure the whole area is covered without having overlaps
+      // between returned partitions.
+      
+      ArrayList<CellInfo> cellSet = new ArrayList<CellInfo>();
+      for (Partition p : gindex) {
+        boolean overlapping = false;
+        for (int i = 0; i < cellSet.size(); i++) {
+          if (p.isIntersected(cellSet.get(i))) {
+            if (overlapping == true)
+              throw new RuntimeException("Overlapping partitions");
+            overlapping = true;
+            cellSet.get(i).expand(p);
+          }
+        }
+        if (overlapping == false) {
+          cellSet.add(new CellInfo(cellSet.size() + 1, p));
+        }
+      }
       return cellSet.toArray(new CellInfo[cellSet.size()]);
     } catch (IOException e) {
       e.printStackTrace();

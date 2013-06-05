@@ -250,10 +250,18 @@ public class DistributedJoin {
     long largest_size = 0;
     
     for (int i = 0; i < files.length; i++) {
-      FileStatus fstatus = fs.getFileStatus(files[i]);
-      if (SpatialSite.getGlobalIndex(fs, files[i]) != null && fstatus.getLen() > largest_size) {
-        largest_partitioned_file = i;
-        largest_size = fstatus.getLen();
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, files[i]);
+      if (gindex != null) {
+        // Compute total size (all files in directory)
+        long total_size = 0;
+        for (Partition p : gindex) {
+          Path file = new Path(files[i], p.filename);
+          total_size += fs.getFileStatus(file).getLen();
+        }
+        if (total_size > largest_size) {
+          largest_partitioned_file = i;
+          largest_size = total_size;
+        }
       }
     }
     return largest_partitioned_file == -1 ? -1 : 1 - largest_partitioned_file;

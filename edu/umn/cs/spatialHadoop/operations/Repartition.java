@@ -208,7 +208,7 @@ public class Repartition {
     job.setMapOutputValueClass(stockShape.getClass());
     ShapeInputFormat.setInputPaths(job, inFile);
     job.setInputFormat(ShapeInputFormat.class);
-    job.setBoolean(SpatialSite.PACK_CELLS, gindex.equals("rtree"));
+    job.setBoolean(SpatialSite.PACK_CELLS, gindex != null && gindex.equals("rtree"));
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
@@ -510,27 +510,6 @@ public class Repartition {
     
     long t1 = System.currentTimeMillis();
     if (cells != null) {
-      if (blockSize == 0) {
-        // Calculate block size based on overlap between given cells and
-        // file MBR
-        if (input_mbr == null)
-          input_mbr = local ? FileMBR.fileMBRLocal(fs, inputPath, stockShape) :
-            FileMBR.fileMBRMapReduce(fs, inputPath, stockShape);
-        double overlap_area = 0;
-        for (CellInfo cell : cells) {
-          Rectangle overlap = input_mbr.getIntersection(cell);
-          overlap_area += (overlap.x2 - overlap.x1) * (overlap.y2 - overlap.y1);
-        }
-        long estimatedRepartitionedFileSize = (long) (fs.getFileStatus(
-            inputPath).getLen() * overlap_area / ((input_mbr.x2 - input_mbr.x1) * (input_mbr.y2 - input_mbr.y1)));
-        blockSize = estimatedRepartitionedFileSize / cells.length;
-        // Adjust blockSize to be a multiple of bytes per checksum
-        int bytes_per_checksum =
-            new Configuration().getInt("io.bytes.per.checksum", 512);
-        blockSize = (long) (Math.ceil((double)blockSize / bytes_per_checksum) *
-            bytes_per_checksum);
-        LOG.info("Calculated block size: "+blockSize);
-      }
       if (local)
         repartitionLocal(inputPath, outputPath, stockShape,
             blockSize, cells, gindex, lindex, overwrite);
