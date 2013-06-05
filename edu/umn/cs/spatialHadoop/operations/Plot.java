@@ -69,7 +69,7 @@ public class Plot {
    *
    */
   public static class PlotMap extends MapReduceBase 
-    implements Mapper<CellInfo, Shape, CellInfo, Shape> {
+    implements Mapper<Rectangle, Shape, Rectangle, Shape> {
     
     private CellInfo[] cellInfos;
     
@@ -80,10 +80,10 @@ public class Plot {
       cellInfos = GridOutputFormat.decodeCells(cellsInfoStr);
     }
     
-    public void map(CellInfo cell, Shape shape,
-        OutputCollector<CellInfo, Shape> output, Reporter reporter)
+    public void map(Rectangle cell, Shape shape,
+        OutputCollector<Rectangle, Shape> output, Reporter reporter)
         throws IOException {
-      if (cell.cellId == -1) {
+      if (cell.isValid()) {
         // Output shape to all overlapping cells
         for (CellInfo cellInfo : cellInfos)
           if (cellInfo.isIntersected(shape))
@@ -102,7 +102,7 @@ public class Plot {
    *
    */
   public static class PlotReduce extends MapReduceBase
-      implements Reducer<CellInfo, Shape, CellInfo, ImageWritable> {
+      implements Reducer<Rectangle, Shape, Rectangle, ImageWritable> {
     
     private Rectangle fileMbr;
     private int imageWidth, imageHeight;
@@ -138,8 +138,8 @@ public class Plot {
     }
 
     @Override
-    public void reduce(CellInfo cellInfo, Iterator<Shape> values,
-        OutputCollector<CellInfo, ImageWritable> output, Reporter reporter)
+    public void reduce(Rectangle cellInfo, Iterator<Shape> values,
+        OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
         throws IOException {
       try {
         // Initialize the image
@@ -559,11 +559,7 @@ public class Plot {
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
 
-    if (cla.isLocal()) {
-      plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
-    } else {
-      plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
-    }
+    plot(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
   }
 
 }

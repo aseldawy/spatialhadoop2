@@ -242,7 +242,6 @@ public class Repartition {
         GridOutputFormat.encodeCells(cellInfos));
     job.setBoolean(GridOutputFormat.OVERWRITE, overwrite);
   
-    System.out.println("Job: "+job);
     JobClient.runJob(job);
     
     // Concatenate all master files into one file

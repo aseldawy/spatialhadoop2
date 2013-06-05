@@ -2,8 +2,6 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -290,23 +288,11 @@ public class DistributedJoin {
     } while (fs.exists(partitioned_file));
     
     // Get the cells to use for repartitioning
-    Set<Rectangle> cellSet = new HashSet<Rectangle>();
-    // Get the global index of the file that is not partitioned
-    GlobalIndex<Partition> globalIndex =
-        SpatialSite.getGlobalIndex(fs, files[1-file_to_repartition]);
-    for (Partition partition : globalIndex) {
-      cellSet.add(new Rectangle(partition));
-    }
-    
-    LOG.info("Repartitioning "+files[file_to_repartition]+" => "+partitioned_file);
-    // Repartition the smaller file with no local index
-    CellInfo[] cells = new CellInfo[cellSet.size()];
-    int i = 0;
-    for (Rectangle rect : cellSet) {
-      cells[i++] = new CellInfo(i, rect);
-    }
+    CellInfo[] cells = SpatialSite.cellsOf(fs, files[1-file_to_repartition]);
+    // Repartition the file to match the other file
     Repartition.repartitionMapReduce(files[file_to_repartition],
-        partitioned_file, stockShape, 0, cells, null, null, true);
+        partitioned_file, stockShape, 0, cells, null, SpatialSite.isRTree(fs,
+            files[1 - file_to_repartition]) ? "rtree" : null, true);
     long t2 = System.currentTimeMillis();
     System.out.println("Repartition time "+(t2-t1)+" millis");
   

@@ -308,34 +308,7 @@ public class CommandLineArguments {
     FileSystem fs;
     try {
       fs = path.getFileSystem(new Configuration());
-      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, path);
-      if (gindex == null)
-        return null;
-      
-      // Find all partitions of the given file. If two partitions overlap,
-      // we consider the union of them. This case corresponds to an R-tree
-      // index where a partition is stored as multiple R-tree. Since we compact
-      // each R-tree when it is stored, different compactions might lead to
-      // different partitions all overlapping the same area. In this case, we
-      // union them to ensure the whole area is covered without having overlaps
-      // between returned partitions.
-      
-      ArrayList<CellInfo> cellSet = new ArrayList<CellInfo>();
-      for (Partition p : gindex) {
-        boolean overlapping = false;
-        for (int i = 0; i < cellSet.size(); i++) {
-          if (p.isIntersected(cellSet.get(i))) {
-            if (overlapping == true)
-              throw new RuntimeException("Overlapping partitions");
-            overlapping = true;
-            cellSet.get(i).expand(p);
-          }
-        }
-        if (overlapping == false) {
-          cellSet.add(new CellInfo(cellSet.size() + 1, p));
-        }
-      }
-      return cellSet.toArray(new CellInfo[cellSet.size()]);
+      return SpatialSite.cellsOf(fs, path);
     } catch (IOException e) {
       e.printStackTrace();
     }
