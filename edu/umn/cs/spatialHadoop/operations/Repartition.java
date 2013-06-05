@@ -5,7 +5,6 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Arrays;
 import java.util.Vector;
 
 import javax.imageio.ImageIO;
@@ -33,8 +32,10 @@ import org.apache.hadoop.mapred.spatial.RTreeGridOutputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
+import org.apache.hadoop.spatial.GlobalIndex;
 import org.apache.hadoop.spatial.GridInfo;
 import org.apache.hadoop.spatial.GridRecordWriter;
+import org.apache.hadoop.spatial.Partition;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.RTree;
 import org.apache.hadoop.spatial.RTreeGridRecordWriter;
@@ -48,7 +49,7 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
 /**
  * Repartitions a file according to a different grid through a MapReduce job
- * @author aseldawy
+ * @author Ahmed Eldawy
  *
  */
 public class Repartition {
@@ -145,9 +146,11 @@ public class Repartition {
     // Calculate number of partitions in output file
     FileStatus inFileStatus = inFs.getFileStatus(inFile);
     // Copy blocksize from source file if it's globally indexed
-    if (blockSize == 0 &&
-        inFs.getFileBlockLocations(inFileStatus, 0, 1)[0].getCellInfo() != null) {
-      blockSize = inFileStatus.getBlockSize();
+    if (blockSize == 0) {
+      GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
+      if (globalIndex != null) {
+        blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
+      }
     }
     int num_partitions = calculateNumberOfPartitions(inFs, inFile, outFs, blockSize);
     
@@ -232,11 +235,15 @@ public class Repartition {
     // Copy blocksize from source file if it's globally indexed
     FileSystem inFs = inFile.getFileSystem(job);
     FileStatus inFileStatus = inFs.getFileStatus(inFile);
-    if (blockSize == 0 &&
-        inFs.getFileBlockLocations(inFileStatus, 0, 1)[0].getCellInfo() != null) {
-      blockSize = inFileStatus.getBlockSize();
-      LOG.info("Automatically setting block size to "+blockSize);
+    
+    if (blockSize == 0) {
+      GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
+      if (globalIndex != null) {
+        blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
+        LOG.info("Automatically setting block size to "+blockSize);
+      }
     }
+
     if (blockSize != 0)
       job.setLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE, blockSize);
     job.set(GridOutputFormat.OUTPUT_CELLS,
@@ -353,9 +360,11 @@ public class Repartition {
     // Calculate number of partitions in output file
     FileStatus inFileStatus = inFs.getFileStatus(inFile);
     // Copy blocksize from source file if it's globally indexed
-    if (blockSize == 0 &&
-        inFs.getFileBlockLocations(inFileStatus, 0, 1)[0].getCellInfo() != null) {
-      blockSize = inFileStatus.getBlockSize();
+    if (blockSize == 0) {
+      GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
+      if (globalIndex != null) {
+        blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
+      }
     }
 
     int num_partitions = calculateNumberOfPartitions(inFs, inFile, outFs, blockSize);
@@ -427,9 +436,11 @@ public class Repartition {
     
     FileStatus inFileStatus = inFs.getFileStatus(in);
     // Copy blocksize from source file if it's globally indexed
-    if (blockSize == 0 &&
-        inFs.getFileBlockLocations(inFileStatus, 0, 1)[0].getCellInfo() != null) {
-      blockSize = inFileStatus.getBlockSize();
+    if (blockSize == 0) {
+      GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, in);
+      if (globalIndex != null) {
+        blockSize = inFs.getFileStatus(new Path(in, globalIndex.iterator().next().filename)).getBlockSize();
+      }
     }
     if (blockSize != 0)
       ((GridRecordWriter<Shape>)writer).setBlockSize(blockSize);

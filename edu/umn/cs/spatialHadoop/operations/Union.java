@@ -34,11 +34,10 @@ import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.spatial.JTSShape;
-import org.apache.hadoop.spatial.SpatialSite;
-import org.postgis.jts.JtsBinaryWriter;
 
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryCollection;
+import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
+import com.esri.core.geometry.ogc.OGCGeometry;
+import com.esri.core.geometry.ogc.OGCGeometryCollection;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 
@@ -60,7 +59,7 @@ public class Union {
   
   static class GeometryArray {
     String categoryId;
-    Vector<Geometry> geometries = new Vector<Geometry>();
+    Vector<OGCGeometry> geometries = new Vector<OGCGeometry>();
     
     @Override
     public String toString() {
@@ -150,17 +149,15 @@ public class Union {
         OutputCollector<IntWritable, Text> output, Reporter reporter)
         throws IOException {
       JTSShape shape = new JTSShape();
-      Vector<Geometry> shapes = new Vector<Geometry>();
+      Vector<OGCGeometry> shapes = new Vector<OGCGeometry>();
       while (shape_lines.hasNext()) {
         shape.fromText(shape_lines.next());
         shapes.add(shape.getGeom());
       }
-      Geometry[] geometries = shapes.toArray(new Geometry[shapes.size()]);
-      GeometryCollection geo_collection = new GeometryCollection(geometries,
-          geometries[0].getFactory());
-      Geometry union = geo_collection.buffer(0);
+      OGCGeometryCollection geo_collection = new OGCConcreteGeometryCollection(shapes,
+          shapes.firstElement().getEsriSpatialReference());
+      OGCGeometry union = geo_collection.union(shapes.firstElement());
       geo_collection = null;
-      geometries = null;
       shapes = null;
       temp_out.clear();
       output.collect(category, new JTSShape(union).toText(temp_out));
@@ -225,7 +222,7 @@ public class Union {
    * @return
    * @throws IOException
    */
-  public static Map<Integer, Geometry> unionLocal(
+  public static Map<Integer, OGCGeometry> unionLocal(
       Path shapeFile, Path categoryFile) throws IOException {
     long t1 = System.currentTimeMillis();
     // 1- Build a hashtable of categories (given their size is small)
@@ -236,8 +233,8 @@ public class Union {
     // 2- Read shapes from the shape file and relate each one to a category
     
     // Prepare a hash that stores shapes in each category
-    Map<Integer, Vector<Geometry>> categoryShapes =
-      new HashMap<Integer, Vector<Geometry>>();
+    Map<Integer, Vector<OGCGeometry>> categoryShapes =
+      new HashMap<Integer, Vector<OGCGeometry>>();
     
     FileSystem fs1 = shapeFile.getFileSystem(new Configuration());
     long file_size1 = fs1.getFileStatus(shapeFile).getLen();
@@ -251,9 +248,9 @@ public class Union {
       int shape_zip = Integer.parseInt(shape.getExtra().split(",", 7)[5]);
       Integer category = idToCategory.get(shape_zip);
       if (category != null) {
-        Vector<Geometry> geometries = categoryShapes.get(category);
+        Vector<OGCGeometry> geometries = categoryShapes.get(category);
         if (geometries == null) {
-          geometries = new Vector<Geometry>();
+          geometries = new Vector<OGCGeometry>();
           categoryShapes.put(category, geometries);
         }
         geometries.add(shape.getGeom());
@@ -264,18 +261,13 @@ public class Union {
     long t3 = System.currentTimeMillis();
 
     // 3- Find the union of each category
-    JtsBinaryWriter jts_binary_writer = new JtsBinaryWriter();
-    Map<Integer, Geometry> final_result = new HashMap<Integer, Geometry>();
-    for (Map.Entry<Integer, Vector<Geometry>> category :
+    Map<Integer, OGCGeometry> final_result = new HashMap<Integer, OGCGeometry>();
+    for (Map.Entry<Integer, Vector<OGCGeometry>> category :
           categoryShapes.entrySet()) {
       if (!category.getValue().isEmpty()) {
-        Geometry[] geometries = category.getValue().toArray(
-            new Geometry[category.getValue().size()]);
-        for (Geometry geom : geometries)
-          System.out.println(jts_binary_writer.writeHexed(geom));
-        GeometryCollection geom_collection = new GeometryCollection(geometries,
-            geometries[0].getFactory());
-        Geometry union = geom_collection.buffer(0);
+        OGCGeometryCollection geom_collection = new OGCConcreteGeometryCollection(category.getValue(),
+            category.getValue().firstElement().esriSR);
+        OGCGeometry union = geom_collection.union(category.getValue().firstElement());
         final_result.put(category.getKey(), union);
         // Free up some memory
         category.getValue().clear();
@@ -368,7 +360,7 @@ public class Union {
 
     long t1 = System.currentTimeMillis();
     if (local) {
-      Map<Integer, Geometry> union = unionLocal(allFiles[0], allFiles[1]);
+      Map<Integer, OGCGeometry> union = unionLocal(allFiles[0], allFiles[1]);
 //    for (Map.Entry<Text, Geometry> category : union.entrySet()) {
 //      System.out.println(category.getValue().toText()+","+category);
 //    }

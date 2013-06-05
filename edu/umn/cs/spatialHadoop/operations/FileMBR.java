@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.util.Iterator;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -149,31 +148,10 @@ public class FileMBR {
    */
   public static <S extends Shape> Rectangle fileMBRLocal(FileSystem fs,
       Path file, S stockShape) throws IOException {
-    // Try to get file MBR from the MBRs of blocks
-    BlockLocation[] fileBlockLocations = fs.getFileBlockLocations(
-        fs.getFileStatus(file), 0, fs.getFileStatus(file).getLen());
-    if (fileBlockLocations[0].getCellInfo() != null) {
-      boolean heap_file = false;
-      BlockLocation firstBlock = fileBlockLocations[0];
-      double x1 = firstBlock.getCellInfo().x1;
-      double y1 = firstBlock.getCellInfo().y1;
-      double x2 = firstBlock.getCellInfo().x2;
-      double y2 = firstBlock.getCellInfo().y2;
-
-      for (BlockLocation blockLocation : fileBlockLocations) {
-        Rectangle rect = blockLocation.getCellInfo();
-        if (blockLocation.getCellInfo() == null) {
-          heap_file = true;
-          break;
-        }
-        if (rect.x1 < x1) x1 = rect.x1;
-        if (rect.y1 < y1) y1 = rect.y1;
-        if (rect.x2 > x2) x2 = rect.x2;
-        if (rect.y1 > y2) y2 = rect.y2;
-      }
-      if (!heap_file) {
-        return new Rectangle(x1, y1, x2, y2);
-      }
+    // Try to get file MBR from the global index (if possible)
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, file);
+    if (gindex != null) {
+      return gindex.getMBR();
     }
     long file_size = fs.getFileStatus(file).getLen();
     

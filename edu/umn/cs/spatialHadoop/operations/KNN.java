@@ -14,7 +14,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -543,19 +542,22 @@ public class KNN {
     
     if (closeness >= 0) {
       // Get query points according to its closeness to grid intersections
-      FileStatus fileStatus = fs.getFileStatus(inputFile);
-      BlockLocation[] blockLocations = fs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, inputFile);
       long seed = cla.getSeed();
       Random random = new Random(seed);
       for (int i = 0; i < count; i++) {
-        int i_block = random.nextInt(blockLocations.length);
+        int i_block = random.nextInt(gindex.size());
         int direction = random.nextInt(4);
         // Generate a point in the given direction
         // Get center point (x, y)
-        double cx = (blockLocations[i_block].getCellInfo().x1 + blockLocations[i_block].getCellInfo().x2) / 2;
-        double cy = (blockLocations[i_block].getCellInfo().y1 + blockLocations[i_block].getCellInfo().y2) / 2;
-        double cw = blockLocations[i_block].getCellInfo().x2 - blockLocations[i_block].getCellInfo().x1;
-        double ch = blockLocations[i_block].getCellInfo().y2 - blockLocations[i_block].getCellInfo().y1;
+        Iterator<Partition> iterator = gindex.iterator();
+        while (i_block-- >= 0)
+          iterator.next();
+        Partition partition = iterator.next();
+        double cx = (partition.x1 + partition.x2) / 2;
+        double cy = (partition.y1 + partition.y2) / 2;
+        double cw = partition.x2 - partition.x1;
+        double ch = partition.y2 - partition.y1;
         int signx = ((direction & 1) == 0)? 1 : -1;
         int signy = ((direction & 2) == 1)? 1 : -1;
         double x = cx + cw * closeness / 2 * signx;

@@ -5,23 +5,19 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Set;
 
 import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -34,16 +30,20 @@ import org.apache.hadoop.mapred.spatial.GridOutputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
 import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
 import org.apache.hadoop.spatial.CellInfo;
+import org.apache.hadoop.spatial.GlobalIndex;
 import org.apache.hadoop.spatial.GridInfo;
 import org.apache.hadoop.spatial.JTSShape;
+import org.apache.hadoop.spatial.Partition;
 import org.apache.hadoop.spatial.Point;
 import org.apache.hadoop.spatial.Rectangle;
 import org.apache.hadoop.spatial.Shape;
 import org.apache.hadoop.spatial.SpatialSite;
 
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.Polygon;
+import com.esri.core.geometry.MultiPath;
+import com.esri.core.geometry.Polygon;
+import com.esri.core.geometry.Polyline;
+import com.esri.core.geometry.ogc.OGCGeometry;
+import com.esri.core.geometry.ogc.OGCGeometryCollection;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
@@ -106,31 +106,17 @@ public class Plot {
     
     private Rectangle fileMbr;
     private int imageWidth, imageHeight;
-    private boolean showBorders;
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
-    private boolean showBlockCount;
-    private boolean showRecordCount;
-    private Path[] inputPaths;
-    private FileSystem inFs;
     private boolean compactCells;
 
     @Override
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
-      inputPaths = FileInputFormat.getInputPaths(job);
-      try {
-        inFs = inputPaths[0].getFileSystem(job);
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
       fileMbr = ImageOutputFormat.getFileMBR(job);
       imageWidth = ImageOutputFormat.getImageWidth(job);
       imageHeight = ImageOutputFormat.getImageHeight(job);
-      showBorders = job.getBoolean(ShowBorders, false);
-      showBlockCount = job.getBoolean(ShowBlockCount, false);
-      showRecordCount = job.getBoolean(ShowRecordCount, false);
       compactCells = job.getBoolean(CompactCells, false);
       
       this.scale2 = (double)imageWidth * imageHeight /
@@ -167,12 +153,9 @@ public class Plot {
         graphics.setColor(stroke_color);
         graphics.translate(-image_x1, -image_y1);
 
-        int recordCount = 0;
-        
         double data_x1 = cellInfo.x1, data_y1 = cellInfo.y1,
             data_x2 = cellInfo.x2, data_y2 = cellInfo.y2;
         if (values.hasNext()) {
-          recordCount++;
           Shape s = values.next();
           drawShape(graphics, s, fileMbr, imageWidth, imageHeight, scale2);
           if (compactCells) {
@@ -184,7 +167,6 @@ public class Plot {
           }
           
           while (values.hasNext()) {
-            recordCount++;
             s = values.next();
             drawShape(graphics, s, fileMbr, imageWidth, imageHeight, scale2);
 
@@ -214,36 +196,6 @@ public class Plot {
             data_y2 = cellInfo.y2;
         }
 
-        if (showBorders) {
-          graphics.setColor(Color.BLACK);
-          int rect_x1 = (int) ((data_x1 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-          int rect_y1 = (int) ((data_y1 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
-          int rect_x2 = (int) ((data_x2 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-          int rect_y2 = (int) ((data_y2 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
-          graphics.drawRect(rect_x1, rect_y1, rect_x2-rect_x1-1, rect_y2-rect_y1-1);
-          String info = "";
-          if (showRecordCount) {
-            info += "rc:"+recordCount;
-          }
-          if (showBlockCount) {
-            int blockCount = 0;
-            for (Path inputPath : inputPaths) {
-              FileStatus fileStatus = inFs.getFileStatus(inputPath);
-              BlockLocation[] blocks = inFs.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
-              for (BlockLocation block : blocks) {
-                if (block.getCellInfo().equals(cellInfo)) {
-                  blockCount++;
-                }
-              }
-            }
-            if (info.length() != 0)
-              info += ", ";
-            info += "bc:"+blockCount;
-          }
-          if (info.length() > 0) {
-            graphics.drawString(info, 0, graphics.getFontMetrics().getHeight());
-          }
-        }
         graphics.dispose();
         
         sharedValue.setImage(image);
@@ -256,7 +208,7 @@ public class Plot {
   }
   
   public static void drawShape(Graphics2D graphics, Shape s, Rectangle fileMbr,
-      int imageWidth, int imageHeight, double scale2) {
+      int imageWidth, int imageHeight, double scale) {
     if (s instanceof Point) {
       Point pt = (Point) s;
       int x = (int) ((pt.x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
@@ -273,54 +225,41 @@ public class Plot {
       graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
     } else if (s instanceof JTSShape) {
       JTSShape jts_shape = (JTSShape) s;
-      Geometry geom = jts_shape.getGeom();
+      OGCGeometry geom = jts_shape.getGeom();
       Color shape_color = graphics.getColor();
-      for (int i_geom = 0; i_geom < geom.getNumGeometries(); i_geom++) {
-        Geometry sub_geom = geom.getGeometryN(i_geom);
-        double sub_geom_alpha = sub_geom.getEnvelope().getArea() * scale2;
+      if (geom instanceof OGCGeometryCollection) {
+        OGCGeometryCollection geom_coll = (OGCGeometryCollection) geom;
+        for (int i = 0; i < geom_coll.numGeometries(); i++) {
+          OGCGeometry sub_geom = geom_coll.geometryN(i);
+          // Recursive call to draw each geometry
+          drawShape(graphics, new JTSShape(sub_geom), fileMbr, imageWidth, imageHeight, scale);
+        }
+      } else if (geom.getEsriGeometry() instanceof MultiPath) {
+        MultiPath path = (MultiPath) geom.getEsriGeometry();
+        double sub_geom_alpha = path.calculateLength2D() * scale;
         int color_alpha = sub_geom_alpha > 1.0 ? 255 : (int) Math.round(sub_geom_alpha * 255);
 
         if (color_alpha == 0)
-          continue;
+          return;
 
-        Coordinate[][] coordss;
-        if (sub_geom instanceof Polygon) {
-          Polygon poly = (Polygon) sub_geom;
-
-          coordss = new Coordinate[1+poly.getNumInteriorRing()][];
-          coordss[0] = poly.getExteriorRing().getCoordinates();
-          for (int i = 0; i < poly.getNumInteriorRing(); i++) {
-            coordss[i+1] = poly.getInteriorRingN(i).getCoordinates();
-          }
-        } else {
-          coordss = new Coordinate[1][];
-          coordss[0] = sub_geom.getCoordinates();
+        int[] xpoints = new int[path.getPointCount()];
+        int[] ypoints = new int[path.getPointCount()];
+        
+        for (int i = 0; i < path.getPointCount(); i++) {
+          double px = path.getPoint(i).getX();
+          double py = path.getPoint(i).getY();
+          
+          // Transform a point in the polygon to image coordinates
+          xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+          ypoints[i] = (int) Math.round((py - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
         }
-
-        for (Coordinate[] coords : coordss) {
-          int[] xpoints = new int[coords.length];
-          int[] ypoints = new int[coords.length];
-          int npoints = 0;
-
-          // Transform all points in the polygon to image coordinates
-          xpoints[npoints] = (int) Math.round((coords[0].x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-          ypoints[npoints] = (int) Math.round((coords[0].y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
-          npoints++;
-          for (int i_coord = 1; i_coord < coords.length; i_coord++) {
-            int x = (int) Math.round((coords[i_coord].x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-            int y = (int) Math.round((coords[i_coord].y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
-            if (x != xpoints[npoints-1] || y != ypoints[npoints-1]) {
-              xpoints[npoints] = x;
-              ypoints[npoints] = y;
-              npoints++;
-            }
-          }
-          // Draw the polygon
-          if (color_alpha > 0) {
-            graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
-            graphics.drawPolygon(xpoints, ypoints, npoints);
-          }
-        }
+        
+        // Draw the polygon
+        graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+        if (path instanceof Polygon)
+          graphics.drawPolygon(xpoints, ypoints, path.getPointCount());
+        else if (path instanceof Polyline)
+          graphics.drawPolyline(xpoints, ypoints, path.getPointCount());
       }
     } else {
       LOG.warn("Cannot draw a shape of type: "+s.getClass());
@@ -354,7 +293,8 @@ public class Plot {
     FileStatus inFileStatus = inFs.getFileStatus(inFile);
     
     CellInfo[] cellInfos;
-    if (inFs.getGlobalIndex(inFileStatus) == null) {
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, inFile);
+    if (gindex == null) {
       // A heap file. The map function should partition the file
       GridInfo gridInfo = new GridInfo(fileMbr.x1, fileMbr.y1, fileMbr.x2,
           fileMbr.y2);
@@ -364,14 +304,7 @@ public class Plot {
       // Doesn't make sense to show any partition information in a heap file
       showBorders = showBlockCount = showRecordCount = false;
     } else {
-      // A grid file, use its cells
-      Set<CellInfo> all_cells = new HashSet<CellInfo>();
-      for (BlockLocation block :
-          inFs.getFileBlockLocations(inFileStatus, 0, inFileStatus.getLen())) {
-        if (block.getCellInfo() != null)
-          all_cells.add(block.getCellInfo());
-      }
-      cellInfos = all_cells.toArray(new CellInfo[all_cells.size()]);
+      cellInfos = SpatialSite.cellsOf(inFs, inFile);
     }
     
     // Set cell information in the job configuration to be used by the mapper
