@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.util.Iterator;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -232,6 +233,16 @@ public class FileMBR {
     Rectangle mbr = local ? fileMBRLocal(fs, inputFile, stockShape) :
       fileMBRMapReduce(fs, inputFile, stockShape);
     System.out.println("MBR of records in file "+inputFile+" is "+mbr);
+  }
+
+  public static Rectangle fileMBR(FileSystem fs, Path inFile, Shape stockShape) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(new Configuration());
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    if (inFStatus.isDir() || inFs.getFileBlockLocations(inFStatus, 0, inFStatus.getLen()).length > 3) {
+      return fileMBRMapReduce(fs, inFile, stockShape);
+    } else {
+      return fileMBRLocal(fs, inFile, stockShape);
+    }
   }
 
 }

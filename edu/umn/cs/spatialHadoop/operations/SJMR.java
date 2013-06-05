@@ -80,7 +80,7 @@ public class SJMR {
   
   /**
    * The map class maps each object to all cells it overlaps with.
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
    */
   public static class SJMRMap extends MapReduceBase
@@ -201,7 +201,7 @@ public class SJMR {
     Path outputPath = userOutputPath;
     if (outputPath == null) {
       do {
-        outputPath = new Path("/" + inputFiles[0].getName() + ".sjmr_"
+        outputPath = new Path(inputFiles[0].getName() + ".sjmr_"
             + (int) (Math.random() * 1000000));
       } while (outFs.exists(outputPath));
     } else {
@@ -309,7 +309,7 @@ public class SJMR {
       Rectangle rect = cla.getRectangle();
       if (rect == null) {
         for (Path path : inputFiles) {
-          Rectangle file_mbr = FileMBR.fileMBRLocal(fs, path, stockShape);
+          Rectangle file_mbr = FileMBR.fileMBR(fs, path, stockShape);
           rect = rect == null ? file_mbr : rect.union(file_mbr);
         }
         LOG.info("Automatically calculated MBR: "+rect);

@@ -1,15 +1,12 @@
 package edu.umn.cs.spatialHadoop;
 
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.Map;
-import java.util.TreeMap;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.spatial.CellInfo;
+import org.apache.hadoop.spatial.GlobalIndex;
+import org.apache.hadoop.spatial.Partition;
+import org.apache.hadoop.spatial.SpatialSite;
 
 /**
  * Reads spatial information associated with a file
@@ -37,35 +34,17 @@ public class ReadFile {
     
     long length = fs.getFileStatus(inFile).getLen();
     
-    BlockLocation[] locations = cla.getOffset() == -1 ?
-        fs.getFileBlockLocations(fs.getFileStatus(inFile), 0, length) :
-        fs.getFileBlockLocations(fs.getFileStatus(inFile), cla.getOffset(), 1);
-    Arrays.sort(locations, new Comparator<BlockLocation>() {
-      @Override
-      public int compare(BlockLocation o1, BlockLocation o2) {
-        if (o1.getCellInfo() == null && o2.getCellInfo() != null) {
-          return -1;
-        }
-        if (o1.getCellInfo() != null && o2.getCellInfo() == null) {
-          return 1;
-        }
-        if (o1.getCellInfo() == null && o2.getCellInfo() == null) {
-          return o1.getOffset() < o2.getOffset() ? -1 : 1;
-        }
-        if (o1.getCellInfo() != null && o2.getCellInfo() != null) {
-          return o1.getCellInfo().compareTo(o2.getCellInfo());
-        }
-        return 0;
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, inFile);
+    if (gindex == null) {
+      BlockLocation[] locations = cla.getOffset() == -1 ?
+          fs.getFileBlockLocations(fs.getFileStatus(inFile), 0, length) :
+            fs.getFileBlockLocations(fs.getFileStatus(inFile), cla.getOffset(), 1);
+      System.out.println(locations.length+" heap blocks");
+    } else {
+      for (Partition p : gindex) {
+        long partition_length = fs.getFileStatus(new Path(inFile, p.filename)).getLen();
+        System.out.println(p+" --- "+partition_length);
       }
-    });
-    
-    for (int i = 0; i < locations.length; i++) {
-      if (i == 0 || !locations[i].equals(locations[i-1])) {
-        System.out.println(locations[i].getCellInfo() == null?
-            "Heap file" :
-            locations[i].getCellInfo());
-      }
-      System.out.println("   ["+locations[i].getOffset()+","+locations[i].getLength()+"]");
     }
   }
 }
