@@ -21,19 +21,19 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
-import org.apache.hadoop.mapred.spatial.BlockFilter;
-import org.apache.hadoop.mapred.spatial.RTreeInputFormat;
-import org.apache.hadoop.mapred.spatial.RangeFilter;
-import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
-import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
-import org.apache.hadoop.mapred.spatial.TextOutputFormat;
-import org.apache.hadoop.spatial.RTree;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.ResultCollector;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SpatialSite;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.RTree;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.RangeFilter;
+import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
  * Performs a range query over a spatial file.

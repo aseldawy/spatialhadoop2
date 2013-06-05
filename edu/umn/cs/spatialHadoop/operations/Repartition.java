@@ -27,25 +27,25 @@ import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.spatial.GridOutputFormat;
-import org.apache.hadoop.mapred.spatial.RTreeGridOutputFormat;
-import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
-import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
-import org.apache.hadoop.spatial.CellInfo;
-import org.apache.hadoop.spatial.GlobalIndex;
-import org.apache.hadoop.spatial.GridInfo;
-import org.apache.hadoop.spatial.GridRecordWriter;
-import org.apache.hadoop.spatial.Partition;
-import org.apache.hadoop.spatial.Point;
-import org.apache.hadoop.spatial.RTree;
-import org.apache.hadoop.spatial.RTreeGridRecordWriter;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.ResultCollector;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.ShapeRecordWriter;
-import org.apache.hadoop.spatial.SpatialSite;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.RTree;
+import edu.umn.cs.spatialHadoop.core.RTreeGridRecordWriter;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.ShapeRecordWriter;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
+import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 /**
  * Repartitions a file according to a different grid through a MapReduce job

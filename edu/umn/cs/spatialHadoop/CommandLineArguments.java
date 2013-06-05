@@ -10,19 +10,19 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.Text2;
-import org.apache.hadoop.spatial.CellInfo;
-import org.apache.hadoop.spatial.GlobalIndex;
-import org.apache.hadoop.spatial.GridInfo;
-import org.apache.hadoop.spatial.JTSShape;
-import org.apache.hadoop.spatial.Partition;
-import org.apache.hadoop.spatial.Point;
-import org.apache.hadoop.spatial.Polygon;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.ResultCollector;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SpatialSite;
 
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.JTSShape;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Polygon;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 
 public class CommandLineArguments {

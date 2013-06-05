@@ -17,17 +17,17 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
-import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
-import org.apache.hadoop.mapred.spatial.TextOutputFormat;
-import org.apache.hadoop.spatial.GlobalIndex;
-import org.apache.hadoop.spatial.Partition;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
  * Finds the minimal bounding rectangle for a file.

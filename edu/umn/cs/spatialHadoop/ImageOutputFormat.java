@@ -16,10 +16,11 @@ import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.spatial.CellInfo;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.Progressable;
+
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable> {
   private static final Log LOG = LogFactory.getLog(ImageOutputFormat.class);

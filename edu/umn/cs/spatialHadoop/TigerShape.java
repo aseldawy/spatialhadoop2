@@ -5,9 +5,10 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.TextSerializerHelper;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.Shape;
+
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 /**
  * A shape from tiger file.

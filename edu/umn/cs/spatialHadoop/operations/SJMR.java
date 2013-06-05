@@ -29,18 +29,18 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
-import org.apache.hadoop.mapred.spatial.GridOutputFormat;
-import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
-import org.apache.hadoop.mapred.spatial.TextOutputFormat;
-import org.apache.hadoop.spatial.CellInfo;
-import org.apache.hadoop.spatial.GridInfo;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.ResultCollector2;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SpatialAlgorithms;
-import org.apache.hadoop.spatial.SpatialSite;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
  * An implementation of Spatial Join MapReduce as it appears in

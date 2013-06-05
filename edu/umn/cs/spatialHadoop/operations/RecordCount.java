@@ -18,13 +18,13 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
-import org.apache.hadoop.mapred.spatial.TextOutputFormat;
-import org.apache.hadoop.spatial.CellInfo;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.Estimator;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 
 /**

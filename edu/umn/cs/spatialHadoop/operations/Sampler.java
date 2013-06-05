@@ -15,8 +15,6 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.Text2;
-import org.apache.hadoop.io.TextSerializable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
@@ -28,18 +26,20 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
-import org.apache.hadoop.mapred.spatial.ShapeLineInputFormat;
-import org.apache.hadoop.mapred.spatial.TextOutputFormat;
-import org.apache.hadoop.spatial.CellInfo;
-import org.apache.hadoop.spatial.Point;
-import org.apache.hadoop.spatial.RTree;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.ResultCollector;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.RTree;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.io.TextSerializable;
+import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
  * Reads a random sample of a file.

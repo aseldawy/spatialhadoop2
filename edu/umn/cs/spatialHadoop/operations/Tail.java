@@ -7,12 +7,12 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.Text2;
-import org.apache.hadoop.io.TextSerializable;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.spatial.ResultCollector;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.io.TextSerializable;
 
 /**
  * Reads the last n lines of a text file

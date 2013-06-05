@@ -25,19 +25,6 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.spatial.GridOutputFormat;
-import org.apache.hadoop.mapred.spatial.ShapeInputFormat;
-import org.apache.hadoop.mapred.spatial.ShapeRecordReader;
-import org.apache.hadoop.mapred.spatial.TextOutputFormat;
-import org.apache.hadoop.spatial.CellInfo;
-import org.apache.hadoop.spatial.GlobalIndex;
-import org.apache.hadoop.spatial.GridInfo;
-import org.apache.hadoop.spatial.JTSShape;
-import org.apache.hadoop.spatial.Partition;
-import org.apache.hadoop.spatial.Point;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SpatialSite;
 
 import com.esri.core.geometry.MultiPath;
 import com.esri.core.geometry.Polygon;
@@ -49,6 +36,19 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.JTSShape;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 public class Plot {
   /**Logger*/

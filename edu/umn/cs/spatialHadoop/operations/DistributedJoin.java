@@ -27,27 +27,27 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
-import org.apache.hadoop.mapred.spatial.BinaryRecordReader;
-import org.apache.hadoop.mapred.spatial.BinarySpatialInputFormat;
-import org.apache.hadoop.mapred.spatial.BlockFilter;
-import org.apache.hadoop.mapred.spatial.DefaultBlockFilter;
-import org.apache.hadoop.mapred.spatial.PairWritable;
-import org.apache.hadoop.mapred.spatial.RTreeRecordReader;
-import org.apache.hadoop.mapred.spatial.ShapeArrayRecordReader;
-import org.apache.hadoop.mapred.spatial.TextOutputFormat;
-import org.apache.hadoop.spatial.CellInfo;
-import org.apache.hadoop.spatial.GlobalIndex;
-import org.apache.hadoop.spatial.Partition;
-import org.apache.hadoop.spatial.RTree;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.ResultCollector2;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.SpatialAlgorithms;
-import org.apache.hadoop.spatial.SpatialSite;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.RTree;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.BinaryRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.BinarySpatialInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.PairWritable;
+import edu.umn.cs.spatialHadoop.mapred.RTreeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
  * Performs a spatial join between two or more files using the redistribute-join

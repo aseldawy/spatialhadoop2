@@ -12,15 +12,16 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.spatial.CellInfo;
-import org.apache.hadoop.spatial.GridInfo;
-import org.apache.hadoop.spatial.GridRecordWriter;
-import org.apache.hadoop.spatial.Point;
-import org.apache.hadoop.spatial.RTreeGridRecordWriter;
-import org.apache.hadoop.spatial.Rectangle;
-import org.apache.hadoop.spatial.Shape;
-import org.apache.hadoop.spatial.ShapeRecordWriter;
-import org.apache.hadoop.spatial.SpatialSite;
+
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.RTreeGridRecordWriter;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.ShapeRecordWriter;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 
 

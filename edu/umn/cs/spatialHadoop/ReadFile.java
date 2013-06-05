@@ -4,9 +4,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.spatial.GlobalIndex;
-import org.apache.hadoop.spatial.Partition;
-import org.apache.hadoop.spatial.SpatialSite;
+
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * Reads spatial information associated with a file
