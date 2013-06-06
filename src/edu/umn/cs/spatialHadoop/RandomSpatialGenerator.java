@@ -85,7 +85,7 @@ public class RandomSpatialGenerator {
     final Random random = new Random(seed);
     final Text text = new Text();
     if (blocksize == 0)
-      blocksize = outFS.getDefaultBlockSize();
+      blocksize = outFS.getDefaultBlockSize(outFilePath);
     int num_of_cells = (int) Math.ceil(totalSize * (1+IndexingOverhead) /
         blocksize);
     CellInfo[] cellInfo;
@@ -155,13 +155,13 @@ public class RandomSpatialGenerator {
       long blocksize, boolean overwrite) throws IOException {
     OutputStream out = null;
     if (blocksize == 0 && outFS != null)
-      blocksize = outFS.getDefaultBlockSize();
+      blocksize = outFS.getDefaultBlockSize(outputFilePath);
     if (outFS == null || outputFilePath == null)
       out = new BufferedOutputStream(System.out);
     else
       out = new BufferedOutputStream(outFS.create(outputFilePath, true,
           outFS.getConf().getInt("io.file.buffer.size", 4096),
-          outFS.getDefaultReplication(), blocksize));
+          outFS.getDefaultReplication(outputFilePath), blocksize));
     long generatedSize = 0;
     Random random = new Random(seed);
     Text text = new Text();

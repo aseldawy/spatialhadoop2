@@ -10,15 +10,9 @@
 <!--- global properties -->
 
 <property>
-  <name>spatialHadoop.storage.RTreeDegree</name>
-  <value>11</value>
-  <description>Default degree of RTrees built in blocks</description>
-</property>
-
-<property>
-  <name>spatialHadoop.storage.RTreeBlockSize</name>
+  <name>spatialHadoop.storage.LocalIndexBlockSize</name>
   <value>33554432</value>
-  <description>Default block size for RTree files</description>
+  <description>Default block size for building local indexes</description>
 </property>
 
 <property>
@@ -28,9 +22,38 @@
 </property>
 
 <property>
+  <name>spatialHadoop.storage.IndexingOverhead</name>
+  <value>0.2</value>
+  <description>The recommended target overhead of indexing.
+  The system starts with this value as an initial guess but resulting file could grow larger.</description>
+</property>
+
+<property>
+  <name>spatialHadoop.storage.SampleRatio</name>
+  <value>0.1</value>
+  <description>Ratio of input file (in terms of records) to be sampled to
+  provide a big picture about data distribution when building a global index</description>
+</property>
+
+<property>
+  <name>spatialHadoop.storage.SampleSize</name>
+  <value>104857600</value>
+  <description>Maximum size (in bytes) of data to be sampled when building a
+  distribution-aware global index</description>
+</property>
+
+<property>
   <name>spatialHadoop.mapred.MaxShapesPerRead</name>
   <value>1000000</value>
-  <description>Maximum number of shapes to read in one read operation and return when reading a file as array</description>
+  <description>Maximum number of shapes to read in one read operation and
+  return when reading a file as an array</description>
+</property>
+
+<property>
+  <name>spatialHadoop.mapred.MaxBytesPerRead</name>
+  <value>33554432</value>
+  <description>Maximum size in bytes to be read in one shot when reading
+  a file as an array</description>
 </property>
 
 </configuration>

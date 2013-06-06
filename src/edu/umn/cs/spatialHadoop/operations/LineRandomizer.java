@@ -117,7 +117,7 @@ public class LineRandomizer {
 
     FileSystem infs = infile.getFileSystem(job);
     int numOfPartitions = (int) Math.ceil((double)
-        infs.getFileStatus(infile).getLen() / infs.getDefaultBlockSize());
+        infs.getFileStatus(infile).getLen() / infs.getDefaultBlockSize(outfile));
     job.setInt(NumOfPartitions, numOfPartitions);
     
     job.setInputFormat(TextInputFormat.class);

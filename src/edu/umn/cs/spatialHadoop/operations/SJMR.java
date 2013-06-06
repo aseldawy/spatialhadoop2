@@ -254,7 +254,7 @@ public class SJMR {
     CellInfo[] cellsInfo;
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,
     		0.002f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize());
+    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath));
     gridInfo.calculateCellDimensions(num_cells);
     cellsInfo = gridInfo.getAllCells();
     job.set(GridOutputFormat.OUTPUT_CELLS,

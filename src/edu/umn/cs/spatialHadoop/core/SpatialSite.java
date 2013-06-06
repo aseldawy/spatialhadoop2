@@ -21,7 +21,7 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 /**
  * Combines all the configuration needed for SpatialHadoop.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class SpatialSite {
@@ -31,9 +31,6 @@ public class SpatialSite {
   
   /**The class used to filter blocks before starting map tasks*/
   public static final String FilterClass = "spatialHadoop.mapreduce.filter";
-  
-  /**The default RTree degree used for local indexing*/
-  public static final String RTREE_DEGREE = "spatialHadoop.storage.RTreeDegree";
   
   /**Maximum size of an RTree.*/
   public static final String LOCAL_INDEX_BLOCK_SIZE =
@@ -45,7 +42,7 @@ public class SpatialSite {
   
   /**Configuration line to set the default shape class to use if not set*/
   public static final String SHAPE_CLASS =
-      "edu.umn.cs.spatialHadoop.ShapeRecordReader.ShapeClass.default";
+      "SpatialSite.ShapeClass";
   
   /**Configuration line name for replication overhead*/
   public static final String INDEXING_OVERHEAD =
