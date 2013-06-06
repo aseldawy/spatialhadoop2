@@ -22,7 +22,7 @@ public class RTreeGridOutputFormat<S extends Shape> extends FileOutputFormat<Int
       Progressable progress)
       throws IOException {
     // Get grid info
-    CellInfo[] cellsInfo = GridOutputFormat.decodeCells(job.get(GridOutputFormat.OUTPUT_CELLS));
+    CellInfo[] cellsInfo = GridOutputFormat.getCells(job);
     boolean pack = job.getBoolean(SpatialSite.PACK_CELLS, false);
     RTreeGridRecordWriter<S> writer = new RTreeGridRecordWriter<S>(job, name, cellsInfo, pack);
     writer.setStockObject((S) SpatialSite.createStockShape(job));

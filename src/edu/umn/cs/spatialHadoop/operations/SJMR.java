@@ -96,14 +96,17 @@ public class SJMR {
     
     @Override
     public void configure(JobConf job) {
-      super.configure(job);
-      // Retrieve cells to use for partitioning
-      String cellsInfoStr = job.get(GridOutputFormat.OUTPUT_CELLS);
-      cellInfos = GridOutputFormat.decodeCells(cellsInfoStr);
-      // Create a stock shape for deserializing lines
-      shape = SpatialSite.createStockShape(job);
-      // Get input paths to determine file index for every record
-      inputFiles = FileInputFormat.getInputPaths(job);
+      try {
+        super.configure(job);
+        // Retrieve cells to use for partitioning
+        cellInfos = GridOutputFormat.getCells(job);
+        // Create a stock shape for deserializing lines
+        shape = SpatialSite.createStockShape(job);
+        // Get input paths to determine file index for every record
+        inputFiles = FileInputFormat.getInputPaths(job);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
 
     @Override
@@ -143,11 +146,14 @@ public class SJMR {
     
     @Override
     public void configure(JobConf job) {
-      super.configure(job);
-      String cellsInfoStr = job.get(GridOutputFormat.OUTPUT_CELLS);
-      cellInfos = GridOutputFormat.decodeCells(cellsInfoStr);
-      shape = (S) SpatialSite.createStockShape(job);
-      inputFileCount = FileInputFormat.getInputPaths(job).length;
+      try {
+        super.configure(job);
+        cellInfos = GridOutputFormat.getCells(job);
+        shape = (S) SpatialSite.createStockShape(job);
+        inputFileCount = FileInputFormat.getInputPaths(job).length;
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
 
     @Override
@@ -257,8 +263,7 @@ public class SJMR {
     int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath));
     gridInfo.calculateCellDimensions(num_cells);
     cellsInfo = gridInfo.getAllCells();
-    job.set(GridOutputFormat.OUTPUT_CELLS,
-        GridOutputFormat.encodeCells(cellsInfo));
+    GridOutputFormat.setCells(job, cellsInfo);
     
     TextOutputFormat.setOutputPath(job, outputPath);
     

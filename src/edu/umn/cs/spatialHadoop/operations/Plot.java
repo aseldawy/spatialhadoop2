@@ -75,9 +75,12 @@ public class Plot {
     
     @Override
     public void configure(JobConf job) {
-      super.configure(job);
-      String cellsInfoStr = job.get(GridOutputFormat.OUTPUT_CELLS);
-      cellInfos = GridOutputFormat.decodeCells(cellsInfoStr);
+      try {
+        super.configure(job);
+        cellInfos = GridOutputFormat.getCells(job);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
     
     public void map(Rectangle cell, Shape shape,
@@ -308,8 +311,7 @@ public class Plot {
     }
     
     // Set cell information in the job configuration to be used by the mapper
-    job.set(GridOutputFormat.OUTPUT_CELLS,
-        GridOutputFormat.encodeCells(cellInfos));
+    GridOutputFormat.setCells(job, cellInfos);
     
     // Adjust width and height to maintain aspect ratio
     if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
