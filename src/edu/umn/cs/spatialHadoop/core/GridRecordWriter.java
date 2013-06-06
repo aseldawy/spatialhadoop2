@@ -10,9 +10,12 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.util.ReflectionUtils;
 
 import edu.umn.cs.spatialHadoop.operations.Plot;
 
@@ -106,9 +109,9 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     intermediateCellPath = new Path[this.cells.length];
     cellMbr = new Rectangle[this.cells.length];
 
-    this.blockSize = job == null ? fileSystem.getDefaultBlockSize() :
+    this.blockSize = job == null ? fileSystem.getDefaultBlockSize(this.outDir) :
       job.getLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE,
-            fileSystem.getDefaultBlockSize());
+            fileSystem.getDefaultBlockSize(this.outDir));
     
     text = new Text();
   }
@@ -216,16 +219,28 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   protected OutputStream createFinalCellStream(Path cellFilePath, CellInfo cellInfo)
       throws IOException {
     OutputStream cellStream;
-    if (!fileSystem.exists(cellFilePath)) {
+    boolean isCompressed = FileOutputFormat.getCompressOutput(jobConf);
+    
+    if (!isCompressed) {
       // Create new file
-      cellStream = fileSystem.create(cellFilePath, true,
+      cellStream = fileSystem.create(cellFilePath, false,
           fileSystem.getConf().getInt("io.file.buffer.size", 4096),
-          fileSystem.getDefaultReplication(), this.blockSize);
-      
+          fileSystem.getDefaultReplication(outDir), this.blockSize);
     } else {
-      // Append to existing file
-      cellStream = fileSystem.append(cellFilePath);
+      Class<? extends CompressionCodec> codecClass =
+          FileOutputFormat.getOutputCompressorClass(jobConf, GzipCodec.class);
+      // create the named codec
+      CompressionCodec codec = ReflectionUtils.newInstance(codecClass, jobConf);
+
+      // Open a stream to the output file
+      cellStream = fileSystem.create(cellFilePath, false,
+          fileSystem.getConf().getInt("io.file.buffer.size", 4096),
+          fileSystem.getDefaultReplication(outDir), this.blockSize);
+
+      // Encode the output stream using the codec
+      cellStream = codec.createOutputStream(cellStream);
     }
+
     return cellStream;
   }
   
@@ -303,6 +318,15 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     do {
       String filename = counter == 0 ? String.format("data_%05d", cellIndex)
           : String.format("data_%05d_%d", cellIndex, counter);
+      boolean isCompressed = FileOutputFormat.getCompressOutput(jobConf);
+      if (isCompressed) {
+        Class<? extends CompressionCodec> codecClass =
+            FileOutputFormat.getOutputCompressorClass(jobConf, GzipCodec.class);
+        // create the named codec
+        CompressionCodec codec = ReflectionUtils.newInstance(codecClass, jobConf);
+        filename += codec.getDefaultExtension();
+      }
+      
       path = getFilePath(filename);
       counter++;
     } while (fileSystem.exists(path));
