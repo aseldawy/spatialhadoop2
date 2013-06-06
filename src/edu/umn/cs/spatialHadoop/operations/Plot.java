@@ -224,8 +224,8 @@ public class Plot {
       int s_y2 = (int) (((r.y2) - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
       graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
     } else if (s instanceof OGCShape) {
-      OGCShape jts_shape = (OGCShape) s;
-      OGCGeometry geom = jts_shape.getGeom();
+      OGCShape ogc_shape = (OGCShape) s;
+      OGCGeometry geom = ogc_shape.getGeom();
       Color shape_color = graphics.getColor();
       if (geom instanceof OGCGeometryCollection) {
         OGCGeometryCollection geom_coll = (OGCGeometryCollection) geom;
@@ -441,7 +441,7 @@ public class Plot {
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
-    System.out.println("shape:<point|rectangle|polygon|jts> - (*) Type of shapes stored in input file");
+    System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
     System.out.println("width:<w> - Maximum width of the image (1000,1000)");
     System.out.println("height:<h> - Maximum height of the image (1000,1000)");
 //    System.out.println("color:<c> - Main color used to draw the picture (black)");

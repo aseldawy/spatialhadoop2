@@ -278,7 +278,7 @@ public class CommandLineArguments {
       stockShape = new TigerShape();
     } else if (shapeType.toString().startsWith("poly")) {
       stockShape = new Polygon();
-    } else if (shapeType.toString().startsWith("jts")) {
+    } else if (shapeType.toString().startsWith("ogc")) {
       stockShape = new OGCShape();
     } else if (shapeTypeStr != null) {
       // Use the shapeType as a class name and try to instantiate it dynamically
@@ -394,7 +394,7 @@ public class CommandLineArguments {
       stockShape = new TigerShape();
     } else if (shapeType.toString().startsWith("poly")) {
       stockShape = new Polygon();
-    } else if (shapeType.toString().startsWith("jts")) {
+    } else if (shapeType.toString().startsWith("ogc")) {
       stockShape = new OGCShape();
     } else if (shapeTypeStr != null) {
       // Use the shapeType as a class name and try to instantiate it dynamically

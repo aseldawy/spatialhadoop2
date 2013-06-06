@@ -16,18 +16,17 @@ import com.esri.core.geometry.ogc.OGCGeometryCollection;
 import com.esri.core.geometry.ogc.OGCPoint;
 
 /**
- * A shape class that represents a JTS geometry. The geometry is enclosed inside
- * the class and all calls are delegated to it. The class also holds extra
- * information for each records that could represent other columns for each
- * records. The text representation is assumed to be some kind of CSV. The shape
- * is always the first column in that CSV. The text representation of the shape
- * could be either a WTK (Well Known Text) or a binary representation. The WKT
- * can be generated with PostGIS using the function ST_AsText(geom). An example
- * may look like this:<br/>
+ * A shape class that represents an OGC compliant geometry. The geometry is
+ * enclosed inside the class and all calls are delegated to it. The class also
+ * holds extra information for each records that could represent other columns
+ * for each records. The text representation is assumed to be some kind of CSV.
+ * The shape is always the first column in that CSV. The text representation of
+ * the shape could be either a WTK (Well Known Text) or a binary representation.
+ * The WKT can be generated with PostGIS using the function ST_AsText(geom). An
+ * example may look like this:<br/>
  * <code>
  * POLYGON ((-89 43,-89 50,-97 50,-97 43,-89 43))
- * </code>
- * The binary representation can be generated from PostGIS by selecting
+ * </code> The binary representation can be generated from PostGIS by selecting
  * the geom column using a normal select statement. When a shape is parsed, we
  * detect the format and use the appropriate parser. When writing to text, we
  * always use the binary representation as it is faster and more compact. For
