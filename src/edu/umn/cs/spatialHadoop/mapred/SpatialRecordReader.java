@@ -13,10 +13,15 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.Decompressor;
+import org.apache.hadoop.io.compress.SplitCompressionInputStream;
+import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
@@ -55,6 +60,11 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
   protected long pos;
   /** Input stream that reads from file */
   private InputStream in;
+  
+  private Seekable filePosition;
+  private CompressionCodec codec;
+  private Decompressor decompressor;
+  
   /** Reads lines from text files */
   protected LineReader lineReader;
   /** A temporary text to read lines from lineReader */
@@ -114,27 +124,53 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     this.end = s + l;
     this.path = p;
     this.fs = this.path.getFileSystem(job);
-    this.in = fs.open(this.path);
+    FSDataInputStream fileIn = fs.open(this.path);
     this.blockSize = fs.getFileStatus(this.path).getBlockSize();
     this.cellMbr = new Rectangle();
     
     LOG.info("Open a SpatialRecordReader to file: "+this.path);
 
-    final CompressionCodec codec = new CompressionCodecFactory(job).getCodec(this.path);
+    codec = new CompressionCodecFactory(job).getCodec(this.path);
 
-    if (codec != null) {
-      // Decompress the stream
-      in = codec.createInputStream(in);
-      // Read till the end of the stream
-      end = Long.MAX_VALUE;
+    if (isCompressedInput()) {
+      decompressor = CodecPool.getDecompressor(codec);
+      if (codec instanceof SplittableCompressionCodec) {
+        final SplitCompressionInputStream cIn =
+            ((SplittableCompressionCodec)codec).createInputStream(
+              fileIn, decompressor, start, end,
+              SplittableCompressionCodec.READ_MODE.BYBLOCK);
+        in = cIn;
+        start = cIn.getAdjustedStart();
+        end = cIn.getAdjustedEnd();
+        filePosition = cIn; // take pos from compressed stream
+      } else {
+        in = codec.createInputStream(fileIn, decompressor);
+        filePosition = fileIn;
+      }
     } else {
-      ((FSDataInputStream)in).seek(start);
+      fileIn.seek(start);
+      in = fileIn;
+      filePosition = fileIn;
     }
     this.pos = start;
     this.maxShapesInOneRead = job.getInt(SpatialSite.MaxShapesInOneRead, 1000000);
     this.maxBytesInOneRead = job.getInt(SpatialSite.MaxBytesInOneRead, 32*1024*1024);
 
     initializeReader();
+  }
+  
+  private long getFilePosition() throws IOException {
+    long retVal;
+    if (isCompressedInput() && null != filePosition) {
+      retVal = filePosition.getPos();
+    } else {
+      retVal = pos;
+    }
+    return retVal;
+  }
+
+  private boolean isCompressedInput() {
+    return codec != null;
   }
   
   /**
@@ -162,6 +198,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
 
   @Override
   public void close() throws IOException {
+    try {
     if (lineReader != null) {
       lineReader.close();
     } else if (in != null) {
@@ -169,6 +206,11 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     }
     lineReader = null;
     in = null;
+    } finally {
+      if (decompressor != null) {
+        CodecPool.returnDecompressor(decompressor);
+      }
+    }
   }
 
   @Override
@@ -176,7 +218,8 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     if (start == end) {
       return 0.0f;
     } else {
-      return Math.min(1.0f, (pos - start) / (float)(end - start));
+      return Math.min(1.0f,
+        (getFilePosition() - start) / (float)(end - start));
     }
   }
   
@@ -269,7 +312,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       // Reinitialize record reader at the new position
       lineReader = new LineReader(in);
     }
-    while (getPos() <= end) {
+    while (getFilePosition() <= end) {
       value.clear();
       int b = 0;
       if (buffer != null) {

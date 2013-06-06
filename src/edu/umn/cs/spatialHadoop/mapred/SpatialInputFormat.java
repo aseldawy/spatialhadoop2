@@ -11,6 +11,9 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -33,6 +36,8 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
  */
 public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   
+  private CompressionCodecFactory compressionCodecs = null;
+  
   /**
    * We need to use this way of constructing readers to be able to pass it to
    * CmobineFileRecordReader
@@ -49,6 +54,8 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   @Override
   public RecordReader<K, V> getRecordReader(InputSplit split, JobConf job,
       Reporter reporter) throws IOException {
+    if (compressionCodecs == null)
+      compressionCodecs = new CompressionCodecFactory(job);
     if (split instanceof CombineFileSplit) {
       return new CombineFileRecordReader<K, V>(job, (CombineFileSplit)split,
           reporter, (Class<RecordReader<K, V>>) rrClass);
@@ -120,6 +127,8 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   @Override
   protected FileStatus[] listStatus(JobConf job) throws IOException {
     try {
+      if (compressionCodecs == null)
+        compressionCodecs = new CompressionCodecFactory(job);
       Class<? extends BlockFilter> blockFilterClass =
           job.getClass(SpatialSite.FilterClass, null, BlockFilter.class);
       if (blockFilterClass == null) {
@@ -154,13 +163,15 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   }
 
   @Override
-  protected boolean isSplitable(FileSystem fs, Path filename) {
-    // TODO think of a better way to check the file without opening it
-    // For example, store more meta information in the master file
+  protected boolean isSplitable(FileSystem fs, Path file) {
+    final CompressionCodec codec = compressionCodecs.getCodec(file);
+    if (codec != null && !(codec instanceof SplittableCompressionCodec))
+      return false;
+
     try {
-      return !SpatialSite.isRTree(fs, filename);
+      return !SpatialSite.isRTree(fs, file);
     } catch (IOException e) {
-      return super.isSplitable(fs, filename);
+      return super.isSplitable(fs, file);
     }
   }
 }

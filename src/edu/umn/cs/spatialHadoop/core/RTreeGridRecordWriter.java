@@ -1,6 +1,8 @@
 package edu.umn.cs.spatialHadoop.core;
 
 import java.io.BufferedOutputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -114,8 +116,8 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     rtree.setStockObject(stockObject);
     // It should create a new stream
     Path finalCellPath = getFinalCellPath(cellIndex);
-    FSDataOutputStream cellStream =
-      (FSDataOutputStream) createFinalCellStream(finalCellPath, cells[cellIndex]);
+    DataOutputStream cellStream =
+      (DataOutputStream) createFinalCellStream(finalCellPath, cells[cellIndex]);
     cellStream.writeLong(SpatialSite.RTreeFileMarker);
     int degree = 4096 / RTree.NodeSize;
     rtree.bulkLoadWrite(cellData, 0, cellData.length, degree, cellStream,

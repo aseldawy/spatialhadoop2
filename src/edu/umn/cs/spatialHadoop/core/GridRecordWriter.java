@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.core;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
@@ -238,7 +239,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
           fileSystem.getDefaultReplication(outDir), this.blockSize);
 
       // Encode the output stream using the codec
-      cellStream = codec.createOutputStream(cellStream);
+      cellStream = new DataOutputStream(codec.createOutputStream(cellStream));
     }
 
     return cellStream;

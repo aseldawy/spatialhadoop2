@@ -104,20 +104,20 @@ public class Repartition {
   /**
    * Calculates number of partitions required to index the given file
    * @param inFs
-   * @param file
+   * @param inFile
    * @param rtree
    * @return
    * @throws IOException 
    */
-  static int calculateNumberOfPartitions(FileSystem inFs, Path file,
-      FileSystem outFs, long blockSize) throws IOException {
+  static int calculateNumberOfPartitions(FileSystem inFs, Path inFile,
+      FileSystem outFs, Path outFile, long blockSize) throws IOException {
     Configuration conf = inFs.getConf();
     final float IndexingOverhead =
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);
-    final long fileSize = inFs.getFileStatus(file).getLen();
+    final long fileSize = inFs.getFileStatus(inFile).getLen();
     long indexedFileSize = (long) (fileSize * (1 + IndexingOverhead));
     if (blockSize == 0)
-      blockSize = outFs.getDefaultBlockSize();
+      blockSize = outFs.getDefaultBlockSize(outFile);
     return (int)Math.ceil((float)indexedFileSize / blockSize);
   }
 	
@@ -144,7 +144,6 @@ public class Repartition {
       input_mbr = FileMBR.fileMBRMapReduce(inFs, inFile, stockShape);
 
     // Calculate number of partitions in output file
-    FileStatus inFileStatus = inFs.getFileStatus(inFile);
     // Copy blocksize from source file if it's globally indexed
     if (blockSize == 0) {
       GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
@@ -152,7 +151,7 @@ public class Repartition {
         blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
       }
     }
-    int num_partitions = calculateNumberOfPartitions(inFs, inFile, outFs, blockSize);
+    int num_partitions = calculateNumberOfPartitions(inFs, inFile, outFs,outPath, blockSize);
     
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
@@ -234,7 +233,6 @@ public class Repartition {
     }
     // Copy blocksize from source file if it's globally indexed
     FileSystem inFs = inFile.getFileSystem(job);
-    FileStatus inFileStatus = inFs.getFileStatus(inFile);
     
     if (blockSize == 0) {
       GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
@@ -358,7 +356,6 @@ public class Repartition {
     FileSystem outFs = outPath.getFileSystem(new Configuration());
     
     // Calculate number of partitions in output file
-    FileStatus inFileStatus = inFs.getFileStatus(inFile);
     // Copy blocksize from source file if it's globally indexed
     if (blockSize == 0) {
       GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
@@ -367,7 +364,7 @@ public class Repartition {
       }
     }
 
-    int num_partitions = calculateNumberOfPartitions(inFs, inFile, outFs, blockSize);
+    int num_partitions = calculateNumberOfPartitions(inFs, inFile, outFs, outPath, blockSize);
     
     if (input_mbr == null)
       input_mbr = FileMBR.fileMBRLocal(inFs, inFile, stockShape);

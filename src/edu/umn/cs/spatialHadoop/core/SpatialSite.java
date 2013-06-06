@@ -5,13 +5,17 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.CodecPool;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.Decompressor;
 
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
@@ -62,6 +66,9 @@ public class SpatialSite {
    * in a field (e.g. localIndexType).
    */
   public static final long RTreeFileMarker = -0x00012345678910L;
+  
+  private static final CompressionCodecFactory compressionCodecs =
+      new CompressionCodecFactory(new Configuration());
 
   /**
    * Maximum number of shapes to read in one read operation and return when
@@ -166,7 +173,7 @@ public class SpatialSite {
     FileStatus file = fs.getFileStatus(path);
     Path fileToCheck;
     if (file.isDir()) {
-      // Check any cell (first cell)
+      // Check any cell (e.g., first cell)
       InputStream in = fs.open(new Path(path, "_master"));
       ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(in, 0, Long.MAX_VALUE);
       Partition first_partition = new Partition();
@@ -179,10 +186,22 @@ public class SpatialSite {
     } else {
       fileToCheck = file.getPath();
     }
-    FSDataInputStream fsdis = fs.open(fileToCheck);
-    Long signature = fsdis.readLong();
-    fsdis.close();
-    return signature == SpatialSite.RTreeFileMarker;
+    InputStream fileIn = fs.open(fileToCheck);
+    
+    // Check if file is compressed
+    CompressionCodec codec = compressionCodecs.getCodec(fileToCheck);
+    Decompressor decompressor = null;
+    if (codec != null) {
+      decompressor = CodecPool.getDecompressor(codec);
+      fileIn = codec.createInputStream(fileIn, decompressor);
+    }
+    byte[] signature = new byte[RTreeFileMarkerB.length];
+    fileIn.read(signature);
+    fileIn.close();
+    if (decompressor != null) {
+      CodecPool.returnDecompressor(decompressor);
+    }
+    return Arrays.equals(signature, SpatialSite.RTreeFileMarkerB);
   }
   
   public static CellInfo[] cellsOf(FileSystem fs, Path path) throws IOException {
