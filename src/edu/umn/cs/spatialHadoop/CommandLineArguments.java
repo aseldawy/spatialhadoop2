@@ -1,7 +1,6 @@
 package edu.umn.cs.spatialHadoop;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -12,10 +11,8 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.JTSShape;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
