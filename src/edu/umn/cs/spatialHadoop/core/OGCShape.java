@@ -33,12 +33,12 @@ import com.esri.core.geometry.ogc.OGCPoint;
  * always use the binary representation as it is faster and more compact. For
  * binary serialization/deserialization, we use the PostGIS writer and parser.
  * 
- * @author eldawy
+ * @author Ahmed Eldawy
  * 
  */
-public class JTSShape implements Shape {
+public class OGCShape implements Shape {
   
-  private static final Log LOG = LogFactory.getLog(JTSShape.class);
+  private static final Log LOG = LogFactory.getLog(OGCShape.class);
   
   private static final byte[][] ShapeNames = { "LINESTRING".getBytes(),
       "POINT".getBytes(), "POLYGON".getBytes(), "MULTIPOINT".getBytes(),
@@ -57,11 +57,11 @@ public class JTSShape implements Shape {
    */
   private String extra;
   
-  public JTSShape() {
+  public OGCShape() {
     this(null);
   }
   
-  public JTSShape(OGCGeometry geom) {
+  public OGCShape(OGCGeometry geom) {
     this.geom = geom;
   }
 
@@ -258,7 +258,7 @@ public class JTSShape implements Shape {
 
   @Override
   public Shape clone() {
-    JTSShape copy = new JTSShape(this.geom);
+    OGCShape copy = new OGCShape(this.geom);
     copy.extra = this.extra;
     return copy;
   }

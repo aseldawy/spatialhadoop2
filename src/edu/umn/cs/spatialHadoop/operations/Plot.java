@@ -39,7 +39,7 @@ import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
-import edu.umn.cs.spatialHadoop.core.JTSShape;
+import edu.umn.cs.spatialHadoop.core.OGCShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -223,8 +223,8 @@ public class Plot {
       int s_x2 = (int) (((r.x2) - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
       int s_y2 = (int) (((r.y2) - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
       graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
-    } else if (s instanceof JTSShape) {
-      JTSShape jts_shape = (JTSShape) s;
+    } else if (s instanceof OGCShape) {
+      OGCShape jts_shape = (OGCShape) s;
       OGCGeometry geom = jts_shape.getGeom();
       Color shape_color = graphics.getColor();
       if (geom instanceof OGCGeometryCollection) {
@@ -232,7 +232,7 @@ public class Plot {
         for (int i = 0; i < geom_coll.numGeometries(); i++) {
           OGCGeometry sub_geom = geom_coll.geometryN(i);
           // Recursive call to draw each geometry
-          drawShape(graphics, new JTSShape(sub_geom), fileMbr, imageWidth, imageHeight, scale);
+          drawShape(graphics, new OGCShape(sub_geom), fileMbr, imageWidth, imageHeight, scale);
         }
       } else if (geom.getEsriGeometry() instanceof MultiPath) {
         MultiPath path = (MultiPath) geom.getEsriGeometry();
