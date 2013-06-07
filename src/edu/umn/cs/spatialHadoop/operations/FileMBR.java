@@ -10,6 +10,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -36,16 +37,30 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  */
 public class FileMBR {
   private static final NullWritable Dummy = NullWritable.get();
-  private static final Rectangle MBR = new Rectangle();
 
   public static class Map extends MapReduceBase implements
       Mapper<Rectangle, Shape, NullWritable, Rectangle> {
+    
+    private final Rectangle MBR = new Rectangle();
+    private Rectangle mbr_so_far = null;
+    
     public void map(Rectangle dummy, Shape shape,
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
         throws IOException {
       Rectangle mbr = shape.getMBR();
-      MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-      output.collect(Dummy, MBR);
+      
+      if (mbr_so_far == null) {
+        MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+        mbr_so_far = new Rectangle();
+        mbr_so_far.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+        output.collect(Dummy, MBR);
+      } else {
+        // Skip writing file to output
+        if (!mbr_so_far.contains(mbr)) {
+          mbr_so_far.expand(mbr);
+          output.collect(Dummy, MBR);
+        }
+      }
     }
   }
   
@@ -155,10 +170,9 @@ public class FileMBR {
     }
     long file_size = fs.getFileStatus(file).getLen();
     
-    ShapeRecordReader<Shape> shapeReader =
-        new ShapeRecordReader<Shape>(fs.open(file), 0, file_size);
+    ShapeRecordReader<Shape> shapeReader = new ShapeRecordReader<Shape>(
+        new Configuration(), new FileSplit(file, 0, file_size, new String[] {}));
 
-    
     Rectangle key = shapeReader.createKey();
     
     if (!shapeReader.next(key, stockShape)) {
@@ -182,6 +196,18 @@ public class FileMBR {
     return new Rectangle(x1, y1, x2-x1, y2-y1);
   }
   
+  public static Rectangle fileMBR(FileSystem fs, Path inFile, Shape stockShape) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(new Configuration());
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 1) {
+      // Either a directory of file or a large file
+      return fileMBRMapReduce(fs, inFile, stockShape);
+    } else {
+      // A single small file, process it without MapReduce
+      return fileMBRLocal(fs, inFile, stockShape);
+    }
+  }
+
   private static void printUsage() {
     System.out.println("Finds the MBR of an input file");
     System.out.println("Parameters: (* marks required parameters)");
@@ -207,20 +233,11 @@ public class FileMBR {
     }
 
     Shape stockShape = cla.getShape(true);
-    boolean local = cla.isLocal();
-    Rectangle mbr = local ? fileMBRLocal(fs, inputFile, stockShape) :
-      fileMBRMapReduce(fs, inputFile, stockShape);
+    long t1 = System.currentTimeMillis();
+    Rectangle mbr = fileMBRMapReduce(fs, inputFile, stockShape);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total processing time: "+(t2-t1)+" millis");
     System.out.println("MBR of records in file "+inputFile+" is "+mbr);
-  }
-
-  public static Rectangle fileMBR(FileSystem fs, Path inFile, Shape stockShape) throws IOException {
-    FileSystem inFs = inFile.getFileSystem(new Configuration());
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFs.getFileBlockLocations(inFStatus, 0, inFStatus.getLen()).length > 3) {
-      return fileMBRMapReduce(fs, inFile, stockShape);
-    } else {
-      return fileMBRLocal(fs, inFile, stockShape);
-    }
   }
 
 }
