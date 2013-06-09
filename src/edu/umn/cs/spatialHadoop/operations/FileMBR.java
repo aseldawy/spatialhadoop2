@@ -181,19 +181,13 @@ public class FileMBR {
     }
       
     Rectangle rect = stockShape.getMBR();
-    double x1 = rect.x1;
-    double y1 = rect.y1;
-    double x2 = rect.x2;
-    double y2 = rect.y2;
+    Rectangle mbr = rect.clone();
 
     while (shapeReader.next(key, stockShape)) {
       rect = stockShape.getMBR();
-      if (rect.x1 < x1) x1 = rect.x1;
-      if (rect.y1 < y1) y1 = rect.y1;
-      if (rect.x2 > x2) x2 = rect.x2;
-      if (rect.y2 > y2) y2 = rect.y2;
+      mbr.expand(rect);
     }
-    return new Rectangle(x1, y1, x2-x1, y2-y1);
+    return mbr;
   }
   
   public static Rectangle fileMBR(FileSystem fs, Path inFile, Shape stockShape) throws IOException {
