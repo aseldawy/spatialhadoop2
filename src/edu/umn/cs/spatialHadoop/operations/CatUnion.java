@@ -42,13 +42,30 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
- * Computes the union of all shapes in a given input file.
+ * Computes the union of a set of shapes given a category for each shape.
+ * Input:
+ *  - A file that contains all shapes (one per line)
+ *  - A file that contains a category for each shape
+ * Output:
+ *  - One file that contains one line per category. Each line contains category
+ *    ID as it appears in the second file and the union of all shapes assigned
+ *    to this ID
  * 
- * @author Ahmed Eldawy
+ * @author eldawy
  *
  */
-public class Union {
-  private static final Log LOG = LogFactory.getLog(Union.class);
+public class CatUnion {
+  private static final Log LOG = LogFactory.getLog(CatUnion.class);
+  
+  static class GeometryArray {
+    String categoryId;
+    Vector<OGCGeometry> geometries = new Vector<OGCGeometry>();
+    
+    @Override
+    public String toString() {
+      return categoryId+": "+geometries;
+    }
+  }
   
   static class UnionMapper extends MapReduceBase
       implements Mapper<CellInfo, Text, IntWritable, Text> {
@@ -160,7 +177,7 @@ public class Union {
    */
   public static void unionMapReduce(Path shapeFile, Path categoryFile,
       Path output, boolean overwrite) throws IOException {
-    JobConf job = new JobConf(Union.class);
+    JobConf job = new JobConf(CatUnion.class);
     job.setJobName("Union");
 
     // Check output file existence
@@ -323,7 +340,7 @@ public class Union {
    */
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    JobConf conf = new JobConf(Union.class);
+    JobConf conf = new JobConf(CatUnion.class);
     Path[] allFiles = cla.getPaths();
     boolean local = cla.isLocal();
     boolean overwrite = cla.isOverwrite();
