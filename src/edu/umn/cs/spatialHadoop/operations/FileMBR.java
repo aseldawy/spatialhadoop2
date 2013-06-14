@@ -50,14 +50,15 @@ public class FileMBR {
       Rectangle mbr = shape.getMBR();
       
       if (mbr_so_far == null) {
-        MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
         mbr_so_far = new Rectangle();
         mbr_so_far.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+        MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
         output.collect(Dummy, MBR);
       } else {
-        // Skip writing file to output
+        // Skip writing rectangle to output if totally contained in mbr_so_far
         if (!mbr_so_far.contains(mbr)) {
           mbr_so_far.expand(mbr);
+          MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
           output.collect(Dummy, MBR);
         }
       }
@@ -162,7 +163,7 @@ public class FileMBR {
    * @throws IOException
    */
   public static <S extends Shape> Rectangle fileMBRLocal(FileSystem fs,
-      Path file, S stockShape) throws IOException {
+      Path file, S shape) throws IOException {
     // Try to get file MBR from the global index (if possible)
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, file);
     if (gindex != null) {
@@ -175,16 +176,16 @@ public class FileMBR {
 
     Rectangle key = shapeReader.createKey();
     
-    if (!shapeReader.next(key, stockShape)) {
+    if (!shapeReader.next(key, shape)) {
       shapeReader.close();
       return null;
     }
       
-    Rectangle rect = stockShape.getMBR();
+    Rectangle rect = shape.getMBR();
     Rectangle mbr = rect.clone();
 
-    while (shapeReader.next(key, stockShape)) {
-      rect = stockShape.getMBR();
+    while (shapeReader.next(key, shape)) {
+      rect = shape.getMBR();
       mbr.expand(rect);
     }
     return mbr;

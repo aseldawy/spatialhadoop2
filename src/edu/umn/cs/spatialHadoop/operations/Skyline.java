@@ -18,6 +18,8 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Vector;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -32,10 +34,15 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
@@ -46,6 +53,8 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
  *
  */
 public class Skyline {
+  
+  private static final Log LOG = LogFactory.getLog(Skyline.class);
   
   /**Data type for the direction of skyline to compute*/
   enum Direction {MaxMax, MaxMin, MinMax, MinMin}
@@ -91,6 +100,13 @@ public class Skyline {
     return result;
   }
 
+  /**
+   * Returns true if p1 dominates p2 according to the given direction.
+   * @param p1
+   * @param p2
+   * @param dir
+   * @return
+   */
   private static boolean skylineDominate(Point p1, Point p2, Direction dir) {
     switch (dir) {
     case MaxMax: return p1.x >= p2.x && p1.y >= p2.y;
@@ -101,6 +117,61 @@ public class Skyline {
     }
   }
   
+  /**
+   * Returns true if r1 dominates r2 in the given direction. r1 dominates r2 if
+   * one point in r1 dominates all points in r2. There are two rules for
+   * rectangle domination. We will describe them here in terms of MaxMax skyline
+   * but they can be expanded to cover all other skylines.
+   * 1- If the lowest corner of r1 dominates the highest corner of r2.
+   * 2- If the semi-lowest corner of r1 dominates the highest corner of r2.
+   * The lowest (highest) corner of a rectangle is the point inside this
+   * rectangle with the minimum (maximum) coordinates in all dimensions.
+   * The semi-lowest corner of a rectangle is a point inside the rectangle with
+   * the minimum coordinates in all dimensions except for one dimension which
+   * is the maximum coordinate.
+   * 
+   * Rule 2 is applied only if rectangles are compact which means they are
+   * minimal bounding rectangles around contained points.
+   * 
+   * @param r1
+   * @param r2
+   * @param dir
+   * @param compact - whether the input rectangles are compact or not
+   * @return
+   */
+  private static boolean skylineDominate(Rectangle r1, Rectangle r2,
+      Direction dir, boolean compact) {
+    switch (dir) {
+    case MaxMax:
+      return compact ? (r1.x2 >= r2.x2 && r1.y1 >= r2.y2) ||
+                       (r1.x1 >= r2.x2 && r1.y2 >= r2.y2) :
+                       (r1.x1 >= r2.x2 && r1.y1 >= r2.y2);
+    case MaxMin:
+      return compact ? (r1.x2 >= r2.x2 && r1.y1 <= r2.y2) ||
+                       (r1.x1 >= r2.x2 && r1.y2 <= r2.y2) :
+                       (r1.x1 >= r2.x2 && r1.y1 <= r2.y2);
+    case MinMax:
+      return compact ? (r1.x2 <= r2.x2 && r1.y1 >= r2.y2) ||
+                       (r1.x1 <= r2.x2 && r1.y2 >= r2.y2) :
+                       (r1.x1 <= r2.x2 && r1.y1 >= r2.y2);
+    case MinMin:
+      return compact ? (r1.x2 <= r2.x2 && r1.y1 <= r2.y2) ||
+                       (r1.x1 <= r2.x2 && r1.y2 <= r2.y2) :
+                       (r1.x1 <= r2.x2 && r1.y1 <= r2.y2);
+    default: throw new RuntimeException("Unknown direction: "+dir);
+    }
+  }
+  
+  /**
+   * Computes the skyline of an input file using a single machine algorithm.
+   * The output is written to the output file. If output file is null, the
+   * output is just thrown away.
+   * @param inFile
+   * @param outFile
+   * @param dir
+   * @param overwrite
+   * @throws IOException
+   */
   public static void skylineLocal(Path inFile, Path outFile, Direction dir,
       boolean overwrite) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
@@ -135,15 +206,65 @@ public class Skyline {
     }
   }
   
+  /**Name of the configuration line for storing the skyline direction*/
   private static final String SkylineDirection = "skyline.direction";
   
+  /**Sets the skyline direction in the configuration file*/
   private static void setDirection(Configuration conf, Direction dir) {
     conf.set(SkylineDirection, dir.toString());
   }
   
+  public static class SkylineFilter extends DefaultBlockFilter {
+    
+    private Direction dir;
+    
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      dir = getDirection(job);
+    }
+    
+    @Override
+    public void selectCells(GlobalIndex<Partition> gIndex,
+        ResultCollector<Partition> output) {
+      Vector<Partition> non_dominated_partitions = new Vector<Partition>();
+      
+      for (Partition p : gIndex) {
+        boolean dominated = false;
+        int i = 0;
+        while (!dominated && i < non_dominated_partitions.size()) {
+          Partition p2 = non_dominated_partitions.get(i);
+          dominated = skylineDominate(p2, p, dir, gIndex.isCompact());
+          
+          // Check if the new partition dominates the previously selected one
+          if (skylineDominate(p, p2, dir, gIndex.isCompact())) {
+            // p2 is no longer non-dominated
+            non_dominated_partitions.remove(i);
+          } else {
+            // Skip to next non-dominated partition
+            i++;
+          }
+        }
+        if (!dominated) {
+          non_dominated_partitions.add(p);
+        }
+      }
+      
+      LOG.info("Processing "+non_dominated_partitions.size()+" out of "+gIndex.size()+" partition");
+      // Output all non-dominated partitions
+      for (Partition p : non_dominated_partitions) {
+        output.collect(p);
+      }
+    }
+  }
+  
+  /**
+   * An identity map function that returns values as-is with a null key. This
+   * ensures that all values are reduced in one reducer.
+   * @author Ahmed Eldawy
+   */
   public static class IdentityMapper extends MapReduceBase implements
   Mapper<Rectangle, Point, NullWritable, Point> {
-
     @Override
     public void map(Rectangle dummy, Point point,
         OutputCollector<NullWritable, Point> output, Reporter reporter)
@@ -207,6 +328,7 @@ public class Skyline {
     }
     
     setDirection(job, dir);
+    job.setClass(SpatialSite.FilterClass, SkylineFilter.class, BlockFilter.class);
     job.setMapperClass(IdentityMapper.class);
     job.setCombinerClass(SkylineReducer.class);
     job.setReducerClass(SkylineReducer.class);

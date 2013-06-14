@@ -221,4 +221,12 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
     }
     return result_size;
   }
+  
+  /**
+   * Returns true if the partitions are compact (minimal) around its contents
+   * @return
+   */
+  public boolean isCompact() {
+    return false;
+  }
 }
