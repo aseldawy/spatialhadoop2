@@ -139,7 +139,7 @@ public class Skyline {
    * @param compact - whether the input rectangles are compact or not
    * @return
    */
-  private static boolean skylineDominate(Rectangle r1, Rectangle r2,
+  public static boolean skylineDominate(Rectangle r1, Rectangle r2,
       Direction dir, boolean compact) {
     switch (dir) {
     case MaxMax:
@@ -328,6 +328,7 @@ public class Skyline {
     }
     
     setDirection(job, dir);
+    job.setJobName("Skyline");
     job.setClass(SpatialSite.FilterClass, SkylineFilter.class, BlockFilter.class);
     job.setMapperClass(IdentityMapper.class);
     job.setCombinerClass(SkylineReducer.class);
@@ -363,7 +364,7 @@ public class Skyline {
     Path inFile = paths[0];
     Path outFile = paths.length > 1? paths[1] : null;
     boolean overwrite = cla.isOverwrite();
-    if (!overwrite && outFile.getFileSystem(new Configuration()).exists(outFile)) {
+    if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
       System.err.println("Output path already exists and overwrite flag is not set");
       return;
     }

@@ -48,4 +48,14 @@ public class Partition extends Rectangle {
   public Partition clone() {
     return new Partition(filename, this);
   }
+  
+  @Override
+  public int hashCode() {
+    return filename.hashCode();
+  }
+  
+  @Override
+  public boolean equals(Object obj) {
+    return this.filename.equals(((Partition)obj).filename);
+  }
 }
