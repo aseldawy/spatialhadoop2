@@ -223,7 +223,7 @@ public class CommandLineArguments {
    * @param key
    * @return
    */
-  protected String get(String key) {
+  public String get(String key) {
     key = key +":";
     for (String arg : args) {
       if (arg.startsWith(key)) {

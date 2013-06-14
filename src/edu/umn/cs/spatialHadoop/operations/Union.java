@@ -1,27 +1,18 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.LineRecordReader;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -36,10 +27,10 @@ import com.esri.core.geometry.ogc.OGCGeometryCollection;
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.OGCShape;
-import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
-import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.operations.CatUnion.UnionMapper;
 
 /**
  * Computes the union of all shapes in a given input file.
@@ -50,70 +41,16 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 public class Union {
   private static final Log LOG = LogFactory.getLog(Union.class);
   
-  static class UnionMapper extends MapReduceBase
-      implements Mapper<CellInfo, Text, IntWritable, Text> {
-    /**
-     * Maps each shape by ID to a category
-     */
-    private Map<Integer, Integer> idToCategory = new HashMap<Integer, Integer>();
-    
-    /**
-     * A shared key for all intermediate data
-     */
-    IntWritable sharedKey = new IntWritable();
+  static class IdentityMapper extends MapReduceBase
+      implements Mapper<CellInfo, OGCShape, NullWritable, OGCShape> {
+
+    private static final NullWritable dummy = NullWritable.get(); 
     
     @Override
-    public void configure(JobConf job) {
-      super.configure(job);
-      try {
-        Path categoryFile = DistributedCache.getLocalCacheFiles(job)[0];
-        readCategories(categoryFile, idToCategory);
-      } catch (IOException e) {
-        LOG.error(e);
-        e.printStackTrace();
-      }
-    }
-    
-    @Override
-    public void map(CellInfo key, Text line,
-        OutputCollector<IntWritable, Text> output, Reporter reporter)
+    public void map(CellInfo key, OGCShape s,
+        OutputCollector<NullWritable, OGCShape> output, Reporter reporter)
         throws IOException {
-      byte[] bytes = line.getBytes();
-      int column_to_read = 6;
-      int i1_shape = 0, i2_shape = 0;
-      int i1 = 0;
-      int i2 = 0;
-      for (int i = 0; i <= column_to_read; i++) {
-        byte delimiter = ',';
-        if (bytes[i1] == '\'' || bytes[i1] == '\"')
-          delimiter = bytes[i1++];
-        i2 = i1+1;
-        while (bytes[i2] != delimiter)
-          i2++;
-        if (i == 0) {
-          i1_shape = i1;
-          i2_shape = i2;
-          if (delimiter != ',') {
-            // If the first column is quoted, include the quotes
-            i1--;
-            i2++;
-          }
-        }
-        if (i < column_to_read) {
-          // Skip to next column
-          i1 = i2 + 1; // Skip the terminator
-          if (delimiter != ',') // Skip another byte if field is quoted 
-            i1++;
-        }
-      }
-      int shape_zip = TextSerializerHelper.deserializeInt(bytes, i1, i2-i1);
-      Integer category = idToCategory.get(shape_zip);
-      if (category != null) {
-        sharedKey.set(category);
-        // Truncate the line to include only the shape
-        line.set(bytes, i1_shape, i2_shape-i1_shape);
-        output.collect(sharedKey, line);
-      }
+      output.collect(dummy, s);
     }
   }
   
@@ -123,42 +60,43 @@ public class Union {
    *
    */
   static class UnionReducer extends MapReduceBase
-      implements Reducer<IntWritable, Text, IntWritable, Text> {
-    
-    private Text temp_out = new Text();
+      implements Reducer<NullWritable, OGCShape, NullWritable, OGCShape> {
     
     @Override
-    public void reduce(IntWritable category, Iterator<Text> shape_lines,
-        OutputCollector<IntWritable, Text> output, Reporter reporter)
+    public void reduce(NullWritable dummy, Iterator<OGCShape> shapes,
+        OutputCollector<NullWritable, OGCShape> output, Reporter reporter)
         throws IOException {
-      OGCShape shape = new OGCShape();
-      Vector<OGCGeometry> shapes = new Vector<OGCGeometry>();
-      while (shape_lines.hasNext()) {
-        shape.fromText(shape_lines.next());
-        shapes.add(shape.getGeom());
+      Vector<OGCGeometry> shapes_list = new Vector<OGCGeometry>();
+      while (shapes.hasNext()) {
+        OGCShape shape = shapes.next();
+        shapes_list.add(shape.getGeom());
       }
-      OGCGeometryCollection geo_collection = new OGCConcreteGeometryCollection(shapes,
-          shapes.firstElement().getEsriSpatialReference());
-      OGCGeometry union = geo_collection.union(shapes.firstElement());
+      OGCGeometryCollection geo_collection = new OGCConcreteGeometryCollection(
+          shapes_list, shapes_list.firstElement().getEsriSpatialReference());
+      OGCGeometry union = geo_collection.union(shapes_list.firstElement());
       geo_collection = null;
       shapes = null;
-      temp_out.clear();
-      output.collect(category, new OGCShape(union).toText(temp_out));
+      if (union instanceof OGCGeometryCollection) {
+        OGCGeometryCollection union_shapes = (OGCGeometryCollection) union;
+        for (int i_geom = 0; i_geom < union_shapes.numGeometries(); i_geom++) {
+          OGCGeometry geom_n = union_shapes.geometryN(i_geom);
+          output.collect(dummy, new OGCShape(geom_n));
+        }
+      } else {
+        output.collect(dummy, new OGCShape(union));
+      }
     }
   }
   
   /**
-   * Calculates the union of a set of shapes categorized by some user defined
-   * category.
+   * Calculates the union of a set of shapes.
    * @param shapeFile - Input file that contains shapes
-   * @param categoryFile - Category file that contains the category of each
-   *  shape.Shapes not appearing in this file are not generated in output.
    * @param output - An output file that contains each category and the union
    *  of all shapes in it. Each line contains the category, then a comma,
    *   then the union represented as text.
    * @throws IOException
    */
-  public static void unionMapReduce(Path shapeFile, Path categoryFile,
+  public static void unionMapReduce(Path shapeFile,
       Path output, boolean overwrite) throws IOException {
     JobConf job = new JobConf(Union.class);
     job.setJobName("Union");
@@ -182,13 +120,12 @@ public class Union {
     job.setCombinerClass(UnionReducer.class);
     job.setReducerClass(UnionReducer.class);
     
-    job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(Text.class);
+    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputValueClass(OGCShape.class);
 
     // Set input and output
-    job.setInputFormat(ShapeLineInputFormat.class);
+    job.setInputFormat(ShapeInputFormat.class);
     TextInputFormat.addInputPath(job, shapeFile);
-    DistributedCache.addCacheFile(categoryFile.toUri(), job);
     
     job.setOutputFormat(TextOutputFormat.class);
     TextOutputFormat.setOutputPath(job, output);
@@ -198,26 +135,18 @@ public class Union {
   }
 
   /**
-   * Calculates the union of a set of shapes categorized by some user defined
-   * category.
+   * Calculates the union of a set of shapes
    * @param fs
    * @param file
    * @return
    * @throws IOException
    */
-  public static Map<Integer, OGCGeometry> unionLocal(
-      Path shapeFile, Path categoryFile) throws IOException {
-    long t1 = System.currentTimeMillis();
-    // 1- Build a hashtable of categories (given their size is small)
-    Map<Integer, Integer> idToCategory = new HashMap<Integer, Integer>();
-    readCategories(categoryFile, idToCategory);
-    long t2 = System.currentTimeMillis();
+  public static OGCGeometry unionLocal(Path shapeFile)
+      throws IOException {
+    // Read shapes from the shape file and relate each one to a category
     
-    // 2- Read shapes from the shape file and relate each one to a category
-    
-    // Prepare a hash that stores shapes in each category
-    Map<Integer, Vector<OGCGeometry>> categoryShapes =
-      new HashMap<Integer, Vector<OGCGeometry>>();
+    // Prepare a hash that stores all shapes
+    Vector<OGCGeometry> shapes = new Vector<OGCGeometry>();
     
     FileSystem fs1 = shapeFile.getFileSystem(new Configuration());
     long file_size1 = fs1.getFileStatus(shapeFile).getLen();
@@ -228,92 +157,24 @@ public class Union {
     OGCShape shape = new OGCShape();
 
     while (shapeReader.next(cellInfo, shape)) {
-      int shape_zip = Integer.parseInt(shape.getExtra().split(",", 7)[5]);
-      Integer category = idToCategory.get(shape_zip);
-      if (category != null) {
-        Vector<OGCGeometry> geometries = categoryShapes.get(category);
-        if (geometries == null) {
-          geometries = new Vector<OGCGeometry>();
-          categoryShapes.put(category, geometries);
-        }
-        geometries.add(shape.getGeom());
-      }
+      shapes.add(shape.getGeom());
     }
-    
     shapeReader.close();
-    long t3 = System.currentTimeMillis();
 
-    // 3- Find the union of each category
-    Map<Integer, OGCGeometry> final_result = new HashMap<Integer, OGCGeometry>();
-    for (Map.Entry<Integer, Vector<OGCGeometry>> category :
-          categoryShapes.entrySet()) {
-      if (!category.getValue().isEmpty()) {
-        OGCGeometryCollection geom_collection = new OGCConcreteGeometryCollection(category.getValue(),
-            category.getValue().firstElement().esriSR);
-        OGCGeometry union = geom_collection.union(category.getValue().firstElement());
-        final_result.put(category.getKey(), union);
-        // Free up some memory
-        category.getValue().clear();
-      }
-    }
-    long t4 = System.currentTimeMillis();
+    // Find the union of all shapes
+    OGCGeometryCollection all_geoms = new OGCConcreteGeometryCollection(shapes,
+        shapes.firstElement().getEsriSpatialReference());
 
-    System.out.println("Time reading categories: "+(t2-t1)+" millis");
-    System.out.println("Time reading records: "+(t3-t2)+" millis");
-    System.out.println("Time union categories: "+(t4-t3)+" millis");
-
-    return final_result;
+    OGCGeometry union = all_geoms.union(shapes.firstElement());
+    
+    return union;
   }
 
-  /**
-   * Read all categories from the category file
-   * @param categoryFile
-   * @param categoryShapes
-   * @param idToCategory
-   * @throws IOException
-   */
-  private static void readCategories(Path categoryFile,
-      Map<Integer, Integer> idToCategory) throws IOException {
-    Map<Integer, String> idToCatName = new HashMap<Integer, String>();
-    FileSystem fsCategory = FileSystem.getLocal(new Configuration());
-    long categoryFileSize = fsCategory.getFileStatus(categoryFile).getLen();
-    if (categoryFileSize > 1024*1024)
-      LOG.warn("Category file size is big: "+categoryFileSize);
-    InputStream inCategory = fsCategory.open(categoryFile);
-    LineRecordReader lineReader = new LineRecordReader(inCategory, 0,
-        categoryFileSize, new Configuration());
-    LongWritable lineOffset = lineReader.createKey();
-    Text line = lineReader.createValue();
-    
-    Set<String> catNames = new TreeSet<String>();
-    
-    while (lineReader.next(lineOffset, line)) {
-      int shape_id = TextSerializerHelper.consumeInt(line, ',');
-      String cat_name = line.toString();
-      catNames.add(cat_name);
-      idToCatName.put(shape_id, cat_name);
-    }
-
-    lineReader.close();
-    
-    // Change category names to numbers
-    Map<String, Integer> cat_name_to_id = new HashMap<String, Integer>();
-    int cat_id = 0;
-    for (String cat_name : catNames) {
-      cat_name_to_id.put(cat_name, cat_id++);
-    }
-    
-    for (Map.Entry<Integer, String> entry : idToCatName.entrySet()) {
-      idToCategory.put(entry.getKey(), cat_name_to_id.get(entry.getValue()));
-    }
-  }
-  
   private static void printUsage() {
-    System.out.println("Finds the union of all shapes in a file according to some category.");
-    System.out.println("The output is a list of categories with the union of all shapes in each category.");
+    System.out.println("Finds the union of all shapes in the input file.");
+    System.out.println("The output is one shape that represents the union of all shapes in input file.");
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<shape file>: (*) Path to file that contains all shapes");
-    System.out.println("<category file>: (*) Path to a file that contains the category of each shape");
     System.out.println("<output file>: (*) Path to output file.");
   }
 
@@ -327,7 +188,7 @@ public class Union {
     Path[] allFiles = cla.getPaths();
     boolean local = cla.isLocal();
     boolean overwrite = cla.isOverwrite();
-    if (allFiles.length < 2) {
+    if (allFiles.length == 0) {
       printUsage();
       throw new RuntimeException("Illegal arguments. Input file missing");
     }
@@ -343,12 +204,9 @@ public class Union {
 
     long t1 = System.currentTimeMillis();
     if (local) {
-      Map<Integer, OGCGeometry> union = unionLocal(allFiles[0], allFiles[1]);
-//    for (Map.Entry<Text, Geometry> category : union.entrySet()) {
-//      System.out.println(category.getValue().toText()+","+category);
-//    }
+      unionLocal(allFiles[0]);
     } else {
-      unionMapReduce(allFiles[0], allFiles[1], allFiles[2], overwrite);
+      unionMapReduce(allFiles[0], allFiles[1], overwrite);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");

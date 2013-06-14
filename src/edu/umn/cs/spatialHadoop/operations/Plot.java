@@ -45,7 +45,6 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
@@ -77,7 +76,7 @@ public class Plot {
     public void configure(JobConf job) {
       try {
         super.configure(job);
-        cellInfos = GridOutputFormat.getCells(job);
+        cellInfos = SpatialSite.getCells(job);
       } catch (IOException e) {
         e.printStackTrace();
       }
@@ -311,7 +310,7 @@ public class Plot {
     }
     
     // Set cell information in the job configuration to be used by the mapper
-    GridOutputFormat.setCells(job, cellInfos);
+    SpatialSite.setCells(job, cellInfos);
     
     // Adjust width and height to maintain aspect ratio
     if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {

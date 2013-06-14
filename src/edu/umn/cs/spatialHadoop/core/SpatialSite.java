@@ -2,12 +2,16 @@ package edu.umn.cs.spatialHadoop.core;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.filecache.DistributedCache;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -16,6 +20,7 @@ import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.Decompressor;
+import org.apache.hadoop.mapred.JobConf;
 
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
@@ -63,6 +68,11 @@ public class SpatialSite {
    * in a field (e.g. localIndexType).
    */
   public static final long RTreeFileMarker = -0x00012345678910L;
+  
+  public static final String OUTPUT_CELLS = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.CellsInfo";
+  public static final String OVERWRITE = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.Overwrite";
+  public static final String RTREE = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.RTree";
+
   
   private static final CompressionCodecFactory compressionCodecs =
       new CompressionCodecFactory(new Configuration());
@@ -232,4 +242,41 @@ public class SpatialSite {
     return cellSet.toArray(new CellInfo[cellSet.size()]);
 
   }
+  
+  public static void setCells(JobConf job, CellInfo[] cellsInfo) throws IOException {
+    File tempFile = File.createTempFile(job.getJobName(), "cells");
+    FSDataOutputStream out = FileSystem.getLocal(job).create(new Path(tempFile.getPath()));
+    out.writeInt(cellsInfo.length);
+    for (CellInfo cell : cellsInfo) {
+      cell.write(out);
+    }
+    out.close();
+
+    DistributedCache.addCacheFile(tempFile.toURI(), job);
+    job.set(OUTPUT_CELLS, tempFile.getName());
+  }
+  
+  public static CellInfo[] getCells(JobConf job) throws IOException {
+    CellInfo[] cells = null;
+    String cells_file = job.get(OUTPUT_CELLS);
+    if (cells_file != null) {
+      Path[] cacheFiles = DistributedCache.getLocalCacheFiles(job);
+      for (Path cacheFile : cacheFiles) {
+        if (cacheFile.getName().equals(cells_file)) {
+          FSDataInputStream in = FileSystem.getLocal(job).open(cacheFile);
+          
+          int cellCount = in.readInt();
+          cells = new CellInfo[cellCount];
+          for (int i = 0; i < cellCount; i++) {
+            cells[i] = new CellInfo();
+            cells[i].readFields(in);
+          }
+          
+          in.close();
+        }
+      }
+    }
+    return cells;
+  }
+
 }

@@ -13,7 +13,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * @author aseldawy
  *
  */
-public class Point implements Shape {
+public class Point implements Shape, Comparable<Point> {
 	public double x;
 	public double y;
 
@@ -107,6 +107,19 @@ public class Point implements Shape {
   public void fromText(Text text) {
     x = TextSerializerHelper.consumeDouble(text, ',');
     y = TextSerializerHelper.consumeDouble(text, '\0');
+  }
+
+  @Override
+  public int compareTo(Point o) {
+    if (x < o.x)
+      return -1;
+    if (x > o.x)
+      return 1;
+    if (y < o.y)
+      return -1;
+    if (y > o.y)
+      return 1;
+    return 0;
   }
 
 }

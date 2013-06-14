@@ -71,7 +71,7 @@ public class Repartition {
     @Override
     public void configure(JobConf job) {
       try {
-        cellInfos = GridOutputFormat.getCells(job);
+        cellInfos = SpatialSite.getCells(job);
         super.configure(job);
       } catch (IOException e) {
         e.printStackTrace();
@@ -247,8 +247,8 @@ public class Repartition {
 
     if (blockSize != 0)
       job.setLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE, blockSize);
-    GridOutputFormat.setCells(job, cellInfos);
-    job.setBoolean(GridOutputFormat.OVERWRITE, overwrite);
+    SpatialSite.setCells(job, cellInfos);
+    job.setBoolean(SpatialSite.OVERWRITE, overwrite);
   
     JobClient.runJob(job);
     

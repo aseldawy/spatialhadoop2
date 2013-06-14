@@ -99,7 +99,7 @@ public class SJMR {
       try {
         super.configure(job);
         // Retrieve cells to use for partitioning
-        cellInfos = GridOutputFormat.getCells(job);
+        cellInfos = SpatialSite.getCells(job);
         // Create a stock shape for deserializing lines
         shape = SpatialSite.createStockShape(job);
         // Get input paths to determine file index for every record
@@ -148,7 +148,7 @@ public class SJMR {
     public void configure(JobConf job) {
       try {
         super.configure(job);
-        cellInfos = GridOutputFormat.getCells(job);
+        cellInfos = SpatialSite.getCells(job);
         shape = (S) SpatialSite.createStockShape(job);
         inputFileCount = FileInputFormat.getInputPaths(job).length;
       } catch (IOException e) {
@@ -263,7 +263,7 @@ public class SJMR {
     int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath));
     gridInfo.calculateCellDimensions(num_cells);
     cellsInfo = gridInfo.getAllCells();
-    GridOutputFormat.setCells(job, cellsInfo);
+    SpatialSite.setCells(job, cellsInfo);
     
     TextOutputFormat.setOutputPath(job, outputPath);
     

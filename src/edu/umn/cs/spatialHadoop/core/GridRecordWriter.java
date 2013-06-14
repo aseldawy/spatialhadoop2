@@ -89,26 +89,33 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       outDir.getFileSystem(job != null? job : new Configuration());
     this.outDir = outDir;
     this.jobConf = job;
-    // Make sure cellIndex maps to array index. This is necessary for calls that
-    // call directly write(int, Text)
-    int highest_index = 0;
     
-    for (CellInfo cell : cells) {
-      if (cell.cellId > highest_index)
-        highest_index = (int) cell.cellId;
+    if (cells != null) {
+      // Make sure cellIndex maps to array index. This is necessary for calls that
+      // call directly write(int, Text)
+      int highest_index = 0;
+      
+      for (CellInfo cell : cells) {
+        if (cell.cellId > highest_index)
+          highest_index = (int) cell.cellId;
+      }
+      
+      // Create a master file that contains meta information about partitions
+      masterFile = fileSystem.create(getFilePath("_master"));
+      
+      this.cells = new CellInfo[highest_index + 1];
+      for (CellInfo cell : cells)
+        this.cells[(int) cell.cellId] = cell;
+      
+      // Prepare arrays that hold cells information
+      intermediateCellStreams = new OutputStream[this.cells.length];
+      intermediateCellPath = new Path[this.cells.length];
+      cellMbr = new Rectangle[this.cells.length];
+    } else {
+      intermediateCellStreams = new OutputStream[1];
+      intermediateCellPath = new Path[1];
+      cellMbr = new Rectangle[1];
     }
-    
-    // Create a master file that contains meta information about partitions
-    masterFile = fileSystem.create(getFilePath("_master"));
-
-    this.cells = new CellInfo[highest_index + 1];
-    for (CellInfo cell : cells)
-      this.cells[(int) cell.cellId] = cell;
-    
-    // Prepare arrays that hold cells information
-    intermediateCellStreams = new OutputStream[this.cells.length];
-    intermediateCellPath = new Path[this.cells.length];
-    cellMbr = new Rectangle[this.cells.length];
 
     this.blockSize = job == null ? fileSystem.getDefaultBlockSize(this.outDir) :
       job.getLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE,
@@ -139,10 +146,16 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
 
   @Override
   public synchronized void write(NullWritable dummy, S shape) throws IOException {
-    Rectangle mbr = shape.getMBR();
-    for (int cellIndex = 0; cellIndex < cells.length; cellIndex++) {
-      if (mbr.isIntersected(cells[cellIndex])) {
-        writeInternal(cellIndex, shape);
+    if (cells == null) {
+      // No cells. Write to the only stream open to this file
+      writeInternal(0, shape);
+    } else {
+      // Check which cells should contain the given shape
+      Rectangle mbr = shape.getMBR();
+      for (int cellIndex = 0; cellIndex < cells.length; cellIndex++) {
+        if (mbr.isIntersected(cells[cellIndex])) {
+          writeInternal(cellIndex, shape);
+        }
       }
     }
   }
@@ -205,8 +218,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     if (intermediateCellStreams[cellIndex] == null) {
       // For grid file, we write directly to the final file
       intermediateCellPath[cellIndex] = getFinalCellPath(cellIndex);
-      intermediateCellStreams[cellIndex] = createFinalCellStream(
-          intermediateCellPath[cellIndex], cells[cellIndex]);
+      intermediateCellStreams[cellIndex] = createFinalCellStream(intermediateCellPath[cellIndex]);
     }
     return intermediateCellStreams[cellIndex];
   }
@@ -217,10 +229,10 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @return
    * @throws IOException 
    */
-  protected OutputStream createFinalCellStream(Path cellFilePath, CellInfo cellInfo)
+  protected OutputStream createFinalCellStream(Path cellFilePath)
       throws IOException {
     OutputStream cellStream;
-    boolean isCompressed = FileOutputFormat.getCompressOutput(jobConf);
+    boolean isCompressed = jobConf != null && FileOutputFormat.getCompressOutput(jobConf);
     
     if (!isCompressed) {
       // Create new file
@@ -256,13 +268,15 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     // Write an entry to the master file
 
     // Write a line to the master file including file name and cellInfo
-    Rectangle cell = cells[cellIndex];
-    if (pack)
-      cell = cell.getIntersection(cellMbr[cellIndex]);
-    Partition partition = new Partition(finalCellPath.getName(), cell);
-    Text line = partition.toText(new Text());
-    masterFile.write(line.getBytes(), 0, line.getLength());
-    masterFile.write(NEW_LINE);
+    if (cells != null) {
+      Rectangle cell = cells[cellIndex];
+      if (pack)
+        cell = cell.getIntersection(cellMbr[cellIndex]);
+      Partition partition = new Partition(finalCellPath.getName(), cell);
+      Text line = partition.toText(new Text());
+      masterFile.write(line.getBytes(), 0, line.getLength());
+      masterFile.write(NEW_LINE);
+    }
 
     cellMbr[cellIndex] = null;
   }
@@ -290,7 +304,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    */
   public synchronized void close(Progressable progressable) throws IOException {
     // Close all output files
-    for (int cellIndex = 0; cellIndex < cells.length; cellIndex++) {
+    for (int cellIndex = 0; cellIndex < intermediateCellStreams.length; cellIndex++) {
       if (intermediateCellStreams[cellIndex] != null) {
         closeCell(cellIndex);
       }
@@ -298,12 +312,14 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       if (progressable != null)
         progressable.progress();
     }
-    masterFile.close();
-    
-    // Plot an overview of the partitions to an image
-    int imageSize = (int) (300 * Math.sqrt(cells.length));
-    Plot.plot(getFilePath("_master"), getFilePath("_partitions.png"), new Partition(),
-        imageSize, imageSize, false, false, false, false);
+    if (masterFile != null) {
+      masterFile.close();
+      
+      // Plot an overview of the partitions to an image
+      int imageSize = (int) (300 * Math.sqrt(cells.length));
+      Plot.plot(getFilePath("_master"), getFilePath("_partitions.png"), new Partition(),
+          imageSize, imageSize, false, false, false, false);
+    }
   }
 
   /**
@@ -319,7 +335,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     do {
       String filename = counter == 0 ? String.format("data_%05d", cellIndex)
           : String.format("data_%05d_%d", cellIndex, counter);
-      boolean isCompressed = FileOutputFormat.getCompressOutput(jobConf);
+      boolean isCompressed = jobConf != null && FileOutputFormat.getCompressOutput(jobConf);
       if (isCompressed) {
         Class<? extends CompressionCodec> codecClass =
             FileOutputFormat.getOutputCompressorClass(jobConf, GzipCodec.class);

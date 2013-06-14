@@ -115,7 +115,7 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     // It should create a new stream
     Path finalCellPath = getFinalCellPath(cellIndex);
     DataOutputStream cellStream =
-      (DataOutputStream) createFinalCellStream(finalCellPath, cells[cellIndex]);
+      (DataOutputStream) createFinalCellStream(finalCellPath);
     cellStream.writeLong(SpatialSite.RTreeFileMarker);
     int degree = 4096 / RTree.NodeSize;
     rtree.bulkLoadWrite(cellData, 0, cellData.length, degree, cellStream,
