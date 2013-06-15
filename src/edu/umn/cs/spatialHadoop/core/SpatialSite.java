@@ -15,6 +15,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
@@ -159,10 +160,19 @@ public class SpatialSite {
 
   public static GlobalIndex<Partition> getGlobalIndex(FileSystem fs,
       Path dir) throws IOException {
-    Path masterFile = new Path(dir, "_master");
+    // Retrieve the master file (the only file with the name _master in it)
+    FileStatus[] masterFiles = fs.listStatus(dir, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.getName().contains("_master");
+      }
+    });
     // Check if the given file is indexed
-    if (!fs.exists(masterFile))
+    if (masterFiles.length == 0)
       return null;
+    if (masterFiles.length > 1)
+      throw new RuntimeException("Found more than one master file in "+dir);
+    Path masterFile = masterFiles[0].getPath();
     ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(
         fs.open(masterFile), 0, fs.getFileStatus(masterFile).getLen());
     CellInfo dummy = new CellInfo();
@@ -173,6 +183,7 @@ public class SpatialSite {
     }
     GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
     globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
+    globalIndex.setCompact(masterFile.getName().endsWith("rtree"));
     return globalIndex;
   }
 

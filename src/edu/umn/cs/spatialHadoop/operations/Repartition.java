@@ -214,7 +214,8 @@ public class Repartition {
     job.setMapOutputValueClass(stockShape.getClass());
     ShapeInputFormat.setInputPaths(job, inFile);
     job.setInputFormat(ShapeInputFormat.class);
-    job.setBoolean(SpatialSite.PACK_CELLS, gindex != null && gindex.equals("rtree"));
+    boolean pack = gindex != null && gindex.equals("rtree");
+    job.setBoolean(SpatialSite.PACK_CELLS, pack);
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
@@ -259,7 +260,7 @@ public class Repartition {
         return path.getName().contains("_master");
       }
     });
-    Path destPath = new Path(outPath, "_master");
+    Path destPath = new Path(outPath, "_master" + (pack? ".rtree" : ".grid"));
     OutputStream destOut = outFs.create(destPath);
     byte[] buffer = new byte[4096];
     for (FileStatus f : resultFiles) {

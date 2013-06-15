@@ -147,17 +147,17 @@ public class Skyline {
                        (r1.x1 >= r2.x2 && r1.y2 >= r2.y2) :
                        (r1.x1 >= r2.x2 && r1.y1 >= r2.y2);
     case MaxMin:
-      return compact ? (r1.x2 >= r2.x2 && r1.y1 <= r2.y2) ||
-                       (r1.x1 >= r2.x2 && r1.y2 <= r2.y2) :
-                       (r1.x1 >= r2.x2 && r1.y1 <= r2.y2);
+      return compact ? (r1.x2 >= r2.x2 && r1.y2 <= r2.y1) ||
+                       (r1.x1 >= r2.x2 && r1.y1 <= r2.y1) :
+                       (r1.x1 >= r2.x2 && r1.y2 <= r2.y1);
     case MinMax:
-      return compact ? (r1.x2 <= r2.x2 && r1.y1 >= r2.y2) ||
-                       (r1.x1 <= r2.x2 && r1.y2 >= r2.y2) :
-                       (r1.x1 <= r2.x2 && r1.y1 >= r2.y2);
+      return compact ? (r1.x2 <= r2.x1 && r1.y2 >= r2.y2) ||
+                       (r1.x1 <= r2.x1 && r1.y2 >= r2.y2) :
+                       (r1.x2 <= r2.x1 && r1.y1 >= r2.y2);
     case MinMin:
-      return compact ? (r1.x2 <= r2.x2 && r1.y1 <= r2.y2) ||
-                       (r1.x1 <= r2.x2 && r1.y2 <= r2.y2) :
-                       (r1.x1 <= r2.x2 && r1.y1 <= r2.y2);
+      return compact ? (r1.x2 <= r2.x1 && r1.y1 <= r2.y1) ||
+                       (r1.x1 <= r2.x1 && r1.y2 <= r2.y1) :
+                       (r1.x2 <= r2.x1 && r1.y2 <= r2.y1);
     default: throw new RuntimeException("Unknown direction: "+dir);
     }
   }

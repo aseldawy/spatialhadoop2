@@ -25,6 +25,9 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
   
   /**All underlying shapes in no specific order*/
   protected S[] shapes;
+
+  /**Whether partitions in this global index are compact (minimal) or not*/
+  private boolean compact;
   
   public GlobalIndex() {
   }
@@ -227,6 +230,10 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
    * @return
    */
   public boolean isCompact() {
-    return false;
+    return this.compact;
+  }
+
+  public void setCompact(boolean compact) {
+    this.compact = compact;
   }
 }

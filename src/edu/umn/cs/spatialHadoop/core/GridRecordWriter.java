@@ -101,7 +101,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       }
       
       // Create a master file that contains meta information about partitions
-      masterFile = fileSystem.create(getFilePath("_master"));
+      masterFile = fileSystem.create(getMasterFilePath());
       
       this.cells = new CellInfo[highest_index + 1];
       for (CellInfo cell : cells)
@@ -122,6 +122,10 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
             fileSystem.getDefaultBlockSize(this.outDir));
     
     text = new Text();
+  }
+
+  protected Path getMasterFilePath() throws IOException {
+    return getFilePath("_master"+(pack? ".rtree" : ".grid"));
   }
   
   /**
@@ -317,7 +321,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       
       // Plot an overview of the partitions to an image
       int imageSize = (int) (300 * Math.sqrt(cells.length));
-      Plot.plot(getFilePath("_master"), getFilePath("_partitions.png"), new Partition(),
+      Plot.plot(getMasterFilePath(), getFilePath("_partitions.png"), new Partition(),
           imageSize, imageSize, false, false, false, false);
     }
   }
