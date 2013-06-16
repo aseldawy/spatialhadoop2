@@ -1,13 +1,9 @@
 package edu.umn.cs.spatialHadoop.operations;
 
-import java.awt.Graphics;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Vector;
-
-import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -260,8 +256,8 @@ public class Repartition {
         return path.getName().contains("_master");
       }
     });
-    Path destPath = new Path(outPath, "_master" + (pack? ".rtree" : ".grid"));
-    OutputStream destOut = outFs.create(destPath);
+    Path masterPath = new Path(outPath, "_master" + (pack? ".rtree" : ".grid"));
+    OutputStream destOut = outFs.create(masterPath);
     byte[] buffer = new byte[4096];
     for (FileStatus f : resultFiles) {
       InputStream in = outFs.open(f.getPath());
@@ -276,33 +272,10 @@ public class Repartition {
     }
     destOut.close();
     
-    // Overlay all partition images into one image
-    resultFiles = outFs.listStatus(outPath, new PathFilter() {
-      @Override
-      public boolean accept(Path path) {
-        return path.getName().contains("_partitions");
-      }
-    });
-    destPath = new Path(outPath, "_partitions.png");
-    BufferedImage destImage = null;
-    for (FileStatus f : resultFiles) {
-      InputStream in = outFs.open(f.getPath());
-      BufferedImage oneImage = ImageIO.read(in);
-      
-      if (destImage == null) {
-        destImage = oneImage;
-      } else {
-        Graphics g = destImage.getGraphics();
-        g.drawImage(oneImage, 0, 0, null);
-        g.dispose();
-      }
-      
-      in.close();
-      outFs.delete(f.getPath(), false);
-    }
-    destOut = outFs.create(destPath);
-    ImageIO.write(destImage, "png", destOut);
-    destOut.close();
+    // Plot an image for the partitions used in file
+    Path imagePath = new Path(outPath, "_partitions.png");
+    int imageSize = (int) (Math.sqrt(cellInfos.length) * 300);
+    Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, false, false, false, false);
   }
 
   public static <S extends Shape> CellInfo[] packInRectangles(

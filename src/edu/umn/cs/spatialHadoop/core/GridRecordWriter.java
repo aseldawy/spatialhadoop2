@@ -18,8 +18,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
 
-import edu.umn.cs.spatialHadoop.operations.Plot;
-
 /**
  * Writes a spatial file where objects are of type S.
  * @author Ahmed Eldawy
@@ -316,14 +314,8 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       if (progressable != null)
         progressable.progress();
     }
-    if (masterFile != null) {
+    if (masterFile != null)
       masterFile.close();
-      
-      // Plot an overview of the partitions to an image
-      int imageSize = (int) (300 * Math.sqrt(cells.length));
-      Plot.plot(getMasterFilePath(), getFilePath("_partitions.png"), new Partition(),
-          imageSize, imageSize, false, false, false, false);
-    }
   }
 
   /**
