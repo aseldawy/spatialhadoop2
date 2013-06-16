@@ -2,12 +2,13 @@ package edu.umn.cs.spatialHadoop.core;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -31,6 +32,8 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
  *
  */
 public class SpatialSite {
+  
+  private static final Log LOG = LogFactory.getLog(SpatialSite.class);
 
   /**Enforce static only calls*/
   private SpatialSite() {}
@@ -255,15 +258,19 @@ public class SpatialSite {
   }
   
   public static void setCells(JobConf job, CellInfo[] cellsInfo) throws IOException {
-    File tempFile = File.createTempFile(job.getJobName(), "cells");
-    FSDataOutputStream out = FileSystem.getLocal(job).create(new Path(tempFile.getPath()));
+    Path tempFile;
+    FileSystem fs = FileSystem.get(job);
+    do {
+      tempFile = new Path(job.getJobName()+"_"+(int)(Math.random()*1000000)+".cells");
+    } while (fs.exists(tempFile));
+    FSDataOutputStream out = fs.create(tempFile);
     out.writeInt(cellsInfo.length);
     for (CellInfo cell : cellsInfo) {
       cell.write(out);
     }
     out.close();
 
-    DistributedCache.addCacheFile(tempFile.toURI(), job);
+    DistributedCache.addCacheFile(tempFile.toUri(), job);
     job.set(OUTPUT_CELLS, tempFile.getName());
   }
   
@@ -273,7 +280,7 @@ public class SpatialSite {
     if (cells_file != null) {
       Path[] cacheFiles = DistributedCache.getLocalCacheFiles(job);
       for (Path cacheFile : cacheFiles) {
-        if (cacheFile.getName().equals(cells_file)) {
+        if (cacheFile.getName().contains(cells_file)) {
           FSDataInputStream in = FileSystem.getLocal(job).open(cacheFile);
           
           int cellCount = in.readInt();
