@@ -28,7 +28,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 /**
  * Generates a random file of rectangles or points based on some user
  * parameters
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class RandomSpatialGenerator {
@@ -41,6 +41,12 @@ public class RandomSpatialGenerator {
       e.printStackTrace();
     }
   }
+  
+  public enum DistributionType {
+    UNIFORM, GAUSSIAN, CORRELATED, ANTI_CORRELATED
+  }
+
+  public final static double rho = 0.9;
   
   /**
    * Generates a grid file in the output file system. This function uses
@@ -65,9 +71,9 @@ public class RandomSpatialGenerator {
    * @throws IOException
    */
   public static void generateGridFile(FileSystem outFS, Path outFilePath,
-      Shape shape, final long totalSize, final Rectangle mbr, int rectSize,
-      long seed,
-      long blocksize, String gindex, String lindex, boolean overwrite) throws IOException {
+      Shape shape, final long totalSize, final Rectangle mbr,
+      DistributionType type, int rectSize, long seed, long blocksize,
+      String gindex, String lindex, boolean overwrite) throws IOException {
     if (outFS.exists(outFilePath)) {
       if (overwrite) {
         outFS.delete(outFilePath, true);
@@ -115,12 +121,10 @@ public class RandomSpatialGenerator {
     if (rectSize == 0)
       rectSize = 100;
     
-    int minPoints = 3, maxPoints = 5;
-    
     long t1 = System.currentTimeMillis();
     while (true) {
       // Generate a random rectangle
-      generateShape(shape, mbr, rectSize, random, minPoints, maxPoints);
+      generateShape(shape, mbr, type, rectSize, random);
 
       // Serialize it to text first to make it easy count its size
       text.clear();
@@ -151,8 +155,9 @@ public class RandomSpatialGenerator {
    * @throws IOException 
    */
   public static void generateHeapFile(FileSystem outFS, Path outputFilePath,
-      Shape shape, long totalSize, Rectangle mbr, int rectSize, long seed,
-      long blocksize, boolean overwrite) throws IOException {
+      Shape shape, long totalSize, Rectangle mbr, DistributionType type,
+      int rectSize, long seed, long blocksize, boolean overwrite)
+      throws IOException {
     OutputStream out = null;
     if (blocksize == 0 && outFS != null)
       blocksize = outFS.getDefaultBlockSize(outputFilePath);
@@ -166,15 +171,12 @@ public class RandomSpatialGenerator {
     Random random = new Random(seed);
     Text text = new Text();
     
-    // Range for number of points to generate in case of polygons (inclusive)
-    int minPoints = 3, maxPoints = 5;
-    
     if (rectSize == 0)
       rectSize = 100;
     long t1 = System.currentTimeMillis();
     while (true) {
       // Generate a random rectangle
-      generateShape(shape, mbr, rectSize, random, minPoints, maxPoints);
+      generateShape(shape, mbr, type, rectSize, random);
       
       // Serialize it to text first to make it easy count its size
       text.clear();
@@ -203,11 +205,10 @@ public class RandomSpatialGenerator {
     }
   }
 
-  private static void generateShape(Shape shape, Rectangle mbr, int rectSize,
-      Random random, int minPoints, int maxPoints) {
+  private static void generateShape(Shape shape, Rectangle mbr,
+      DistributionType type, int rectSize, Random random) {
     if (shape instanceof Point) {
-      ((Point)shape).x = random.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
-      ((Point)shape).y = random.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1;
+      generatePoint((Point)shape, mbr, type, random);
     } else if (shape instanceof Rectangle) {
       ((Rectangle)shape).x1 = random.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
       ((Rectangle)shape).y1 = random.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1;
@@ -215,6 +216,31 @@ public class RandomSpatialGenerator {
       ((Rectangle)shape).y2 = Math.min(mbr.y2, ((Rectangle)shape).y1 + random.nextInt(rectSize) + 2);
     } else {
       throw new RuntimeException("Cannot generate random shapes of type: "+shape.getClass());
+    }
+  }
+  
+  public static void generatePoint(Point p, Rectangle mbr, DistributionType type, Random rand) {
+    switch (type) {
+    case UNIFORM:
+      p.x = rand.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
+      p.y = rand.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1; 
+      break;
+    case GAUSSIAN:
+      p.x = rand.nextGaussian() * (mbr.x2 - mbr.x1) + mbr.x1;
+      p.y = rand.nextGaussian() * (mbr.y2 - mbr.y1) + mbr.y1;
+      break;
+    case CORRELATED:
+      double x = rand.nextGaussian(), y = rho * x + Math.sqrt(1 - rho * rho) * rand.nextGaussian();
+      p.x = x * (mbr.x2 - mbr.x1) + mbr.x1;
+      p.y = y * (mbr.y2 - mbr.y1) + mbr.y1;
+      break;
+    case ANTI_CORRELATED:
+      x = rand.nextGaussian(); y = rho * x + Math.sqrt(1 - rho * rho) * rand.nextGaussian();
+      p.x = x * (mbr.x2 - mbr.x1) + mbr.x1;
+      p.y = -y * (mbr.y2 - mbr.y1) + mbr.y2;
+      break;
+    default:
+      break;
     }
   }
   
@@ -257,8 +283,23 @@ public class RandomSpatialGenerator {
     String gindex = cla.getGIndex();
     String lindex = cla.getLIndex();
     boolean overwrite = cla.isOverwrite();
-
     
+    DistributionType type = DistributionType.UNIFORM;
+    String strType = cla.get("type").toLowerCase();
+    if (strType.startsWith("uni"))
+      type = DistributionType.UNIFORM;
+    else if (strType.startsWith("gaus"))
+      type = DistributionType.GAUSSIAN;
+    else if (strType.startsWith("cor"))
+      type = DistributionType.CORRELATED;
+    else if (strType.startsWith("anti"))
+      type = DistributionType.ANTI_CORRELATED;
+    else {
+      System.err.println("Unknown distribution type: "+cla.get("type"));
+      printUsage();
+      return;
+    }
+
     if (outputFile != null) {
       System.out.print("Generating a file ");
       System.out.print("with gindex:"+gindex+" ");
@@ -268,9 +309,9 @@ public class RandomSpatialGenerator {
       System.out.println("In the range: " + mbr);
     }
     if (gindex == null && lindex == null)
-      generateHeapFile(fs, outputFile, stockShape, totalSize, mbr, rectSize, seed, blocksize, overwrite);
+      generateHeapFile(fs, outputFile, stockShape, totalSize, mbr, type, rectSize, seed, blocksize, overwrite);
     else
-      generateGridFile(fs, outputFile, stockShape, totalSize, mbr, rectSize, seed, blocksize, gindex, lindex, overwrite);
+      generateGridFile(fs, outputFile, stockShape, totalSize, mbr, type, rectSize, seed, blocksize, gindex, lindex, overwrite);
   }
 
 }

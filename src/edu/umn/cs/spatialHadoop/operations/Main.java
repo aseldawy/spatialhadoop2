@@ -44,10 +44,16 @@ public class Main {
           "Generates a random file containing spatial data");
 
       pgd.addClass("union", Union.class,
-          "Computes the union of categorized shapes");
+          "Computes the union of input shapes");
 
       pgd.addClass("plot", Plot.class,
           "Plots a file to an image");
+
+      pgd.addClass("skyline", Skyline.class,
+          "Computes the skyline of an input set of points");
+      
+      pgd.addClass("convexhull", ConvexHull.class,
+          "Computes the convex hull of an input set of points");
 
       pgd.driver(args);
       

@@ -387,7 +387,10 @@ public class Skyline {
       }
     }    
     
+    long t1 = System.currentTimeMillis();
     skylineMapReduce(inFile, outFile, dir, cla.isOverwrite());
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time: "+(t2-t1)+" millis");
   }
   
 }

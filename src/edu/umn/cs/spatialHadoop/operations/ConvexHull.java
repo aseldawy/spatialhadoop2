@@ -290,7 +290,10 @@ public class ConvexHull {
       return;
     }
     
+    long t1 = System.currentTimeMillis();
     convexHullMapReduce(inFile, outFile, cla.isOverwrite());
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time: "+(t2-t1)+" millis");
   }
   
 }
