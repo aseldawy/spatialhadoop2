@@ -199,15 +199,8 @@ public class SpatialSite {
     Path fileToCheck;
     if (file.isDir()) {
       // Check any cell (e.g., first cell)
-      InputStream in = fs.open(new Path(path, "_master"));
-      ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(in, 0, Long.MAX_VALUE);
-      Partition first_partition = new Partition();
-      if (!reader.next(new CellInfo(), first_partition)) {
-        in.close();
-        throw new RuntimeException("Cannot find any partitions in "+path);
-      }
-      in.close();
-      fileToCheck = new Path(path, first_partition.filename);
+      GlobalIndex<Partition> gIndex = getGlobalIndex(fs, path);
+      fileToCheck = new Path(path, gIndex.iterator().next().filename);
     } else {
       fileToCheck = file.getPath();
     }
