@@ -351,7 +351,7 @@ public class DistributedJoin {
 
     job.setInputFormat(DJInputFormatArray.class);
     job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
-    job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
+    SpatialSite.setShapeClass(job, stockShape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
     String commaSeparatedFiles = "";

@@ -241,7 +241,7 @@ public class ClosestPair {
 
 		job.setInputFormat(ShapeArrayInputFormat.class);
 //		job.setInputFormat(ShapeInputFormat.class);
-		job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
+		SpatialSite.setShapeClass(job, stockShape.getClass());
 		ShapeInputFormat.setInputPaths(job, file);
 
 		job.setOutputFormat(TextOutputFormat.class);

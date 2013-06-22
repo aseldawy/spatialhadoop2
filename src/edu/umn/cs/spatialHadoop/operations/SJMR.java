@@ -235,7 +235,7 @@ public class SJMR {
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
 
     job.setInputFormat(ShapeLineInputFormat.class);
-    job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
+    SpatialSite.setShapeClass(job, stockShape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
     String commaSeparatedFiles = "";

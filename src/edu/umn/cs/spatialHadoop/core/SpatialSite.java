@@ -33,6 +33,7 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
  */
 public class SpatialSite {
   
+  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(SpatialSite.class);
 
   /**Enforce static only calls*/
@@ -50,8 +51,7 @@ public class SpatialSite {
       "spatialHadoop.storage.RTreeBuildMode";
   
   /**Configuration line to set the default shape class to use if not set*/
-  public static final String SHAPE_CLASS =
-      "SpatialSite.ShapeClass";
+  public static final String ShapeClass = "SpatialSite.ShapeClass";
   
   /**Configuration line name for replication overhead*/
   public static final String INDEXING_OVERHEAD =
@@ -113,6 +113,14 @@ public class SpatialSite {
     }
   }
   
+  public static void setShapeClass(Configuration conf, Class<? extends Shape> klass) {
+    conf.setClass(ShapeClass, klass, Shape.class);
+  }
+  
+  public static Class<? extends Shape> getShapeClass(Configuration conf) {
+    return conf.getClass(ShapeClass, Point.class, Shape.class);
+  }
+  
   /**
    * Creates a stock shape according to the given configuration
    * @param job
@@ -120,13 +128,9 @@ public class SpatialSite {
    */
   public static Shape createStockShape(Configuration job) {
     Shape stockShape = null;
-    String shapeClassName = job.get(SHAPE_CLASS, Point.class.getName());
     try {
-      Class<? extends Shape> shapeClass =
-          Class.forName(shapeClassName).asSubclass(Shape.class);
+      Class<? extends Shape> shapeClass = getShapeClass(job);
       stockShape = shapeClass.newInstance();
-    } catch (ClassNotFoundException e) {
-      e.printStackTrace();
     } catch (InstantiationException e) {
       e.printStackTrace();
     } catch (IllegalAccessException e) {

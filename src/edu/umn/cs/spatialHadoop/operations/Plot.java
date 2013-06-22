@@ -287,7 +287,7 @@ public class Plot {
     job.setReducerClass(PlotReduce.class);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
     job.setMapOutputKeyClass(CellInfo.class);
-    job.set(SpatialSite.SHAPE_CLASS, shape.getClass().getName());
+    SpatialSite.setShapeClass(job, shape.getClass());
     job.setMapOutputValueClass(shape.getClass());
     
     FileSystem inFs = inFile.getFileSystem(job);

@@ -27,10 +27,11 @@ import com.esri.core.geometry.ogc.OGCGeometryCollection;
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.OGCShape;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.operations.CatUnion.UnionMapper;
 
 /**
  * Computes the union of all shapes in a given input file.
@@ -39,21 +40,22 @@ import edu.umn.cs.spatialHadoop.operations.CatUnion.UnionMapper;
  *
  */
 public class Union {
+  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(Union.class);
   
   static class IdentityMapper extends MapReduceBase
-      implements Mapper<CellInfo, OGCShape, NullWritable, OGCShape> {
+      implements Mapper<Rectangle, OGCShape, NullWritable, OGCShape> {
 
     private static final NullWritable dummy = NullWritable.get(); 
     
     @Override
-    public void map(CellInfo key, OGCShape s,
+    public void map(Rectangle key, OGCShape s,
         OutputCollector<NullWritable, OGCShape> output, Reporter reporter)
         throws IOException {
       output.collect(dummy, s);
     }
   }
-  
+
   /**
    * Reduce function takes a category and union all shapes in that category
    * @author eldawy
@@ -116,7 +118,7 @@ public class Union {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
     
-    job.setMapperClass(UnionMapper.class);
+    job.setMapperClass(IdentityMapper.class);
     job.setCombinerClass(UnionReducer.class);
     job.setReducerClass(UnionReducer.class);
     
@@ -125,6 +127,7 @@ public class Union {
 
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
+    SpatialSite.setShapeClass(job, OGCShape.class);
     TextInputFormat.addInputPath(job, shapeFile);
     
     job.setOutputFormat(TextOutputFormat.class);

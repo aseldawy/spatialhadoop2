@@ -258,7 +258,7 @@ public class ConvexHull {
     job.setOutputKeyClass(NullWritable.class);
     job.setOutputValueClass(Point.class);
     job.setInputFormat(ShapeInputFormat.class);
-    job.set(SpatialSite.SHAPE_CLASS, Point.class.getName());
+    SpatialSite.setShapeClass(job, Point.class);
     ShapeInputFormat.addInputPath(job, inFile);
     job.setOutputFormat(GridOutputFormat2.class);
     GridOutputFormat2.setOutputPath(job, outPath);
