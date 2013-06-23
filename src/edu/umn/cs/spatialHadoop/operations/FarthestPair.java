@@ -170,6 +170,9 @@ public class FarthestPair {
     
     JobClient.runJob(job);
     
+    // If outputPath not set by user, automatically delete it
+    if (userOutPath == null)
+      outFs.delete(outPath, true);
   }
   
   private static void printUsage() {

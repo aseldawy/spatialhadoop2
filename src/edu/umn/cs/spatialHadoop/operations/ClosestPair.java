@@ -273,6 +273,8 @@ public class ClosestPair {
 
 		// Submit the job
 		JobClient.runJob(job);
+		
+    outFs.delete(outputPath, true);
 	}
 
 	private static void printUsage() {

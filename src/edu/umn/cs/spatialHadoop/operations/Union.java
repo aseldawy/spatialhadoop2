@@ -135,6 +135,10 @@ public class Union {
 
     // Start job
     JobClient.runJob(job);
+    
+    // TODO If outputPath not set by user, automatically delete it
+//    if (userOutputPath == null)
+//      outFs.delete(outputPath, true);
   }
 
   /**

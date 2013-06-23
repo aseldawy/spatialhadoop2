@@ -264,7 +264,10 @@ public class ConvexHull {
     GridOutputFormat2.setOutputPath(job, outPath);
     
     JobClient.runJob(job);
-    
+   
+    // If outputPath not set by user, automatically delete it
+    if (userOutPath == null)
+      outFs.delete(outPath, true);
   }
   
   private static void printUsage() {

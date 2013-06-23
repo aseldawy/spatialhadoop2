@@ -266,6 +266,8 @@ public class SpatialSite {
       cell.write(out);
     }
     out.close();
+    
+    fs.deleteOnExit(tempFile);
 
     DistributedCache.addCacheFile(tempFile.toUri(), job);
     job.set(OUTPUT_CELLS, tempFile.getName());
