@@ -218,31 +218,42 @@ public class RandomSpatialGenerator {
       throw new RuntimeException("Cannot generate random shapes of type: "+shape.getClass());
     }
   }
+  // The standard deviation is 0.2
+  public static double nextGaussian(Random rand) {
+    double res = 0;
+    do {
+      res = rand.nextGaussian() / 5.0;
+    } while(res < -1 || res > 1);
+    return res;
+  }
   
   public static void generatePoint(Point p, Rectangle mbr, DistributionType type, Random rand) {
+    double x, y;
     switch (type) {
     case UNIFORM:
       p.x = rand.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
       p.y = rand.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1; 
       break;
     case GAUSSIAN:
-      p.x = rand.nextGaussian() * (mbr.x2 - mbr.x1) + mbr.x1;
-      p.y = rand.nextGaussian() * (mbr.y2 - mbr.y1) + mbr.y1;
+      p.x = nextGaussian(rand) * (mbr.x2 - mbr.x1) / 2.0 + (mbr.x1 + mbr.x2) / 2.0;
+      p.y = nextGaussian(rand) * (mbr.y2 - mbr.y1) / 2.0 + (mbr.y1 + mbr.y2) / 2.0;
       break;
     case CORRELATED:
-      double x = rand.nextGaussian(), y = rho * x + Math.sqrt(1 - rho * rho) * rand.nextGaussian();
-      p.x = x * (mbr.x2 - mbr.x1) + mbr.x1;
-      p.y = y * (mbr.y2 - mbr.y1) + mbr.y1;
-      break;
     case ANTI_CORRELATED:
-      x = rand.nextGaussian(); y = rho * x + Math.sqrt(1 - rho * rho) * rand.nextGaussian();
-      p.x = x * (mbr.x2 - mbr.x1) + mbr.x1;
-      p.y = -y * (mbr.y2 - mbr.y1) + mbr.y2;
+      x = rand.nextDouble() * 2 - 1;
+      do {
+        y = rho * x + Math.sqrt(1 - rho * rho) * nextGaussian(rand);
+      } while(y < -1 || y > 1) ;
+      p.x = x * (mbr.x2 - mbr.x1) / 2.0 + (mbr.x1 + mbr.x2) / 2.0;
+      p.y = y * (mbr.y2 - mbr.y1) / 2.0 + (mbr.y1 + mbr.y2) / 2.0;
+      if (type == DistributionType.ANTI_CORRELATED)
+        p.y = mbr.y2 - (p.y - mbr.y1);
       break;
     default:
-      break;
+      throw new RuntimeException("Unrecognized distribution type: "+type);
     }
   }
+  
   
   private static void printUsage() {
     System.out.println("Generates a file with random shapes");
@@ -285,19 +296,23 @@ public class RandomSpatialGenerator {
     boolean overwrite = cla.isOverwrite();
     
     DistributionType type = DistributionType.UNIFORM;
-    String strType = cla.get("type").toLowerCase();
-    if (strType.startsWith("uni"))
-      type = DistributionType.UNIFORM;
-    else if (strType.startsWith("gaus"))
-      type = DistributionType.GAUSSIAN;
-    else if (strType.startsWith("cor"))
-      type = DistributionType.CORRELATED;
-    else if (strType.startsWith("anti"))
-      type = DistributionType.ANTI_CORRELATED;
-    else {
-      System.err.println("Unknown distribution type: "+cla.get("type"));
-      printUsage();
-      return;
+    String strType = cla.get("type");
+    if (strType != null) {
+      strType = strType.toLowerCase();
+      if (strType.startsWith("uni"))
+        type = DistributionType.UNIFORM;
+      else if (strType.startsWith("gaus"))
+        type = DistributionType.GAUSSIAN;
+      else if (strType.startsWith("cor"))
+        type = DistributionType.CORRELATED;
+      else if (strType.startsWith("anti"))
+        type = DistributionType.ANTI_CORRELATED;
+      else {
+        System.err.println("Unknown distribution type: "+cla.get("type"));
+        printUsage();
+        fs.close();
+        return;
+      }
     }
 
     if (outputFile != null) {
