@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Do not modify this file directly.  Instead, copy entries that you -->
+<!-- wish to modify from this file into spatial-site.xml and change them -->
+<!-- there.  If spatial-site.xml does not already exist, create it.      -->
+
+<configuration>
+
+<!--- global properties -->
+
+<property>
+  <name>spatialHadoop.storage.LocalIndexBlockSize</name>
+  <value>33554432</value>
+  <description>Default block size for building local indexes</description>
+</property>
+
+<property>
+  <name>spatialHadoop.storage.RTreeBuildMode</name>
+  <value>fast</value>
+  <description>Which mode to use when building the RTree. Could be "fast" or "light"</description>
+</property>
+
+<property>
+  <name>spatialHadoop.storage.IndexingOverhead</name>
+  <value>0.2</value>
+  <description>The recommended target overhead of indexing.
+  The system starts with this value as an initial guess but resulting file could grow larger.</description>
+</property>
+
+<property>
+  <name>spatialHadoop.storage.SampleRatio</name>
+  <value>0.1</value>
+  <description>Ratio of input file (in terms of records) to be sampled to
+  provide a big picture about data distribution when building a global index</description>
+</property>
+
+<property>
+  <name>spatialHadoop.storage.SampleSize</name>
+  <value>104857600</value>
+  <description>Maximum size (in bytes) of data to be sampled when building a
+  distribution-aware global index</description>
+</property>
+
+<property>
+  <name>spatialHadoop.mapred.MaxShapesPerRead</name>
+  <value>1000000</value>
+  <description>Maximum number of shapes to read in one read operation and
+  return when reading a file as an array</description>
+</property>
+
+<property>
+  <name>spatialHadoop.mapred.MaxBytesPerRead</name>
+  <value>33554432</value>
+  <description>Maximum size in bytes to be read in one shot when reading
+  a file as an array</description>
+</property>
+
+</configuration>
