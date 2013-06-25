@@ -408,7 +408,10 @@ public class Sampler {
     Random random = new Random(seed);
     long[] offsets = new long[count];
     for (int i = 0; i < offsets.length; i++) {
-      offsets[i] = Math.abs(random.nextLong()) % total_length;
+      if (total_length == 0)
+    	offsets[i] = 0;
+      else
+        offsets[i] = Math.abs(random.nextLong()) % total_length;
     }
     Arrays.sort(offsets);
 

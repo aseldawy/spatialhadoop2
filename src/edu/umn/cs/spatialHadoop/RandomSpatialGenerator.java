@@ -107,10 +107,10 @@ public class RandomSpatialGenerator {
     
     ShapeRecordWriter<Shape> recordWriter;
     if (lindex == null) {
-      recordWriter = new GridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gridInfo.equals("rtree"));
+      recordWriter = new GridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gindex.equals("rtree"));
       ((GridRecordWriter<Shape>)recordWriter).setBlockSize(blocksize);
     } else if (lindex.equals("rtree")) {
-      recordWriter = new RTreeGridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gridInfo.equals("rtree"));
+      recordWriter = new RTreeGridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gindex.equals("rtree"));
       recordWriter.setStockObject(shape);
       ((RTreeGridRecordWriter<Shape>)recordWriter).setBlockSize(blocksize);
     } else {
