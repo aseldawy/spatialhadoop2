@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.core;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -60,7 +61,16 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   protected OutputStream masterFile;
   
   /**New line marker to separate records*/
-  protected static final byte[] NEW_LINE = {'\n'};
+  protected static byte[] NEW_LINE;
+  
+  static {
+    try {
+      NEW_LINE = System.getProperty("line.separator").getBytes("utf-8");
+    } catch (UnsupportedEncodingException e) {
+      e.printStackTrace();
+    }
+  }
+
   
   /**A unique prefix to all files written by this writer*/
   protected String prefix;

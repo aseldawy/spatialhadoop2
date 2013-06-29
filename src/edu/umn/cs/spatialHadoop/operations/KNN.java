@@ -328,7 +328,7 @@ public class KNN {
     job.setReducerClass(KNNReduce.class);
     job.setNumReduceTasks(1);
     
-    job.set(SpatialSite.SHAPE_CLASS, shape.getClass().getName());
+    SpatialSite.setShapeClass(job, shape.getClass());
 
     RunningJob runningJob;
 

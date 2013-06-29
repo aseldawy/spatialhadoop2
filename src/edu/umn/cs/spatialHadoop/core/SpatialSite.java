@@ -33,6 +33,7 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
  */
 public class SpatialSite {
   
+  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(SpatialSite.class);
 
   /**Enforce static only calls*/
@@ -50,8 +51,7 @@ public class SpatialSite {
       "spatialHadoop.storage.RTreeBuildMode";
   
   /**Configuration line to set the default shape class to use if not set*/
-  public static final String SHAPE_CLASS =
-      "SpatialSite.ShapeClass";
+  public static final String ShapeClass = "SpatialSite.ShapeClass";
   
   /**Configuration line name for replication overhead*/
   public static final String INDEXING_OVERHEAD =
@@ -113,6 +113,14 @@ public class SpatialSite {
     }
   }
   
+  public static void setShapeClass(Configuration conf, Class<? extends Shape> klass) {
+    conf.setClass(ShapeClass, klass, Shape.class);
+  }
+  
+  public static Class<? extends Shape> getShapeClass(Configuration conf) {
+    return conf.getClass(ShapeClass, Point.class, Shape.class);
+  }
+  
   /**
    * Creates a stock shape according to the given configuration
    * @param job
@@ -120,13 +128,9 @@ public class SpatialSite {
    */
   public static Shape createStockShape(Configuration job) {
     Shape stockShape = null;
-    String shapeClassName = job.get(SHAPE_CLASS, Point.class.getName());
     try {
-      Class<? extends Shape> shapeClass =
-          Class.forName(shapeClassName).asSubclass(Shape.class);
+      Class<? extends Shape> shapeClass = getShapeClass(job);
       stockShape = shapeClass.newInstance();
-    } catch (ClassNotFoundException e) {
-      e.printStackTrace();
     } catch (InstantiationException e) {
       e.printStackTrace();
     } catch (IllegalAccessException e) {
@@ -167,7 +171,7 @@ public class SpatialSite {
     FileStatus[] masterFiles = fs.listStatus(dir, new PathFilter() {
       @Override
       public boolean accept(Path path) {
-        return path.getName().contains("_master");
+        return path.getName().contains("_master.grid");
       }
     });
     // Check if the given file is indexed
@@ -195,15 +199,8 @@ public class SpatialSite {
     Path fileToCheck;
     if (file.isDir()) {
       // Check any cell (e.g., first cell)
-      InputStream in = fs.open(new Path(path, "_master"));
-      ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(in, 0, Long.MAX_VALUE);
-      Partition first_partition = new Partition();
-      if (!reader.next(new CellInfo(), first_partition)) {
-        in.close();
-        throw new RuntimeException("Cannot find any partitions in "+path);
-      }
-      in.close();
-      fileToCheck = new Path(path, first_partition.filename);
+      GlobalIndex<Partition> gIndex = getGlobalIndex(fs, path);
+      fileToCheck = new Path(path, gIndex.iterator().next().filename);
     } else {
       fileToCheck = file.getPath();
     }
@@ -269,6 +266,8 @@ public class SpatialSite {
       cell.write(out);
     }
     out.close();
+    
+    fs.deleteOnExit(tempFile);
 
     DistributedCache.addCacheFile(tempFile.toUri(), job);
     job.set(OUTPUT_CELLS, tempFile.getName());

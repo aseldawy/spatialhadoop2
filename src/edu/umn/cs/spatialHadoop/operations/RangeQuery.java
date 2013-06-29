@@ -193,7 +193,7 @@ public class RangeQuery {
     job.set(QUERY_SHAPE, queryShape.toText(new Text()).toString());
     
     // Set shape class for the SpatialInputFormat
-    job.set(SpatialSite.SHAPE_CLASS, shape.getClass().getName());
+    SpatialSite.setShapeClass(job, shape.getClass());
     
     job.setOutputFormat(TextOutputFormat.class);
     

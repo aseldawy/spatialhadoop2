@@ -12,7 +12,6 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -32,13 +31,13 @@ public class ShapeArrayRecordReader extends SpatialRecordReader<Rectangle, Array
   public ShapeArrayRecordReader(CombineFileSplit split, Configuration conf,
       Reporter reporter, Integer index) throws IOException {
     super(split, conf, reporter, index);
-    shapeClass = getShapeClass(conf);
+    shapeClass = SpatialSite.getShapeClass(conf);
   }
   
   public ShapeArrayRecordReader(Configuration job, FileSplit split)
       throws IOException {
     super(job, split);
-    shapeClass = getShapeClass(job);
+    shapeClass = SpatialSite.getShapeClass(job);
   }
 
   public ShapeArrayRecordReader(InputStream is, long offset, long endOffset)
@@ -64,16 +63,4 @@ public class ShapeArrayRecordReader extends SpatialRecordReader<Rectangle, Array
     return new ArrayWritable(shapeClass);
   }
   
-  private Class<? extends Shape> getShapeClass(Configuration job) {
-    String shapeClassName =
-        job.get(SpatialSite.SHAPE_CLASS, Point.class.getName());
-    try {
-      Class<? extends Shape> shapeClass =
-          Class.forName(shapeClassName).asSubclass(Shape.class);
-      return shapeClass;
-    } catch (ClassNotFoundException e) {
-      e.printStackTrace();
-    }
-    return null;
-  }
 }

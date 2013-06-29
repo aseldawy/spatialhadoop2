@@ -10,7 +10,6 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 
-import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -32,13 +31,13 @@ public class ShapeRecordReader<S extends Shape>
   public ShapeRecordReader(Configuration job, FileSplit split)
       throws IOException {
     super(job, split);
-    stockShape = createStockShape(job);
+    stockShape = (S) SpatialSite.createStockShape(job);
   }
 
   public ShapeRecordReader(CombineFileSplit split, Configuration conf,
       Reporter reporter, Integer index) throws IOException {
     super(split, conf, reporter, index);
-    stockShape = createStockShape(conf);
+    stockShape = (S) SpatialSite.createStockShape(conf);
   }
   
   public ShapeRecordReader(InputStream in, long offset, long endOffset)
@@ -60,25 +59,6 @@ public class ShapeRecordReader<S extends Shape>
 
   @Override
   public S createValue() {
-    return stockShape;
-  }
-
-  @SuppressWarnings("unchecked")
-  private S createStockShape(Configuration job) {
-    S stockShape = null;
-    String shapeClassName =
-        job.get(SpatialSite.SHAPE_CLASS, Point.class.getName());
-    try {
-      Class<? extends Shape> shapeClass =
-          Class.forName(shapeClassName).asSubclass(Shape.class);
-      stockShape = (S) shapeClass.newInstance();
-    } catch (ClassNotFoundException e) {
-      e.printStackTrace();
-    } catch (InstantiationException e) {
-      e.printStackTrace();
-    } catch (IllegalAccessException e) {
-      e.printStackTrace();
-    }
     return stockShape;
   }
 }

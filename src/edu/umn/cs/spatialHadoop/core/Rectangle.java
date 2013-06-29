@@ -133,6 +133,43 @@ public class Rectangle implements Shape {
     
     return Math.min(dx, dy);
   }
+  
+  public double getMinDistance(Rectangle r2) {
+    // dx is the horizontal gap between the two rectangles. If their x ranges
+    // overlap, dx is zero
+    double dx = 0;
+    if (r2.x1 > this.x2)
+      dx = r2.x1 - this.x2;
+    else if (this.x1 > r2.x2)
+      dx = this.x1 - r2.x2;
+
+    double dy = 0;
+    if (r2.y1 > this.y2)
+      dy = r2.y1 - this.y2;
+    else if (this.y1 > r2.y2)
+      dy = this.y1 - r2.y2;
+
+    // Case 1: Overlapping rectangles
+    if (dx == 0 && dy == 0)
+      return 0;
+    
+    // Case 2: Overlapping in one dimension only
+    if (dx == 0 || dy == 0)
+      return dx + dy;
+    
+    // Case 3: Not overlapping in any dimension
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  
+  public double getMaxDistance(Rectangle r2) {
+    double xmin = Math.min(this.x1, r2.x1);
+    double xmax = Math.max(this.x2, r2.x2);
+    double ymin = Math.min(this.y1, r2.y1);
+    double ymax = Math.max(this.y2, r2.y2);
+    double dx = xmax - xmin;
+    double dy = ymax - ymin;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
 
   @Override
   public Rectangle clone() {
@@ -147,10 +184,10 @@ public class Rectangle implements Shape {
   public boolean isIntersected(Shape s) {
     if (s instanceof Point) {
       Point pt = (Point)s;
-      return pt.x >= x1 && pt.x < x2 && pt.y >= y1 && pt.y < y2;
+      return pt.x >= x1 && pt.x <= x2 && pt.y >= y1 && pt.y <= y2;
     }
     Rectangle r = s.getMBR();
-    return (this.x2 > r.x1 && r.x2 > this.x1 && this.y2 > r.y1 && r.y2 > this.y1);
+    return (this.x2 >= r.x1 && r.x2 >= this.x1 && this.y2 >= r.y1 && r.y2 >= this.y1);
   }
 
   public Rectangle getIntersection(Shape s) {

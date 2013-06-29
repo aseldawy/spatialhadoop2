@@ -28,7 +28,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 /**
  * Generates a random file of rectangles or points based on some user
  * parameters
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class RandomSpatialGenerator {
@@ -41,6 +41,12 @@ public class RandomSpatialGenerator {
       e.printStackTrace();
     }
   }
+  
+  public enum DistributionType {
+    UNIFORM, GAUSSIAN, CORRELATED, ANTI_CORRELATED
+  }
+
+  public final static double rho = 0.9;
   
   /**
    * Generates a grid file in the output file system. This function uses
@@ -65,9 +71,9 @@ public class RandomSpatialGenerator {
    * @throws IOException
    */
   public static void generateGridFile(FileSystem outFS, Path outFilePath,
-      Shape shape, final long totalSize, final Rectangle mbr, int rectSize,
-      long seed,
-      long blocksize, String gindex, String lindex, boolean overwrite) throws IOException {
+      Shape shape, final long totalSize, final Rectangle mbr,
+      DistributionType type, int rectSize, long seed, long blocksize,
+      String gindex, String lindex, boolean overwrite) throws IOException {
     if (outFS.exists(outFilePath)) {
       if (overwrite) {
         outFS.delete(outFilePath, true);
@@ -101,10 +107,10 @@ public class RandomSpatialGenerator {
     
     ShapeRecordWriter<Shape> recordWriter;
     if (lindex == null) {
-      recordWriter = new GridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gridInfo.equals("rtree"));
+      recordWriter = new GridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gindex.equals("rtree"));
       ((GridRecordWriter<Shape>)recordWriter).setBlockSize(blocksize);
     } else if (lindex.equals("rtree")) {
-      recordWriter = new RTreeGridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gridInfo.equals("rtree"));
+      recordWriter = new RTreeGridRecordWriter<Shape>(outFilePath, null, null, cellInfo, gindex.equals("rtree"));
       recordWriter.setStockObject(shape);
       ((RTreeGridRecordWriter<Shape>)recordWriter).setBlockSize(blocksize);
     } else {
@@ -115,12 +121,10 @@ public class RandomSpatialGenerator {
     if (rectSize == 0)
       rectSize = 100;
     
-    int minPoints = 3, maxPoints = 5;
-    
     long t1 = System.currentTimeMillis();
     while (true) {
       // Generate a random rectangle
-      generateShape(shape, mbr, rectSize, random, minPoints, maxPoints);
+      generateShape(shape, mbr, type, rectSize, random);
 
       // Serialize it to text first to make it easy count its size
       text.clear();
@@ -151,8 +155,9 @@ public class RandomSpatialGenerator {
    * @throws IOException 
    */
   public static void generateHeapFile(FileSystem outFS, Path outputFilePath,
-      Shape shape, long totalSize, Rectangle mbr, int rectSize, long seed,
-      long blocksize, boolean overwrite) throws IOException {
+      Shape shape, long totalSize, Rectangle mbr, DistributionType type,
+      int rectSize, long seed, long blocksize, boolean overwrite)
+      throws IOException {
     OutputStream out = null;
     if (blocksize == 0 && outFS != null)
       blocksize = outFS.getDefaultBlockSize(outputFilePath);
@@ -166,15 +171,12 @@ public class RandomSpatialGenerator {
     Random random = new Random(seed);
     Text text = new Text();
     
-    // Range for number of points to generate in case of polygons (inclusive)
-    int minPoints = 3, maxPoints = 5;
-    
     if (rectSize == 0)
       rectSize = 100;
     long t1 = System.currentTimeMillis();
     while (true) {
       // Generate a random rectangle
-      generateShape(shape, mbr, rectSize, random, minPoints, maxPoints);
+      generateShape(shape, mbr, type, rectSize, random);
       
       // Serialize it to text first to make it easy count its size
       text.clear();
@@ -203,11 +205,10 @@ public class RandomSpatialGenerator {
     }
   }
 
-  private static void generateShape(Shape shape, Rectangle mbr, int rectSize,
-      Random random, int minPoints, int maxPoints) {
+  private static void generateShape(Shape shape, Rectangle mbr,
+      DistributionType type, int rectSize, Random random) {
     if (shape instanceof Point) {
-      ((Point)shape).x = random.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
-      ((Point)shape).y = random.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1;
+      generatePoint((Point)shape, mbr, type, random);
     } else if (shape instanceof Rectangle) {
       ((Rectangle)shape).x1 = random.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
       ((Rectangle)shape).y1 = random.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1;
@@ -217,6 +218,42 @@ public class RandomSpatialGenerator {
       throw new RuntimeException("Cannot generate random shapes of type: "+shape.getClass());
     }
   }
+  // The standard deviation is 0.2
+  public static double nextGaussian(Random rand) {
+    double res = 0;
+    do {
+      res = rand.nextGaussian() / 5.0;
+    } while(res < -1 || res > 1);
+    return res;
+  }
+  
+  public static void generatePoint(Point p, Rectangle mbr, DistributionType type, Random rand) {
+    double x, y;
+    switch (type) {
+    case UNIFORM:
+      p.x = rand.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
+      p.y = rand.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1; 
+      break;
+    case GAUSSIAN:
+      p.x = nextGaussian(rand) * (mbr.x2 - mbr.x1) / 2.0 + (mbr.x1 + mbr.x2) / 2.0;
+      p.y = nextGaussian(rand) * (mbr.y2 - mbr.y1) / 2.0 + (mbr.y1 + mbr.y2) / 2.0;
+      break;
+    case CORRELATED:
+    case ANTI_CORRELATED:
+      x = rand.nextDouble() * 2 - 1;
+      do {
+        y = rho * x + Math.sqrt(1 - rho * rho) * nextGaussian(rand);
+      } while(y < -1 || y > 1) ;
+      p.x = x * (mbr.x2 - mbr.x1) / 2.0 + (mbr.x1 + mbr.x2) / 2.0;
+      p.y = y * (mbr.y2 - mbr.y1) / 2.0 + (mbr.y1 + mbr.y2) / 2.0;
+      if (type == DistributionType.ANTI_CORRELATED)
+        p.y = mbr.y2 - (p.y - mbr.y1);
+      break;
+    default:
+      throw new RuntimeException("Unrecognized distribution type: "+type);
+    }
+  }
+  
   
   private static void printUsage() {
     System.out.println("Generates a file with random shapes");
@@ -257,8 +294,27 @@ public class RandomSpatialGenerator {
     String gindex = cla.getGIndex();
     String lindex = cla.getLIndex();
     boolean overwrite = cla.isOverwrite();
-
     
+    DistributionType type = DistributionType.UNIFORM;
+    String strType = cla.get("type");
+    if (strType != null) {
+      strType = strType.toLowerCase();
+      if (strType.startsWith("uni"))
+        type = DistributionType.UNIFORM;
+      else if (strType.startsWith("gaus"))
+        type = DistributionType.GAUSSIAN;
+      else if (strType.startsWith("cor"))
+        type = DistributionType.CORRELATED;
+      else if (strType.startsWith("anti"))
+        type = DistributionType.ANTI_CORRELATED;
+      else {
+        System.err.println("Unknown distribution type: "+cla.get("type"));
+        printUsage();
+        fs.close();
+        return;
+      }
+    }
+
     if (outputFile != null) {
       System.out.print("Generating a file ");
       System.out.print("with gindex:"+gindex+" ");
@@ -268,9 +324,9 @@ public class RandomSpatialGenerator {
       System.out.println("In the range: " + mbr);
     }
     if (gindex == null && lindex == null)
-      generateHeapFile(fs, outputFile, stockShape, totalSize, mbr, rectSize, seed, blocksize, overwrite);
+      generateHeapFile(fs, outputFile, stockShape, totalSize, mbr, type, rectSize, seed, blocksize, overwrite);
     else
-      generateGridFile(fs, outputFile, stockShape, totalSize, mbr, rectSize, seed, blocksize, gindex, lindex, overwrite);
+      generateGridFile(fs, outputFile, stockShape, totalSize, mbr, type, rectSize, seed, blocksize, gindex, lindex, overwrite);
   }
 
 }

@@ -126,7 +126,7 @@ public class FileMBR {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     
     job.setInputFormat(ShapeInputFormat.class);
-    job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
+    SpatialSite.setShapeClass(job, stockShape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
     ShapeInputFormat.setInputPaths(job, file);

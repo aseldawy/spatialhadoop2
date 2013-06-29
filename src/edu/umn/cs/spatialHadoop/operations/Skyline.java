@@ -336,13 +336,16 @@ public class Skyline {
     job.setOutputKeyClass(NullWritable.class);
     job.setOutputValueClass(Point.class);
     job.setInputFormat(ShapeInputFormat.class);
-    job.set(SpatialSite.SHAPE_CLASS, Point.class.getName());
+    SpatialSite.setShapeClass(job, Point.class);
     ShapeInputFormat.addInputPath(job, inFile);
     job.setOutputFormat(GridOutputFormat2.class);
     GridOutputFormat2.setOutputPath(job, outPath);
     
     JobClient.runJob(job);
     
+    // If outputPath not set by user, automatically delete it
+    if (userOutPath == null)
+      outFs.delete(outPath, true);
   }
   
   private static void printUsage() {
@@ -387,7 +390,10 @@ public class Skyline {
       }
     }    
     
+    long t1 = System.currentTimeMillis();
     skylineMapReduce(inFile, outFile, dir, cla.isOverwrite());
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time: "+(t2-t1)+" millis");
   }
   
 }

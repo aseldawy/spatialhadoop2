@@ -220,7 +220,7 @@ public class Repartition {
     job.setNumReduceTasks(Math.max(1, (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10));
   
     // Set default parameters for reading input file
-    job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
+    SpatialSite.setShapeClass(job, stockShape.getClass());
   
     FileOutputFormat.setOutputPath(job,outPath);
     if (lindex == null) {

@@ -3,6 +3,8 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -24,11 +26,13 @@ import org.apache.hadoop.mapred.TextOutputFormat;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 public class ClosestPair {
 	private static final NullWritable Dummy = NullWritable.get();
@@ -159,6 +163,7 @@ public class ClosestPair {
 				if (p.y > y2) y2 = p.y;
 			}
 			
+			Arrays.sort(a);
 			DistanceAndPair delta = nearestNeighbor(a, tmp, 0, a.length - 1);
 			int cnt = 0;
 			for (int i=0; i<a.length; i++) {
@@ -202,11 +207,30 @@ public class ClosestPair {
 			Point a[] = new Point[buffer.size()];
 			Point tmp[] = new Point[buffer.size()];
 			a = buffer.toArray(a);
+			Arrays.sort(a);
 			DistanceAndPair delta1 = nearestNeighbor(a, tmp, 0, a.length - 1);
 			
 			if (delta == null || delta1.distance < delta.distance) delta = delta1;
 			out.collect(Dummy, delta);
 		}
+	}
+	
+	public static <S extends Shape> void closestPairLocal(FileSystem fs,
+			Path file, S stockShape) throws IOException {
+		ShapeRecordReader<S> reader = new ShapeRecordReader<S>(fs.open(file), 0, fs.getFileStatus(file).getLen());
+		Rectangle rect = new Rectangle();
+		ArrayList<Shape> cb = new ArrayList<Shape>();
+		while (reader.next(rect, stockShape)){
+			cb.add(stockShape.clone());
+		}
+		System.out.println("here");
+		Shape []a = cb.toArray(new Point[cb.size()]);
+		Point []tmp = new Point[cb.size()];
+		Arrays.sort(a);
+		System.out.println("preprocessing is done.");
+		
+		DistanceAndPair delta = nearestNeighbor(a, tmp, 0, a.length - 1);
+		System.out.println(delta);
 	}
 	
 	/**
@@ -218,7 +242,7 @@ public class ClosestPair {
 	 * @return
 	 * @throws IOException 
 	 */
-	public static <S extends Shape> void cloesetPair(FileSystem fs,
+	public static <S extends Shape> void closestPair(FileSystem fs,
 			Path file, S stockShape) throws IOException {
 		// Try to get file MBR from the MBRs of blocks
 		JobConf job = new JobConf(ClosestPair.class);
@@ -241,7 +265,7 @@ public class ClosestPair {
 
 		job.setInputFormat(ShapeArrayInputFormat.class);
 //		job.setInputFormat(ShapeInputFormat.class);
-		job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
+		SpatialSite.setShapeClass(job, stockShape.getClass());
 		ShapeInputFormat.setInputPaths(job, file);
 
 		job.setOutputFormat(TextOutputFormat.class);
@@ -249,6 +273,8 @@ public class ClosestPair {
 
 		// Submit the job
 		JobClient.runJob(job);
+		
+    outFs.delete(outputPath, true);
 	}
 
 	private static void printUsage() {
@@ -273,7 +299,7 @@ public class ClosestPair {
 		}
 
 		Shape stockShape = new Point();
-		cloesetPair(fs, inputFile, stockShape);
+		closestPair(fs, inputFile, stockShape);
+//		closestPairLocal(fs, inputFile, stockShape);
 	}
 }
-
