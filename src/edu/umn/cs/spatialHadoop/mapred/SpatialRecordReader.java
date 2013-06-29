@@ -247,11 +247,9 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     if (Arrays.equals(buffer, SpatialSite.RTreeFileMarkerB)) {
       blockType = BlockType.RTREE;
       pos += 8;
-      LOG.info("Block is RTree indexed at position "+pos);
       // Ignore the signature
       buffer = null;
     } else {
-      LOG.info("Found a heap block at position "+pos);
       blockType = BlockType.HEAP;
       // The read buffer might contain some data that must be read
       // File is text file
@@ -289,7 +287,6 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
           pos += lineReader.readLine(tempLine, 0, (int)(end - pos));
         }
       }
-      LOG.info("After line skip: "+(buffer == null? 0 : buffer.length)+" bytes in buffer and pos="+pos);
     }
     
     

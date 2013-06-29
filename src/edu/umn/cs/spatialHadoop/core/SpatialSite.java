@@ -171,7 +171,7 @@ public class SpatialSite {
     FileStatus[] masterFiles = fs.listStatus(dir, new PathFilter() {
       @Override
       public boolean accept(Path path) {
-        return path.getName().contains("_master.grid");
+        return path.getName().contains("_master");
       }
     });
     // Check if the given file is indexed
