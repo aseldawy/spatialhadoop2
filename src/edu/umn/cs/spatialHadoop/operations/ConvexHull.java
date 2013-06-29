@@ -14,9 +14,11 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.Stack;
 import java.util.Vector;
@@ -150,6 +152,32 @@ public class ConvexHull {
   }
   
   /**
+   * Computes the convex hull by reading points from stream
+   */
+  public static void convexHullStream() {
+    Scanner scanner = new Scanner(System.in);
+    final int threshold = 50000000;
+    Point[] points = new Point[threshold];
+    int size = 0;
+    while (scanner.hasNext()) {
+      long id = scanner.nextLong();
+      double x = scanner.nextDouble();
+      double y = scanner.nextDouble();
+      points[size++] = new Point(x, y);
+      if (size >= threshold) {
+        Point[] ch = convexHull(points);
+        size = 0;
+        for (Point p : ch)
+          points[size++] = p;
+        System.err.println("Size: "+size);
+      }
+    }
+    Point[] actualPoints = new Point[size];
+    System.arraycopy(points, 0, actualPoints, 0, size);
+    convexHull(actualPoints);
+  }
+  
+  /**
    * Filters partitions to remove ones that do not contribute to answer.
    * A partition is pruned if it does not have any points in any of the four
    * skylines.
@@ -277,6 +305,13 @@ public class ConvexHull {
   
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
+    if (cla.isLocal() && cla.getPaths().length == 0) {
+      long t1 = System.currentTimeMillis();
+      convexHullStream();
+      long t2 = System.currentTimeMillis();
+      System.err.println("Total time for convex hull: "+(t2-t1)+" millis");
+      return;
+    }
     Path[] paths = cla.getPaths();
     if (paths.length == 0) {
       printUsage();
