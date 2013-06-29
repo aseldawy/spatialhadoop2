@@ -54,7 +54,6 @@ import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.operations.DistributedJoin.DJInputFormatArray.DJRecordReader;
 
 /**
  * Computes the farthest pair for a set of points
@@ -261,10 +260,9 @@ public class FarthestPair {
     @Override
     public RecordReader<PairWritable<Rectangle>, PairWritable<ArrayWritable>> getRecordReader(
         InputSplit split, JobConf job, Reporter reporter) throws IOException {
-      return new DJRecordReader(job, (CombineFileSplit)split);
+      return new FPRecordReader(job, (CombineFileSplit)split);
     }
   }
-  
   
   public static void farthestPairMapReduce(Path inFile, Path userOutPath,
       boolean overwrite) throws IOException {

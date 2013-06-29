@@ -55,6 +55,12 @@ public class Main {
       pgd.addClass("convexhull", ConvexHull.class,
           "Computes the convex hull of an input set of points");
 
+      pgd.addClass("farthestpair", FarthestPair.class,
+          "Computes the farthest pair of point of an input set of points");
+
+      pgd.addClass("closestpair", ClosestPair.class,
+          "Computes the closest pair of point of an input set of points");
+
       pgd.driver(args);
       
       // Success
