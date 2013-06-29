@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.Vector;
 
 import org.apache.hadoop.conf.Configuration;
@@ -243,7 +242,7 @@ public class ClosestPairHadoop {
 
 		job.setInputFormat(ShapeArrayInputFormat.class);
 //		job.setInputFormat(ShapeInputFormat.class);
-		job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
+		SpatialSite.setShapeClass(job, stockShape.getClass());
 		ShapeInputFormat.setInputPaths(job, file);
 		
 		job.setOutputFormat(TextOutputFormat.class);
@@ -267,7 +266,7 @@ public class ClosestPairHadoop {
 		
 		job.setInputFormat(ShapeArrayInputFormat.class);
 //		job.setInputFormat(ShapeInputFormat.class);
-		job.set(SpatialSite.SHAPE_CLASS, stockShape.getClass().getName());
+		SpatialSite.setShapeClass(job, stockShape.getClass());
 		ShapeInputFormat.setInputPaths(job, outputPath);  // The previous output is the current input
 		
 		Path newPath = new Path(outputPath.getName() + "_result");

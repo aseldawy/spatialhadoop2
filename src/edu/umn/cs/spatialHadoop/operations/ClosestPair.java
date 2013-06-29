@@ -299,7 +299,10 @@ public class ClosestPair {
 		}
 
 		Shape stockShape = new Point();
-		closestPair(fs, inputFile, stockShape);
+		if (SpatialSite.getGlobalIndex(fs, inputFile) != null)
+		  closestPair(fs, inputFile, stockShape);
+		else
+		  ClosestPairHadoop.cloesetPair(fs, inputFile, stockShape);
 //		closestPairLocal(fs, inputFile, stockShape);
 	}
 }
