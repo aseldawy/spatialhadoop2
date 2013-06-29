@@ -14,7 +14,6 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -160,7 +159,7 @@ public class ConvexHull {
     Point[] points = new Point[threshold];
     int size = 0;
     while (scanner.hasNext()) {
-      long id = scanner.nextLong();
+      /*long id = */scanner.nextLong();
       double x = scanner.nextDouble();
       double y = scanner.nextDouble();
       points[size++] = new Point(x, y);
