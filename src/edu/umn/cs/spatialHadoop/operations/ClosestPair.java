@@ -117,7 +117,7 @@ public class ClosestPair {
 		double medianX = ((Point)a[mid]).x;
 		DistanceAndPair delta1 = nearestNeighbor(a, tmp, l, mid);
 		DistanceAndPair delta2 = nearestNeighbor(a, tmp, mid + 1, r);
-		DistanceAndPair delta = delta1.distance < delta2.distance ? delta1 : delta2;
+		DistanceAndPair delta = delta1.distance < delta2.distance || delta2.pair.first == null ? delta1 : delta2;
 		int i = l, j = mid + 1, k = l;
 		
 		while (i <= mid && j <= r)
@@ -137,7 +137,7 @@ public class ClosestPair {
 		for (i=l; i<k; i++)
 			for (j=i+1; j<k; j++) {
 				if (tmp[j].y - tmp[i].y >= delta.distance) break;
-				else if (tmp[i].distanceTo(tmp[j]) < delta.distance) {
+				else if (tmp[i].distanceTo(tmp[j]) < delta.distance || delta.pair.first == null) {
 					delta.distance = tmp[i].distanceTo(tmp[j]);
 					delta.pair.first = tmp[i];
 					delta.pair.second = tmp[j];
