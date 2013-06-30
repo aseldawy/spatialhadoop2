@@ -152,7 +152,7 @@ public class CatUnion {
       Vector<OGCGeometry> shapes = new Vector<OGCGeometry>();
       while (shape_lines.hasNext()) {
         shape.fromText(shape_lines.next());
-        shapes.add(shape.getGeom());
+        shapes.add(shape.geom);
       }
       OGCGeometryCollection geo_collection = new OGCConcreteGeometryCollection(shapes,
           shapes.firstElement().getEsriSpatialReference());
@@ -245,7 +245,7 @@ public class CatUnion {
     OGCShape shape = new OGCShape();
 
     while (shapeReader.next(cellInfo, shape)) {
-      int shape_zip = Integer.parseInt(shape.getExtra().split(",", 7)[5]);
+      int shape_zip = Integer.parseInt(shape.extra.split(",", 7)[5]);
       Integer category = idToCategory.get(shape_zip);
       if (category != null) {
         Vector<OGCGeometry> geometries = categoryShapes.get(category);
@@ -253,7 +253,7 @@ public class CatUnion {
           geometries = new Vector<OGCGeometry>();
           categoryShapes.put(category, geometries);
         }
-        geometries.add(shape.getGeom());
+        geometries.add(shape.geom);
       }
     }
     

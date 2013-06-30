@@ -1,10 +1,8 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.Scanner;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -30,6 +28,7 @@ import com.esri.core.geometry.ogc.OGCGeometryCollection;
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.OGCShape;
+import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
@@ -47,13 +46,13 @@ public class Union {
   private static final Log LOG = LogFactory.getLog(Union.class);
   
   static class IdentityMapper extends MapReduceBase
-      implements Mapper<Rectangle, OGCShape, NullWritable, OGCShape> {
+      implements Mapper<Rectangle, OSMPolygon, NullWritable, OSMPolygon> {
 
     private static final NullWritable dummy = NullWritable.get(); 
     
     @Override
-    public void map(Rectangle key, OGCShape s,
-        OutputCollector<NullWritable, OGCShape> output, Reporter reporter)
+    public void map(Rectangle key, OSMPolygon s,
+        OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
         throws IOException {
       output.collect(dummy, s);
     }
@@ -65,16 +64,16 @@ public class Union {
    *
    */
   static class UnionReducer extends MapReduceBase
-      implements Reducer<NullWritable, OGCShape, NullWritable, OGCShape> {
+      implements Reducer<NullWritable, OSMPolygon, NullWritable, OSMPolygon> {
     
     @Override
-    public void reduce(NullWritable dummy, Iterator<OGCShape> shapes,
-        OutputCollector<NullWritable, OGCShape> output, Reporter reporter)
+    public void reduce(NullWritable dummy, Iterator<OSMPolygon> shapes,
+        OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
         throws IOException {
       Vector<OGCGeometry> shapes_list = new Vector<OGCGeometry>();
       while (shapes.hasNext()) {
-        OGCShape shape = shapes.next();
-        shapes_list.add(shape.getGeom());
+        OSMPolygon shape = shapes.next();
+        shapes_list.add(shape.geom);
       }
       OGCGeometryCollection geo_collection = new OGCConcreteGeometryCollection(
           shapes_list, shapes_list.firstElement().getEsriSpatialReference());
@@ -85,10 +84,10 @@ public class Union {
         OGCGeometryCollection union_shapes = (OGCGeometryCollection) union;
         for (int i_geom = 0; i_geom < union_shapes.numGeometries(); i_geom++) {
           OGCGeometry geom_n = union_shapes.geometryN(i_geom);
-          output.collect(dummy, new OGCShape(geom_n));
+          output.collect(dummy, new OSMPolygon(geom_n));
         }
       } else {
-        output.collect(dummy, new OGCShape(union));
+        output.collect(dummy, new OSMPolygon(union));
       }
     }
   }
@@ -126,11 +125,11 @@ public class Union {
     job.setReducerClass(UnionReducer.class);
     
     job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(OGCShape.class);
+    job.setMapOutputValueClass(OSMPolygon.class);
 
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, OGCShape.class);
+    SpatialSite.setShapeClass(job, OSMPolygon.class);
     TextInputFormat.addInputPath(job, shapeFile);
     
     job.setOutputFormat(TextOutputFormat.class);
@@ -171,16 +170,16 @@ public class Union {
   }
 
   
-  public static OGCGeometry unionStream() {
-    Scanner scanner = new Scanner(System.in);
+  public static <S extends OGCShape> OGCGeometry unionStream(S shape) throws IOException {
+    ShapeRecordReader<S> reader =
+        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
     final int threshold = 5000000;
     ArrayList<OGCGeometry> polygons = new ArrayList<OGCGeometry>();
-    while (scanner.hasNext()) {
-      /*long id = */scanner.nextLong();
-      String hex = scanner.next();
-      OGCGeometry geom = OGCGeometry.fromBinary(ByteBuffer.wrap(hexToBytes(hex)));
-      if (!geom.isEmpty())
-        polygons.add(geom.convexHull());
+    
+    Rectangle key = new Rectangle();
+
+    while (reader.next(key, shape)) {
+      polygons.add(shape.geom);
       if (polygons.size() >= threshold) {
         OGCGeometryCollection collection = new OGCConcreteGeometryCollection(polygons, polygons.get(0).esriSR);
         OGCGeometry union = collection.union(polygons.get(0));
@@ -212,13 +211,13 @@ public class Union {
     FileSystem fs1 = shapeFile.getFileSystem(new Configuration());
     long file_size1 = fs1.getFileStatus(shapeFile).getLen();
     
-    ShapeRecordReader<OGCShape> shapeReader =
-        new ShapeRecordReader<OGCShape>(fs1.open(shapeFile), 0, file_size1);
+    ShapeRecordReader<OSMPolygon> shapeReader =
+        new ShapeRecordReader<OSMPolygon>(fs1.open(shapeFile), 0, file_size1);
     CellInfo cellInfo = new CellInfo();
-    OGCShape shape = new OGCShape();
+    OSMPolygon shape = new OSMPolygon();
 
     while (shapeReader.next(cellInfo, shape)) {
-      shapes.add(shape.getGeom());
+      shapes.add(shape.geom);
     }
     shapeReader.close();
 
@@ -245,18 +244,18 @@ public class Union {
    */
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    if (cla.isLocal() && cla.getPaths().length == 0) {
-      long t1 = System.currentTimeMillis();
-      unionStream();
-      long t2 = System.currentTimeMillis();
-      System.err.println("Total time for union: "+(t2-t1)+" millis");
-      return;
-    }
     JobConf conf = new JobConf(Union.class);
     Path[] allFiles = cla.getPaths();
     boolean local = cla.isLocal();
     boolean overwrite = cla.isOverwrite();
     if (allFiles.length == 0) {
+      if (local) {
+        long t1 = System.currentTimeMillis();
+        unionStream((OGCShape)cla.getShape(true));
+        long t2 = System.currentTimeMillis();
+        System.err.println("Total time for union: "+(t2-t1)+" millis");
+        return;
+      }
       printUsage();
       throw new RuntimeException("Illegal arguments. Input file missing");
     }

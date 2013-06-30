@@ -163,6 +163,34 @@ public class Skyline {
   }
   
   /**
+   * Computes the skyline by reading points from stream
+   * @param p 
+   * @throws IOException 
+   */
+  public static <S extends Point> void skylineStream(S point, Direction dir) throws IOException {
+    ShapeRecordReader<S> reader =
+        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
+    final int threshold = 50000000;
+    Point[] points = new Point[threshold];
+    int size = 0;
+    
+    Rectangle key = new Rectangle();
+    while (reader.next(key, point)) {
+      points[size++] = point.clone();
+      if (size >= threshold) {
+        Point[] ch = skyline(points, dir);
+        size = 0;
+        for (Point p : ch)
+          points[size++] = p;
+        System.err.println("Size: "+size);
+      }
+    }
+    Point[] actualPoints = new Point[size];
+    System.arraycopy(points, 0, actualPoints, 0, size);
+    skyline(actualPoints, dir);
+  }
+  
+  /**
    * Computes the skyline of an input file using a single machine algorithm.
    * The output is written to the output file. If output file is null, the
    * output is just thrown away.
@@ -359,18 +387,6 @@ public class Skyline {
   
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    Path[] paths = cla.getPaths();
-    if (paths.length == 0) {
-      printUsage();
-      return;
-    }
-    Path inFile = paths[0];
-    Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = cla.isOverwrite();
-    if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
-      System.err.println("Output path already exists and overwrite flag is not set");
-      return;
-    }
     String strdir = cla.get("dir");
     Direction dir = Direction.MaxMax;
     if (strdir != null) {
@@ -389,6 +405,25 @@ public class Skyline {
         return;
       }
     }    
+    Path[] paths = cla.getPaths();
+    if (paths.length == 0) {
+      if (cla.isLocal()) {
+        long t1 = System.currentTimeMillis();
+        skylineStream((Point)cla.getShape(true), dir);
+        long t2 = System.currentTimeMillis();
+        System.out.println("Total time: "+(t2-t1)+" millis");
+      } else {
+        printUsage();
+      }
+      return;
+    }
+    Path inFile = paths[0];
+    Path outFile = paths.length > 1? paths[1] : null;
+    boolean overwrite = cla.isOverwrite();
+    if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
+      System.err.println("Output path already exists and overwrite flag is not set");
+      return;
+    }
     
     long t1 = System.currentTimeMillis();
     skylineMapReduce(inFile, outFile, dir, cla.isOverwrite());

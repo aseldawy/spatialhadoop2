@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.Scanner;
 import java.util.Set;
 import java.util.Stack;
 import java.util.Vector;
@@ -152,17 +151,19 @@ public class ConvexHull {
   
   /**
    * Computes the convex hull by reading points from stream
+   * @param point 
+   * @throws IOException 
    */
-  public static void convexHullStream() {
-    Scanner scanner = new Scanner(System.in);
+  public static <S extends Point> void convexHullStream(S point) throws IOException {
+    ShapeRecordReader<S> reader =
+        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
     final int threshold = 50000000;
     Point[] points = new Point[threshold];
     int size = 0;
-    while (scanner.hasNext()) {
-      /*long id = */scanner.nextLong();
-      double x = scanner.nextDouble();
-      double y = scanner.nextDouble();
-      points[size++] = new Point(x, y);
+    
+    Rectangle key = new Rectangle();
+    while (reader.next(key, point)) {
+      points[size++] = point.clone();
       if (size >= threshold) {
         Point[] ch = convexHull(points);
         size = 0;
@@ -309,7 +310,7 @@ public class ConvexHull {
     CommandLineArguments cla = new CommandLineArguments(args);
     if (cla.isLocal() && cla.getPaths().length == 0) {
       long t1 = System.currentTimeMillis();
-      convexHullStream();
+      convexHullStream((Point)cla.getShape(true));
       long t2 = System.currentTimeMillis();
       System.err.println("Total time for convex hull: "+(t2-t1)+" millis");
       return;

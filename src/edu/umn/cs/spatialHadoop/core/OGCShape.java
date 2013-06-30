@@ -49,12 +49,12 @@ public class OGCShape implements Shape {
   /**
    * The underlying geometry
    */
-  private OGCGeometry geom;
+  public OGCGeometry geom;
   
   /**
    * Any extra data after the shape information
    */
-  private String extra;
+  public String extra;
   
   public OGCShape() {
     this(null);
@@ -264,20 +264,8 @@ public class OGCShape implements Shape {
     return copy;
   }
   
-  public OGCGeometry getGeom() {
-    return geom;
-  }
-  
-  public String getExtra() {
-    return extra;
-  }
-  
-  public void setExtra(String extra) {
-    this.extra = extra;
-  }
-  
   @Override
   public String toString() {
-    return super.toString()+","+getExtra();
+    return super.toString()+","+extra;
   }
 }

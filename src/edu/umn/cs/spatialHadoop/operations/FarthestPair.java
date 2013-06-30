@@ -53,6 +53,7 @@ import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
@@ -119,6 +120,26 @@ public class FarthestPair {
     }
     return farthest_pair;
   }
+  
+  /**
+   * Computes the closest pair by reading points from stream
+   * @param p 
+   * @return 
+   */
+  public static <S extends Point> PairDistance farthestPairStream(S p) throws IOException {
+    ShapeRecordReader<S> reader =
+        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
+    ArrayList<Point> points = new ArrayList<Point>();
+    
+    Rectangle key = new Rectangle();
+    while (reader.next(key, p)) {
+      points.add(p.clone());
+    }
+    Point[] allPoints = points.toArray(new Point[points.size()]);
+    Point[] hull = ConvexHull.convexHull(allPoints);
+    return rotatingCallipers(hull);
+  }
+
 
   public static class FarthestPairFilter extends DefaultBlockFilter {
 
@@ -318,7 +339,14 @@ public class FarthestPair {
     CommandLineArguments cla = new CommandLineArguments(args);
     Path[] paths = cla.getPaths();
     if (paths.length == 0) {
-      printUsage();
+      if (cla.isLocal()) {
+        long t1 = System.currentTimeMillis();
+        farthestPairStream((Point)cla.getShape(true));
+        long t2 = System.currentTimeMillis();
+        System.out.println("Total time: "+(t2-t1)+" millis");
+      } else {
+        printUsage();
+      }
       return;
     }
     Path inFile = paths[0];
