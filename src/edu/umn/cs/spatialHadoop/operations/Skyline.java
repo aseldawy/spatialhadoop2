@@ -16,6 +16,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Scanner;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -160,6 +161,32 @@ public class Skyline {
                        (r1.x2 <= r2.x1 && r1.y2 <= r2.y1);
     default: throw new RuntimeException("Unknown direction: "+dir);
     }
+  }
+  
+  /**
+   * Computes the skyline by reading points from stream
+   */
+  public static void skylineStream(Direction dir) {
+    Scanner scanner = new Scanner(System.in);
+    final int threshold = 50000000;
+    Point[] points = new Point[threshold];
+    int size = 0;
+    while (scanner.hasNext()) {
+      /*long id = */scanner.nextLong();
+      double x = scanner.nextDouble();
+      double y = scanner.nextDouble();
+      points[size++] = new Point(x, y);
+      if (size >= threshold) {
+        Point[] ch = skyline(points, dir);
+        size = 0;
+        for (Point p : ch)
+          points[size++] = p;
+        System.err.println("Size: "+size);
+      }
+    }
+    Point[] actualPoints = new Point[size];
+    System.arraycopy(points, 0, actualPoints, 0, size);
+    skyline(actualPoints, dir);
   }
   
   /**
@@ -359,18 +386,6 @@ public class Skyline {
   
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    Path[] paths = cla.getPaths();
-    if (paths.length == 0) {
-      printUsage();
-      return;
-    }
-    Path inFile = paths[0];
-    Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = cla.isOverwrite();
-    if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
-      System.err.println("Output path already exists and overwrite flag is not set");
-      return;
-    }
     String strdir = cla.get("dir");
     Direction dir = Direction.MaxMax;
     if (strdir != null) {
@@ -389,6 +404,25 @@ public class Skyline {
         return;
       }
     }    
+    Path[] paths = cla.getPaths();
+    if (paths.length == 0) {
+      if (cla.isLocal()) {
+        long t1 = System.currentTimeMillis();
+        skylineStream(dir);
+        long t2 = System.currentTimeMillis();
+        System.out.println("Total time: "+(t2-t1)+" millis");
+      } else {
+        printUsage();
+      }
+      return;
+    }
+    Path inFile = paths[0];
+    Path outFile = paths.length > 1? paths[1] : null;
+    boolean overwrite = cla.isOverwrite();
+    if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
+      System.err.println("Output path already exists and overwrite flag is not set");
+      return;
+    }
     
     long t1 = System.currentTimeMillis();
     skylineMapReduce(inFile, outFile, dir, cla.isOverwrite());

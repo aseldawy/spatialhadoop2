@@ -18,6 +18,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Scanner;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -119,6 +120,25 @@ public class FarthestPair {
     }
     return farthest_pair;
   }
+  
+  /**
+   * Computes the closest pair by reading points from stream
+   * @return 
+   */
+  public static PairDistance farthestPairStream() {
+    Scanner scanner = new Scanner(System.in);
+    ArrayList<Point> points = new ArrayList<Point>();
+    while (scanner.hasNext()) {
+      /*long id = */scanner.nextLong();
+      double x = scanner.nextDouble();
+      double y = scanner.nextDouble();
+      points.add(new Point(x, y));
+    }
+    Point[] allPoints = points.toArray(new Point[points.size()]);
+    Point[] hull = ConvexHull.convexHull(allPoints);
+    return rotatingCallipers(hull);
+  }
+
 
   public static class FarthestPairFilter extends DefaultBlockFilter {
 
@@ -318,7 +338,14 @@ public class FarthestPair {
     CommandLineArguments cla = new CommandLineArguments(args);
     Path[] paths = cla.getPaths();
     if (paths.length == 0) {
-      printUsage();
+      if (cla.isLocal()) {
+        long t1 = System.currentTimeMillis();
+        farthestPairStream();
+        long t2 = System.currentTimeMillis();
+        System.out.println("Total time: "+(t2-t1)+" millis");
+      } else {
+        printUsage();
+      }
       return;
     }
     Path inFile = paths[0];

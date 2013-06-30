@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Scanner;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -24,6 +25,7 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextOutputFormat;
 
+import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -215,6 +217,23 @@ public class ClosestPair {
 		}
 	}
 	
+  /**
+   * Computes the closest pair by reading points from stream
+   */
+  public static void closestPairStream() {
+    Scanner scanner = new Scanner(System.in);
+    ArrayList<Point> points = new ArrayList<Point>();
+    while (scanner.hasNext()) {
+      /*long id = */scanner.nextLong();
+      double x = scanner.nextDouble();
+      double y = scanner.nextDouble();
+      points.add(new Point(x, y));
+    }
+    Shape[] allPoints = points.toArray(new Shape[points.size()]);
+    nearestNeighbor(allPoints, new Point[allPoints.length], 0, allPoints.length-1);
+  }
+
+	
 	public static <S extends Shape> void closestPairLocal(FileSystem fs,
 			Path file, S stockShape) throws IOException {
 		ShapeRecordReader<S> reader = new ShapeRecordReader<S>(fs.open(file), 0, fs.getFileStatus(file).getLen());
@@ -287,6 +306,14 @@ public class ClosestPair {
 	 * @throws IOException 
 	 */
 	public static void main(String[] args) throws IOException {
+	  CommandLineArguments cla = new CommandLineArguments(args);
+	  if (cla.getPaths().length == 0 && cla.isLocal()) {
+	    long t1 = System.currentTimeMillis();
+	    closestPairStream();
+      long t2 = System.currentTimeMillis();
+      System.out.println("Total time: "+(t2-t1)+" millis");
+	    return;
+	  }
 		if (args.length == 0) {
 			printUsage();
 			throw new RuntimeException("Illegal arguments. Input file missing");
