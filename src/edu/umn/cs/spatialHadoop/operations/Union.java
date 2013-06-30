@@ -180,10 +180,7 @@ public class Union {
       /*long id = */scanner.nextLong();
       String hex = scanner.next();
       OGCGeometry geom = OGCGeometry.fromBinary(ByteBuffer.wrap(hexToBytes(hex)));
-      System.out.println(geom.asText());
-      System.out.println(geom.buffer(0.00001).convexHull().asText());
-      if (!geom.isEmpty())
-        polygons.add(geom.convexHull());
+      polygons.add(geom);
       if (polygons.size() >= threshold) {
         OGCGeometryCollection collection = new OGCConcreteGeometryCollection(polygons, polygons.get(0).esriSR);
         OGCGeometry union = collection.union(polygons.get(0));
