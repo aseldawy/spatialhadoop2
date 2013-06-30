@@ -217,6 +217,8 @@ public class OGCShape implements Shape {
 
   @Override
   public Rectangle getMBR() {
+    if (geom.isEmpty())
+      return null;
     com.esri.core.geometry.Polygon mbr = (com.esri.core.geometry.Polygon) geom.envelope().getEsriGeometry();
     int pointCount = mbr.getPointCount();
     double xmin = mbr.getPoint(0).getX();
