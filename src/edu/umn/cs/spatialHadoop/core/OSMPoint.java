@@ -38,4 +38,13 @@ public class OSMPoint extends Point {
     this.id = in.readLong();
     super.readFields(in);
   }
+  
+  @Override
+  public Point clone() {
+    OSMPoint c = new OSMPoint();
+    c.id = id;
+    c.x = x;
+    c.y = y;
+    return c;
+  }
 }

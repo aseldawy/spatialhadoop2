@@ -1,11 +1,8 @@
 package edu.umn.cs.spatialHadoop.operations;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.Scanner;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -30,6 +27,7 @@ import com.esri.core.geometry.ogc.OGCGeometryCollection;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.OGCShape;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -75,7 +73,7 @@ public class Union {
       Vector<OGCGeometry> shapes_list = new Vector<OGCGeometry>();
       while (shapes.hasNext()) {
         OSMPolygon shape = shapes.next();
-        shapes_list.add(shape.getGeom());
+        shapes_list.add(shape.geom);
       }
       OGCGeometryCollection geo_collection = new OGCConcreteGeometryCollection(
           shapes_list, shapes_list.firstElement().getEsriSpatialReference());
@@ -172,15 +170,16 @@ public class Union {
   }
 
   
-  public static OGCGeometry unionStream() throws FileNotFoundException {
-    Scanner scanner = new Scanner(System.in);
+  public static <S extends OGCShape> OGCGeometry unionStream(S shape) throws IOException {
+    ShapeRecordReader<S> reader =
+        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
     final int threshold = 5000000;
     ArrayList<OGCGeometry> polygons = new ArrayList<OGCGeometry>();
-    while (scanner.hasNext()) {
-      /*long id = */scanner.nextLong();
-      String hex = scanner.next();
-      OGCGeometry geom = OGCGeometry.fromBinary(ByteBuffer.wrap(hexToBytes(hex)));
-      polygons.add(geom);
+    
+    Rectangle key = new Rectangle();
+
+    while (reader.next(key, shape)) {
+      polygons.add(shape.geom);
       if (polygons.size() >= threshold) {
         OGCGeometryCollection collection = new OGCConcreteGeometryCollection(polygons, polygons.get(0).esriSR);
         OGCGeometry union = collection.union(polygons.get(0));
@@ -218,7 +217,7 @@ public class Union {
     OSMPolygon shape = new OSMPolygon();
 
     while (shapeReader.next(cellInfo, shape)) {
-      shapes.add(shape.getGeom());
+      shapes.add(shape.geom);
     }
     shapeReader.close();
 
@@ -245,18 +244,18 @@ public class Union {
    */
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    if (cla.isLocal() && cla.getPaths().length == 0) {
-      long t1 = System.currentTimeMillis();
-      unionStream();
-      long t2 = System.currentTimeMillis();
-      System.err.println("Total time for union: "+(t2-t1)+" millis");
-      return;
-    }
     JobConf conf = new JobConf(Union.class);
     Path[] allFiles = cla.getPaths();
     boolean local = cla.isLocal();
     boolean overwrite = cla.isOverwrite();
     if (allFiles.length == 0) {
+      if (local) {
+        long t1 = System.currentTimeMillis();
+        unionStream((OGCShape)cla.getShape(true));
+        long t2 = System.currentTimeMillis();
+        System.err.println("Total time for union: "+(t2-t1)+" millis");
+        return;
+      }
       printUsage();
       throw new RuntimeException("Illegal arguments. Input file missing");
     }

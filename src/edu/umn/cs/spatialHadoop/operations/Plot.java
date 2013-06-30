@@ -227,7 +227,7 @@ public class Plot {
       graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
     } else if (s instanceof OGCShape) {
       OGCShape ogc_shape = (OGCShape) s;
-      OGCGeometry geom = ogc_shape.getGeom();
+      OGCGeometry geom = ogc_shape.geom;
       Color shape_color = graphics.getColor();
       if (geom instanceof OGCGeometryCollection) {
         OGCGeometryCollection geom_coll = (OGCGeometryCollection) geom;

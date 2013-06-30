@@ -18,7 +18,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.Scanner;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -54,6 +53,7 @@ import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
@@ -123,16 +123,17 @@ public class FarthestPair {
   
   /**
    * Computes the closest pair by reading points from stream
+   * @param p 
    * @return 
    */
-  public static PairDistance farthestPairStream() {
-    Scanner scanner = new Scanner(System.in);
+  public static <S extends Point> PairDistance farthestPairStream(S p) throws IOException {
+    ShapeRecordReader<S> reader =
+        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
     ArrayList<Point> points = new ArrayList<Point>();
-    while (scanner.hasNext()) {
-      /*long id = */scanner.nextLong();
-      double x = scanner.nextDouble();
-      double y = scanner.nextDouble();
-      points.add(new Point(x, y));
+    
+    Rectangle key = new Rectangle();
+    while (reader.next(key, p)) {
+      points.add(p.clone());
     }
     Point[] allPoints = points.toArray(new Point[points.size()]);
     Point[] hull = ConvexHull.convexHull(allPoints);
@@ -340,7 +341,7 @@ public class FarthestPair {
     if (paths.length == 0) {
       if (cla.isLocal()) {
         long t1 = System.currentTimeMillis();
-        farthestPairStream();
+        farthestPairStream((Point)cla.getShape(true));
         long t2 = System.currentTimeMillis();
         System.out.println("Total time: "+(t2-t1)+" millis");
       } else {

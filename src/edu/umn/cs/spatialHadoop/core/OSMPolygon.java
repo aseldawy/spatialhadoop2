@@ -42,4 +42,12 @@ public class OSMPolygon extends OGCShape {
     id = in.readLong();
     super.readFields(in);
   }
+  
+  @Override
+  public Shape clone() {
+    OSMPolygon c = new OSMPolygon();
+    c.id = this.id;
+    c.geom = this.geom;
+    return c;
+  }
 }
