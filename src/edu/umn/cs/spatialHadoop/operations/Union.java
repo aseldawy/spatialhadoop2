@@ -1,5 +1,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -29,7 +31,7 @@ import com.esri.core.geometry.ogc.OGCGeometryCollection;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.OGCShape;
+import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
@@ -47,13 +49,13 @@ public class Union {
   private static final Log LOG = LogFactory.getLog(Union.class);
   
   static class IdentityMapper extends MapReduceBase
-      implements Mapper<Rectangle, OGCShape, NullWritable, OGCShape> {
+      implements Mapper<Rectangle, OSMPolygon, NullWritable, OSMPolygon> {
 
     private static final NullWritable dummy = NullWritable.get(); 
     
     @Override
-    public void map(Rectangle key, OGCShape s,
-        OutputCollector<NullWritable, OGCShape> output, Reporter reporter)
+    public void map(Rectangle key, OSMPolygon s,
+        OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
         throws IOException {
       output.collect(dummy, s);
     }
@@ -65,15 +67,15 @@ public class Union {
    *
    */
   static class UnionReducer extends MapReduceBase
-      implements Reducer<NullWritable, OGCShape, NullWritable, OGCShape> {
+      implements Reducer<NullWritable, OSMPolygon, NullWritable, OSMPolygon> {
     
     @Override
-    public void reduce(NullWritable dummy, Iterator<OGCShape> shapes,
-        OutputCollector<NullWritable, OGCShape> output, Reporter reporter)
+    public void reduce(NullWritable dummy, Iterator<OSMPolygon> shapes,
+        OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
         throws IOException {
       Vector<OGCGeometry> shapes_list = new Vector<OGCGeometry>();
       while (shapes.hasNext()) {
-        OGCShape shape = shapes.next();
+        OSMPolygon shape = shapes.next();
         shapes_list.add(shape.getGeom());
       }
       OGCGeometryCollection geo_collection = new OGCConcreteGeometryCollection(
@@ -85,10 +87,10 @@ public class Union {
         OGCGeometryCollection union_shapes = (OGCGeometryCollection) union;
         for (int i_geom = 0; i_geom < union_shapes.numGeometries(); i_geom++) {
           OGCGeometry geom_n = union_shapes.geometryN(i_geom);
-          output.collect(dummy, new OGCShape(geom_n));
+          output.collect(dummy, new OSMPolygon(geom_n));
         }
       } else {
-        output.collect(dummy, new OGCShape(union));
+        output.collect(dummy, new OSMPolygon(union));
       }
     }
   }
@@ -126,11 +128,11 @@ public class Union {
     job.setReducerClass(UnionReducer.class);
     
     job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(OGCShape.class);
+    job.setMapOutputValueClass(OSMPolygon.class);
 
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, OGCShape.class);
+    SpatialSite.setShapeClass(job, OSMPolygon.class);
     TextInputFormat.addInputPath(job, shapeFile);
     
     job.setOutputFormat(TextOutputFormat.class);
@@ -171,14 +173,17 @@ public class Union {
   }
 
   
-  public static OGCGeometry unionStream() {
-    Scanner scanner = new Scanner(System.in);
+  public static OGCGeometry unionStream() throws FileNotFoundException {
+    //Scanner scanner = new Scanner(System.in);
+    Scanner scanner = new Scanner(new File("/home/eldawy/pig-0.11.1/ways.csv/part-r-00000"));
     final int threshold = 5000000;
     ArrayList<OGCGeometry> polygons = new ArrayList<OGCGeometry>();
     while (scanner.hasNext()) {
       /*long id = */scanner.nextLong();
       String hex = scanner.next();
       OGCGeometry geom = OGCGeometry.fromBinary(ByteBuffer.wrap(hexToBytes(hex)));
+      System.out.println(geom.asText());
+      System.out.println(geom.buffer(0.00001).convexHull().asText());
       if (!geom.isEmpty())
         polygons.add(geom.convexHull());
       if (polygons.size() >= threshold) {
@@ -212,10 +217,10 @@ public class Union {
     FileSystem fs1 = shapeFile.getFileSystem(new Configuration());
     long file_size1 = fs1.getFileStatus(shapeFile).getLen();
     
-    ShapeRecordReader<OGCShape> shapeReader =
-        new ShapeRecordReader<OGCShape>(fs1.open(shapeFile), 0, file_size1);
+    ShapeRecordReader<OSMPolygon> shapeReader =
+        new ShapeRecordReader<OSMPolygon>(fs1.open(shapeFile), 0, file_size1);
     CellInfo cellInfo = new CellInfo();
-    OGCShape shape = new OGCShape();
+    OSMPolygon shape = new OSMPolygon();
 
     while (shapeReader.next(cellInfo, shape)) {
       shapes.add(shape.getGeom());
