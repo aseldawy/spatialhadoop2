@@ -1,6 +1,5 @@
 package edu.umn.cs.spatialHadoop.operations;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -174,8 +173,7 @@ public class Union {
 
   
   public static OGCGeometry unionStream() throws FileNotFoundException {
-    //Scanner scanner = new Scanner(System.in);
-    Scanner scanner = new Scanner(new File("/home/eldawy/pig-0.11.1/ways.csv/part-r-00000"));
+    Scanner scanner = new Scanner(System.in);
     final int threshold = 5000000;
     ArrayList<OGCGeometry> polygons = new ArrayList<OGCGeometry>();
     while (scanner.hasNext()) {
