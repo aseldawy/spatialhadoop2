@@ -48,6 +48,8 @@ public class FileMBR {
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
         throws IOException {
       Rectangle mbr = shape.getMBR();
+      if (mbr == null)
+        return;
       
       if (mbr_so_far == null) {
         mbr_so_far = new Rectangle();

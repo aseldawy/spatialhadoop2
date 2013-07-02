@@ -17,7 +17,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Stack;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -37,6 +39,9 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
+import org.apache.hadoop.util.IndexedSortable;
+import org.apache.hadoop.util.IndexedSorter;
+import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
@@ -121,6 +126,126 @@ public class FarthestPair {
     return farthest_pair;
   }
   
+  
+  private static PairDistance rotatingCallipersLocal(double[] xs, double[] ys, int[] hull_points) {
+    PairDistance farthest_pair = new PairDistance();
+    Point pi = new Point();
+    Point pi_plus_one = new Point();
+    Point pj = new Point();
+    Point pj_plus_one = new Point();
+    int i = 0, j = 1, j_plus_one = 2 % hull_points.length;
+    pj.x = xs[hull_points[j]]; pj.y = ys[hull_points[j]];
+    pj_plus_one.x = xs[hull_points[j_plus_one]]; pj_plus_one.y = ys[hull_points[j_plus_one]];
+    for (i = 0; i < hull_points.length; i++) {
+      pi.x = xs[hull_points[i]]; pi.y = ys[hull_points[i]];
+      int i_plus_one = (i + 1) % hull_points.length;
+      pi_plus_one.x = xs[hull_points[i_plus_one]]; pi_plus_one.y = ys[hull_points[i_plus_one]];
+      while(cross(pi, pi_plus_one, pj_plus_one) > cross(pi, pi_plus_one, pj)) {
+        j = j_plus_one;
+        j_plus_one = (j + 1) % hull_points.length;
+        pj.x = xs[hull_points[j]]; pj.y = ys[hull_points[j]];
+        pj_plus_one.x = xs[hull_points[j_plus_one]]; pj_plus_one.y = ys[hull_points[j_plus_one]];
+      }
+      double dist = pi.distanceTo(pj);
+      if (dist > farthest_pair.distance) {
+        farthest_pair.distance = dist;
+        farthest_pair.first = pi;
+        farthest_pair.second = pj;
+      }
+
+      dist = pi_plus_one.distanceTo(pj);
+      if (dist > farthest_pair.distance) {
+        farthest_pair.distance = dist;
+        farthest_pair.first = pi_plus_one;
+        farthest_pair.second = pj;
+      }
+    }
+    return farthest_pair;
+  }
+
+  
+  /**
+   * In place version of convex hull. Given points are sorted on x direction
+   * and the indexes of points on the convex hull are returned.
+   * @param xs
+   * @param ys
+   * @param size
+   * @return
+   */
+  public static int[] convexHullInPlace(final double[] xs, final double[] ys, final int size) {
+    Stack<Integer> s1 = new Stack<Integer>();
+    Stack<Integer> s2 = new Stack<Integer>();
+    
+    
+    IndexedSortable sortableX = new IndexedSortable() {
+      
+      @Override
+      public void swap(int a, int b) {
+        double temp = xs[a];
+        xs[a] = xs[b];
+        xs[b] = temp;
+        temp = ys[a];
+        ys[a] = ys[b];
+        ys[b] = temp;
+      }
+      
+      @Override
+      public int compare(int a, int b) {
+        if (xs[a] < xs[b])
+          return -1;
+        return 1;
+      }
+    };
+    
+    final IndexedSorter sorter = new QuickSort();
+    sorter.sort(sortableX, 0, size);    
+    
+    Point p1 = new Point();
+    Point p2 = new Point();
+    Point p3 = new Point();
+    
+    // Lower chain
+    for (int i=0; i<size; i++) {
+      while(s1.size() > 1) {
+        p1.x = xs[s1.get(s1.size() - 2)];
+        p1.y = ys[s1.get(s1.size() - 2)];
+        p2.x = xs[s1.get(s1.size() - 1)];
+        p2.y = ys[s1.get(s1.size() - 1)];
+        p3.x = xs[i];
+        p3.y = ys[i];
+        double crossProduct = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+        if (crossProduct <= 0) s1.pop();
+        else break;
+      }
+      s1.push(i);
+    }
+    
+    // Upper chain
+    for (int i = size - 1; i >= 0; i--) {
+      while(s2.size() > 1) {
+        p1.x = xs[s2.get(s2.size() - 2)];
+        p1.y = ys[s2.get(s2.size() - 2)];
+        p2.x = xs[s2.get(s2.size() - 1)];
+        p2.y = ys[s2.get(s2.size() - 1)];
+        p3.x = xs[i];
+        p3.y = ys[i];
+        double crossProduct = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+        if (crossProduct <= 0) s2.pop();
+        else break;
+      }
+      s2.push(i);
+    }
+    
+    s1.pop();
+    s2.pop();
+    s1.addAll(s2);
+    int[] hull_points = new int[s1.size()];
+    for (int i = 0; i < s1.size(); i++)
+      hull_points[i] = s1.get(i);
+    return hull_points;    
+  }
+
+  
   /**
    * Computes the closest pair by reading points from stream
    * @param p 
@@ -129,15 +254,32 @@ public class FarthestPair {
   public static <S extends Point> PairDistance farthestPairStream(S p) throws IOException {
     ShapeRecordReader<S> reader =
         new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
-    ArrayList<Point> points = new ArrayList<Point>();
+    double[] xs = new double[1000000];
+    double[] ys = new double[1000000];
+    int size = 0;
     
     Rectangle key = new Rectangle();
     while (reader.next(key, p)) {
-      points.add(p.clone());
+      xs[size] = p.x;
+      ys[size] = p.y;
+      size++;
+      if (size == xs.length) {
+        // Need to expand array
+        double[] old_xs = xs;
+        xs = new double[old_xs.length * 2];
+        System.arraycopy(old_xs, 0, xs, 0, old_xs.length);
+        double[] old_ys = ys;
+        ys = new double[old_ys.length * 2];
+        System.arraycopy(old_ys, 0, ys, 0, old_ys.length);
+      }
+      if ((size % 10000000) == 0) {
+        LOG.info("Loaded "+size+" points");
+      }
     }
-    Point[] allPoints = points.toArray(new Point[points.size()]);
-    Point[] hull = ConvexHull.convexHull(allPoints);
-    return rotatingCallipers(hull);
+    LOG.info("Loaded a total of "+size+ " points");
+    int[] hull_points = convexHullInPlace(xs, ys, size);
+    LOG.info("Convex hull computed with "+hull_points.length+" points");
+    return rotatingCallipersLocal(xs, ys, hull_points);
   }
 
 
@@ -357,7 +499,10 @@ public class FarthestPair {
       return;
     }
     
+    long t1 = System.currentTimeMillis();
     farthestPairMapReduce(inFile, outFile, cla.isOverwrite());
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time: "+(t2-t1)+" millis");
   }
   
 }

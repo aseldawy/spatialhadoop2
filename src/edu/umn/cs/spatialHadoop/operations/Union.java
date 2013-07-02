@@ -2,6 +2,8 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.Vector;
 
@@ -10,30 +12,29 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextInputFormat;
 
-import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
-import com.esri.core.geometry.ogc.OGCGeometry;
-import com.esri.core.geometry.ogc.OGCGeometryCollection;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryCollection;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.OGCShape;
-import edu.umn.cs.spatialHadoop.core.OSMPolygon;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.JTSShape;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
-import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
  * Computes the union of all shapes in a given input file.
@@ -45,50 +46,54 @@ public class Union {
   @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(Union.class);
   
-  static class IdentityMapper extends MapReduceBase
-      implements Mapper<Rectangle, OSMPolygon, NullWritable, OSMPolygon> {
-
-    private static final NullWritable dummy = NullWritable.get(); 
-    
-    @Override
-    public void map(Rectangle key, OSMPolygon s,
-        OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
-        throws IOException {
-      output.collect(dummy, s);
-    }
-  }
-
   /**
    * Reduce function takes a category and union all shapes in that category
    * @author eldawy
    *
    */
   static class UnionReducer extends MapReduceBase
-      implements Reducer<NullWritable, OSMPolygon, NullWritable, OSMPolygon> {
+      implements Reducer<IntWritable, JTSShape, IntWritable, JTSShape> {
     
     @Override
-    public void reduce(NullWritable dummy, Iterator<OSMPolygon> shapes,
-        OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
+    public void reduce(IntWritable dummy, Iterator<JTSShape> shapes,
+        OutputCollector<IntWritable, JTSShape> output, Reporter reporter)
         throws IOException {
-      Vector<OGCGeometry> shapes_list = new Vector<OGCGeometry>();
+      final int threshold = 500000;
+      Geometry[] shapes_list = new Geometry[threshold];
+      int size = 0;
       while (shapes.hasNext()) {
-        OSMPolygon shape = shapes.next();
-        shapes_list.add(shape.geom);
+        JTSShape shape = shapes.next();
+        shapes_list[size++] = shape.geom;
+        if (size == threshold) {
+          LOG.info("Computing union of "+size+" shapes");
+          reporter.progress();
+          GeometryCollection geo_collection = new GeometryCollection(shapes_list, shapes_list[0].getFactory());
+          Geometry union = geo_collection.buffer(0);
+          geo_collection = null;
+          size = 0;
+          shapes_list[size++] = union;
+        }
       }
-      OGCGeometryCollection geo_collection = new OGCConcreteGeometryCollection(
-          shapes_list, shapes_list.firstElement().getEsriSpatialReference());
-      OGCGeometry union = geo_collection.union(shapes_list.firstElement());
+
+      LOG.info("Final union computation of "+size+" shapes");
+      Geometry[] good_shapes = new Geometry[size];
+      System.arraycopy(shapes_list, 0, good_shapes, 0, size);
+      GeometryCollection geo_collection = new GeometryCollection(good_shapes, good_shapes[0].getFactory());
+      Geometry union = geo_collection.buffer(0);
       geo_collection = null;
       shapes = null;
-      if (union instanceof OGCGeometryCollection) {
-        OGCGeometryCollection union_shapes = (OGCGeometryCollection) union;
-        for (int i_geom = 0; i_geom < union_shapes.numGeometries(); i_geom++) {
-          OGCGeometry geom_n = union_shapes.geometryN(i_geom);
-          output.collect(dummy, new OSMPolygon(geom_n));
+      reporter.progress();
+      LOG.info("Writing geoms to output");
+      if (union instanceof GeometryCollection) {
+        GeometryCollection union_shapes = (GeometryCollection) union;
+        for (int i_geom = 0; i_geom < union_shapes.getNumGeometries(); i_geom++) {
+          Geometry geom_n = union_shapes.getGeometryN(i_geom);
+          output.collect(dummy, new JTSShape(geom_n));
         }
       } else {
-        output.collect(dummy, new OSMPolygon(union));
+        output.collect(dummy, new JTSShape(union));
       }
+      LOG.info("Done writing geoms to output");
     }
   }
   
@@ -101,7 +106,7 @@ public class Union {
    * @throws IOException
    */
   public static void unionMapReduce(Path shapeFile,
-      Path output, boolean overwrite) throws IOException {
+      Path output, JTSShape shape, boolean overwrite) throws IOException {
     JobConf job = new JobConf(Union.class);
     job.setJobName("Union");
 
@@ -115,25 +120,88 @@ public class Union {
       }
     }
     
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(shapeFile.getFileSystem(job), shapeFile);
+    int reduceBuckets = 1;
+    if (gindex != null) {
+      int groups = Math.max(1, (int) Math.sqrt(gindex.size() / 4));
+      // Ensure that the final number of buckets is less than current
+      while (groups * groups >= gindex.size() && groups > 1) {
+        groups--;
+      }
+      
+      // Get the list of all partitions ordered by x
+      CellInfo[] unionGroups = new CellInfo[groups * groups];
+      Partition[] all = new Partition[gindex.size()];
+      int i = 0;
+      for (Partition p : gindex)
+        all[i++] = p;
+      Arrays.sort(all, new Comparator<Partition>() {
+        @Override
+        public int compare(Partition o1, Partition o2) {
+          return o1.x1 < o2.x1 ? -1 : 1;
+        }
+      });
+      
+      int i1 = 0;
+      i = 0;
+      while (i1 < all.length) {
+        int i2 = Math.min(all.length, (i + 1) * all.length / groups);
+        Arrays.sort(all, i1, i2, new Comparator<Partition>() {
+          @Override
+          public int compare(Partition o1, Partition o2) {
+            return o1.y1 < o2.y1 ? -1 : 1;
+          }
+        });
+        
+        int j = 0;
+        int j1 = i1;
+        while (j1 < i2) {
+          int j2 = Math.min(i2, (j + 1) * i2 / groups);
+          
+          CellInfo r = new CellInfo(j * groups + i, all[j1]);
+          while (j1 < j2) {
+            j1++;
+            if (j1 < j2)
+              r.expand(all[j1]);
+          }
+          unionGroups[j * groups + i] = r;
+          
+          j++;
+        }
+        
+        i++;
+        i1 = i2;
+      }
+      
+      SpatialSite.setCells(job, unionGroups);
+      reduceBuckets = unionGroups.length;
+    } else {
+      Rectangle mbr = FileMBR.fileMBR(shapeFile.getFileSystem(job), shapeFile, shape);
+      CellInfo[] unionGroups = new CellInfo[1];
+      unionGroups[0] = new CellInfo(1, mbr);
+      SpatialSite.setCells(job, unionGroups);
+      reduceBuckets = unionGroups.length;
+    }
+    LOG.info("Number of reduce buckets: "+reduceBuckets);
+
     // Set map and reduce
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
-    
-    job.setMapperClass(IdentityMapper.class);
+    job.setNumReduceTasks(Math.max(1, Math.min(reduceBuckets, clusterStatus.getMaxReduceTasks() * 9 / 10)));
+
+    job.setMapperClass(Repartition.RepartitionMap.class);
     job.setCombinerClass(UnionReducer.class);
     job.setReducerClass(UnionReducer.class);
     
-    job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(OSMPolygon.class);
+    job.setMapOutputKeyClass(IntWritable.class);
+    job.setMapOutputValueClass(shape.getClass());
 
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, OSMPolygon.class);
+    SpatialSite.setShapeClass(job, shape.getClass());
     TextInputFormat.addInputPath(job, shapeFile);
     
-    job.setOutputFormat(TextOutputFormat.class);
-    TextOutputFormat.setOutputPath(job, output);
+    job.setOutputFormat(GridOutputFormat.class);
+    GridOutputFormat.setOutputPath(job, output);
 
     // Start job
     JobClient.runJob(job);
@@ -170,26 +238,26 @@ public class Union {
   }
 
   
-  public static <S extends OGCShape> OGCGeometry unionStream(S shape) throws IOException {
+  public static <S extends JTSShape> Geometry unionStream(S shape) throws IOException {
     ShapeRecordReader<S> reader =
         new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
     final int threshold = 5000000;
-    ArrayList<OGCGeometry> polygons = new ArrayList<OGCGeometry>();
+    ArrayList<Geometry> polygons = new ArrayList<Geometry>();
     
     Rectangle key = new Rectangle();
 
     while (reader.next(key, shape)) {
       polygons.add(shape.geom);
       if (polygons.size() >= threshold) {
-        OGCGeometryCollection collection = new OGCConcreteGeometryCollection(polygons, polygons.get(0).esriSR);
-        OGCGeometry union = collection.union(polygons.get(0));
+        GeometryCollection collection = new GeometryCollection(polygons.toArray(new Geometry[polygons.size()]), polygons.get(0).getFactory());
+        Geometry union = collection.buffer(0);
         polygons.clear();
         polygons.add(union);
         System.err.println("Size: "+polygons.size());
       }
     }
-    OGCGeometryCollection collection = new OGCConcreteGeometryCollection(polygons, polygons.get(0).esriSR);
-    OGCGeometry union = collection.union(polygons.get(0));
+    GeometryCollection collection = new GeometryCollection(polygons.toArray(new Geometry[polygons.size()]), polygons.get(0).getFactory());
+    Geometry union = collection.buffer(0);
     polygons.clear();
     return union;
   }
@@ -201,20 +269,19 @@ public class Union {
    * @return
    * @throws IOException
    */
-  public static OGCGeometry unionLocal(Path shapeFile)
+  public static Geometry unionLocal(Path shapeFile, JTSShape shape)
       throws IOException {
     // Read shapes from the shape file and relate each one to a category
     
     // Prepare a hash that stores all shapes
-    Vector<OGCGeometry> shapes = new Vector<OGCGeometry>();
+    Vector<Geometry> shapes = new Vector<Geometry>();
     
     FileSystem fs1 = shapeFile.getFileSystem(new Configuration());
     long file_size1 = fs1.getFileStatus(shapeFile).getLen();
     
-    ShapeRecordReader<OSMPolygon> shapeReader =
-        new ShapeRecordReader<OSMPolygon>(fs1.open(shapeFile), 0, file_size1);
+    ShapeRecordReader<JTSShape> shapeReader =
+        new ShapeRecordReader<JTSShape>(fs1.open(shapeFile), 0, file_size1);
     CellInfo cellInfo = new CellInfo();
-    OSMPolygon shape = new OSMPolygon();
 
     while (shapeReader.next(cellInfo, shape)) {
       shapes.add(shape.geom);
@@ -222,10 +289,9 @@ public class Union {
     shapeReader.close();
 
     // Find the union of all shapes
-    OGCGeometryCollection all_geoms = new OGCConcreteGeometryCollection(shapes,
-        shapes.firstElement().getEsriSpatialReference());
+    GeometryCollection all_geoms = new GeometryCollection(shapes.toArray(new Geometry[shapes.size()]), shapes.firstElement().getFactory());
 
-    OGCGeometry union = all_geoms.union(shapes.firstElement());
+    Geometry union = all_geoms.buffer(0);
     
     return union;
   }
@@ -251,7 +317,7 @@ public class Union {
     if (allFiles.length == 0) {
       if (local) {
         long t1 = System.currentTimeMillis();
-        unionStream((OGCShape)cla.getShape(true));
+        unionStream((JTSShape)cla.getShape(true));
         long t2 = System.currentTimeMillis();
         System.err.println("Total time for union: "+(t2-t1)+" millis");
         return;
@@ -265,15 +331,17 @@ public class Union {
       FileSystem fs = inputFile.getFileSystem(conf);
       if (!fs.exists(inputFile)) {
         printUsage();
-        throw new RuntimeException("Input file does not exist");
+        throw new RuntimeException("Input file '"+inputFile+"' does not exist");
       }
     }
+    
+    JTSShape shape = (JTSShape) cla.getShape(true);
 
     long t1 = System.currentTimeMillis();
     if (local) {
-      unionLocal(allFiles[0]);
+      unionLocal(allFiles[0], shape);
     } else {
-      unionMapReduce(allFiles[0], allFiles[1], overwrite);
+      unionMapReduce(allFiles[0], allFiles[1], shape, overwrite);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");

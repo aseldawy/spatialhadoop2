@@ -49,6 +49,7 @@ import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.operations.FarthestPair.PairDistance;
 
 /**
  * Computes the convex hull for a set of shapes
@@ -115,7 +116,7 @@ public class ConvexHull {
    * @param overwrite
    * @throws IOException
    */
-  public static void convexHullLocal(Path inFile, Path outFile,
+  public static void convexHull(Path inFile, Path outFile,
       boolean overwrite) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     long file_size = inFs.getFileStatus(inFile).getLen();
@@ -149,6 +150,7 @@ public class ConvexHull {
     }
   }
   
+  
   /**
    * Computes the convex hull by reading points from stream
    * @param point 
@@ -174,7 +176,8 @@ public class ConvexHull {
     }
     Point[] actualPoints = new Point[size];
     System.arraycopy(points, 0, actualPoints, 0, size);
-    convexHull(actualPoints);
+    Point[] convexHull = convexHull(actualPoints);
+    LOG.info("Convex hull computed with "+convexHull.length+" points");
   }
   
   /**

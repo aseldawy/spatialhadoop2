@@ -86,6 +86,8 @@ public class Repartition {
         OutputCollector<IntWritable, T> output, Reporter reporter)
         throws IOException {
       Rectangle shape_mbr = shape.getMBR();
+      if (shape_mbr == null)
+        return;
       // Only send shape to output if its lowest corner lies in the cellMBR
       // This ensures that a replicated shape in an already partitioned file
       // doesn't get send to output from all partitions
@@ -216,9 +218,6 @@ public class Repartition {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
 
-    // Do not set a reduce function. Use the default identity reduce function
-    job.setNumReduceTasks(Math.max(1, (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10));
-  
     // Set default parameters for reading input file
     SpatialSite.setShapeClass(job, stockShape.getClass());
   
@@ -246,6 +245,9 @@ public class Repartition {
       job.setLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE, blockSize);
     SpatialSite.setCells(job, cellInfos);
     job.setBoolean(SpatialSite.OVERWRITE, overwrite);
+    
+    // Do not set a reduce function. Use the default identity reduce function
+    job.setNumReduceTasks(Math.max(1, Math.min(cellInfos.length, (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
   
     JobClient.runJob(job);
     

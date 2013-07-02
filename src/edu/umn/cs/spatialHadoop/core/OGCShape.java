@@ -142,7 +142,8 @@ public class OGCShape implements Shape {
   @Override
   public Text toText(Text text) {
     String str = bytesToHex(geom.asBinary().array());
-    text.set(str);
+    byte[] str_b = str.getBytes();
+    text.append(str_b, 0, str_b.length);
     if (extra != null) {
       text.append(Separator, 0, Separator.length);
       byte[] extra_bytes = extra.getBytes();
