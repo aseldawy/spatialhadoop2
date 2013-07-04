@@ -127,17 +127,22 @@ public class Sampler {
           break;
         case ShapeToPoint:
           inShape.fromText(line);
-          Point center = inShape.getMBR().getCenterPoint();
-          line.clear();
-          center.toText(line);
-          output.collect(dummyKey, line);
+          Rectangle mbr = inShape.getMBR();
+          if (mbr != null) {
+            Point center = mbr.getCenterPoint();
+            line.clear();
+            center.toText(line);
+            output.collect(dummyKey, line);
+          }
           break;
         case ShapeToRect:
           inShape.fromText(line);
-          Rectangle mbr = inShape.getMBR();
-          line.clear();
-          mbr.toText(line);
-          output.collect(dummyKey, line);
+          mbr = inShape.getMBR();
+          if (mbr != null) {
+            line.clear();
+            mbr.toText(line);
+            output.collect(dummyKey, line);
+          }
           break;
         }
       }

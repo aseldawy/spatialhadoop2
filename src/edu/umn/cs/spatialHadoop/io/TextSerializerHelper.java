@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.io;
 
 import java.util.Arrays;
+import java.util.Map;
 
 import org.apache.hadoop.io.Text;
 
@@ -394,5 +395,59 @@ public final class TextSerializerHelper {
     text.set(bytes, 0, text.getLength() - i);
     return l;
   }
+ 
+  private static final byte[] Separators = {'[', '#', ',', ']'};
+  private static final int MapStart = 0, KeyValueSeparator = 1,
+      FieldSeparator = 2, MapEnd = 3;
   
+  public static void consumeMap(Text text, Map<String, String> tags) {
+    tags.clear();
+    if (text.getLength() > 0) {
+      byte[] tagsBytes = text.getBytes();
+      if (tagsBytes[0] != Separators[MapStart])
+        return;
+      int i1 = 1;
+      while (i1 < text.getLength() && tagsBytes[i1] != Separators[MapEnd]) {
+        int i2 = i1 + 1;
+        while (i2 < text.getLength() && tagsBytes[i2] != Separators[KeyValueSeparator])
+          i2++;
+        String key = new String(tagsBytes, i1, i2 - i1);
+        i1 = i2 + 1;
+        
+        i2 = i1 + 1;
+        while (i2 < text.getLength() && tagsBytes[i2] != Separators[FieldSeparator] && tagsBytes[i2] != Separators[MapEnd])
+          i2++;
+        String value = new String(tagsBytes, i1, i2 - i1);
+        tags.put(key, value);
+        i1 = i2;
+        if (i1 < text.getLength() && tagsBytes[i1] == Separators[FieldSeparator])
+          i1++;
+      }
+      text.set(tagsBytes, i1, text.getLength() - i1);
+    }
+  }
+  
+
+  public static Text serializeMap(Text text, Map<String, String> tags) {
+    if (!tags.isEmpty()) {
+      boolean first = true;
+      text.append(Separators, MapStart, 1);
+      for (Map.Entry<String, String> entry : tags.entrySet()) {
+        if (first) {
+          first = false;
+        } else {
+          first = true;
+          text.append(Separators, FieldSeparator, 1);
+        }
+        byte[] k = entry.getKey().getBytes();
+        text.append(k, 0, k.length);
+        text.append(Separators, KeyValueSeparator, 1);
+        byte[] v = entry.getValue().getBytes();
+        text.append(v, 0, v.length);
+      }
+      text.append(Separators, MapEnd, 1);
+    }
+    return text;
+  }
+
 }

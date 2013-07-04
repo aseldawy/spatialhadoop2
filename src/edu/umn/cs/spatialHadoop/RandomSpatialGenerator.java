@@ -57,7 +57,7 @@ public class RandomSpatialGenerator {
   }
   
   public enum DistributionType {
-    UNIFORM, GAUSSIAN, CORRELATED, ANTI_CORRELATED
+    UNIFORM, GAUSSIAN, CORRELATED, ANTI_CORRELATED, CIRCLE
   }
   
   
@@ -411,6 +411,21 @@ public class RandomSpatialGenerator {
       if (type == DistributionType.ANTI_CORRELATED)
         p.y = mbr.y2 - (p.y - mbr.y1);
       break;
+    case CIRCLE:
+      double degree = rand.nextDouble() * Math.PI * 2;
+      double xradius;
+      do {
+        xradius = (mbr.x2 - mbr.x1) / 2  * (0.8 + rand.nextGaussian() / 30);
+      } while (xradius > (mbr.x2 - mbr.x1) / 2);
+      double yradius;
+      do {
+        yradius = (mbr.y2 - mbr.y1) / 2  * (0.8 + rand.nextGaussian() / 30);
+      } while (yradius > (mbr.y2 - mbr.y1) / 2);
+      double dx = Math.cos(degree) * xradius;
+      double dy = Math.sin(degree) * yradius;
+      p.x = (mbr.x1 + mbr.x2) / 2 + dx;
+      p.y = (mbr.y1 + mbr.y2) / 2 + dy;
+      break;
     default:
       throw new RuntimeException("Unrecognized distribution type: "+type);
     }
@@ -469,6 +484,8 @@ public class RandomSpatialGenerator {
         type = DistributionType.CORRELATED;
       else if (strType.startsWith("anti"))
         type = DistributionType.ANTI_CORRELATED;
+      else if (strType.startsWith("circle"))
+        type = DistributionType.CIRCLE;
       else {
         System.err.println("Unknown distribution type: "+cla.get("type"));
         printUsage();

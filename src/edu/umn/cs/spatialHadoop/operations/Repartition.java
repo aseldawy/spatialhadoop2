@@ -86,6 +86,8 @@ public class Repartition {
         OutputCollector<IntWritable, T> output, Reporter reporter)
         throws IOException {
       Rectangle shape_mbr = shape.getMBR();
+      if (shape_mbr == null)
+        return;
       // Only send shape to output if its lowest corner lies in the cellMBR
       // This ensures that a replicated shape in an already partitioned file
       // doesn't get send to output from all partitions
