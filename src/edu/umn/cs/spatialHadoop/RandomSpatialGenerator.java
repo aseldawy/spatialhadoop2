@@ -1,17 +1,31 @@
 package edu.umn.cs.spatialHadoop;
 
 import java.io.BufferedOutputStream;
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.util.List;
 import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.Mapper;
+import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapreduce.InputFormat;
+import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
@@ -45,6 +59,154 @@ public class RandomSpatialGenerator {
   public enum DistributionType {
     UNIFORM, GAUSSIAN, CORRELATED, ANTI_CORRELATED
   }
+  
+  
+  /**
+   * Seed of generators to be used. This can be used to generate deterministic
+   * files by reusing the same seed again.
+   */
+  private static final String GenerationSeed = "Generator.Seed";
+  
+  private static final String GenerationMBR = "Generator.MBR";
+  
+  private static final String GenerationType = "Generator.Type";
+  
+  private static final String GenerationRectSize = "Generator.RectSize";
+  
+  /**
+   * A split that does not map to any underlying files. It represents part
+   * of the file to be generated.
+   * @author Ahmed Eldawy
+   */
+  static final class EmptySplit implements InputSplit {
+    
+    /**Index of this split*/
+    int index;
+    
+    /**Length of this split*/
+    long length;
+    
+    public EmptySplit() {}
+    
+    public EmptySplit(int index, long length) {
+      super();
+      this.index = index;
+      this.length = length;
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+      out.writeInt(index);
+      out.writeLong(length);
+    }
+
+    @Override
+    public void readFields(DataInput in) throws IOException {
+      this.index = in.readInt();
+      this.length = in.readLong();
+    }
+
+    @Override
+    public long getLength() throws IOException {
+      return 0;
+    }
+
+    @Override
+    public String[] getLocations() throws IOException {
+      return null;
+    }
+  }
+  
+  static final class GeneratorInputFormat extends InputFormat<CellInfo, LongWritable> {
+
+    @Override
+    public List<org.apache.hadoop.mapreduce.InputSplit> getSplits(
+        JobContext context) throws IOException, InterruptedException {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public RecordReader<CellInfo, LongWritable> createRecordReader(
+        org.apache.hadoop.mapreduce.InputSplit split, TaskAttemptContext context)
+        throws IOException, InterruptedException {
+      // TODO Auto-generated method stub
+      return null;
+    }
+    
+  }
+  
+  /**
+   * Generate number of shapes in a given area
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class GenerateMapper extends MapReduceBase implements
+    Mapper<CellInfo, LongWritable, IntWritable, Shape> {
+
+    /**Generation seed*/
+    private long seed;
+    private Shape shape;
+    private Rectangle mbr;
+    private DistributionType type;
+    private int rectSize;
+
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      this.seed = job.getLong(GenerationSeed, System.currentTimeMillis());
+      this.shape = SpatialSite.createStockShape(job);
+      this.mbr = SpatialSite.getRectangle(job, GenerationMBR);
+      this.type = DistributionType.valueOf(job.get(GenerationType));
+      this.rectSize = job.getInt(GenerationRectSize, 100);
+    }
+    
+    @Override
+    public void map(CellInfo cell, LongWritable genrationSize,
+        OutputCollector<IntWritable, Shape> output, Reporter reporter)
+        throws IOException {
+      // Create a (deterministic) random generator
+      Random random =
+          new Random(seed + ((EmptySplit)reporter.getInputSplit()).index);
+      
+      Text text = new Text();
+      long generatedSize = 0;
+      long totalSize = genrationSize.get();
+      IntWritable cellId = new IntWritable((int) cell.cellId);
+      
+      while (true) {
+        // Generate a random rectangle
+        generateShape(shape, mbr, type, rectSize, random);
+        
+        // Serialize it to text first to make it easy count its size
+        text.clear();
+        shape.toText(text);
+        if (text.getLength() + NEW_LINE.length + generatedSize > totalSize)
+          break;
+        output.collect(cellId, shape);
+        generatedSize += text.getLength() + NEW_LINE.length;
+      }
+
+    }
+  }
+  
+  public static void generateMapReduce(Path file, Rectangle mbr,
+      String gindex, String lindex,
+      long seed, int rectsize, DistributionType type) throws IOException {
+    JobConf job = new JobConf(RandomSpatialGenerator.class);
+    job.setJobName("Generator");
+
+    // Set generation parameters in job
+    SpatialSite.setRectangle(job, GenerationMBR, mbr);
+    job.setLong(GenerationSeed, seed);
+    job.setInt(GenerationRectSize, rectsize);
+    job.set(GenerationType, type.toString());
+
+    // Set input format and map class
+    job.setInputFormat(GeneratorInputFormat.class);
+    job.setMapperClass(Mapper.class);
+  }
+  
 
   public final static double rho = 0.9;
   
