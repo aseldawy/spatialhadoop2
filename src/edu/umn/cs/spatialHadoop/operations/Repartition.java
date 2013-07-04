@@ -146,6 +146,8 @@ public class Repartition {
       GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
       if (globalIndex != null) {
         blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
+      } else {
+        blockSize = outFs.getDefaultBlockSize(outPath);
       }
     }
     
