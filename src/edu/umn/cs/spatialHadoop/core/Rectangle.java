@@ -235,7 +235,7 @@ public class Rectangle implements Shape {
   }
   
   public boolean contains(double rx1, double ry1, double rx2, double ry2) {
-    return rx2 >= x1 && x2 >= rx1 && ry2 >= y1 && y2 >= ry1;
+    return rx1 >= x1 && rx2 <= x2 && ry2 >= y1 && ry2 <= y2;
   }
   
   public Point getCenterPoint() {

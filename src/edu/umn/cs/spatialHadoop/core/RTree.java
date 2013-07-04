@@ -649,10 +649,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
       // Create rectangles in this column
       double y1 = gridInfo.y1;
       for (int row = 0; row < gridInfo.rows; row++) {
-        int yindex2 = xindex1 + (xindex2 - xindex1) *
-            (row + 1) / gridInfo.rows;
-        double y2 = row == gridInfo.rows - 1 ? 
-            gridInfo.y2 : sample[yindex2-1].y;
+        int yindex2 = xindex1 + (xindex2 - xindex1) * (row + 1) / gridInfo.rows;
+        double y2 = row == gridInfo.rows - 1 ? gridInfo.y2 : sample[yindex2 - 1].y;
         
         rectangles[iRectangle++] = new Rectangle(x1, y1, x2, y2);
         y1 = y2;

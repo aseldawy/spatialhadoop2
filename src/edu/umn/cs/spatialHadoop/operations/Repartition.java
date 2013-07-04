@@ -108,13 +108,11 @@ public class Repartition {
    * @return
    * @throws IOException 
    */
-  static int calculateNumberOfPartitions(FileSystem inFs, Path inFile,
+  static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
       FileSystem outFs, Path outFile, long blockSize) throws IOException {
-    Configuration conf = inFs.getConf();
     final float IndexingOverhead =
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);
-    final long fileSize = inFs.getFileStatus(inFile).getLen();
-    long indexedFileSize = (long) (fileSize * (1 + IndexingOverhead));
+    long indexedFileSize = (long) (inFileSize * (1 + IndexingOverhead));
     if (blockSize == 0)
       blockSize = outFs.getDefaultBlockSize(outFile);
     return (int)Math.ceil((float)indexedFileSize / blockSize);
@@ -134,13 +132,11 @@ public class Repartition {
    * @throws IOException
    */
   public static void repartitionMapReduce(Path inFile, Path outPath,
-      Shape stockShape, long blockSize, Rectangle input_mbr, String gindex,
+      Shape stockShape, long blockSize, String gindex,
       String lindex, boolean overwrite) throws IOException {
     
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileSystem outFs = outPath.getFileSystem(new Configuration());
-    if (input_mbr == null)
-      input_mbr = FileMBR.fileMBRMapReduce(inFs, inFile, stockShape);
 
     // Calculate number of partitions in output file
     // Copy blocksize from source file if it's globally indexed
@@ -150,25 +146,24 @@ public class Repartition {
         blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
       }
     }
-    int num_partitions = calculateNumberOfPartitions(inFs, inFile, outFs,outPath, blockSize);
     
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
     if (gindex == null) {
       throw new RuntimeException("Unsupported global index: "+gindex);
     } else if (gindex.equals("grid")) {
+      Rectangle input_mbr = FileMBR.fileMBRMapReduce(inFs, inFile, stockShape);
+      long inFileSize = FileMBR.sizeOfLastProcessedFile;
+      int num_partitions = calculateNumberOfPartitions(new Configuration(),
+          inFileSize, outFs, outPath, blockSize);
+
       GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
     } else if (gindex.equals("rtree")) {
-      // Create a dummy grid info used to find number of columns and rows for
-      // the r-tree packing algorithm
-      GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
-          input_mbr.x2, input_mbr.y2);
-      gridInfo.calculateCellDimensions(num_partitions);
       // Pack in rectangles using an RTree
-      cellInfos = packInRectangles(inFs, inFile, outFs, gridInfo, stockShape, false);
+      cellInfos = packInRectangles(inFs, inFile, outFs, outPath, blockSize, stockShape);
     } else {
       throw new RuntimeException("Unsupported global index: "+gindex);
     }
@@ -216,9 +211,6 @@ public class Repartition {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
 
-    // Do not set a reduce function. Use the default identity reduce function
-    job.setNumReduceTasks(Math.max(1, (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10));
-  
     // Set default parameters for reading input file
     SpatialSite.setShapeClass(job, stockShape.getClass());
   
@@ -231,7 +223,7 @@ public class Repartition {
     } else {
       throw new RuntimeException("Unsupported local index: "+lindex);
     }
-    // Copy blocksize from source file if it's globally indexed
+    // Copy block size from source file if it's globally indexed
     FileSystem inFs = inFile.getFileSystem(job);
     
     if (blockSize == 0) {
@@ -246,7 +238,11 @@ public class Repartition {
       job.setLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE, blockSize);
     SpatialSite.setCells(job, cellInfos);
     job.setBoolean(SpatialSite.OVERWRITE, overwrite);
-  
+
+    // Do not set a reduce function. Use the default identity reduce function
+    job.setNumReduceTasks(Math.max(1, Math.min(cellInfos.length,
+        (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
+
     JobClient.runJob(job);
     
     // Concatenate all master files into one file
@@ -278,16 +274,15 @@ public class Repartition {
     Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, false, false, false, false);
   }
 
-  public static <S extends Shape> CellInfo[] packInRectangles(
-      FileSystem inFileSystem, Path inputPath, FileSystem outFileSystem,
-      GridInfo gridInfo, S stockShape, boolean local) throws IOException {
-    return packInRectangles(inFileSystem, new Path[] { inputPath },
-        outFileSystem, gridInfo, stockShape, local);
+  public static <S extends Shape> CellInfo[] packInRectangles(FileSystem inFS,
+      Path inFile, FileSystem outFS, Path outFile, long blocksize, S stockShape)
+      throws IOException {
+    return packInRectangles(inFS, new Path[] { inFile },
+        outFS, outFile, blocksize, stockShape);
   }
   
   public static <S extends Shape> CellInfo[] packInRectangles(FileSystem fs,
-      Path[] files, FileSystem outFileSystem, GridInfo gridInfo, S stockShape,
-      boolean local)
+      Path[] files, FileSystem outFileSystem, Path outFile, long blocksize, S stockShape)
       throws IOException {
     final Vector<Point> sample = new Vector<Point>();
     
@@ -306,14 +301,23 @@ public class Repartition {
         sample.add(value.clone());
       }
     };
-    if (local) {
-      Sampler.sampleLocalWithRatio(fs, files, sample_ratio,
-          System.currentTimeMillis(), resultCollector, stockShape, new Point());
-    } else {
-      Sampler.sampleMapReduceWithRatio(fs, files, sample_ratio, sample_count,
-          System.currentTimeMillis(), resultCollector, stockShape, new Point());
-    }
+    Sampler.sampleWithRatio(fs, files, sample_ratio, sample_count,
+        System.currentTimeMillis(), resultCollector, stockShape, new Point());
     LOG.info("Finished reading a sample of size: "+sample.size()+" records");
+    
+    long inFileSize = Sampler.sizeOfLastProcessedFile;
+
+    // Compute an approximate MBR to determine the desired number of rows
+    // and columns
+    Rectangle approxMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        Double.MIN_VALUE, Double.MIN_VALUE);
+    for (Point pt : sample) {
+      approxMBR.expand(pt);
+    }
+    GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
+    gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
+    gridInfo.set(Double.MIN_VALUE, Double.MIN_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
+    
     Rectangle[] rectangles = RTree.packInRectangles(gridInfo,
             sample.toArray(new Point[sample.size()]));
     CellInfo[] cellsInfo = new CellInfo[rectangles.length];
@@ -323,13 +327,13 @@ public class Repartition {
     return cellsInfo;
   }
   
-  public static<S extends Shape> void repartitionLocal(Path inFile, Path outPath,
-      S stockShape, long blockSize, Rectangle input_mbr, String gindex,
-      String lindex, boolean overwrite)
+  public static <S extends Shape> void repartitionLocal(Path inFile,
+      Path outFile, S stockShape, long blockSize, String gindex, String lindex,
+      boolean overwrite)
           throws IOException {
     
     FileSystem inFs = inFile.getFileSystem(new Configuration());
-    FileSystem outFs = outPath.getFileSystem(new Configuration());
+    FileSystem outFs = outFile.getFileSystem(new Configuration());
     
     // Calculate number of partitions in output file
     // Copy blocksize from source file if it's globally indexed
@@ -340,33 +344,27 @@ public class Repartition {
       }
     }
 
-    int num_partitions = calculateNumberOfPartitions(inFs, inFile, outFs, outPath, blockSize);
-    
-    if (input_mbr == null)
-      input_mbr = FileMBR.fileMBRLocal(inFs, inFile, stockShape);
-    
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
     if (gindex == null) {
       throw new RuntimeException("Unsupported global index: "+gindex);
     } else if (gindex.equals("grid")) {
+      Rectangle input_mbr = FileMBR.fileMBRLocal(inFs, inFile, stockShape);
+      long inFileSize = FileMBR.sizeOfLastProcessedFile;
+      int num_partitions = calculateNumberOfPartitions(new Configuration(),
+          inFileSize, outFs, outFile, blockSize);
+
       GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
     } else if (gindex.equals("rtree")) {
-      // Create a dummy grid info used to find number of columns and rows for
-      // the r-tree packing algorithm
-      GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
-          input_mbr.x2, input_mbr.y2);
-      gridInfo.calculateCellDimensions(num_partitions);
-      // Pack in rectangles using an RTree
-      cellInfos = packInRectangles(inFs, inFile, outFs, gridInfo, stockShape, true);
+      cellInfos = packInRectangles(inFs, inFile, outFs, outFile, blockSize, stockShape);
     } else {
       throw new RuntimeException("Unsupported global index: "+gindex);
     }
     
-    repartitionLocal(inFile, outPath, stockShape, blockSize, cellInfos, gindex,
+    repartitionLocal(inFile, outFile, stockShape, blockSize, cellInfos, gindex,
         lindex, overwrite);
   }
 
@@ -484,14 +482,6 @@ public class Repartition {
     LOG.info("Shape: "+stockShape.getClass());
     CellInfo[] cells = cla.getCells();
 
-    Rectangle input_mbr = cla.getRectangle();
-    if (input_mbr == null && cells == null) {
-      LOG.info("Calculating file MBR");
-      input_mbr = local ? FileMBR.fileMBRLocal(fs, inputPath, stockShape) : 
-        FileMBR.fileMBRMapReduce(fs, inputPath, stockShape);
-      LOG.info("File MBR is "+input_mbr);
-    }
-    
     long t1 = System.currentTimeMillis();
     if (cells != null) {
       if (local)
@@ -503,10 +493,10 @@ public class Repartition {
     } else {
       if (local)
         repartitionLocal(inputPath, outputPath, stockShape,
-            blockSize, input_mbr, gindex, lindex, overwrite);
+            blockSize, gindex, lindex, overwrite);
       else
         repartitionMapReduce(inputPath, outputPath, stockShape,
-            blockSize, input_mbr, gindex, lindex, overwrite);
+            blockSize, gindex, lindex, overwrite);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Total indexing time in millis "+(t2-t1));

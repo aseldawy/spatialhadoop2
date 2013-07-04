@@ -10,6 +10,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -18,6 +19,9 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
@@ -37,30 +41,30 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  */
 public class FileMBR {
   private static final NullWritable Dummy = NullWritable.get();
+  
+  /**
+   * Keeps track of the size of last processed file. Used to determine the
+   * uncompressed size of a file.
+   */
+  public static long sizeOfLastProcessedFile;
 
   public static class Map extends MapReduceBase implements
       Mapper<Rectangle, Shape, NullWritable, Rectangle> {
     
     private final Rectangle MBR = new Rectangle();
-    private Rectangle mbr_so_far = null;
+    private Rectangle mbr_so_far = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        Double.MIN_VALUE, Double.MIN_VALUE);
     
     public void map(Rectangle dummy, Shape shape,
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
-        throws IOException {
+            throws IOException {
       Rectangle mbr = shape.getMBR();
-      
-      if (mbr_so_far == null) {
-        mbr_so_far = new Rectangle();
-        mbr_so_far.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+
+      // Skip writing rectangle to output if totally contained in mbr_so_far
+      if (!mbr_so_far.contains(mbr)) {
+        mbr_so_far.expand(mbr);
         MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
         output.collect(Dummy, MBR);
-      } else {
-        // Skip writing rectangle to output if totally contained in mbr_so_far
-        if (!mbr_so_far.contains(mbr)) {
-          mbr_so_far.expand(mbr);
-          MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-          output.collect(Dummy, MBR);
-        }
       }
     }
   }
@@ -71,23 +75,13 @@ public class FileMBR {
     public void reduce(NullWritable dummy, Iterator<Rectangle> values,
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
             throws IOException {
-      if (values.hasNext()) {
+      Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          Double.MIN_VALUE, Double.MIN_VALUE);
+      while (values.hasNext()) {
         Rectangle rect = values.next();
-        
-        double x1 = rect.x1;
-        double y1 = rect.y1;
-        double x2 = rect.x2;
-        double y2 = rect.y2;
-
-        while (values.hasNext()) {
-          rect = values.next();
-          if (rect.x1 < x1) x1 = rect.x1;
-          if (rect.y1 < y1) y1 = rect.y1;
-          if (rect.x2 > x2) x2 = rect.x2;
-          if (rect.y2 > y2) y2 = rect.y2;
-        }
-        output.collect(dummy, new Rectangle(x1, y1, x2, y2));
+        mbr.expand(rect);
       }
+      output.collect(dummy, mbr);
     }
   }
   
@@ -133,8 +127,11 @@ public class FileMBR {
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job
-    JobClient.runJob(job);
-    
+    RunningJob runningJob = JobClient.runJob(job);
+    Counters counters = runningJob.getCounters();
+    Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
+    FileMBR.sizeOfLastProcessedFile = inputBytesCounter.getValue();
+
     // Read job result
     FileStatus[] results = outFs.listStatus(outputPath);
     Rectangle mbr = new Rectangle();
@@ -170,22 +167,18 @@ public class FileMBR {
       return gindex.getMBR();
     }
     long file_size = fs.getFileStatus(file).getLen();
+    sizeOfLastProcessedFile = file_size;
     
     ShapeRecordReader<Shape> shapeReader = new ShapeRecordReader<Shape>(
         new Configuration(), new FileSplit(file, 0, file_size, new String[] {}));
 
-    Rectangle key = shapeReader.createKey();
+    Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        Double.MIN_VALUE, Double.MIN_VALUE);
     
-    if (!shapeReader.next(key, shape)) {
-      shapeReader.close();
-      return null;
-    }
-      
-    Rectangle rect = shape.getMBR();
-    Rectangle mbr = rect.clone();
+    Rectangle key = shapeReader.createKey();
 
     while (shapeReader.next(key, shape)) {
-      rect = shape.getMBR();
+      Rectangle rect = shape.getMBR();
       mbr.expand(rect);
     }
     return mbr;

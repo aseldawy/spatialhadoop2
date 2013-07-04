@@ -55,6 +55,12 @@ public class Sampler {
   private static final String InClass = "sampler.InClass";
   private static final String OutClass = "sampler.OutClass";
   
+  /**
+   * Keeps track of the (uncompressed) size of the last processed file or
+   * directory.
+   */
+  public static long sizeOfLastProcessedFile;
+  
   /**Random seed to use by all mappers to ensure unique result per seed*/
   private static final String RANDOM_SEED = "sampler.RandomSeed";
   
@@ -137,14 +143,28 @@ public class Sampler {
       }
     }
   }
+  
+  public static <T extends TextSerializable, O extends TextSerializable> int sampleWithRatio(
+      FileSystem fs, Path[] files, double ratio, long threshold, long seed,
+      final ResultCollector<O> output, T inObj, O outObj) throws IOException {
+    FileStatus inFStatus = fs.getFileStatus(files[0]);
+    if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 1) {
+      // Either a directory of file or a large file
+      return sampleMapReduceWithRatio(fs, files, ratio, threshold, seed, output, inObj, outObj);
+    } else {
+      // A single small file, process it without MapReduce
+      return sampleLocalWithRatio(fs, files, ratio, threshold, seed, output, inObj, outObj);
+    }
+  }  
 
   public static <T extends TextSerializable, O extends TextSerializable> int sampleLocalWithRatio(
-      FileSystem fs, Path[] files, double ratio, long seed,
+      FileSystem fs, Path[] files, double ratio, long threshold, long seed,
       final ResultCollector<O> output, T inObj, O outObj) throws IOException {
     long total_size = 0;
     for (Path file : files) {
       total_size += fs.getFileStatus(file).getLen();
     }
+    sizeOfLastProcessedFile = total_size;
     return sampleLocalWithSize(fs, files, (long) (total_size * ratio), seed,
         output, inObj, outObj);
   }
@@ -198,6 +218,10 @@ public class Sampler {
     Counters counters = run_job.getCounters();
     Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
     final long resultCount = outputRecordCounter.getValue();
+
+    Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
+    Sampler.sizeOfLastProcessedFile = inputBytesCounter.getValue();
+
     // Ratio of records to return from output based on the threshold
     // Note that any number greater than or equal to one will cause all
     // elements to be returned
