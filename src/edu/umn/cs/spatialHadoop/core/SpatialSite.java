@@ -296,4 +296,25 @@ public class SpatialSite {
     return cells;
   }
 
+  
+  public static void setRectangle(Configuration conf, String name, Rectangle rect) {
+    conf.set(name, rect.toText(new Text()).toString());
+  }
+  
+  /**
+   * Retrieves a rectangle from configuration parameter
+   * @param conf
+   * @param name
+   * @return
+   */
+  public static Rectangle getRectangle(Configuration conf, String name) {
+    Rectangle rect = null;
+    String rectStr = conf.get(name);
+    if (rectStr != null) {
+      rect = new Rectangle();
+      rect.fromText(new Text(rectStr));
+    }
+    return rect;
+  }
+
 }
