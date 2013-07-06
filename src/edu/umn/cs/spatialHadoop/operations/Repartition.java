@@ -86,6 +86,8 @@ public class Repartition {
         OutputCollector<IntWritable, T> output, Reporter reporter)
         throws IOException {
       Rectangle shape_mbr = shape.getMBR();
+      if (shape_mbr == null)
+        return;
       // Only send shape to output if its lowest corner lies in the cellMBR
       // This ensures that a replicated shape in an already partitioned file
       // doesn't get send to output from all partitions
@@ -108,7 +110,7 @@ public class Repartition {
    * @return
    * @throws IOException 
    */
-  static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
+  public static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
       FileSystem outFs, Path outFile, long blockSize) throws IOException {
     final float IndexingOverhead =
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);

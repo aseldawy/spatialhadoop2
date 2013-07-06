@@ -6,8 +6,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.LinkedList;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -25,7 +26,6 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextOutputFormat;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
-import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -36,12 +36,17 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 public class ClosestPair {
+  
+  private static final Log LOG = LogFactory.getLog(ClosestPair.class);
+  
 	private static final NullWritable Dummy = NullWritable.get();
 	
 	static class DistanceAndPair implements Writable {
 		double distance;
 		PairWritable<Point> pair = new PairWritable<Point>();
-		public DistanceAndPair() { }
+		public DistanceAndPair() {
+		}
+		
 		public DistanceAndPair(double d, Point a, Point b) {
 			distance = d;
 			pair.first = a;
@@ -69,41 +74,6 @@ public class ClosestPair {
 		}
 	}
 
-	static class DistanceAndBuffer implements Writable {
-		DistanceAndPair delta;
-		Point []buffer;
-		    
-		public DistanceAndBuffer() { }
-		public DistanceAndBuffer(DistanceAndPair delta, Point buffer[]) {
-			this.delta = delta;
-			this.buffer = buffer;
-		}
-		
-	    @Override
-	    public void write(DataOutput out) throws IOException {
-	    	delta.write(out);
-	    	out.writeInt(buffer.length);
-	    	for (Point p : buffer)
-	    		p.write(out);
-	    }
-
-	    @Override
-	    public void readFields(DataInput in) throws IOException {
-	    	delta = new DistanceAndPair();
-	    	delta.readFields(in);
-	    	buffer = new Point[in.readInt()];
-	    	for (int i=0; i<buffer.length; i++) {
-	    		buffer[i] = new Point();
-	    		buffer[i].readFields(in);
-	    	}
-	    }
-	    
-	    @Override
-	    public String toString() {
-	    	return "";
-	    }
-	}
-
 	/***
 	 * [l, r] inclusive
 	 * @param l
@@ -111,13 +81,18 @@ public class ClosestPair {
 	 * @return
 	 */
 	public static DistanceAndPair nearestNeighbor(Shape[] a, Point[] tmp, int l, int r) {
-		if (l >= r) return new DistanceAndPair(Double.MAX_VALUE, null, null);
+		if (l >= r) return null;
 		
 		int mid = (l + r) >> 1;
 		double medianX = ((Point)a[mid]).x;
 		DistanceAndPair delta1 = nearestNeighbor(a, tmp, l, mid);
 		DistanceAndPair delta2 = nearestNeighbor(a, tmp, mid + 1, r);
-		DistanceAndPair delta = delta1.distance < delta2.distance || delta2.pair.first == null ? delta1 : delta2;
+		DistanceAndPair delta;
+		if (delta1 == null || delta2 == null) {
+		  delta = delta1 == null ? delta2 : delta1;
+		} else {
+		  delta = delta1.distance < delta2.distance ? delta1 : delta2;
+		}
 		int i = l, j = mid + 1, k = l;
 		
 		while (i <= mid && j <= r)
@@ -131,13 +106,15 @@ public class ClosestPair {
 		
 		k = l;
 		for (i=l; i<=r; i++)
-			if (Math.abs(tmp[i].x - medianX) <= delta.distance)
+			if (delta == null || Math.abs(tmp[i].x - medianX) <= delta.distance)
 				tmp[k++] = tmp[i];
 
 		for (i=l; i<k; i++)
 			for (j=i+1; j<k; j++) {
-				if (tmp[j].y - tmp[i].y >= delta.distance) break;
-				else if (tmp[i].distanceTo(tmp[j]) < delta.distance || delta.pair.first == null) {
+				if (delta != null && tmp[j].y - tmp[i].y >= delta.distance) break;
+				else if (delta == null || tmp[i].distanceTo(tmp[j]) < delta.distance) {
+				  if (delta == null)
+				    delta = new DistanceAndPair();
 					delta.distance = tmp[i].distanceTo(tmp[j]);
 					delta.pair.first = tmp[i];
 					delta.pair.second = tmp[j];
@@ -147,72 +124,70 @@ public class ClosestPair {
 	}
 	
 	public static class Map extends MapReduceBase implements
-	Mapper<CellInfo, ArrayWritable, NullWritable, DistanceAndBuffer> {
+	Mapper<Rectangle, ArrayWritable, NullWritable, Point> {
 		@Override
-		public void map(CellInfo mbr, ArrayWritable arr, OutputCollector<NullWritable, DistanceAndBuffer> out,
+		public void map(Rectangle mbr, ArrayWritable arr, OutputCollector<NullWritable, Point> out,
 				Reporter reporter) throws IOException {
-			double x1 = Long.MAX_VALUE, y1 = Long.MAX_VALUE;
-			double x2 = Long.MIN_VALUE, y2 = Long.MIN_VALUE;
 			Shape[] a = (Shape[])arr.get();
-			Point[] tmp = new Point[a.length];
-			boolean inBuffer[] = new boolean[a.length];
-			for (Shape _p : a) {
-				Point p = (Point)_p;
-				if (p.x < x1) x1 = p.x;
-				if (p.y < y1) y1 = p.y;
-				if (p.x > x2) x2 = p.x;
-				if (p.y > y2) y2 = p.y;
+			
+			if (a.length == 1) {
+			  // Cannot compute closest pair for an input of size 1
+			  out.collect(Dummy, (Point) a[0]);
+			  return;
 			}
 			
+			Point[] tmp = new Point[a.length];
 			Arrays.sort(a);
 			DistanceAndPair delta = nearestNeighbor(a, tmp, 0, a.length - 1);
-			int cnt = 0;
-			for (int i=0; i<a.length; i++) {
+			if (delta.pair == null || delta.pair.first == null || delta.pair.second == null) {
+			  LOG.error("Error null closest pair for input of size: "+a.length);
+			}
+			LOG.info("Found the closest pair: "+delta);
+			
+			Rectangle pruned_area = new Rectangle(mbr.x1 + delta.distance,
+			    mbr.y1 + delta.distance,
+			    mbr.x2 - delta.distance, mbr.y2 - delta.distance);
+			
+			LOG.info("MRR: "+mbr);
+			LOG.info("Pruned area: "+pruned_area);
+
+      out.collect(Dummy, delta.pair.first);
+      out.collect(Dummy, delta.pair.second);
+      
+      int pruned_points = 0;
+      
+			for (int i=0; i < a.length; i++) {
 				Point p = (Point)a[i];
-				if (p.x <= x1 + delta.distance || p.x >= x2 - delta.distance || 
-					p.y <= y1 + delta.distance || p.y >= y2 - delta.distance) {
-					inBuffer[i] = true;
-					cnt++;
+				if (!pruned_area.contains(p) && p != delta.pair.first && p != delta.pair.second) {
+				  out.collect(Dummy, p);
+				} else {
+				  pruned_points++;
 				}
 			}
 			
-			Point buffer[] = new Point[cnt];
-			int ptr = 0;
-			for (int i=0; i<a.length; i++)
-				if (inBuffer[i]) buffer[ptr++] = (Point)a[i];
-			
-			out.collect(Dummy, new DistanceAndBuffer(delta, buffer));
+			LOG.info("Total pruned points "+pruned_points);
 		}
 	}
 	
 	
 	public static class Reduce extends MapReduceBase implements
-	Reducer<NullWritable, DistanceAndBuffer, NullWritable, DistanceAndPair> {
+	Reducer<NullWritable, Point, NullWritable, DistanceAndPair> {
 
 		@Override
-		public void reduce(NullWritable useless, Iterator<DistanceAndBuffer> it,
+		public void reduce(NullWritable useless, Iterator<Point> it,
 				OutputCollector<NullWritable, DistanceAndPair> out,
 				Reporter reporter) throws IOException {
+		  
+		  ArrayList<Point> allPoints = new ArrayList<Point>();
+		  while (it.hasNext()) {
+		    allPoints.add(it.next());
+		  }
+		  
+		  Point[] all_points = allPoints.toArray(new Point[allPoints.size()]);
 			
-			DistanceAndPair delta = null;
-			LinkedList<Point> buffer = new LinkedList<Point>();
-			while (it.hasNext()) {
-				DistanceAndBuffer localBuffer = it.next();
-				if (delta == null) delta = localBuffer.delta;
-				else if (localBuffer.delta.distance < delta.distance) delta = localBuffer.delta;
-				
-				for (Point p : localBuffer.buffer) 
-					buffer.add(p);
-			}
-			
-			Point a[] = new Point[buffer.size()];
-			Point tmp[] = new Point[buffer.size()];
-			a = buffer.toArray(a);
-			Arrays.sort(a);
-			DistanceAndPair delta1 = nearestNeighbor(a, tmp, 0, a.length - 1);
-			
-			if (delta == null || delta1.distance < delta.distance) delta = delta1;
-			out.collect(Dummy, delta);
+      DistanceAndPair delta = nearestNeighbor(all_points,
+          new Point[all_points.length], 0, all_points.length - 1);
+      out.collect(Dummy, delta);
 		}
 	}
 	
@@ -276,7 +251,7 @@ public class ClosestPair {
 
 		job.setJobName("ClosestPair");
 		job.setMapOutputKeyClass(NullWritable.class);
-		job.setMapOutputValueClass(DistanceAndBuffer.class);
+		job.setMapOutputValueClass(stockShape.getClass());
 		
 		job.setMapperClass(Map.class);
 		job.setReducerClass(Reduce.class);
@@ -326,11 +301,14 @@ public class ClosestPair {
 			throw new RuntimeException("Input file does not exist");
 		}
 
-		Shape stockShape = new Point();
+		Point stockShape = (Point) cla.getShape(true);
+		long t1 = System.currentTimeMillis();
 		if (SpatialSite.getGlobalIndex(fs, inputFile) != null)
 		  closestPair(fs, inputFile, stockShape);
 		else
 		  ClosestPairHadoop.cloesetPair(fs, inputFile, stockShape);
 //		closestPairLocal(fs, inputFile, stockShape);
+		long t2 = System.currentTimeMillis();
+		System.out.println("Total time: "+(t2-t1)+" millis");
 	}
 }

@@ -3,17 +3,21 @@ package edu.umn.cs.spatialHadoop.core;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.Text;
 
-import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
-import com.esri.core.geometry.ogc.OGCGeometry;
-import com.esri.core.geometry.ogc.OGCGeometryCollection;
-import com.esri.core.geometry.ogc.OGCPoint;
+import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.LineString;
+import com.vividsolutions.jts.geom.Polygon;
+import com.vividsolutions.jts.io.ParseException;
+import com.vividsolutions.jts.io.WKBReader;
+import com.vividsolutions.jts.io.WKBWriter;
+import com.vividsolutions.jts.io.WKTReader;
+
+import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 /**
  * A shape class that represents an OGC compliant geometry. The geometry is
@@ -35,113 +39,62 @@ import com.esri.core.geometry.ogc.OGCPoint;
  * @author Ahmed Eldawy
  * 
  */
-public class OGCShape implements Shape {
+public class JTSShape implements Shape {
   
-  private static final Log LOG = LogFactory.getLog(OGCShape.class);
+  private static final Log LOG = LogFactory.getLog(JTSShape.class);
   
   private static final byte[][] ShapeNames = { "LINESTRING".getBytes(),
       "POINT".getBytes(), "POLYGON".getBytes(), "MULTIPOINT".getBytes(),
       "MULTILINESTRING".getBytes(), "MULTIPOLYGON".getBytes(),
       "GEOMETRYCOLLECTION".getBytes() };
   
-  private static final byte[] Separator = {'\t'};
+  private static final byte[] Separator = {','};
+  
+  private final WKTReader wktReader = new WKTReader();
+  private final WKBWriter wkbWriter = new WKBWriter();
+  private final WKBReader wkbReader = new WKBReader();
   
   /**
    * The underlying geometry
    */
-  public OGCGeometry geom;
+  public Geometry geom;
   
   /**
    * Any extra data after the shape information
    */
   public String extra;
   
-  public OGCShape() {
+  public JTSShape() {
     this(null);
   }
   
-  public OGCShape(OGCGeometry geom) {
+  public JTSShape(Geometry geom) {
     this.geom = geom;
   }
 
   @Override
   public void write(DataOutput out) throws IOException {
-    byte[] bytes = geom.asBinary().array();
-    out.writeInt(bytes.length);
-    out.write(bytes);
-    if (extra == null) {
-      out.writeInt(-1);
-    } else {
-      bytes = extra.getBytes();
-      out.writeInt(bytes.length);
-      out.write(bytes);
-    }
+    byte[] wkb = wkbWriter.write(geom);
+    out.writeInt(wkb.length);
+    out.write(wkb);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    int size = in.readInt();
-    byte[] bytes = new byte[size];
-    in.readFully(bytes);
-    geom = OGCGeometry.fromBinary(ByteBuffer.wrap(bytes));
-    size = in.readInt();
-    if (size == -1) {
-      extra = null;
-    } else {
-      bytes = new byte[size];
-      in.readFully(bytes);
-      extra = new String(bytes);
+    try {
+      byte[] wkb = new byte[in.readInt()];
+      in.readFully(wkb);
+      geom = wkbReader.read(wkb);
+    } catch (ParseException e) {
+      e.printStackTrace();
+      throw new IOException(e);
     }
   }
 
-  private static final byte[] HexLookupTable = {
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    'A', 'B', 'C', 'D', 'E', 'F'
-  };
-  
-  /**
-   * Convert binary array to a hex string.
-   * @param binary
-   * @return
-   */
-  public static String bytesToHex(byte[] binary) {
-    // Each byte is converted to two hex values
-    byte[] hex = new byte[binary.length * 2];
-    for (int i = 0; i < binary.length; i++) {
-      hex[2*i] = HexLookupTable[(binary[i] & 0xFF) >>> 4];
-      hex[2*i+1] = HexLookupTable[binary[i] & 0xF];
-    }
-    return new String(hex);
-  }
-  
-  /**
-   * Convert a string containing a hex string to a byte array of binary.
-   * For example, the string "AABB" is converted to the byte array {0xAA, 0XBB}
-   * @param hex
-   * @return
-   */
-  public static byte[] hexToBytes(String hex) {
-    byte[] bytes = new byte[(hex.length() + 1) / 2];
-    for (int i = 0; i < hex.length(); i++) {
-      byte x = (byte) hex.charAt(i);
-      if (x >= '0' && x <= '9')
-        x -= '0';
-      else if (x >= 'a' && x <= 'f')
-        x = (byte) ((x - 'a') + 0xa);
-      else if (x >= 'A' && x <= 'F')
-        x = (byte) ((x - 'A') + 0xA);
-      else
-        throw new RuntimeException("Invalid hex char "+x);
-      if (i % 2 == 0)
-        x <<= 4;
-      bytes[i / 2] |= x;
-    }
-    return bytes;
-  }
-  
   @Override
   public Text toText(Text text) {
-    String str = bytesToHex(geom.asBinary().array());
+    //TextSerializerHelper.serializeLong(0, text, '\t');
+    String str = WKBWriter.bytesToHex(wkbWriter.write(geom));
     byte[] str_b = str.getBytes();
     text.append(str_b, 0, str_b.length);
     if (extra != null) {
@@ -152,16 +105,16 @@ public class OGCShape implements Shape {
     return text;
   }
   
-  public static OGCGeometry parseText(String str) {
-    OGCGeometry geom = null;
+  public Geometry parseText(String str) throws ParseException {
+    Geometry geom = null;
     try {
       // Parse string as well known text (WKT)
-      geom = OGCGeometry.fromText(str);
-    } catch (IllegalArgumentException e) {
+      geom = wktReader.read(str);
+    } catch (ParseException e) {
       try {
         // Error parsing from WKT, try hex string instead
-        byte[] binary = hexToBytes(str);
-        geom = OGCGeometry.fromBinary(ByteBuffer.wrap(binary));
+        byte[] binary = WKBReader.hexToBytes(str);
+        geom = wkbReader.read(binary);
       } catch (RuntimeException e1) {
         // Cannot parse text. Just return null
       }
@@ -172,6 +125,8 @@ public class OGCShape implements Shape {
 
   @Override
   public void fromText(Text text) {
+    // Read and skip a long
+//    TextSerializerHelper.consumeLong(text, '\t');
     try {
       // Check whether this text is a Well Known Text (WKT) or a hexed string
       boolean wkt = false;
@@ -213,6 +168,9 @@ public class OGCShape implements Shape {
     } catch (RuntimeException e) {
       LOG.error("Error parsing: "+text);
       throw e;
+    } catch (ParseException e) {
+      LOG.error("Error parsing: "+text);
+      e.printStackTrace();
     }
   }
 
@@ -220,13 +178,14 @@ public class OGCShape implements Shape {
   public Rectangle getMBR() {
     if (geom.isEmpty())
       return null;
-    com.esri.core.geometry.Polygon mbr = (com.esri.core.geometry.Polygon) geom.envelope().getEsriGeometry();
-    int pointCount = mbr.getPointCount();
-    double xmin = mbr.getPoint(0).getX();
-    double ymin = mbr.getPoint(0).getY();
+    com.vividsolutions.jts.geom.Polygon mbr = (com.vividsolutions.jts.geom.Polygon) geom.getEnvelope();
+    LineString mbrr = mbr.getExteriorRing();
+    int pointCount = mbrr.getNumPoints();
+    double xmin = mbrr.getPointN(0).getX();
+    double ymin = mbrr.getPointN(0).getY();
     double xmax = xmin, ymax = ymin;
     for (int i = 1; i < pointCount; i++) {
-      com.esri.core.geometry.Point point = mbr.getPoint(i);
+      com.vividsolutions.jts.geom.Point point = mbrr.getPointN(i);
       if (point.getX() < xmin)
         xmin = point.getX();
       if (point.getX() > xmax)
@@ -242,25 +201,26 @@ public class OGCShape implements Shape {
 
   @Override
   public double distanceTo(double x, double y) {
-    OGCPoint point = new OGCPoint(new com.esri.core.geometry.Point(x, y), this.geom.getEsriSpatialReference());
-    return this.geom.distance(point);
+    return this.distanceTo(x, y);
   }
 
   @Override
   public boolean isIntersected(Shape s) {
     Rectangle mbr = s.getMBR();
-    ArrayList<OGCGeometry> points = new ArrayList<OGCGeometry>();
-    points.add(new OGCPoint(new com.esri.core.geometry.Point(mbr.x1, mbr.y1), geom.getEsriSpatialReference()));
-    points.add(new OGCPoint(new com.esri.core.geometry.Point(mbr.x2, mbr.y2), geom.getEsriSpatialReference()));
+    Coordinate[] coordinates = new Coordinate[5];
+    coordinates[0] = new Coordinate(mbr.x1, mbr.y1);
+    coordinates[1] = new Coordinate(mbr.x1, mbr.y2);
+    coordinates[2] = new Coordinate(mbr.x2, mbr.y2);
+    coordinates[3] = new Coordinate(mbr.x2, mbr.y1);
+    coordinates[4] = coordinates[0];
+    Polygon mbrPoly = geom.getFactory().createPolygon(geom.getFactory().createLinearRing(coordinates), null);
     
-    OGCGeometryCollection all_points = new OGCConcreteGeometryCollection(points, geom.getEsriSpatialReference());
-    
-    return geom.intersects(all_points.envelope());
+    return geom.intersects(mbrPoly);
   }
 
   @Override
   public Shape clone() {
-    OGCShape copy = new OGCShape(this.geom);
+    JTSShape copy = new JTSShape(this.geom);
     copy.extra = this.extra;
     return copy;
   }
@@ -268,5 +228,11 @@ public class OGCShape implements Shape {
   @Override
   public String toString() {
     return super.toString()+","+extra;
+  }
+  
+  public static void main(String[] args) throws ParseException {
+    String str = "POLYGON ((-78.647906 35.31423899999999, -78.647785 35.31423899999999, -78.647785 35.314638, -78.647906 35.314638, -78.647906 35.31423899999999))";
+    Geometry read = new WKTReader().read(str);
+    System.out.println(read.toText());
   }
 }
