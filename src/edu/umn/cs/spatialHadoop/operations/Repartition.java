@@ -110,7 +110,7 @@ public class Repartition {
    * @return
    * @throws IOException 
    */
-  static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
+  public static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
       FileSystem outFs, Path outFile, long blockSize) throws IOException {
     final float IndexingOverhead =
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);

@@ -44,7 +44,7 @@ public class OGCShape implements Shape {
       "MULTILINESTRING".getBytes(), "MULTIPOLYGON".getBytes(),
       "GEOMETRYCOLLECTION".getBytes() };
   
-  private static final byte[] Separator = {','};
+  private static final byte[] Separator = {'\t'};
   
   /**
    * The underlying geometry
