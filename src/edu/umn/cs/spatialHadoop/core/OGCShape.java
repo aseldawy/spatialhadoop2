@@ -163,7 +163,7 @@ public class OGCShape implements Shape {
         byte[] binary = hexToBytes(str);
         geom = OGCGeometry.fromBinary(ByteBuffer.wrap(binary));
       } catch (RuntimeException e1) {
-        // Cannot parse text. Just return null
+        throw new RuntimeException("Cannot parse the shape: "+str);
       }
     }
     return geom;

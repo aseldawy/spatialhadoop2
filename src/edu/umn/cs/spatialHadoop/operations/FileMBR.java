@@ -61,7 +61,7 @@ public class FileMBR {
       Rectangle mbr = shape.getMBR();
 
       // Skip writing rectangle to output if totally contained in mbr_so_far
-      if (!mbr_so_far.contains(mbr)) {
+      if (mbr != null && !mbr_so_far.contains(mbr)) {
         mbr_so_far.expand(mbr);
         MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
         output.collect(Dummy, MBR);
