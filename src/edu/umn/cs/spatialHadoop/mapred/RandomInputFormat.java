@@ -4,6 +4,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
@@ -59,10 +61,16 @@ public class RandomInputFormat<S extends Shape> implements InputFormat<Rectangle
   @Override
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
     long totalFileSize = job.getLong(RandomShapeGenerator.GenerationSize, 0);
-    InputSplit[] splits = new GeneratedSplit[numSplits];
-    for (int i = 0; i < numSplits; i++) {
-      splits[i] = new GeneratedSplit(i, totalFileSize / numSplits);
+    long splitSize = FileSystem.get(job).getDefaultBlockSize(new Path("/"));
+    InputSplit[] splits = new InputSplit[(int) Math.ceil((double)totalFileSize / splitSize)];
+    int i;
+    for (i = 0; i < splits.length - 1; i++) {
+      splits[i] = new GeneratedSplit(i, splitSize);
     }
+    if (totalFileSize % splitSize != 0)
+      splits[i] = new GeneratedSplit(i, totalFileSize % splitSize);
+    else
+      splits[i] = new GeneratedSplit(i, splitSize);
     return splits;
   }
 

@@ -1,10 +1,14 @@
 package edu.umn.cs.spatialHadoop;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -15,6 +19,7 @@ import org.apache.hadoop.mapred.JobConf;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.RTreeGridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -25,6 +30,7 @@ import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RandomInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
+import edu.umn.cs.spatialHadoop.operations.Plot;
 import edu.umn.cs.spatialHadoop.operations.Repartition;
 
 
@@ -96,10 +102,16 @@ public class RandomSpatialGenerator {
     SpatialSite.setCells(job, cells);
     
     // Do not set a reduce function. Use the default identity reduce function
-    job.setNumReduceTasks(Math.max(1, Math.min(cells.length,
-        (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
+    if (cells.length == 1) {
+      // All objects are in one partition. No need for a reduce phase
+      job.setNumReduceTasks(0);
+    } else {
+      // More than one partition. Need a reduce phase to group shapes of the
+      // same partition together
+      job.setNumReduceTasks(Math.max(1, Math.min(cells.length,
+          (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
+    }
     
-
     // Set output path
     FileOutputFormat.setOutputPath(job, file);
     if (lindex == null) {
@@ -112,6 +124,36 @@ public class RandomSpatialGenerator {
     }
     
     JobClient.runJob(job);
+    
+    // Concatenate all master files into one file
+    FileStatus[] resultFiles = outFs.listStatus(file, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.getName().contains("_master");
+      }
+    });
+    String ext = resultFiles[0].getPath().getName()
+        .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
+    Path masterPath = new Path(file, "_master" + ext);
+    OutputStream destOut = outFs.create(masterPath);
+    byte[] buffer = new byte[4096];
+    for (FileStatus f : resultFiles) {
+      InputStream in = outFs.open(f.getPath());
+      int bytes_read;
+      do {
+        bytes_read = in.read(buffer);
+        if (bytes_read > 0)
+          destOut.write(buffer, 0, bytes_read);
+      } while (bytes_read > 0);
+      in.close();
+      outFs.delete(f.getPath(), false);
+    }
+    destOut.close();
+    
+    // Plot an image for the partitions used in file
+    Path imagePath = new Path(file, "_partitions.png");
+    int imageSize = (int) (Math.sqrt(cells.length) * 300);
+    Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, false, false, false, false);
 
   }
   
@@ -139,7 +181,7 @@ public class RandomSpatialGenerator {
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cells;
     if (gindex == null) {
-      throw new RuntimeException("Unsupported global index: "+gindex);
+      cells = new CellInfo[] {new CellInfo(0, mbr)};
     } else if (gindex.equals("grid")) {
       int num_partitions = Repartition.calculateNumberOfPartitions(new Configuration(),
           totalSize, outFS, outFile, blocksize);
@@ -163,8 +205,8 @@ public class RandomSpatialGenerator {
     outFS.mkdirs(outFile);
 
     ShapeRecordWriter<Shape> writer;
-    boolean pack = gindex.equals("r+tree");
-    boolean expand = gindex.equals("rtree");
+    boolean pack = gindex != null && gindex.equals("r+tree");
+    boolean expand = gindex != null && gindex.equals("rtree");
     if (lindex == null) {
       writer = new GridRecordWriter<Shape>(outFile, null, null, cells, pack, expand);
     } else if (lindex.equals("grid") || lindex.equals("rtree")) {

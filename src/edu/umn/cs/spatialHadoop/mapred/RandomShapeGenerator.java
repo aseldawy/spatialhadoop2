@@ -83,11 +83,11 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   @SuppressWarnings("unchecked")
   public RandomShapeGenerator(Configuration job,
       RandomInputFormat.GeneratedSplit split) throws IOException {
-    this(job.getLong(GenerationSize, 0), SpatialSite.getRectangle(job,
-        GenerationMBR), DistributionType.valueOf(job.get(GenerationType)), job
-        .getInt(GenerationRectSize, 100), split.index
-        + job.getLong(GenerationSeed, System.currentTimeMillis()));
-    setShape((S)SpatialSite.createStockShape(job));
+    this(split.length, SpatialSite.getRectangle(job, GenerationMBR),
+        DistributionType.valueOf(job.get(GenerationType)),
+        job.getInt(GenerationRectSize, 100),
+        split.index + job.getLong(GenerationSeed, System.currentTimeMillis()));
+    setShape((S) SpatialSite.createStockShape(job));
   }
 
   public RandomShapeGenerator(long size, Rectangle mbr,
