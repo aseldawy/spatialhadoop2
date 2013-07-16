@@ -24,7 +24,8 @@ public class RTreeGridOutputFormat<S extends Shape> extends FileOutputFormat<Int
     // Get grid info
     CellInfo[] cellsInfo = SpatialSite.getCells(job);
     boolean pack = job.getBoolean(SpatialSite.PACK_CELLS, false);
-    RTreeGridRecordWriter<S> writer = new RTreeGridRecordWriter<S>(job, name, cellsInfo, pack);
+    boolean expand = job.getBoolean(SpatialSite.EXPAND_CELLS, false);
+    RTreeGridRecordWriter<S> writer = new RTreeGridRecordWriter<S>(job, name, cellsInfo, pack, expand);
     writer.setStockObject((S) SpatialSite.createStockShape(job));
     return writer;
   }

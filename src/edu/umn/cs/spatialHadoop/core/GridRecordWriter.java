@@ -78,6 +78,9 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   /**Pack MBR of each cell around its content after it's written to disk*/
   protected boolean pack;
   
+  /**Expand MBR of each cell to totally cover all of its contents*/
+  private boolean expand;
+  
   /**
    * Creates a new GridRecordWriter that will write all data files to the
    * given directory
@@ -89,8 +92,9 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @throws IOException
    */
   public GridRecordWriter(Path outDir, JobConf job, String prefix,
-      CellInfo[] cells, boolean pack) throws IOException {
+      CellInfo[] cells, boolean pack, boolean expand) throws IOException {
     this.pack = pack;
+    this.expand = expand;
     this.prefix = prefix == null ? "" : prefix;
     this.fileSystem = outDir == null ? 
       FileOutputFormat.getOutputPath(job).getFileSystem(job):
@@ -133,7 +137,16 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   }
 
   protected Path getMasterFilePath() throws IOException {
-    return getFilePath("_master"+(pack? ".rtree" : ".grid"));
+    String extension;
+    LOG.info("Pack: "+pack+", expand:" +expand);
+    if (pack)
+      extension = ".r+tree";
+    else if (expand)
+      extension = ".rtree";
+    else
+      extension = ".grid";
+    LOG.info("extension: "+extension);
+    return getFilePath("_master"+extension);
   }
   
   /**
@@ -282,7 +295,9 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     // Write a line to the master file including file name and cellInfo
     if (cells != null) {
       Rectangle cell = cells[cellIndex];
-      if (pack)
+      if (expand)
+        cell = cellMbr[cellIndex];
+      else if (pack)
         cell = cell.getIntersection(cellMbr[cellIndex]);
       Partition partition = new Partition(finalCellPath.getName(), cell);
       Text line = partition.toText(new Text());

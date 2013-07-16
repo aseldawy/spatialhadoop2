@@ -94,6 +94,9 @@ public class SpatialSite {
   public static final String MaxBytesInOneRead =
       "spatialHadoop.mapred.MaxBytesPerRead";
 
+  /**Expand global index partitions to cover all of its contents*/
+  public static final String EXPAND_CELLS = "spatialHadoop.storage.expand";
+
   public static byte[] RTreeFileMarkerB;
   
   static {
@@ -190,7 +193,8 @@ public class SpatialSite {
     }
     GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
     globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
-    globalIndex.setCompact(masterFile.getName().endsWith("rtree"));
+    globalIndex.setCompact(masterFile.getName().endsWith("rtree") || masterFile.getName().endsWith("r+tree"));
+    globalIndex.setReplicated(masterFile.getName().endsWith("r+tree") || masterFile.getName().endsWith("grid"));
     return globalIndex;
   }
 

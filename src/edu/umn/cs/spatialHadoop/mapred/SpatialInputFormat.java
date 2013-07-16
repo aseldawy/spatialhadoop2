@@ -111,7 +111,6 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
         @Override
         public void collect(Partition partition) {
           try {
-            LOG.info("User filter function matched with "+partition);
             Path cell_path = new Path(dir, partition.filename);
             if (!fs.exists(cell_path))
               LOG.warn("Matched file not found: "+cell_path);

@@ -52,7 +52,7 @@ public class Repartition {
   static final Log LOG = LogFactory.getLog(Repartition.class);
   
   /**
-   * The map class maps each object to all cells it overlaps with.
+   * The map class maps each object to every cell it overlaps with.
    * @author Ahmed Eldawy
    *
    */
@@ -98,6 +98,69 @@ public class Repartition {
             output.collect(cellId, shape);
           }
         }
+      }
+    }
+  }
+  
+  /**
+   * The map class maps each object to the cell with maximum overlap.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class RepartitionMap2<T extends Shape> extends MapReduceBase
+      implements Mapper<Rectangle, T, IntWritable, T> {
+    /**List of cells used by the mapper*/
+    private CellInfo[] cellInfos;
+    
+    /**Used to output intermediate records*/
+    private IntWritable cellId = new IntWritable();
+    
+    @Override
+    public void configure(JobConf job) {
+      try {
+        cellInfos = SpatialSite.getCells(job);
+        super.configure(job);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+    
+    /**
+     * Map function
+     * @param dummy
+     * @param shape
+     * @param output
+     * @param reporter
+     * @throws IOException
+     */
+    public void map(Rectangle cellMbr, T shape,
+        OutputCollector<IntWritable, T> output, Reporter reporter)
+        throws IOException {
+      Rectangle shape_mbr = shape.getMBR();
+      if (shape_mbr == null)
+        return;
+      double maxOverlap = 0.0;
+      int bestCell = -1;
+      // Only send shape to output if its lowest corner lies in the cellMBR
+      // This ensures that a replicated shape in an already partitioned file
+      // doesn't get send to output from all partitions
+      if (!cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
+        for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
+          Rectangle overlap = cellInfos[cellIndex].getIntersection(shape_mbr);
+          if (overlap != null) {
+            double overlapArea = overlap.getWidth() * overlap.getHeight();
+            if (overlapArea > maxOverlap) {
+              maxOverlap = overlapArea;
+              bestCell = cellIndex;
+            }
+          }
+        }
+      }
+      if (bestCell != -1) {
+        cellId.set((int) cellInfos[bestCell].cellId);
+        output.collect(cellId, shape);
+      } else {
+        LOG.warn("Shape: "+shape+" doesn't overlap any partitions");
       }
     }
   }
@@ -165,7 +228,7 @@ public class Repartition {
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
-    } else if (gindex.equals("rtree")) {
+    } else if (gindex.equals("rtree") || gindex.equals("r+tree")) {
       // Pack in rectangles using an RTree
       cellInfos = packInRectangles(inFs, inFile, outFs, outPath, blockSize, stockShape);
     } else {
@@ -202,15 +265,22 @@ public class Repartition {
             + "' already exists and overwrite flag is not set");
     }
     
-    // Decide which map function to use depending on how blocks are indexed
-    // And also which input format to use
-    job.setMapperClass(RepartitionMap.class);
+    // Decide which map function to use depending on the type of global index
+    if (gindex.equals("rtree")) {
+      // Repartition without replication
+      job.setMapperClass(RepartitionMap2.class);
+    } else {
+      // Repartition with replication (grid and r+tree)
+      job.setMapperClass(RepartitionMap.class);
+    }
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(stockShape.getClass());
     ShapeInputFormat.setInputPaths(job, inFile);
     job.setInputFormat(ShapeInputFormat.class);
-    boolean pack = gindex != null && gindex.equals("rtree");
+    boolean pack = gindex != null && gindex.equals("r+tree");
+    boolean expand = gindex != null && gindex.equals("rtree");
     job.setBoolean(SpatialSite.PACK_CELLS, pack);
+    job.setBoolean(SpatialSite.EXPAND_CELLS, expand);
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
@@ -256,7 +326,9 @@ public class Repartition {
         return path.getName().contains("_master");
       }
     });
-    Path masterPath = new Path(outPath, "_master" + (pack? ".rtree" : ".grid"));
+    String ext = resultFiles[0].getPath().getName()
+        .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
+    Path masterPath = new Path(outPath, "_master" + ext);
     OutputStream destOut = outFs.create(masterPath);
     byte[] buffer = new byte[4096];
     for (FileStatus f : resultFiles) {
@@ -401,9 +473,13 @@ public class Repartition {
     
     ShapeRecordWriter<Shape> writer;
     if (lindex == null) {
-      writer = new GridRecordWriter<Shape>(out, null, null, cells, gindex.equals("rtree"));
+      boolean pack = gindex.equals("r+tree");
+      boolean expand = gindex.equals("rtree");
+      writer = new GridRecordWriter<Shape>(out, null, null, cells, pack, expand);
     } else if (lindex.equals("grid") || lindex.equals("rtree")) {
-      writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells, gindex.equals("rtree"));
+      boolean pack = gindex.equals("r+tree");
+      boolean expand = gindex.equals("rtree");
+      writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells, pack, expand);
       writer.setStockObject(stockShape);
     } else {
       throw new RuntimeException("Unupoorted local idnex: "+lindex);
