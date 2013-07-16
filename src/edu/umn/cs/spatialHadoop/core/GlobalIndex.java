@@ -29,6 +29,9 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
   /**Whether partitions in this global index are compact (minimal) or not*/
   private boolean compact;
   
+  /**Whether objects are allowed to replicated in different partitions or not*/
+  private boolean replicated;
+  
   public GlobalIndex() {
   }
   
@@ -235,5 +238,13 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
 
   public void setCompact(boolean compact) {
     this.compact = compact;
+  }
+
+  public void setReplicated(boolean r) {
+    this.replicated = r;
+  }
+  
+  public boolean isReplicated() {
+    return replicated;
   }
 }

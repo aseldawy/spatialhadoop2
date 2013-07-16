@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.mapred;
 
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.Text;
@@ -7,6 +8,7 @@ import org.apache.hadoop.mapred.JobConf;
 
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
@@ -55,7 +57,25 @@ public class RangeFilter extends DefaultBlockFilter {
   @Override
   public void selectCells(GlobalIndex<Partition> gIndex,
       ResultCollector<Partition> output) {
-    int numPartitions = gIndex.rangeQuery(queryRange, output);
+    int numPartitions;
+    if (gIndex.isReplicated()) {
+      // Need to process all partitions to perform duplicate avoidance
+      numPartitions = gIndex.rangeQuery(queryRange, output);
+    } else {
+      Rectangle queryRange = this.queryRange.getMBR();
+      // Need to process only partitions at the perimeter
+      // Partitions that are totally contained in query range should not be
+      // processed and should be copied to output directly
+      // TODO partitions totally contained in query range should be copied
+      // to output directly
+      numPartitions = 0;
+      for (Partition p : gIndex) {
+        if (p.isIntersected(queryRange) && !queryRange.contains(p)) {
+          output.collect(p);
+          numPartitions++;
+        }
+      }
+    }
     LOG.info("Selected "+numPartitions+" partitions in the range "+queryRange);
   }
 }

@@ -147,10 +147,12 @@ public class Repartition {
       if (!cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
         for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
           Rectangle overlap = cellInfos[cellIndex].getIntersection(shape_mbr);
-          double overlapArea = overlap.getWidth() * overlap.getHeight();
-          if (overlapArea > maxOverlap) {
-            maxOverlap = overlapArea;
-            bestCell = cellIndex;
+          if (overlap != null) {
+            double overlapArea = overlap.getWidth() * overlap.getHeight();
+            if (overlapArea > maxOverlap) {
+              maxOverlap = overlapArea;
+              bestCell = cellIndex;
+            }
           }
         }
       }
@@ -226,7 +228,7 @@ public class Repartition {
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
-    } else if (gindex.equals("rtree")) {
+    } else if (gindex.equals("rtree") || gindex.equals("r+tree")) {
       // Pack in rectangles using an RTree
       cellInfos = packInRectangles(inFs, inFile, outFs, outPath, blockSize, stockShape);
     } else {
@@ -324,7 +326,9 @@ public class Repartition {
         return path.getName().contains("_master");
       }
     });
-    Path masterPath = new Path(outPath, "_master" + (pack? ".rtree" : ".grid"));
+    String ext = resultFiles[0].getPath().getName()
+        .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
+    Path masterPath = new Path(outPath, "_master" + ext);
     OutputStream destOut = outFs.create(masterPath);
     byte[] buffer = new byte[4096];
     for (FileStatus f : resultFiles) {

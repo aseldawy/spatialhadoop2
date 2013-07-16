@@ -137,7 +137,16 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   }
 
   protected Path getMasterFilePath() throws IOException {
-    return getFilePath("_master"+(pack? ".rtree" : ".grid"));
+    String extension;
+    LOG.info("Pack: "+pack+", expand:" +expand);
+    if (pack)
+      extension = ".r+tree";
+    else if (expand)
+      extension = ".rtree";
+    else
+      extension = ".grid";
+    LOG.info("extension: "+extension);
+    return getFilePath("_master"+extension);
   }
   
   /**
