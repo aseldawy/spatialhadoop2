@@ -200,6 +200,8 @@ public class SpatialSite {
     if (file.isDir()) {
       // Check any cell (e.g., first cell)
       GlobalIndex<Partition> gIndex = getGlobalIndex(fs, path);
+      if (gIndex == null)
+        return false;
       fileToCheck = new Path(path, gIndex.iterator().next().filename);
     } else {
       fileToCheck = file.getPath();
