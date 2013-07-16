@@ -226,7 +226,7 @@ public class Skyline {
         FileSystem outFs = outFile.getFileSystem(new Configuration());
         outFs.delete(outFile, true);
       }
-      GridRecordWriter<Point> out = new GridRecordWriter<Point>(outFile, null, null, null, false);
+      GridRecordWriter<Point> out = new GridRecordWriter<Point>(outFile, null, null, null, false, false);
       for (Point pt : skyline) {
         out.write(NullWritable.get(), pt);
       }

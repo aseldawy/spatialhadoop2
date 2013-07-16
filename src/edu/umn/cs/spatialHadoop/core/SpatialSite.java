@@ -94,6 +94,9 @@ public class SpatialSite {
   public static final String MaxBytesInOneRead =
       "spatialHadoop.mapred.MaxBytesPerRead";
 
+  /**Expand global index partitions to cover all of its contents*/
+  public static final String EXPAND_CELLS = "spatialHadoop.storage.expand";
+
   public static byte[] RTreeFileMarkerB;
   
   static {

@@ -142,7 +142,7 @@ public class ConvexHull {
         FileSystem outFs = outFile.getFileSystem(new Configuration());
         outFs.delete(outFile, true);
       }
-      GridRecordWriter<Point> out = new GridRecordWriter<Point>(outFile, null, null, null, false);
+      GridRecordWriter<Point> out = new GridRecordWriter<Point>(outFile, null, null, null, false, false);
       for (Point pt : convex_hull) {
         out.write(NullWritable.get(), pt);
       }

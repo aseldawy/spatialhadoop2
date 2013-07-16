@@ -24,7 +24,8 @@ public class GridOutputFormat<S extends Shape> extends FileOutputFormat<IntWrita
     // Get grid info
     CellInfo[] cellsInfo = SpatialSite.getCells(job);
     boolean pack = job.getBoolean(SpatialSite.PACK_CELLS, false);
-    GridRecordWriter<S> writer = new GridRecordWriter<S>(job, name, cellsInfo, pack);
+    boolean expand = job.getBoolean(SpatialSite.EXPAND_CELLS, false);
+    GridRecordWriter<S> writer = new GridRecordWriter<S>(job, name, cellsInfo, pack, expand);
     return writer;
   }
   

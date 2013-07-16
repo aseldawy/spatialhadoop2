@@ -272,4 +272,12 @@ public class Rectangle implements Shape {
     this.x1 = Double.NaN;
   }
 
+  public double getHeight() {
+    return y2 - y1;
+  }
+
+  public double getWidth() {
+    return x2 - x1;
+  }
+
 }

@@ -163,10 +163,12 @@ public class RandomSpatialGenerator {
     outFS.mkdirs(outFile);
 
     ShapeRecordWriter<Shape> writer;
+    boolean pack = gindex.equals("r+tree");
+    boolean expand = gindex.equals("rtree");
     if (lindex == null) {
-      writer = new GridRecordWriter<Shape>(outFile, null, null, cells, gindex.equals("rtree"));
+      writer = new GridRecordWriter<Shape>(outFile, null, null, cells, pack, expand);
     } else if (lindex.equals("grid") || lindex.equals("rtree")) {
-      writer = new RTreeGridRecordWriter<Shape>(outFile, null, null, cells, gindex.equals("rtree"));
+      writer = new RTreeGridRecordWriter<Shape>(outFile, null, null, cells, pack, expand);
       writer.setStockObject(shape);
     } else {
       throw new RuntimeException("Unupoorted local idnex: "+lindex);
