@@ -99,6 +99,15 @@ public class FileMBR {
     // Quickly get file MBR if it is globally indexed
     GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(fs, file);
     if (globalIndex != null) {
+      // Return the MBR of the global index.
+      // Compute file size by adding up sizes of all files assuming they are
+      // not compressed
+      long totalLength = 0;
+      for (Partition p : globalIndex) {
+        Path filePath = new Path(file, p.filename);
+        totalLength += fs.getFileStatus(filePath).getLen();
+      }
+      sizeOfLastProcessedFile = totalLength;
       return globalIndex.getMBR();
     }
     JobConf job = new JobConf(FileMBR.class);

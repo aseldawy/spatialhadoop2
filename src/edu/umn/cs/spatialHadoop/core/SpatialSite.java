@@ -277,6 +277,7 @@ public class SpatialSite {
 
     DistributedCache.addCacheFile(tempFile.toUri(), job);
     job.set(OUTPUT_CELLS, tempFile.getName());
+    LOG.info("Partitioning file into "+cellsInfo.length+" cells");
   }
   
   public static CellInfo[] getCells(JobConf job) throws IOException {
