@@ -17,6 +17,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -25,6 +26,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -566,10 +568,19 @@ public class KNN {
       }
     }
 
+    final BooleanWritable exceptionHappened = new BooleanWritable();
+    
+    Thread.UncaughtExceptionHandler h = new Thread.UncaughtExceptionHandler() {
+      public void uncaughtException(Thread th, Throwable ex) {
+        ex.printStackTrace();
+        exceptionHappened.set(true);
+      }
+    };
+
     // Generate query at random points
     final Vector<Thread> threads = new Vector<Thread>();
     for (int i = 0; i < queryPoints.length; i++) {
-      threads.add(new Thread() {
+      Thread thread = new Thread() {
         @Override
         public void run() {
           try {
@@ -581,7 +592,9 @@ public class KNN {
             e.printStackTrace();
           }
         }
-      });
+      };
+      thread.setUncaughtExceptionHandler(h);
+      threads.add(thread);
     }
 
     long t1 = System.currentTimeMillis();
@@ -611,6 +624,9 @@ public class KNN {
       }
     } while (!threads.isEmpty());
     long t2 = System.currentTimeMillis();
+    if (exceptionHappened.get())
+      throw new RuntimeException("Not all jobs finished correctly");
+
     System.out.println("Time for " + queryPoints.length + " jobs is "
         + (t2 - t1) + " millis");
     System.out.println("Result size: " + results);

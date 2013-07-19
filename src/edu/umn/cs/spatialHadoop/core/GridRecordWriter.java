@@ -95,7 +95,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       CellInfo[] cells, boolean pack, boolean expand) throws IOException {
     this.pack = pack;
     this.expand = expand;
-    this.prefix = prefix == null ? "" : prefix;
+    this.prefix = prefix;
     this.fileSystem = outDir == null ? 
       FileOutputFormat.getOutputPath(job).getFileSystem(job):
       outDir.getFileSystem(job != null? job : new Configuration());
@@ -138,14 +138,12 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
 
   protected Path getMasterFilePath() throws IOException {
     String extension;
-    LOG.info("Pack: "+pack+", expand:" +expand);
     if (pack)
       extension = ".r+tree";
     else if (expand)
       extension = ".rtree";
     else
       extension = ".grid";
-    LOG.info("extension: "+extension);
     return getFilePath("_master"+extension);
   }
   
@@ -157,8 +155,10 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @throws IOException
    */
   protected Path getFilePath(String filename) throws IOException {
-    return outDir != null ? new Path(outDir, prefix + "_" +filename) : 
-      FileOutputFormat.getTaskOutputPath(jobConf, prefix + "_" + filename);
+    if (prefix != null)
+      filename = prefix + "_" + filename;
+    return outDir != null ? new Path(outDir, filename) : 
+      FileOutputFormat.getTaskOutputPath(jobConf, filename);
   }
 
   public void setBlockSize(long _block_size) {
