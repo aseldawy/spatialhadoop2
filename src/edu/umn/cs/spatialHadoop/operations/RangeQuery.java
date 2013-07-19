@@ -7,6 +7,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
@@ -23,6 +24,8 @@ import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.RTree;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
@@ -134,6 +137,67 @@ public class RangeQuery {
     }
   }
   
+  
+  /**
+   * The map function used for range query
+   * @author eldawy
+   *
+   * @param <T>
+   */
+  public static class RangeQueryMapNoDupAvoidance extends MapReduceBase implements
+      Mapper<Rectangle, Writable, NullWritable, Shape> {
+    /**A shape that is used to filter input*/
+    private Shape queryShape;
+    private Rectangle queryMbr;
+
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      try {
+        String queryShapeClassName = job.get(QUERY_SHAPE_CLASS);
+        Class<? extends Shape> queryShapeClass =
+            Class.forName(queryShapeClassName).asSubclass(Shape.class);
+        queryShape = queryShapeClass.newInstance();
+        queryShape.fromText(new Text(job.get(QUERY_SHAPE)));
+        queryMbr = queryShape.getMBR();
+      } catch (ClassNotFoundException e) {
+        e.printStackTrace();
+      } catch (InstantiationException e) {
+        e.printStackTrace();
+      } catch (IllegalAccessException e) {
+        e.printStackTrace();
+      }
+    }
+    
+    private final NullWritable dummy = NullWritable.get();
+    
+    /**
+     * Map function for non-indexed blocks
+     */
+    public void map(final Rectangle cellMbr, final Writable value,
+        final OutputCollector<NullWritable, Shape> output, Reporter reporter)
+            throws IOException {
+      if (value instanceof Shape) {
+        Shape shape = (Shape) value;
+        if (shape.isIntersected(queryShape)) {
+          output.collect(dummy, shape);
+        }
+      } else if (value instanceof RTree) {
+        RTree<Shape> shapes = (RTree<Shape>) value;
+        shapes.search(queryMbr, new ResultCollector<Shape>() {
+          @Override
+          public void collect(Shape shape) {
+            try {
+              output.collect(dummy, shape);
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+          }
+        });
+      }
+    }
+  }
+  
   /**
    * Performs a range query using MapReduce
    * @param fs
@@ -167,12 +231,12 @@ public class RangeQuery {
     }
     
     job.setJobName("RangeQuery");
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setNumReduceTasks(0);
     job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     RangeFilter.setQueryRange(job, queryShape); // Set query range for filter
 
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
+    job.setNumReduceTasks(0);
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(shape.getClass());
     // Decide which map function to use depending on how blocks are indexed
@@ -186,7 +250,12 @@ public class RangeQuery {
       LOG.info("Searching a non local-indexed file");
       job.setInputFormat(ShapeInputFormat.class);
     }
-    job.setMapperClass(RangeQueryMap.class);
+    
+    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, inputFile);
+    if (gIndex.isReplicated())
+      job.setMapperClass(RangeQueryMap.class);
+    else
+      job.setMapperClass(RangeQueryMapNoDupAvoidance.class);
 
     // Set query range for the map function
     job.set(QUERY_SHAPE_CLASS, queryShape.getClass().getName());
@@ -289,11 +358,13 @@ public class RangeQuery {
 
     final long[] results = new long[queryRanges.length];
     final Vector<Thread> threads = new Vector<Thread>();
+
+    final BooleanWritable exceptionHappened = new BooleanWritable();
     
     Thread.UncaughtExceptionHandler h = new Thread.UncaughtExceptionHandler() {
       public void uncaughtException(Thread th, Throwable ex) {
         ex.printStackTrace();
-        throw new RuntimeException("Error running a thread");
+        exceptionHappened.set(true);
       }
     };
 
@@ -342,6 +413,9 @@ public class RangeQuery {
       }
     } while (!threads.isEmpty());
     long t2 = System.currentTimeMillis();
+    
+    if (exceptionHappened.get())
+      throw new RuntimeException("Not all jobs finished correctly");
     System.out.println("Time for "+queryRanges.length+" jobs is "+(t2-t1)+" millis");
     
     System.out.print("Result size: [");

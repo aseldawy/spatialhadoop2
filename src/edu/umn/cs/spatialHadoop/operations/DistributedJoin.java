@@ -163,14 +163,95 @@ public class DistributedJoin {
     }
   }
   
+  
+  public static class RedistributeJoinMapNoDupAvoidance extends MapReduceBase
+  implements Mapper<PairWritable<Rectangle>, PairWritable<? extends Writable>, Shape, Shape> {
+    
+    public void map(
+        final PairWritable<Rectangle> key,
+        final PairWritable<? extends Writable> value,
+        final OutputCollector<Shape, Shape> output,
+        Reporter reporter) throws IOException {
+      final Rectangle mapperMBR = !key.first.isValid()
+          && !key.second.isValid() ? null // Both blocks are heap blocks
+          : (!key.first.isValid() ? key.second // Second block is indexed
+              : (!key.second.isValid() ? key.first // First block is indexed
+                  : (key.first.getIntersection(key.second)))); // Both indexed
+
+      if (value.first instanceof ArrayWritable && value.second instanceof ArrayWritable) {
+        // Join two arrays using the plane sweep algorithm
+        if (mapperMBR != null) {
+          // Only join shapes in the intersection rectangle
+          ArrayList<Shape> r = new ArrayList<Shape>();
+          ArrayList<Shape> s = new ArrayList<Shape>();
+          for (Shape shape : (Shape[])((ArrayWritable) value.first).get()) {
+            if (mapperMBR.isIntersected(shape))
+              r.add(shape);
+          }
+          for (Shape shape : (Shape[])((ArrayWritable) value.second).get()) {
+            if (mapperMBR.isIntersected(shape))
+              s.add(shape);
+          }
+          SpatialAlgorithms.SpatialJoin_planeSweep(r, s, new ResultCollector2<Shape, Shape>() {
+            @Override
+            public void collect(Shape r, Shape s) {
+              try {
+                output.collect(r, s);
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
+            }
+          });
+        } else {
+          ArrayWritable ar1 = (ArrayWritable) value.first;
+          ArrayWritable ar2 = (ArrayWritable) value.second;
+          SpatialAlgorithms.SpatialJoin_planeSweep(
+              (Shape[])ar1.get(), (Shape[])ar2.get(),
+              new ResultCollector2<Shape, Shape>() {
+                @Override
+                public void collect(Shape x, Shape y) {
+                  try {
+                    // No need to do reference point technique because input
+                    // blocks are not indexed (mapperMBR is null)
+                    output.collect(x, y);
+                  } catch (IOException e) {
+                    e.printStackTrace();
+                  }
+                }
+              }
+              );
+        }
+      } else if (value.first instanceof RTree && value.second instanceof RTree) {
+        // Join two R-trees
+        @SuppressWarnings("unchecked")
+        RTree<Shape> r1 = (RTree<Shape>) value.first;
+        @SuppressWarnings("unchecked")
+        RTree<Shape> r2 = (RTree<Shape>) value.second;
+        RTree.spatialJoin(r1, r2, new ResultCollector2<Shape, Shape>() {
+          @Override
+          public void collect(Shape r, Shape s) {
+            try {
+              output.collect(r, s);
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+          }
+        });
+      } else {
+        throw new RuntimeException("Cannot join " + value.first.getClass()
+            + " with " + value.second.getClass());
+      }
+    }
+  }
 
   /**
    * Input format that returns a record reader that reads a pair of arrays of
    * shapes
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
    */
-  public static class DJInputFormatArray extends BinarySpatialInputFormat<Rectangle, ArrayWritable> {
+  public static class DJInputFormatArray extends
+      BinarySpatialInputFormat<Rectangle, ArrayWritable> {
 
     /**
      * Reads a pair of arrays of shapes
@@ -343,7 +424,15 @@ public class DistributedJoin {
 
     job.setJobName("DistributedJoin");
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setMapperClass(RedistributeJoinMap.class);
+    GlobalIndex<Partition> gindex1 = SpatialSite.getGlobalIndex(fs, inputFiles[0]);
+    GlobalIndex<Partition> gindex2 = SpatialSite.getGlobalIndex(fs, inputFiles[1]);
+    if (gindex1.isReplicated() && gindex2.isReplicated())
+      job.setMapperClass(RedistributeJoinMap.class);
+    else if (!gindex1.isReplicated() && gindex2.isReplicated())
+      job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
+    else {
+      throw new RuntimeException("Don't know how to join a replicated file with a non-replicated file");
+    }
     job.setMapOutputKeyClass(stockShape.getClass());
     job.setMapOutputValueClass(stockShape.getClass());
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));

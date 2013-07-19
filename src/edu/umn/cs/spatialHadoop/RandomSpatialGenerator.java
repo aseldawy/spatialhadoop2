@@ -229,6 +229,7 @@ public class RandomSpatialGenerator {
       // Serialize it to text
       writer.write(NullWritable.get(), shape);
     }
+    writer.close(null);
     long t2 = System.currentTimeMillis();
     
     System.out.println("Generation time: "+(t2-t1)+" millis");
