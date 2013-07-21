@@ -248,7 +248,7 @@ public class SJMR {
     // Calculate and set the dimensions of the grid to use in the map phase
     long total_size = 0;
     Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-        Double.MIN_VALUE, Double.MIN_VALUE);
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Path file : inputFiles) {
       Rectangle file_mbr = FileMBR.fileMBR(fs, file, stockShape);
       mbr.expand(file_mbr);
@@ -256,9 +256,8 @@ public class SJMR {
     }
     // If the largest file is globally indexed, use its partitions
     CellInfo[] cellsInfo;
-    total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,
-    		0.002f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath));
+    total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
+    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * 20);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(num_cells);
     cellsInfo = gridInfo.getAllCells();

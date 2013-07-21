@@ -407,13 +407,13 @@ public class Repartition {
     // Compute an approximate MBR to determine the desired number of rows
     // and columns
     Rectangle approxMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-        Double.MIN_VALUE, Double.MIN_VALUE);
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Point pt : sample) {
       approxMBR.expand(pt);
     }
     GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
-    gridInfo.set(Double.MIN_VALUE, Double.MIN_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
+    gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
     
     Rectangle[] rectangles = RTree.packInRectangles(gridInfo,
             sample.toArray(new Point[sample.size()]));

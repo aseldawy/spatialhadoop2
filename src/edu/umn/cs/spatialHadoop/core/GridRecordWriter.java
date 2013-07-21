@@ -84,6 +84,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   
   /**Expand MBR of each cell to totally cover all of its contents*/
   private boolean expand;
+  private int counter;
   
   /**
    * Creates a new GridRecordWriter that will write all data files to the
@@ -134,7 +135,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     }
     for (int i = 0; i < cellsMbr.length; i++) {
       cellsMbr[i] = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-          Double.MIN_VALUE, Double.MIN_VALUE);
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
     }
 
     this.blockSize = job == null ? fileSystem.getDefaultBlockSize(this.outDir) :
@@ -305,7 +306,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
         getFinalCellPath(cellIndex), intermediateCellStreams[cellIndex],
         masterFile, cell);
     cellsMbr[cellIndex] = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-        Double.MIN_VALUE, Double.MIN_VALUE);
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
     intermediateCellPath[cellIndex] = null;
     intermediateCellStreams[cellIndex] = null;
   }
@@ -383,13 +384,12 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
 
     while (!closingThreads.isEmpty()) {
       try {
-        if (!closingThreads.isEmpty()) {
-          if (closingThreads.get(0).getState() == Thread.State.NEW)
-            closingThreads.get(0).start();
-          else if (closingThreads.get(0).getState() == Thread.State.TERMINATED)
-            closingThreads.remove(0);
-          else
-            closingThreads.get(0).join();
+        Thread t = closingThreads.get(0);
+        switch (t.getState()) {
+        case NEW: t.start(); break;
+        case TERMINATED: closingThreads.remove(0); break;
+        default:
+          t.join(10000);
         }
       } catch (InterruptedException e) {
         e.printStackTrace();
@@ -409,10 +409,8 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @throws IOException 
    */
   protected Path getFinalCellPath(int cellIndex) throws IOException {
-    int counter = 0;
     Path path = null;
-    boolean fileCreated = false;
-    while (!fileCreated) {
+    do {
       String filename = counter == 0 ? String.format("data_%05d", cellIndex)
           : String.format("data_%05d_%d", cellIndex, counter);
       boolean isCompressed = jobConf != null && FileOutputFormat.getCompressOutput(jobConf);
@@ -426,13 +424,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       
       path = getFilePath(filename);
       counter++;
-      fileCreated = true;
-      try {
-        fileSystem.create(path, false);
-      } catch (IOException e) {
-        fileCreated = false;
-      }
-    }
+    } while (fileSystem.exists(path));
     return path;
   }
 }

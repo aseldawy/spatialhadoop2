@@ -252,7 +252,7 @@ public class RangeQuery {
     }
     
     GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, inputFile);
-    if (gIndex.isReplicated())
+    if (gIndex != null && gIndex.isReplicated())
       job.setMapperClass(RangeQueryMap.class);
     else
       job.setMapperClass(RangeQueryMapNoDupAvoidance.class);

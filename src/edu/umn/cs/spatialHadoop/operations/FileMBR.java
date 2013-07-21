@@ -76,7 +76,7 @@ public class FileMBR {
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
             throws IOException {
       Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-          Double.MIN_VALUE, Double.MIN_VALUE);
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
       while (values.hasNext()) {
         Rectangle rect = values.next();
         mbr.expand(rect);
@@ -182,7 +182,7 @@ public class FileMBR {
         new Configuration(), new FileSplit(file, 0, file_size, new String[] {}));
 
     Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-        Double.MIN_VALUE, Double.MIN_VALUE);
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
     
     Rectangle key = shapeReader.createKey();
 
