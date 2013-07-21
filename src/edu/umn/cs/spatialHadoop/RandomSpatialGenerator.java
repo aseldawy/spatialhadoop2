@@ -32,6 +32,7 @@ import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
 import edu.umn.cs.spatialHadoop.operations.Plot;
 import edu.umn.cs.spatialHadoop.operations.Repartition;
+import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionReduce;
 
 
 
@@ -108,6 +109,7 @@ public class RandomSpatialGenerator {
     } else {
       // More than one partition. Need a reduce phase to group shapes of the
       // same partition together
+      job.setReducerClass(RepartitionReduce.class);
       job.setNumReduceTasks(Math.max(1, Math.min(cells.length,
           (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
     }
@@ -181,7 +183,7 @@ public class RandomSpatialGenerator {
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cells;
     if (gindex == null) {
-      cells = new CellInfo[] {new CellInfo(0, mbr)};
+      cells = new CellInfo[] {new CellInfo(1, mbr)};
     } else if (gindex.equals("grid")) {
       int num_partitions = Repartition.calculateNumberOfPartitions(new Configuration(),
           totalSize, outFS, outFile, blocksize);

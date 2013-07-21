@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Iterator;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -22,6 +23,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
@@ -107,7 +109,7 @@ public class Repartition {
    * @author Ahmed Eldawy
    *
    */
-  public static class RepartitionMap2<T extends Shape> extends MapReduceBase
+  public static class RepartitionMapNoReplication<T extends Shape> extends MapReduceBase
       implements Mapper<Rectangle, T, IntWritable, T> {
     /**List of cells used by the mapper*/
     private CellInfo[] cellInfos;
@@ -163,6 +165,24 @@ public class Repartition {
         LOG.warn("Shape: "+shape+" doesn't overlap any partitions");
       }
     }
+  }
+  
+  public static class RepartitionReduce<T extends Shape> extends MapReduceBase
+  implements Reducer<IntWritable, T, IntWritable, T> {
+
+    @Override
+    public void reduce(IntWritable cellIndex, Iterator<T> shapes,
+        OutputCollector<IntWritable, T> output, Reporter reporter)
+        throws IOException {
+      T shape = null;
+      while (shapes.hasNext()) {
+        shape = shapes.next();
+        output.collect(cellIndex, shape);
+      }
+      // Close cell
+      output.collect(new IntWritable(-cellIndex.get()), shape);
+    }
+    
   }
   
   /**
@@ -268,7 +288,7 @@ public class Repartition {
     // Decide which map function to use depending on the type of global index
     if (gindex.equals("rtree")) {
       // Repartition without replication
-      job.setMapperClass(RepartitionMap2.class);
+      job.setMapperClass(RepartitionMapNoReplication.class);
     } else {
       // Repartition with replication (grid and r+tree)
       job.setMapperClass(RepartitionMap.class);
@@ -313,7 +333,8 @@ public class Repartition {
     SpatialSite.setCells(job, cellInfos);
     job.setBoolean(SpatialSite.OVERWRITE, overwrite);
 
-    // Do not set a reduce function. Use the default identity reduce function
+    // Set reduce function
+    job.setReducerClass(RepartitionReduce.class);
     job.setNumReduceTasks(Math.max(1, Math.min(cellInfos.length,
         (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
 
@@ -398,7 +419,7 @@ public class Repartition {
             sample.toArray(new Point[sample.size()]));
     CellInfo[] cellsInfo = new CellInfo[rectangles.length];
     for (int i = 0; i < rectangles.length; i++)
-      cellsInfo[i] = new CellInfo(i, rectangles[i]);
+      cellsInfo[i] = new CellInfo(i + 1, rectangles[i]);
     
     return cellsInfo;
   }

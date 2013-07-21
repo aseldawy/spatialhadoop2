@@ -158,7 +158,7 @@ public class Union {
         while (j1 < i2) {
           int j2 = Math.min(i2, (j + 1) * i2 / groups);
           
-          CellInfo r = new CellInfo(j * groups + i, all[j1]);
+          CellInfo r = new CellInfo(j * groups + i + 1, all[j1]);
           while (j1 < j2) {
             j1++;
             if (j1 < j2)

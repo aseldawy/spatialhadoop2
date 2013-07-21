@@ -63,6 +63,11 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
   @Override
   protected synchronized void writeInternal(int cellIndex, S shape)
       throws IOException {
+    if (cellIndex < 0) {
+      // This indicates a close cell command
+      super.writeInternal(cellIndex, shape);
+      return;
+    }
     // Convert to text representation to test new file size
     text.clear();
     shape.toText(text);
@@ -82,7 +87,7 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
             intermediateFileSize[cellIndex]);
         // Writing this element will get the degree above the threshold
         // Flush current file and start a new file
-        super.writeInternal(cellIndex, null);
+        super.writeInternal(-cellIndex, null);
       }
     }
     
@@ -91,21 +96,28 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     cellCount[cellIndex]++;
   }
   
+  protected void closeCell(int cellIndex) throws IOException {
+    super.closeCell(cellIndex);
+    cellCount[cellIndex] = 0;
+    intermediateFileSize[cellIndex] = 0;
+  }
+  
   /**
    * Closes a cell by writing all outstanding objects and closing current file.
    * Then, the file is read again, an RTree is built on top of it and, finally,
    * the file is written again with the RTree built.
    */
   @Override
-  protected Path flushAllEntries(int cellIndex) throws IOException {
+  protected Path flushAllEntries(Path intermediateCellPath,
+      OutputStream intermediateCellStream, Path finalCellPath) throws IOException {
     // Close stream to current intermediate file.
-    intermediateCellStreams[cellIndex].close();
+    intermediateCellStream.close();
 
     // Read all data of the written file in memory
-    byte[] cellData = new byte[(int) new File(intermediateCellPath[cellIndex]
-        .toUri().getPath()).length()];
-    InputStream cellIn =
-        new FileInputStream(intermediateCellPath[cellIndex].toUri().getPath());
+    byte[] cellData = new byte[(int) new File(intermediateCellPath.toUri()
+        .getPath()).length()];
+    InputStream cellIn = new FileInputStream(intermediateCellPath.toUri()
+        .getPath());
     cellIn.read(cellData);
     cellIn.close();
 
@@ -113,7 +125,6 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     RTree<S> rtree = new RTree<S>();
     rtree.setStockObject(stockObject);
     // It should create a new stream
-    Path finalCellPath = getFinalCellPath(cellIndex);
     DataOutputStream cellStream =
       (DataOutputStream) createFinalCellStream(finalCellPath);
     cellStream.writeLong(SpatialSite.RTreeFileMarker);
@@ -122,10 +133,6 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
         fastRTree);
     cellStream.close();
     cellData = null; // To allow GC to collect it
-    cellCount[cellIndex] = 0;
-    intermediateFileSize[cellIndex] = 0;
-    intermediateCellStreams[cellIndex] = null;
-    intermediateCellPath[cellIndex] = null;
     
     return finalCellPath;
   }
