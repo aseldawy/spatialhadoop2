@@ -61,6 +61,7 @@ public class RangeFilter extends DefaultBlockFilter {
     if (gIndex.isReplicated()) {
       // Need to process all partitions to perform duplicate avoidance
       numPartitions = gIndex.rangeQuery(queryRange, output);
+      LOG.info("Selected "+numPartitions+" partitions overlapping the range "+queryRange);
     } else {
       Rectangle queryRange = this.queryRange.getMBR();
       // Need to process only partitions at the perimeter
@@ -75,7 +76,7 @@ public class RangeFilter extends DefaultBlockFilter {
           numPartitions++;
         }
       }
+      LOG.info("Selected "+numPartitions+" partitions on the perimeter of range "+queryRange);
     }
-    LOG.info("Selected "+numPartitions+" partitions in the range "+queryRange);
   }
 }
