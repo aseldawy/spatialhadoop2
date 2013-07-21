@@ -109,21 +109,38 @@ public class GridInfo extends Rectangle {
   public CellInfo[] getAllCells() {
     int cellIndex = 0;
     CellInfo[] cells = new CellInfo[columns * rows];
-    double xstart = x1;
-    for (int col = 0; col < columns; col++) {
-      double xend = x1 + (x2 - x1) * (col+1) / columns;
-      
-      double ystart = y1;
-      for (int row = 0; row < rows; row++) {
-        double yend = y1 + (y2 - y1) * (row+1) / rows;
-        cells[cellIndex] = new CellInfo(cellIndex, xstart, ystart, xend, yend);
-        cellIndex++;
-        
-        ystart = yend;
+    double ystart = y1;
+    for (int row = 0; row < rows; row++) {
+      double yend = y1 + (y2 - y1) * (row+1) / rows;
+      double xstart = x1;
+      for (int col = 0; col < columns; col++) {
+        double xend = x1 + (x2 - x1) * (col+1) / columns;
+
+        cells[cellIndex] = new CellInfo(++cellIndex, xstart, ystart, xend, yend);
+
+        xstart = xend;
       }
-      xstart = xend;
+      ystart = yend;
     }
     return cells;
   }
 
+  public java.awt.Rectangle getOverlappingCells(Rectangle rect) {
+    int col1, col2, row1, row2;
+    col1 = (int)Math.floor((rect.x1 - this.x1) / (this.x2 - this.x1) * columns);
+    col2 = (int)Math.floor((rect.x2 - this.x1) / (this.x2 - this.x1) * columns);
+    row1 = (int)Math.floor((rect.y1 - this.y1) / (this.y2 - this.y1) * rows);
+    row2 = (int)Math.floor((rect.y2 - this.y1) / (this.y2 - this.y1) * rows);
+    return new java.awt.Rectangle(col1, row1, col2 - col1 + 1, row2 - row1 + 1);
+  }
+  
+  public CellInfo getCell(int cellId) {
+    int col = (cellId - 1) % columns;
+    int row = (cellId - 1) / columns;
+    double xstart = x1 + (x2 - x1) * col / columns;
+    double xend = col == columns - 1? x2 : (x1 + (x2 - x1) * (col + 1) / columns);
+    double ystart = y1 + (y2 - y1) * row / rows;
+    double yend = (row == rows - 1)? y2 : (y1 + (y2 - y1) * (row + 1) / rows);
+    return new CellInfo(cellId, xstart, ystart, xend, yend);
+  }
 }

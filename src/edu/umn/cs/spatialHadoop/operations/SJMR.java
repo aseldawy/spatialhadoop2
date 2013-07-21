@@ -55,6 +55,7 @@ public class SJMR {
   
   /**Class logger*/
   private static final Log LOG = LogFactory.getLog(SJMR.class);
+  private static final String PartitionGrid = "SJMR.PartitionGrid";
   
   public static class IndexedText implements Writable {
     public byte index;
@@ -88,24 +89,20 @@ public class SJMR {
     /**List of cells used by the mapper*/
     private Shape shape;
     private IndexedText outputValue = new IndexedText();
-    private CellInfo[] cellInfos;
+    private GridInfo gridInfo;
     private IntWritable cellId = new IntWritable();
     private Path[] inputFiles;
     private InputSplit currentSplit;
     
     @Override
     public void configure(JobConf job) {
-      try {
-        super.configure(job);
-        // Retrieve cells to use for partitioning
-        cellInfos = SpatialSite.getCells(job);
-        // Create a stock shape for deserializing lines
-        shape = SpatialSite.createStockShape(job);
-        // Get input paths to determine file index for every record
-        inputFiles = FileInputFormat.getInputPaths(job);
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
+      super.configure(job);
+      // Retrieve grid to use for partitioning
+      gridInfo = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+      // Create a stock shape for deserializing lines
+      shape = SpatialSite.createStockShape(job);
+      // Get input paths to determine file index for every record
+      inputFiles = FileInputFormat.getInputPaths(job);
     }
 
     @Override
@@ -115,18 +112,20 @@ public class SJMR {
       if (reporter.getInputSplit() != currentSplit) {
       	FileSplit fsplit = (FileSplit) reporter.getInputSplit();
       	for (int i = 0; i < inputFiles.length; i++) {
-      		if (inputFiles[i].equals(fsplit.getPath())) {
+      		if (fsplit.getPath().toString().startsWith(inputFiles[i].toString())) {
       			outputValue.index = (byte) i;
       		}
       	}
+      	currentSplit = reporter.getInputSplit();
       }
 
       Text tempText = new Text(value);
+      outputValue.text = value;
       shape.fromText(tempText);
-      for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
-        if (cellInfos[cellIndex].isIntersected(shape)) {
-          cellId.set((int)cellInfos[cellIndex].cellId);
-          outputValue.text = value;
+      java.awt.Rectangle cells = gridInfo.getOverlappingCells(shape.getMBR());
+      for (int col = cells.x; col < cells.x + cells.width; col++) {
+        for (int row = cells.y; row < cells.y + cells.height; row++) {
+          cellId.set(row * gridInfo.columns + col + 1);
           output.collect(cellId, outputValue);
         }
       }
@@ -139,20 +138,16 @@ public class SJMR {
     private int inputFileCount;
     
     /**List of cells used by the reducer*/
-    private CellInfo[] cellInfos;
+    private GridInfo grid;
 
     private S shape;
     
     @Override
     public void configure(JobConf job) {
-      try {
-        super.configure(job);
-        cellInfos = SpatialSite.getCells(job);
-        shape = (S) SpatialSite.createStockShape(job);
-        inputFileCount = FileInputFormat.getInputPaths(job).length;
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
+      super.configure(job);
+      grid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+      shape = (S) SpatialSite.createStockShape(job);
+      inputFileCount = FileInputFormat.getInputPaths(job).length;
     }
 
     @Override
@@ -160,10 +155,7 @@ public class SJMR {
         final OutputCollector<S, S> output, Reporter reporter)
         throws IOException {
       // Extract CellInfo (MBR) for duplicate avoidance checking
-      int i_cell = 0;
-      while (i_cell < cellInfos.length && cellInfos[i_cell].cellId != cellId.get())
-        i_cell++;
-      final CellInfo cellInfo = cellInfos[i_cell];
+      final CellInfo cellInfo = grid.getCell(cellId.get());
       
       // Partition retrieved shapes (values) into lists for each file
       @SuppressWarnings("unchecked")
@@ -255,13 +247,11 @@ public class SJMR {
       total_size += FileMBR.sizeOfLastProcessedFile;
     }
     // If the largest file is globally indexed, use its partitions
-    CellInfo[] cellsInfo;
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
     int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * 20);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(num_cells);
-    cellsInfo = gridInfo.getAllCells();
-    SpatialSite.setCells(job, cellsInfo);
+    SpatialSite.setShape(job, PartitionGrid, gridInfo);
     
     TextOutputFormat.setOutputPath(job, outputPath);
     
