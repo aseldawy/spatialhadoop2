@@ -7,8 +7,6 @@ import java.io.OutputStream;
 
 import javax.imageio.ImageIO;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -22,9 +20,12 @@ import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
+/**
+ * An output format that is used to plot ImageWritable to PNG image.
+ * @author Ahmed Eldawy
+ *
+ */
 public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable> {
-  private static final Log LOG = LogFactory.getLog(ImageOutputFormat.class);
-  
   /**MBR of the input file*/
   private static final String InputFileMBR = "plot.file_mbr";
   

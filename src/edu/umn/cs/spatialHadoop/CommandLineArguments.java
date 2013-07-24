@@ -22,6 +22,12 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 
+
+/**
+ * Parses command line arguments.
+ * @author Ahmed Eldawy
+ *
+ */
 public class CommandLineArguments {
   private static final Log LOG = LogFactory.getLog(CommandLineArguments.class);
   
@@ -310,34 +316,6 @@ public class CommandLineArguments {
       e.printStackTrace();
     }
     return null;
-  }
-  
-  /**
-   * Return the type of the global index to be used. This could be either:
-   * "grid", "rtree" or <code>null</code>.
-   * These are the values currently supported by the system but the user can
-   * provide any text value.
-   * @return
-   */
-  public String getGIndex() {
-    String gindex = get("gindex");
-    if (gindex == null)
-      gindex = get("global");
-    return gindex;
-  }
-  
-  /**
-   * Return the type of the local index to be used. This could be either:
-   * "grid", "rtree" or <code>null</code>.
-   * These are the values currently supported by the system but the user can
-   * provide any text value.
-   * @return
-   */
-  public String getLIndex() {
-    String lindex = get("lindex");
-    if (lindex == null)
-      lindex = get("local");
-    return lindex; 
   }
   
 

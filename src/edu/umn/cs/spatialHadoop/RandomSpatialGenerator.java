@@ -26,7 +26,6 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.ShapeRecordWriter;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
-import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RandomInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
@@ -46,7 +45,7 @@ public class RandomSpatialGenerator {
   
   public static void generateMapReduce(Path file, Rectangle mbr, long size,
       long blocksize, Shape shape,
-      String gindex, String lindex, long seed, int rectsize,
+      String sindex, long seed, int rectsize,
       RandomShapeGenerator.DistributionType type, boolean overwrite) throws IOException {
     JobConf job = new JobConf(RandomSpatialGenerator.class);
     
@@ -87,9 +86,9 @@ public class RandomSpatialGenerator {
     }
     
     CellInfo[] cells;
-    if (gindex == null) {
+    if (sindex == null) {
       cells = new CellInfo[] {new CellInfo(1, mbr)};
-    } else {
+    } else if (sindex.equals("grid")) {
       GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
       FileSystem fs = file.getFileSystem(job);
       if (blocksize == 0) {
@@ -98,6 +97,8 @@ public class RandomSpatialGenerator {
       int numOfCells = Repartition.calculateNumberOfPartitions(job, size, fs, file, blocksize);
       gridInfo.calculateCellDimensions(numOfCells);
       cells = gridInfo.getAllCells();
+    } else {
+      throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
     
     SpatialSite.setCells(job, cells);
@@ -116,13 +117,10 @@ public class RandomSpatialGenerator {
     
     // Set output path
     FileOutputFormat.setOutputPath(job, file);
-    if (lindex == null) {
+    if (sindex == null || sindex.equals("grid")) {
       job.setOutputFormat(GridOutputFormat.class);
-    } else if (lindex.equals("rtree")) {
-      // For now, the two types of local index are the same
-      job.setOutputFormat(RTreeGridOutputFormat.class);
     } else {
-      throw new RuntimeException("Unsupported local index: "+lindex);
+      throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
     
     JobClient.runJob(job);
@@ -173,7 +171,7 @@ public class RandomSpatialGenerator {
    * @throws IOException 
    */
   public static void generateFileLocal(Path outFile,
-      Shape shape, String gindex, String lindex, long totalSize, Rectangle mbr,
+      Shape shape, String sindex, long totalSize, Rectangle mbr,
       DistributionType type, int rectSize, long seed, long blocksize,
       boolean overwrite) throws IOException {
     FileSystem outFS = outFile.getFileSystem(new Configuration());
@@ -182,9 +180,9 @@ public class RandomSpatialGenerator {
     
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cells;
-    if (gindex == null) {
+    if (sindex == null) {
       cells = new CellInfo[] {new CellInfo(1, mbr)};
-    } else if (gindex.equals("grid")) {
+    } else if (sindex.equals("grid")) {
       int num_partitions = Repartition.calculateNumberOfPartitions(new Configuration(),
           totalSize, outFS, outFile, blocksize);
 
@@ -192,7 +190,7 @@ public class RandomSpatialGenerator {
       gridInfo.calculateCellDimensions(num_partitions);
       cells = gridInfo.getAllCells();
     } else {
-      throw new RuntimeException("Unsupported global index: "+gindex);
+      throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
     
     
@@ -207,15 +205,15 @@ public class RandomSpatialGenerator {
     outFS.mkdirs(outFile);
 
     ShapeRecordWriter<Shape> writer;
-    boolean pack = gindex != null && gindex.equals("r+tree");
-    boolean expand = gindex != null && gindex.equals("rtree");
-    if (lindex == null) {
+    boolean pack = sindex.equals("r+tree");
+    boolean expand = sindex.equals("rtree");
+    if (sindex == null || sindex.equals("grid")) {
       writer = new GridRecordWriter<Shape>(outFile, null, null, cells, pack, expand);
-    } else if (lindex.equals("grid") || lindex.equals("rtree")) {
+    } else if (sindex.equals("r+tree") || sindex.equals("rtree")) {
       writer = new RTreeGridRecordWriter<Shape>(outFile, null, null, cells, pack, expand);
       writer.setStockObject(shape);
     } else {
-      throw new RuntimeException("Unupoorted local idnex: "+lindex);
+      throw new RuntimeException("Unupoorted spatial idnex: "+sindex);
     }
 
     if (rectSize == 0)
@@ -271,8 +269,7 @@ public class RandomSpatialGenerator {
       stockShape = new Rectangle();
     
     long totalSize = cla.getSize();
-    String gindex = cla.getGIndex();
-    String lindex = cla.getLIndex();
+    String sindex = cla.get("sindex");
     boolean overwrite = cla.isOverwrite();
     
     DistributionType type = DistributionType.UNIFORM;
@@ -298,18 +295,17 @@ public class RandomSpatialGenerator {
 
     if (outputFile != null) {
       System.out.print("Generating a file ");
-      System.out.print("with gindex:"+gindex+" ");
-      System.out.print("with lindex:"+lindex+" ");
+      System.out.print("with sindex:"+sindex+" ");
       System.out.println("file of size: "+totalSize);
       System.out.println("To: " + outputFile);
       System.out.println("In the range: " + mbr);
     }
 
     if (totalSize < 100*1024*1024)
-      generateFileLocal(outputFile, stockShape, gindex, lindex, totalSize, mbr, type, rectSize, seed, blocksize, overwrite);
+      generateFileLocal(outputFile, stockShape, sindex, totalSize, mbr, type, rectSize, seed, blocksize, overwrite);
     else
     generateMapReduce(outputFile, mbr, totalSize, blocksize, stockShape,
-        gindex, lindex, seed, rectSize, type, overwrite);
+        sindex, seed, rectSize, type, overwrite);
 //    if (gindex == null && lindex == null)
 //      generateHeapFile(fs, outputFile, stockShape, totalSize, mbr, type, rectSize, seed, blocksize, overwrite);
 //    else

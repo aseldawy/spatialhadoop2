@@ -369,11 +369,23 @@ public class DistributedJoin {
     } while (fs.exists(partitioned_file));
     
     // Get the cells to use for repartitioning
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, files[1-file_to_repartition]);
     CellInfo[] cells = SpatialSite.cellsOf(fs, files[1-file_to_repartition]);
     // Repartition the file to match the other file
+    boolean isReplicated = gindex.isReplicated();
+    boolean isCompact = gindex.isCompact();
+    String sindex;
+    if (isReplicated && !isCompact)
+      sindex = "grid";
+    else if (isReplicated && isCompact)
+      sindex = "r+tree";
+    else if (isReplicated && !isCompact)
+      sindex = "rtree";
+    else
+      throw new RuntimeException("Unknown index  at: "+files[1-file_to_repartition]);
+    
     Repartition.repartitionMapReduce(files[file_to_repartition],
-        partitioned_file, stockShape, 0, cells, null, SpatialSite.isRTree(fs,
-            files[1 - file_to_repartition]) ? "rtree" : null, true);
+        partitioned_file, stockShape, 0, cells, sindex, true);
     long t2 = System.currentTimeMillis();
     System.out.println("Repartition time "+(t2-t1)+" millis");
   
