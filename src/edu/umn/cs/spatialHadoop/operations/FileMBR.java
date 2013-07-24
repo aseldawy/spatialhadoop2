@@ -52,8 +52,6 @@ public class FileMBR {
       Mapper<Rectangle, Shape, NullWritable, Rectangle> {
     
     private final Rectangle MBR = new Rectangle();
-    private Rectangle mbr_so_far = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-        Double.MIN_VALUE, Double.MIN_VALUE);
     
     public void map(Rectangle dummy, Shape shape,
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
@@ -61,8 +59,7 @@ public class FileMBR {
       Rectangle mbr = shape.getMBR();
 
       // Skip writing rectangle to output if totally contained in mbr_so_far
-      if (mbr != null && !mbr_so_far.contains(mbr)) {
-        mbr_so_far.expand(mbr);
+      if (mbr != null) {
         MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
         output.collect(Dummy, MBR);
       }

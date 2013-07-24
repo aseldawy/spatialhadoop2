@@ -187,7 +187,7 @@ public class Rectangle implements Shape {
       return pt.x >= x1 && pt.x <= x2 && pt.y >= y1 && pt.y <= y2;
     }
     Rectangle r = s.getMBR();
-    return (this.x2 >= r.x1 && r.x2 >= this.x1 && this.y2 >= r.y1 && r.y2 >= this.y1);
+    return (this.x2 > r.x1 && r.x2 > this.x1 && this.y2 > r.y1 && r.y2 > this.y1);
   }
 
   public Rectangle getIntersection(Shape s) {

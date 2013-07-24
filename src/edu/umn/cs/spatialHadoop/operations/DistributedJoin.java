@@ -443,26 +443,32 @@ public class DistributedJoin {
     else if (!gindex1.isReplicated() && gindex2.isReplicated())
       job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
     else {
-      throw new RuntimeException("Don't know how to join a replicated file with a non-replicated file");
+      LOG.warn("Don't know how to join a replicated file with a non-replicated file");
+      //throw new RuntimeException("Don't know how to join a replicated file with a non-replicated file");
     }
     job.setMapOutputKeyClass(stockShape.getClass());
     job.setMapOutputValueClass(stockShape.getClass());
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
     job.setNumReduceTasks(0); // No reduce needed for this task
 
-    job.setInputFormat(DJInputFormatArray.class);
-    job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
-    SpatialSite.setShapeClass(job, stockShape.getClass());
-    job.setOutputFormat(TextOutputFormat.class);
-    
+    LOG.info("Joining "+inputFiles[0]+" X "+inputFiles[1]);
     String commaSeparatedFiles = "";
     for (int i = 0; i < inputFiles.length; i++) {
       if (i > 0)
         commaSeparatedFiles += ',';
       commaSeparatedFiles += inputFiles[i].toUri().toString();
     }
-    LOG.info("Joining "+inputFiles[0]+" X "+inputFiles[1]);
-    DJInputFormatArray.addInputPaths(job, commaSeparatedFiles);
+    if (SpatialSite.isRTree(fs, inputFiles[0]) && SpatialSite.isRTree(fs, inputFiles[1])) {
+      job.setInputFormat(DJInputFormatRTree.class);
+      DJInputFormatRTree.addInputPaths(job, commaSeparatedFiles);
+    } else {
+      job.setInputFormat(DJInputFormatArray.class);
+      DJInputFormatArray.addInputPaths(job, commaSeparatedFiles);
+    }
+    job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
+    SpatialSite.setShapeClass(job, stockShape.getClass());
+    job.setOutputFormat(TextOutputFormat.class);
+    
     TextOutputFormat.setOutputPath(job, outputPath);
     
     RunningJob runningJob = JobClient.runJob(job);

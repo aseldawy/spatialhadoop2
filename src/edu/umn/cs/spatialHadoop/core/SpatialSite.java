@@ -243,13 +243,13 @@ public class SpatialSite {
     
     ArrayList<CellInfo> cellSet = new ArrayList<CellInfo>();
     for (Partition p : gindex) {
+      Rectangle r = p;
       boolean overlapping = false;
       for (int i = 0; i < cellSet.size(); i++) {
-        if (p.isIntersected(cellSet.get(i))) {
-          if (overlapping == true)
-            throw new RuntimeException("Overlapping partitions");
+        if (r.isIntersected(cellSet.get(i))) {
           overlapping = true;
-          cellSet.get(i).expand(p);
+          cellSet.get(i).expand(r);
+          r = cellSet.get(i);
         }
       }
       if (overlapping == false) {

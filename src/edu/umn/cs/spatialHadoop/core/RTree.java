@@ -1046,9 +1046,9 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
     
     nodesToJoin.put(0L);
     
-    LruCache<Integer, S1[]> r_records_cache = new LruCache<Integer, S1[]>(
+    LruCache<Integer, Shape[]> r_records_cache = new LruCache<Integer, Shape[]>(
         R.degree * 2);
-    LruCache<Integer, S2[]> s_records_cache = new LruCache<Integer, S2[]>(
+    LruCache<Integer, Shape[]> s_records_cache = new LruCache<Integer, Shape[]>(
         S.degree * R.degree * 4);
     
     Text line = new Text2();
@@ -1116,12 +1116,12 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
 
               ///////////////////////////////////////////////////////////////////
               // Read or retrieve r_records
-              S1[] r_records = r_records_cache.get(r_start_offset);
+              Shape[] r_records = r_records_cache.get(r_start_offset);
               if (r_records == null) {
                 int cache_key = r_start_offset;
                 r_records = r_records_cache.popUnusedEntry();
                 if (r_records == null) {
-                  r_records = (S1[]) Array.newInstance(R.stockObject.getClass(), R.degree *2);
+                  r_records = new Shape[R.degree * 2];
                 }
 
                 // Need to read it from stream
@@ -1134,7 +1134,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
                 while (r_start_offset < r_end_offset) {
                   r_start_offset += r_lr.readLine(line);
                   if (r_records[record_i] == null)
-                    r_records[record_i] = (S1) R.stockObject.clone();
+                    r_records[record_i] = R.stockObject.clone();
                   r_records[record_i].fromText(line);
                   record_i++;
                 }
@@ -1146,7 +1146,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
               }
 
               // Read or retrieve s_records
-              S2[] s_records = s_records_cache.get(s_start_offset);
+              Shape[] s_records = s_records_cache.get(s_start_offset);
               if (s_records == null) {
                 int cache_key = s_start_offset;
 
@@ -1159,13 +1159,13 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
                 }
                 s_records = s_records_cache.popUnusedEntry();
                 if (s_records == null) {
-                  s_records = (S2[]) Array.newInstance(S.stockObject.getClass(), S.degree *2);
+                  s_records = new Shape[S.degree * 2];
                 }
                 int record_i = 0;
                 while (s_start_offset < s_end_offset) {
                   s_start_offset += s_lr.readLine(line);
                   if (s_records[record_i] == null)
-                    s_records[record_i] = (S2) S.stockObject.clone();
+                    s_records[record_i] = S.stockObject.clone();
                   s_records[record_i].fromText(line);
                   record_i++;
                 }
@@ -1183,7 +1183,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
                   if (r_records[i_r].isIntersected(s_records[i_s])) {
                     result_count++;
                     if (output != null) {
-                      output.collect(r_records[i_r], s_records[i_s]);
+                      output.collect((S1)r_records[i_r], (S2)s_records[i_s]);
                     }
                   }
                 }
