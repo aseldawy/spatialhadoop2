@@ -20,7 +20,6 @@ import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Partition;
-import edu.umn.cs.spatialHadoop.core.RTreeGridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.ShapeRecordWriter;
@@ -205,13 +204,8 @@ public class RandomSpatialGenerator {
     outFS.mkdirs(outFile);
 
     ShapeRecordWriter<Shape> writer;
-    boolean pack = sindex.equals("r+tree");
-    boolean expand = sindex.equals("rtree");
     if (sindex == null || sindex.equals("grid")) {
-      writer = new GridRecordWriter<Shape>(outFile, null, null, cells, pack, expand);
-    } else if (sindex.equals("r+tree") || sindex.equals("rtree")) {
-      writer = new RTreeGridRecordWriter<Shape>(outFile, null, null, cells, pack, expand);
-      writer.setStockObject(shape);
+      writer = new GridRecordWriter<Shape>(outFile, null, null, cells, false, false);
     } else {
       throw new RuntimeException("Unupoorted spatial idnex: "+sindex);
     }
