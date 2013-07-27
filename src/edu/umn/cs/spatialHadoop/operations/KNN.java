@@ -54,7 +54,6 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.RangeFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
@@ -334,7 +333,7 @@ public class KNN {
 
     RunningJob runningJob;
 
-    job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+    job.setClass(SpatialSite.FilterClass, RangeQuery.RangeFilter.class, BlockFilter.class);
     
     // TextWithDistance used to read output results
     final TextWithDistance t = new TextWithDistance();
@@ -371,7 +370,7 @@ public class KNN {
         outFs.delete(outputPath, true);
         
       LOG.info("Running iteration: "+(++iterations));
-      RangeFilter.setQueryRange(job, range_for_this_iteration);
+      RangeQuery.RangeFilter.setQueryRange(job, range_for_this_iteration);
 
       // Submit the job
       runningJob = JobClient.runJob(job);
