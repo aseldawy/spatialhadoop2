@@ -43,6 +43,9 @@ import com.esri.core.geometry.Polygon;
 import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.ogc.OGCGeometry;
 import com.esri.core.geometry.ogc.OGCGeometryCollection;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryCollection;
+import com.vividsolutions.jts.geom.LineString;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
@@ -51,6 +54,7 @@ import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.JTSShape;
 import edu.umn.cs.spatialHadoop.core.OGCShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -69,7 +73,6 @@ public class Plot {
   private static final String ShowBorders = "plot.show_borders";
   private static final String ShowBlockCount = "plot.show_block_count";
   private static final String ShowRecordCount = "plot.show_record_count";
-  private static final String CompactCells = "plot.compact_cells";
 
   /**
    * If the processed block is already partitioned (via global index), then
@@ -82,13 +85,23 @@ public class Plot {
   public static class PlotMap extends MapReduceBase 
     implements Mapper<Rectangle, Shape, Rectangle, Shape> {
     
-    private CellInfo[] cellInfos;
+    private Rectangle[] cellInfos;
     
     @Override
     public void configure(JobConf job) {
       try {
         super.configure(job);
-        cellInfos = SpatialSite.getCells(job);
+        CellInfo[] fileCells = SpatialSite.getCells(job);
+        if (fileCells == null) {
+          cellInfos = null;
+        } else {
+          // Fill cellInfos with Rectangles to be able to use them as map
+          // output
+          this.cellInfos = new Rectangle[fileCells.length];
+          for (int i = 0; i < this.cellInfos.length; i++) {
+            this.cellInfos[i] = new Rectangle(fileCells[i]);
+          }
+        }
       } catch (IOException e) {
         e.printStackTrace();
       }
@@ -97,11 +110,11 @@ public class Plot {
     public void map(Rectangle cell, Shape shape,
         OutputCollector<Rectangle, Shape> output, Reporter reporter)
         throws IOException {
-      if (cell.isValid()) {
+      if (!cell.isValid()) {
         // Output shape to all overlapping cells
-        for (CellInfo cellInfo : cellInfos)
-          if (cellInfo.isIntersected(shape))
-            output.collect(cellInfo, shape);
+        for (Rectangle matchedCell : cellInfos)
+          if (matchedCell.isIntersected(shape))
+            output.collect(matchedCell, shape);
       } else {
         // Input is already partitioned
         // Output shape to containing cell only
@@ -122,7 +135,6 @@ public class Plot {
     private int imageWidth, imageHeight;
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
-    private boolean compactCells;
 
     @Override
     public void configure(JobConf job) {
@@ -131,7 +143,6 @@ public class Plot {
       fileMbr = ImageOutputFormat.getFileMBR(job);
       imageWidth = ImageOutputFormat.getImageWidth(job);
       imageHeight = ImageOutputFormat.getImageHeight(job);
-      compactCells = job.getBoolean(CompactCells, false);
       
       this.scale2 = (double)imageWidth * imageHeight /
           ((double)(fileMbr.x2 - fileMbr.x1) * (fileMbr.y2 - fileMbr.y1));
@@ -167,49 +178,11 @@ public class Plot {
         graphics.setColor(stroke_color);
         graphics.translate(-image_x1, -image_y1);
 
-        double data_x1 = cellInfo.x1, data_y1 = cellInfo.y1,
-            data_x2 = cellInfo.x2, data_y2 = cellInfo.y2;
-        if (values.hasNext()) {
+        while (values.hasNext()) {
           Shape s = values.next();
           drawShape(graphics, s, fileMbr, imageWidth, imageHeight, scale2);
-          if (compactCells) {
-            Rectangle mbr = s.getMBR();
-            data_x1 = mbr.x1;
-            data_y1 = mbr.y1;
-            data_x2 = mbr.x2;
-            data_y2 = mbr.y2;
-          }
-          
-          while (values.hasNext()) {
-            s = values.next();
-            drawShape(graphics, s, fileMbr, imageWidth, imageHeight, scale2);
-
-            if (compactCells) {
-              Rectangle mbr = s.getMBR();
-              if (mbr.x1 < data_x1)
-                data_x1 = mbr.x1;
-              if (mbr.y1 < data_y1)
-                data_y1 = mbr.y1;
-              if (mbr.x2 > data_x2)
-                data_x2 = mbr.x2;
-              if (mbr.y2 > data_y2)
-                data_y2 = mbr.y2;
-            }
-          }
         }
         
-        if (compactCells) {
-          // Ensure that the drawn rectangle fits in the partition
-          if (data_x1 < cellInfo.x1)
-            data_x1 = cellInfo.x1;
-          if (data_y1 < cellInfo.y1)
-            data_y1 = cellInfo.y1;
-          if (data_x2 > cellInfo.x2)
-            data_x2 = cellInfo.x2;
-          if (data_y2 > cellInfo.y2)
-            data_y2 = cellInfo.y2;
-        }
-
         graphics.dispose();
         
         sharedValue.setImage(image);
@@ -275,6 +248,13 @@ public class Plot {
         else if (path instanceof Polyline)
           graphics.drawPolyline(xpoints, ypoints, path.getPointCount());
       }
+    } else if (s instanceof JTSShape) {
+      JTSShape jts_shape = (JTSShape) s;
+      Geometry geom = jts_shape.geom;
+      Color shape_color = graphics.getColor();
+      
+      drawJTSShape(graphics, geom, fileMbr, imageWidth, imageHeight, scale,
+          shape_color);
     } else {
       LOG.warn("Cannot draw a shape of type: "+s.getClass());
       Rectangle r = s.getMBR();
@@ -286,10 +266,64 @@ public class Plot {
         graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
     }
   }
+
+  /**
+   * Plots a Geometry from the library JTS into the given image.
+   * @param graphics
+   * @param geom
+   * @param fileMbr
+   * @param imageWidth
+   * @param imageHeight
+   * @param scale
+   * @param shape_color
+   */
+  private static void drawJTSShape(Graphics2D graphics, Geometry geom,
+      Rectangle fileMbr, int imageWidth, int imageHeight, double scale,
+      Color shape_color) {
+    if (geom instanceof GeometryCollection) {
+      GeometryCollection geom_coll = (GeometryCollection) geom;
+      for (int i = 0; i < geom_coll.getNumGeometries(); i++) {
+        Geometry sub_geom = geom_coll.getGeometryN(i);
+        // Recursive call to draw each geometry
+        drawJTSShape(graphics, sub_geom, fileMbr, imageWidth, imageHeight, scale, shape_color);
+      }
+    } else if (geom instanceof com.vividsolutions.jts.geom.Polygon) {
+      com.vividsolutions.jts.geom.Polygon poly = (com.vividsolutions.jts.geom.Polygon) geom;
+
+      for (int i = 0; i < poly.getNumInteriorRing(); i++) {
+        LineString ring = poly.getInteriorRingN(i);
+        drawJTSShape(graphics, ring, fileMbr, imageWidth, imageHeight, scale, shape_color);
+      }
+      
+      drawJTSShape(graphics, poly.getExteriorRing(), fileMbr, imageWidth, imageHeight, scale, shape_color);
+    } else if (geom instanceof LineString) {
+      LineString line = (LineString) geom;
+      double geom_alpha = line.getLength() * scale;
+      int color_alpha = geom_alpha > 1.0 ? 255 : (int) Math.round(geom_alpha * 255);
+      if (color_alpha == 0)
+        return;
+      
+      int[] xpoints = new int[line.getNumPoints()];
+      int[] ypoints = new int[line.getNumPoints()];
+
+      for (int i = 0; i < xpoints.length; i++) {
+        double px = line.getPointN(i).getX();
+        double py = line.getPointN(i).getY();
+        
+        // Transform a point in the polygon to image coordinates
+        xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+        ypoints[i] = (int) Math.round((py - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+      }
+      
+      // Draw the polygon
+      graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+      graphics.drawPolyline(xpoints, ypoints, xpoints.length);
+    }
+  }
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount, boolean compactCells)  throws IOException {
+      boolean showBlockCount, boolean showRecordCount)  throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
     
@@ -298,7 +332,7 @@ public class Plot {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setReducerClass(PlotReduce.class);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setMapOutputKeyClass(CellInfo.class);
+    job.setMapOutputKeyClass(Rectangle.class);
     SpatialSite.setShapeClass(job, shape.getClass());
     job.setMapOutputValueClass(shape.getClass());
     
@@ -337,7 +371,6 @@ public class Plot {
     job.setBoolean(ShowBorders, showBorders);
     job.setBoolean(ShowBlockCount, showBlockCount);
     job.setBoolean(ShowRecordCount, showRecordCount);
-    job.setBoolean(CompactCells, compactCells);
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
@@ -391,7 +424,7 @@ public class Plot {
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
       S shape, int width, int height, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount, boolean compactCells)
+      boolean showBlockCount, boolean showRecordCount)
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
@@ -437,14 +470,14 @@ public class Plot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile,
       S shape, int width, int height, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount, boolean compactCells)
+      boolean showBlockCount, boolean showRecordCount)
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFs.getFileBlockLocations(inFStatus, 0, inFStatus.getLen()).length > 3) {
-      plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
+    if (inFStatus.isDir() || inFStatus.getLen() > 1 * inFStatus.getBlockSize()) {
+      plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
     } else {
-      plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
+      plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
     }
   }
 
@@ -461,7 +494,6 @@ public class Plot {
     System.out.println("-borders: For globally indexed files, draws the borders of partitions");
     System.out.println("-showblockcount: For globally indexed files, draws the borders of partitions");
     System.out.println("-showrecordcount: Show number of records in each partition");
-    System.out.println("-compact: Shrink partition boundaries to fit contents");
     System.out.println("-overwrite: Override output file without notice");
   }
 
@@ -499,13 +531,12 @@ public class Plot {
     boolean showBorders = cla.is("borders");
     boolean showBlockCount = cla.is("showblockcount");
     boolean showRecordCount = cla.is("showrecordcount");
-    boolean compactCells = cla.is("compact");
     Shape shape = cla.getShape(true);
     
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
 
-    plot(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount, compactCells);
+    plot(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
   }
 
 }

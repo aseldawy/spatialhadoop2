@@ -17,6 +17,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableComparable;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
@@ -27,7 +28,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * @author Ahmed Eldawy
  *
  */
-public class Rectangle implements Shape {
+public class Rectangle implements Shape, WritableComparable<Rectangle> {
   public double x1;
   public double y1;
   public double x2;
@@ -290,6 +291,29 @@ public class Rectangle implements Shape {
 
   public double getWidth() {
     return x2 - x1;
+  }
+
+  @Override
+  public int compareTo(Rectangle r2) {
+    if (this.x1 < r2.x1)
+      return -1;
+    if (this.x1 > r2.x1)
+      return 1;
+    if (this.y1 < r2.y1)
+      return -1;
+    if (this.y1 > r2.y1)
+      return 1;
+
+    if (this.x2 < r2.x2)
+      return -1;
+    if (this.x2 > r2.x2)
+      return 1;
+    if (this.y2 < r2.y2)
+      return -1;
+    if (this.y2 > r2.y2)
+      return 1;
+    
+    return 0;
   }
 
 }

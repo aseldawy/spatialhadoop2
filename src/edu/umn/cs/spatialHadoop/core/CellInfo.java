@@ -30,7 +30,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * @author aseldawy
  *
  */
-public class CellInfo extends Rectangle implements WritableComparable<CellInfo> {
+public class CellInfo extends Rectangle {
   
   /**
    * A unique ID for this cell in a file. This must be set initially when
@@ -112,11 +112,6 @@ public class CellInfo extends Rectangle implements WritableComparable<CellInfo> 
     super.readFields(in);
   }
 
-  @Override
-  public int compareTo(CellInfo c) {
-    return (int) (this.cellId - c.cellId);
-  }
-  
   @Override
   public Text toText(Text text) {
     TextSerializerHelper.serializeLong(cellId, text, ',');

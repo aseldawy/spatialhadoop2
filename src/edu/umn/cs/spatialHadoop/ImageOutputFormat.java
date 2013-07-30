@@ -28,7 +28,6 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 
-import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
@@ -37,7 +36,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
  * @author Ahmed Eldawy
  *
  */
-public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable> {
+public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable> {
   /**MBR of the input file*/
   private static final String InputFileMBR = "plot.file_mbr";
   
@@ -50,7 +49,7 @@ public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable>
   /**Used to indicate the progress*/
   private Progressable progress;
   
-  class ImageRecordWriter implements RecordWriter<CellInfo, ImageWritable> {
+  class ImageRecordWriter implements RecordWriter<Rectangle, ImageWritable> {
 
     private final FileSystem outFs;
     private final Path out;
@@ -73,7 +72,7 @@ public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable>
     }
 
     @Override
-    public void write(CellInfo cell, ImageWritable value) throws IOException {
+    public void write(Rectangle cell, ImageWritable value) throws IOException {
       progress.progress();
       int tile_x = (int) ((cell.x1 - fileMbr.x1) * image_width / (fileMbr.x2 - fileMbr.x1));
       int tile_y = (int) ((cell.y1 - fileMbr.y1) * image_height / (fileMbr.y2 - fileMbr.y1));
@@ -96,7 +95,7 @@ public class ImageOutputFormat extends FileOutputFormat<CellInfo, ImageWritable>
   }
 
   @Override
-  public RecordWriter<CellInfo, ImageWritable> getRecordWriter(
+  public RecordWriter<Rectangle, ImageWritable> getRecordWriter(
       FileSystem ignored, JobConf job, String name, Progressable progress)
       throws IOException {
     this.progress = progress;
