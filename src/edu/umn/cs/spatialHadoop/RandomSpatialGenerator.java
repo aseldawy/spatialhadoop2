@@ -164,8 +164,7 @@ public class RandomSpatialGenerator {
     // Plot an image for the partitions used in file
     Path imagePath = new Path(file, "_partitions.png");
     int imageSize = (int) (Math.sqrt(cells.length) * 300);
-    Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, false, false, false, false);
-
+    Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, false, false, false);
   }
   
 
