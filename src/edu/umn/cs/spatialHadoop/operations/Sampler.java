@@ -59,6 +59,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  *
  */
 public class Sampler {
+  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(Sampler.class);
 
   /**Name of the configuration line for sample ratio*/

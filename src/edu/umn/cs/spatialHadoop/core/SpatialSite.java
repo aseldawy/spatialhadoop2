@@ -45,7 +45,6 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
  */
 public class SpatialSite {
   
-  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(SpatialSite.class);
 
   /**Enforce static only calls*/

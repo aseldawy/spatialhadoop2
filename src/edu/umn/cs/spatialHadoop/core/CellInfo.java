@@ -17,7 +17,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.WritableComparable;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 

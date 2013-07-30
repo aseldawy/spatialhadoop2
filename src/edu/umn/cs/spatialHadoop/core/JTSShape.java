@@ -29,8 +29,6 @@ import com.vividsolutions.jts.io.WKBReader;
 import com.vividsolutions.jts.io.WKBWriter;
 import com.vividsolutions.jts.io.WKTReader;
 
-import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
-
 /**
  * A shape class that represents an OGC compliant geometry. The geometry is
  * enclosed inside the class and all calls are delegated to it. The class also

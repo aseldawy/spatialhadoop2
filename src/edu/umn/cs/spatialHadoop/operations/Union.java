@@ -55,7 +55,6 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
  *
  */
 public class Union {
-  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(Union.class);
   
   /**

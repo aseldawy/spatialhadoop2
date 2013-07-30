@@ -48,7 +48,6 @@ import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
-import edu.umn.cs.spatialHadoop.operations.FarthestPair.PairDistance;
 
 /**
  * Computes the convex hull for a set of shapes

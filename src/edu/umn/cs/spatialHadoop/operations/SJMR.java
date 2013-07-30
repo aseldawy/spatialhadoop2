@@ -66,6 +66,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 public class SJMR {
   
   /**Class logger*/
+  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(SJMR.class);
   private static final String PartitionGrid = "SJMR.PartitionGrid";
   
