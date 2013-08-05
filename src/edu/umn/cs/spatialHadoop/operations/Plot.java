@@ -474,7 +474,7 @@ public class Plot {
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFStatus.getLen() > 1 * inFStatus.getBlockSize()) {
+    if (inFStatus.isDir() || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
       plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
     } else {
       plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
