@@ -51,7 +51,9 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
     <input type="button" value="kNN"></input>
     <input type="button" value="Spatial Join"></input>
   </div>
-  <img src="/static/visualizer/roads_rivers.png"/>
+  <div id="preview-img">
+    Preview place holder
+  </div>
 </div>
 <div id="dialog">
   <div class="title">Spatial Join</div>

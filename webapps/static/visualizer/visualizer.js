@@ -5,12 +5,13 @@ $(document).ready(function() {
     var files = selected.map( function(index, obj) {
       return obj.value;
     });
-    $.get("/plotter.jsp", {
+    $.ajax({
+      url: "/plotter.jsp",
       data: files[0],
       success: function(response) {
-        alert(response);
+        $('#preview-img').html(response);
       }, error: function(xhr, status) {
-        alert(status);
+        alert('err: ' + status);
       }
     });
   });
