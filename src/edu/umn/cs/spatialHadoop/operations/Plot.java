@@ -55,6 +55,7 @@ import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.JTSShape;
+import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.OGCShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -194,9 +195,31 @@ public class Plot {
     }
   }
   
+  
+  static int max = 0;
+  
   public static void drawShape(Graphics2D graphics, Shape s, Rectangle fileMbr,
       int imageWidth, int imageHeight, double scale) {
-    if (s instanceof Point) {
+    if (s instanceof NASAPoint) {
+      NASAPoint pt = (NASAPoint) s;
+      int x = (int) ((pt.x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
+      int y = (int) ((pt.y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+      int value = pt.value;
+      
+      if (value > max) {
+        max = value;
+        System.out.println(max);
+      }
+
+      if (value > 0 && x >= 0 && x < imageWidth && y >= 0 && y < imageHeight) {
+        float ratio = 0.627f - 0.627f * value / 10000.0f;
+        if (ratio < 0.0f)
+          ratio = 0.0f;
+        Color color = Color.getHSBColor(ratio, 0.5f, 1.0f);
+        graphics.setColor(color);
+        graphics.fillRect(x, y, 1, 1);
+      }
+    } else if (s instanceof Point) {
       Point pt = (Point) s;
       int x = (int) ((pt.x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
       int y = (int) ((pt.y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
@@ -428,6 +451,7 @@ public class Plot {
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
+    LOG.info("FieMBR: "+fileMbr);
     
     // Adjust width and height to maintain aspect ratio
     if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
@@ -474,7 +498,7 @@ public class Plot {
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFStatus.getLen() > 1 * inFStatus.getBlockSize()) {
+    if (inFStatus.isDir() || inFStatus.getLen() > 1000 * inFStatus.getBlockSize()) {
       plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
     } else {
       plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
