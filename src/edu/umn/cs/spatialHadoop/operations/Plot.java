@@ -13,8 +13,10 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
+import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
@@ -481,6 +483,79 @@ public class Plot {
     }
   }
 
+  /**
+   * Combines images of different datasets into one image that is displayed
+   * to users.
+   * @param fs The file system that contains the datasets and images
+   * @param files Paths to directories which contains the datasets
+   * @param includeBoundaries Also plot the indexing boundaries of datasets
+   * @return An image that is the combination of all datasets images
+   * @throws IOException
+   */
+  public static BufferedImage combineImages(FileSystem fs, Path[] files,
+      boolean includeBoundaries, int width, int height) throws IOException {
+    BufferedImage result = null;
+    // Retrieve the MBRs of all datasets
+    Rectangle allMbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
+    for (Path file : files) {
+      Rectangle mbr = FileMBR.fileMBR(fs, file, null);
+      allMbr.expand(mbr);
+    }
+
+    // Adjust width and height to maintain aspect ratio
+    if ((allMbr.x2 - allMbr.x1) / (allMbr.y2 - allMbr.y1) > (double) width / height) {
+      // Fix width and change height
+      height = (int) ((allMbr.y2 - allMbr.y1) * width / (allMbr.x2 - allMbr.x1));
+    } else {
+      width = (int) ((allMbr.x2 - allMbr.x1) * height / (allMbr.y2 - allMbr.y1));
+    }
+    result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+      
+    for (Path file : files) {
+      if (fs.getFileStatus(file).isDir()) {
+        // Retrieve the MBR of this dataset
+        Rectangle mbr = FileMBR.fileMBR(fs, file, null);
+        // Compute the coordinates of this image in the whole picture
+        mbr.x1 = (mbr.x1 - allMbr.x1) * width / allMbr.getWidth();
+        mbr.x2 = (mbr.x2 - allMbr.x1) * width / allMbr.getWidth();
+        mbr.y1 = (mbr.y1 - allMbr.y1) * height / allMbr.getHeight();
+        mbr.y2 = (mbr.y2 - allMbr.y1) * height / allMbr.getHeight();
+        // Retrieve the image of this dataset
+        Path imagePath = new Path(file, "_data.png");
+        if (!fs.exists(imagePath))
+          throw new RuntimeException("Image "+imagePath+" not ready");
+        FSDataInputStream imageFile = fs.open(imagePath);
+        BufferedImage image = ImageIO.read(imageFile);
+        imageFile.close();
+        // Draw the image
+        Graphics graphics = result.getGraphics();
+        graphics.drawImage(image, (int) mbr.x1, (int) mbr.y1,
+            (int) mbr.getWidth(), (int) mbr.getHeight(), null);
+        graphics.dispose();
+        
+        if (includeBoundaries) {
+          // Plot also the image of the boundaries
+          // Retrieve the image of the dataset boundaries
+          imagePath = new Path(file, "_partitions.png");
+          if (fs.exists(imagePath)) {
+            imageFile = fs.open(imagePath);
+            image = ImageIO.read(imageFile);
+            imageFile.close();
+            // Draw the image
+            graphics = result.getGraphics();
+            graphics.drawImage(image, (int) mbr.x1, (int) mbr.y1,
+                (int) mbr.getWidth(), (int) mbr.getHeight(), null);
+            graphics.dispose();
+          }
+        }
+      }
+    }
+    
+    return result;
+  }
+  
   
   private static void printUsage() {
     System.out.println("Plots all shapes to an image");
@@ -496,12 +571,21 @@ public class Plot {
     System.out.println("-showrecordcount: Show number of records in each partition");
     System.out.println("-overwrite: Override output file without notice");
   }
-
+  
   /**
    * @param args
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
+    BufferedImage image = combineImages(FileSystem.getLocal(new Configuration()), new Path[] {
+      new Path("file:///export/scratch/osm/cities"),
+      new Path("file:///export/scratch/osm/lakes"),
+    }, false, 1000, 1000);
+    
+    ImageIO.write(image, "png", new File("combined.png"));
+    
+    System.exit(0);
+    
     System.setProperty("java.awt.headless", "true");
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(Plot.class);
