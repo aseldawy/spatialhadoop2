@@ -24,6 +24,7 @@ import org.apache.hadoop.io.Text;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.OGCShape;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
@@ -298,6 +299,8 @@ public class CommandLineArguments {
       stockShape = new Polygon();
     } else if (shapeType.toString().startsWith("ogc")) {
       stockShape = new OGCShape();
+    } else if (shapeType.toString().startsWith("nasa")) {
+      stockShape = new NASAPoint();
     } else if (shapeTypeStr != null) {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
