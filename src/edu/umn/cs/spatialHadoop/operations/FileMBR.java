@@ -114,7 +114,8 @@ public class FileMBR {
       long totalLength = 0;
       for (Partition p : globalIndex) {
         Path filePath = new Path(file, p.filename);
-        totalLength += fs.getFileStatus(filePath).getLen();
+        if (fs.exists(filePath))
+          totalLength += fs.getFileStatus(filePath).getLen();
       }
       sizeOfLastProcessedFile = totalLength;
       return globalIndex.getMBR();
