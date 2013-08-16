@@ -516,13 +516,14 @@ public class Plot {
    * @return An image that is the combination of all datasets images
    * @throws IOException
    */
-  public static BufferedImage combineImages(FileSystem fs, Path[] files,
+  public static BufferedImage combineImages(Configuration conf, Path[] files,
       boolean includeBoundaries, int width, int height) throws IOException {
     BufferedImage result = null;
     // Retrieve the MBRs of all datasets
     Rectangle allMbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Path file : files) {
+      FileSystem fs = file.getFileSystem(conf);
       Rectangle mbr = FileMBR.fileMBR(fs, file, null);
       allMbr.expand(mbr);
     }
@@ -538,6 +539,7 @@ public class Plot {
 
       
     for (Path file : files) {
+      FileSystem fs = file.getFileSystem(conf);
       if (fs.getFileStatus(file).isDir()) {
         // Retrieve the MBR of this dataset
         Rectangle mbr = FileMBR.fileMBR(fs, file, null);
@@ -601,7 +603,7 @@ public class Plot {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    BufferedImage image = combineImages(FileSystem.getLocal(new Configuration()), new Path[] {
+    BufferedImage image = combineImages(new Configuration(), new Path[] {
       new Path("file:///export/scratch/osm/cities"),
       new Path("file:///export/scratch/osm/lakes"),
     }, false, 1000, 1000);
