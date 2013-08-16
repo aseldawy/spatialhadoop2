@@ -49,23 +49,27 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
   <div class="operations" style="width: 100%;">
     <input type="button" value="Range Query"></input>
     <input type="button" value="kNN"></input>
-    <input type="button" value="Spatial Join"></input>
+    <input type="button" value="Spatial Join" id="spatial-join-button"></input>
   </div>
   <div id="preview-img">
     Preview place holder
   </div>
 </div>
-<div id="dialog">
+<!-- Spatial join dialog -->
+<div class="dialog" id="spatial-join-dialog">
   <div class="title">Spatial Join</div>
-  <form>
-    <span class="label"><label for="output">Output filename</label></span>
-    <input name="output" type="text" value="/roads_rivers"/><br/>
-    <span class="label"><label for="predicate">Join predicate</label></span>
+  <form action="/spatialjoin.jsp">
+    <p><span class="label"><label for="input1">Input filename</label></span>
+    <input name="input1" type="text" disabled="disabled"/></p>
+    <p><span class="label"><label for="input2">Input filename</label></span>
+    <input name="input2" type="text" disabled="disabled"/></p>
+    <p><span class="label"><label for="predicate">Join predicate</label></span>
     <select name="predicate">
-      <option selected="selected">overlap</option>
-      <option>touches</option>
-      <option>contains</option>
-    </select>
+      <option>overlap</option>
+    </select></p>
+    <p>
+    <p><span class="label"><label for="output">Output filename</label></span>
+    <input name="output" type="text"/></p>
     <textarea cols="40" rows="8">
 area_water = LOAD 'area_water' AS (id: int, area: polygon);
 road_edges = LOAD 'road_edges' AS (id: int, edge: line);
@@ -73,8 +77,13 @@ result     = JOIN area_water BY area
   road_edges BY edge PREDICATE = overlap;
 STORE result INTO '/roads_rivers';
     </textarea>
-    <input type="submit" value="Submit"/><input type="reset" value="Cancel"/>
+    </p>
+    <p>
+    <input type="submit" value="Submit"/>
+    <input type="reset" value="Cancel"/>
+    </p>
   </form>
 </div>
+<!-- end of spatial join dialog -->
 </body>
 </html>
