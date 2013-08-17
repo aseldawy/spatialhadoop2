@@ -450,9 +450,10 @@ public class DistributedJoin {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     GlobalIndex<Partition> gindex1 = SpatialSite.getGlobalIndex(fs, inputFiles[0]);
     GlobalIndex<Partition> gindex2 = SpatialSite.getGlobalIndex(fs, inputFiles[1]);
-    if (gindex1.isReplicated() && gindex2.isReplicated())
+    if (gindex1 != null && gindex2 != null &&
+        gindex1.isReplicated() && gindex2.isReplicated())
       job.setMapperClass(RedistributeJoinMap.class);
-    else if (!gindex1.isReplicated() && gindex2.isReplicated())
+    else if (gindex1 == null || gindex2 == null || (!gindex1.isReplicated() && !gindex2.isReplicated()))
       job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
     else {
       LOG.warn("Don't know how to join a replicated file with a non-replicated file");
