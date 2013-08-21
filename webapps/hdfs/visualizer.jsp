@@ -60,9 +60,9 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
   <div class="title">Spatial Join</div>
   <form action="/spatialjoin.jsp">
     <p><span class="label"><label for="input1">Input filename</label></span>
-    <input name="input1" type="text" disabled="disabled"/></p>
+    <input name="input1" type="text"/></p>
     <p><span class="label"><label for="input2">Input filename</label></span>
-    <input name="input2" type="text" disabled="disabled"/></p>
+    <input name="input2" type="text"/></p>
     <p><span class="label"><label for="predicate">Join predicate</label></span>
     <select name="predicate">
       <option>overlap</option>

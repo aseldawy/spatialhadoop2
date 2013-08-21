@@ -604,8 +604,8 @@ public class Plot {
    */
   public static void main(String[] args) throws IOException {
     BufferedImage image = combineImages(new Configuration(), new Path[] {
-      new Path("file:///export/scratch/osm/cities"),
-      new Path("file:///export/scratch/osm/lakes"),
+      new Path("/home/shadoop/hadoop-1.2.1/cities"),
+      new Path("/home/shadoop/hadoop-1.2.1/parks"),
     }, false, 1000, 1000);
     
     ImageIO.write(image, "png", new File("combined.png"));

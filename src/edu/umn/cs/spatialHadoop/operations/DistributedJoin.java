@@ -423,8 +423,8 @@ public class DistributedJoin {
    * @throws IOException 
    */
   public static <S extends Shape> long joinStep(FileSystem fs,
-      Path[] inputFiles, Path userOutputPath, S stockShape, boolean overwrite)
-      throws IOException {
+      Path[] inputFiles, Path userOutputPath, S stockShape, boolean overwrite,
+      boolean background) throws IOException {
     long t1 = System.currentTimeMillis();
 
     JobConf job = new JobConf(DistributedJoin.class);
@@ -590,7 +590,7 @@ public class DistributedJoin {
     
     // Redistribute join the larger file and the partitioned file
     long result_size = DistributedJoin.joinStep(fs, inputFiles, outputPath, stockShape,
-        overwrite);
+        overwrite, false);
     
     if (userOutputPath == null)
       outFs.delete(outputPath, true);
@@ -635,9 +635,9 @@ public class DistributedJoin {
     } else if (repartition.equals("yes")) {
       int file_to_repartition = selectRepartition(fs, inputFiles);
       repartitionStep(fs, inputFiles, file_to_repartition, stockShape);
-      result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite);
+      result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite, false);
     } else if (repartition.equals("no")) {
-      result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite);
+      result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite, false);
     } else {
       throw new RuntimeException("Illegal parameter repartition:"+repartition);
     }

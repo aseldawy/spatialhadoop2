@@ -32,6 +32,22 @@ $(document).ready(function() {
   $("#spatial-join-dialog input[type='reset']").click( function() {
     $("#spatial-join-dialog").hide();
   });
+
+  $("#spatial-join-dialog form").submit( function(event) {
+    var form = $(this);
+
+    $.ajax({
+      url: "/spatialjoin.jsp",
+      data: form.serialize(),
+      complete: function() {
+        $("#spatial-join-dialog").hide();
+      }, success: function(response) {
+        $('#preview-img').html(response);
+      }
+    });
+    
+    event.preventDefault();
+  });
   
   function spatialJoinUpdateQuery() {
     var query = "input1 = LOAD '%input1%' AS (geom: Geometry);\n\
