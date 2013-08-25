@@ -80,6 +80,9 @@ public class KNN {
 
   /**Statistics for debugging. Total number of iterations by all KNN queries*/
   private static AtomicInteger TotalIterations = new AtomicInteger();
+
+  /**Reference to the last submitted kNN job*/
+  public static RunningJob lastRunningJob;
   
   /**Configuration line name for query point*/
   public static final String QUERY_POINT =
@@ -311,7 +314,7 @@ public class KNN {
    */
   public static <S extends Shape> long knnMapReduce(FileSystem fs,
       Path inputPath, Path userOutputPath, final Point queryPoint, int k, S shape,
-      boolean overwrite) throws IOException {
+      boolean overwrite, boolean background) throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
     job.setJobName("KNN");
@@ -341,8 +344,6 @@ public class KNN {
     job.setNumReduceTasks(1);
     
     SpatialSite.setShapeClass(job, shape.getClass());
-
-    RunningJob runningJob;
 
     job.setClass(SpatialSite.FilterClass, RangeQuery.RangeFilter.class, BlockFilter.class);
     
@@ -384,7 +385,14 @@ public class KNN {
       RangeQuery.RangeFilter.setQueryRange(job, range_for_this_iteration);
 
       // Submit the job
-      runningJob = JobClient.runJob(job);
+      if (background) {
+        // XXX this is incorrect because if the job needs multiple iterations,
+        // it will run only the first one
+        JobClient jc = new JobClient(job);
+        lastRunningJob = jc.submitJob(job);
+        return -1;
+      }
+      RunningJob runningJob = JobClient.runJob(job);
 
       // Retrieve answers for this iteration
       Counters counters = runningJob.getCounters();
@@ -596,7 +604,7 @@ public class KNN {
           try {
             Point query_point = queryPoints[threads.indexOf(this)];
             long result_count = knnMapReduce(fs, inputFile, outputPath,
-                query_point, k, shape, overwrite);
+                query_point, k, shape, overwrite, false);
             results.add(result_count);
           } catch (IOException e) {
             e.printStackTrace();

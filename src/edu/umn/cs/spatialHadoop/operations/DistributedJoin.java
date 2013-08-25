@@ -69,6 +69,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  */
 public class DistributedJoin {
   private static final Log LOG = LogFactory.getLog(DistributedJoin.class);
+  public static RunningJob lastRunningJob;
 
   public static class SpatialJoinFilter extends DefaultBlockFilter {
     @Override
@@ -484,22 +485,31 @@ public class DistributedJoin {
     
     TextOutputFormat.setOutputPath(job, outputPath);
     
-    RunningJob runningJob = JobClient.runJob(job);
-    Counters counters = runningJob.getCounters();
-    Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
-    final long resultCount = outputRecordCounter.getValue();
-
-    // Output number of running map tasks
-    Counter mapTaskCountCounter = counters
-        .findCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
-    System.out.println("Number of map tasks "+mapTaskCountCounter.getValue());
-    
-    if (userOutputPath == null)
-      outFs.delete(outputPath, true);
-    long t2 = System.currentTimeMillis();
-    System.out.println("Join time "+(t2-t1)+" millis");
-    
-    return resultCount;
+    if (!background) {
+      LOG.info("Submit job in sync mode");
+      RunningJob runningJob = JobClient.runJob(job);
+      Counters counters = runningJob.getCounters();
+      Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
+      final long resultCount = outputRecordCounter.getValue();
+      
+      // Output number of running map tasks
+      Counter mapTaskCountCounter = counters
+          .findCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
+      System.out.println("Number of map tasks "+mapTaskCountCounter.getValue());
+      
+      if (userOutputPath == null)
+        outFs.delete(outputPath, true);
+      long t2 = System.currentTimeMillis();
+      System.out.println("Join time "+(t2-t1)+" millis");
+      
+      return resultCount;
+    } else {
+      JobClient jc = new JobClient(job);
+      LOG.info("Submit job in async mode");
+      lastRunningJob = jc.submitJob(job);
+      LOG.info("Job "+lastRunningJob+" submitted successfully");
+      return -1;
+    }
   }
   
   /**

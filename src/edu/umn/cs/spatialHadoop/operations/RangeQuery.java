@@ -66,6 +66,9 @@ public class RangeQuery {
   /**Name of the config line that stores the query shape*/
   public static final String QUERY_SHAPE =
       "edu.umn.cs.spatialHadoop.operations.RangeQuery.QueryShape";
+
+  /**Reference to the last range query job submitted*/
+  public static RunningJob lastRunningJob;
   
   /**
    * A filter function that selects partitions overlapping with a query range.
@@ -282,7 +285,8 @@ public class RangeQuery {
    * @throws IOException
    */
   public static long rangeQueryMapReduce(FileSystem fs, Path inputFile,
-      Path userOutputPath, Shape queryShape, Shape shape, boolean overwrite)
+      Path userOutputPath, Shape queryShape, Shape shape, boolean overwrite,
+      boolean background)
       throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
@@ -343,16 +347,22 @@ public class RangeQuery {
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job
-    RunningJob runningJob = JobClient.runJob(job);
-    Counters counters = runningJob.getCounters();
-    Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
-    final long resultCount = outputRecordCounter.getValue();
-    
-    // If outputPath not set by user, automatically delete it
-    if (userOutputPath == null)
-      outFs.delete(outputPath, true);
-
-    return resultCount;
+    if (!background) {
+      RunningJob runningJob = JobClient.runJob(job);
+      Counters counters = runningJob.getCounters();
+      Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
+      final long resultCount = outputRecordCounter.getValue();
+      
+      // If outputPath not set by user, automatically delete it
+      if (userOutputPath == null)
+        outFs.delete(outputPath, true);
+      
+      return resultCount;
+    } else {
+      JobClient jc = new JobClient(job);
+      lastRunningJob = jc.submitJob(job);
+      return -1;
+    }
   }
   
   /**
@@ -448,7 +458,7 @@ public class RangeQuery {
             try {
               int thread_i = threads.indexOf(this);
               long result_count = rangeQueryMapReduce(fs, inputFile, outputPath,
-                  queryRanges[thread_i], stockShape, overwrite);
+                  queryRanges[thread_i], stockShape, overwrite, false);
               results[thread_i] = result_count;
             } catch (IOException e) {
               throw new RuntimeException(e);

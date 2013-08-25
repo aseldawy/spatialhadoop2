@@ -1,8 +1,11 @@
 <%@ page
   contentType="text/html; charset=UTF-8"
-  import="org.apache.hadoop.fs.Path"
+  import="org.apache.hadoop.fs.*"
   import="java.awt.image.BufferedImage"
+  import="java.awt.image.AffineTransformOp"
+  import="java.awt.geom.AffineTransform"
   import="edu.umn.cs.spatialHadoop.operations.Plot"
+  import="edu.umn.cs.spatialHadoop.core.SpatialSite"
   import="java.io.BufferedReader"
   import="org.apache.hadoop.http.HtmlQuoting"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
@@ -21,17 +24,39 @@
 }
 %>
 
-<h1>
-  <%
-    Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
-    String files = request.getParameter("files");
-    if (files != null) {
-      String[] filenames = HtmlQuoting.unquoteHtmlChars(files).split(",");
-      Path[] filepaths = new Path[filenames.length];
-      for (int i = 0; i < filenames.length; i++)
-        filepaths[i] = new Path(filenames[i]);
+<%
+  Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+  String files = request.getParameter("files");
+  boolean flipVertical = request.getParameter("vflip") != null;
+  if (files != null) {
+    String[] filenames = HtmlQuoting.unquoteHtmlChars(files).split(",");
+    Path[] filepaths = new Path[filenames.length];
+    boolean ready = true;
+    for (int i = 0; ready && i < filenames.length; i++) {
+      filepaths[i] = new Path(filenames[i]);
+      FileSystem fs = filepaths[i].getFileSystem(conf);
+      if (SpatialSite.getGlobalIndex(fs, filepaths[i]) == null) {
+        out.println("File '" + filenames[i] + "' is not ready for plot<br/>");
+        out.print("<a href='");
+        out.print("The URL");
+        out.println("'>");
+        out.println("Click here to preprocess it");
+        out.println("</a>");
+        ready = false;
+      }
+    }
+    if (ready) {
       try {
         BufferedImage combinedImage = Plot.combineImages(conf, filepaths, false, 1000, 1000);
+        // Flip the image vertically if required
+        if (flipVertical) {
+          AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+          tx.translate(0, -combinedImage.getHeight(null));
+          AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+          combinedImage = op.filter(combinedImage, null);
+        }
+        
+        // Encode the image in base64
         ByteArrayOutputStream imageOut = new ByteArrayOutputStream();
         ImageIO.write(combinedImage, "png", imageOut);
         imageOut.close();
@@ -45,8 +70,7 @@
         out.println(e);
         out.println(Arrays.asList(e.getStackTrace()));
       }
-      
     }
-    
-  %>
-</h1>
+  }
+  
+%>

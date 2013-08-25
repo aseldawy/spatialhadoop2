@@ -1,10 +1,10 @@
 <%@ page
   contentType="text/html; charset=UTF-8"
-  import="edu.umn.cs.spatialHadoop.operations.DistributedJoin"
+  import="edu.umn.cs.spatialHadoop.operations.RangeQuery"
   import="org.apache.hadoop.conf.Configuration"
   import="org.apache.hadoop.fs.*"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
-  import="edu.umn.cs.spatialHadoop.core.OSMPolygon"
+  import="edu.umn.cs.spatialHadoop.core.*"
   import="org.apache.hadoop.mapred.RunningJob"
   
   
@@ -26,22 +26,30 @@
 <%! static JspHelper jspHelper = new JspHelper(); %>
 
 <%
-  if (request.getParameter("input1") == null ||
-      request.getParameter("input2") == null) {
-    out.println("Missing input arguments");
+  if (request.getParameter("input") == null ||
+      request.getParameter("xmin") == null ||
+      request.getParameter("ymin") == null ||
+      request.getParameter("xmax") == null ||
+      request.getParameter("ymax") == null) {
+    out.println("Missing input or query arguments");
   } else {
-    Path input1 = new Path(request.getParameter("input1"));
-    Path input2 = new Path(request.getParameter("input2"));
-    String predicate = request.getParameter("predicate");
+    Path input = new Path(request.getParameter("input"));
+    double xmin = Double.parseDouble(request.getParameter("xmin"));
+    double ymin = Double.parseDouble(request.getParameter("ymin"));
+    double xmax = Double.parseDouble(request.getParameter("xmax"));
+    double ymax = Double.parseDouble(request.getParameter("ymax"));
+    Rectangle query_mbr = new Rectangle(xmin, ymin, xmax, ymax);
     Path output = new Path(request.getParameter("output"));
     
     Configuration conf =
       (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
     
     try{
-      DistributedJoin.joinStep(input1.getFileSystem(conf),
-        new Path[] {input1, input2}, output, new OSMPolygon(), false, true);
-      RunningJob running_job = DistributedJoin.lastRunningJob;
+      RangeQuery.rangeQueryMapReduce(input.getFileSystem(conf), input, output,
+          query_mbr, new OSMPolygon(), false, true);
+      RunningJob running_job = RangeQuery.lastRunningJob;
+      
+      // Create a link to the status of the running job
       String trackerAddress = conf.get("mapred.job.tracker.http.address");
       InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(trackerAddress);
       String requestUrl = request.getRequestURL().toString();
