@@ -35,10 +35,11 @@
     for (int i = 0; ready && i < filenames.length; i++) {
       filepaths[i] = new Path(filenames[i]);
       FileSystem fs = filepaths[i].getFileSystem(conf);
-      if (SpatialSite.getGlobalIndex(fs, filepaths[i]) == null) {
+      if (SpatialSite.getGlobalIndex(fs, filepaths[i]) == null ||
+        !fs.exists(new Path(filepaths[i], "_data.png"))) {
         out.println("File '" + filenames[i] + "' is not ready for plot<br/>");
         out.print("<a href='");
-        out.print("The URL");
+        out.print("/preprocess.jsp?path="+filepaths[i]);
         out.println("'>");
         out.println("Click here to preprocess it");
         out.println("</a>");

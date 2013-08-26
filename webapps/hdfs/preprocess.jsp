@@ -59,6 +59,13 @@
         }
       }).start();
     }
+    
+    // 2- Check if the plotted image is there
+    if (!fs.exists(new Path(path, "_data.png"))) {
+      // Plot the image
+      Plot.plot(path, new Path(path, "_data.png"), new OSMPolygon(),
+        1000, 1000, false, false, false);
+    }
   }
 %>
 

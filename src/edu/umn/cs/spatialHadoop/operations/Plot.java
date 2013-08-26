@@ -390,6 +390,7 @@ public class Plot {
     } else {
       width = (int) ((fileMbr.x2 - fileMbr.x1) * height / (fileMbr.y2 - fileMbr.y1));
     }
+    LOG.info("Creating an image of size "+width+"x"+height);
     ImageOutputFormat.setFileMBR(job, fileMbr);
     ImageOutputFormat.setImageWidth(job, width);
     ImageOutputFormat.setImageHeight(job, height);
@@ -440,8 +441,10 @@ public class Plot {
       }
       
       // Finally, write the resulting image to the given output path
+      LOG.info("Writing final image");
       OutputStream outputImage = outFs.create(outFile);
       ImageIO.write(finalImage, "png", outputImage);
+      outputImage.close();
     }
     
     outFs.delete(temp, true);
@@ -603,15 +606,6 @@ public class Plot {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    BufferedImage image = combineImages(new Configuration(), new Path[] {
-      new Path("/home/shadoop/hadoop-1.2.1/cities"),
-      new Path("/home/shadoop/hadoop-1.2.1/parks"),
-    }, false, 1000, 1000);
-    
-    ImageIO.write(image, "png", new File("combined.png"));
-    
-    System.exit(0);
-    
     System.setProperty("java.awt.headless", "true");
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(Plot.class);
