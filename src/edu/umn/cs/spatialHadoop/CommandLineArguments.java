@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop;
 
+import java.awt.Color;
 import java.io.IOException;
 import java.util.Vector;
 
@@ -404,5 +405,25 @@ public class CommandLineArguments {
       LOG.warn("unknown shape type: "+shapeTypeStr);
     
     return stockShape;
+  }
+
+  public Color getColor() {
+    Color color = Color.BLACK;
+    String colorName = get("color");
+    if (colorName == null)
+      return color;
+    colorName = colorName.toLowerCase();
+    if (colorName.equals("red")) {
+      color = Color.RED;
+    } else if (colorName.equals("blue")){
+      color = Color.BLUE;
+    } else if (colorName.equals("green")) {
+      color = Color.GREEN;
+    } else if (colorName.equals("black")) {
+      color = Color.BLACK;
+    } else if (colorName.equals("orange")) {
+      color = Color.ORANGE;
+    }
+    return color;
   }
 }
