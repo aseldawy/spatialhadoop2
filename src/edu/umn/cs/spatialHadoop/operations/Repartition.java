@@ -30,9 +30,11 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -270,6 +272,48 @@ public class Repartition {
         sindex, overwrite);
   }
   
+  public static class RepartitionOutputCommitter extends FileOutputCommitter {
+    @Override
+    public void commitJob(JobContext context) throws IOException {
+      super.commitJob(context);
+      
+      JobConf job = context.getJobConf();
+      Path outPath = GridOutputFormat.getOutputPath(job);
+      FileSystem outFs = outPath.getFileSystem(job);
+      CellInfo[] cellInfos = SpatialSite.getCells(job);
+
+      // Concatenate all master files into one file
+      FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
+        @Override
+        public boolean accept(Path path) {
+          return path.getName().contains("_master");
+        }
+      });
+      String ext = resultFiles[0].getPath().getName()
+          .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
+      Path masterPath = new Path(outPath, "_master" + ext);
+      OutputStream destOut = outFs.create(masterPath);
+      byte[] buffer = new byte[4096];
+      for (FileStatus f : resultFiles) {
+        InputStream in = outFs.open(f.getPath());
+        int bytes_read;
+        do {
+          bytes_read = in.read(buffer);
+          if (bytes_read > 0)
+            destOut.write(buffer, 0, bytes_read);
+        } while (bytes_read > 0);
+        in.close();
+        outFs.delete(f.getPath(), false);
+      }
+      destOut.close();
+      
+      // Plot an image for the partitions used in file
+      Path imagePath = new Path(outPath, "_partitions.png");
+      int imageSize = (int) (Math.sqrt(cellInfos.length) * 300);
+      Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, Color.BLACK, false, false, false);
+    }
+  }
+  
   /**
    * Repartitions an input file according to the given list of cells.
    * @param inFile
@@ -349,37 +393,10 @@ public class Repartition {
     job.setNumReduceTasks(Math.max(1, Math.min(cellInfos.length,
         (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
 
+    // Set output committer that combines output files together
+    job.setOutputCommitter(RepartitionOutputCommitter.class);
+    
     JobClient.runJob(job);
-    
-    // Concatenate all master files into one file
-    FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
-      @Override
-      public boolean accept(Path path) {
-        return path.getName().contains("_master");
-      }
-    });
-    String ext = resultFiles[0].getPath().getName()
-        .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
-    Path masterPath = new Path(outPath, "_master" + ext);
-    OutputStream destOut = outFs.create(masterPath);
-    byte[] buffer = new byte[4096];
-    for (FileStatus f : resultFiles) {
-      InputStream in = outFs.open(f.getPath());
-      int bytes_read;
-      do {
-        bytes_read = in.read(buffer);
-        if (bytes_read > 0)
-          destOut.write(buffer, 0, bytes_read);
-      } while (bytes_read > 0);
-      in.close();
-      outFs.delete(f.getPath(), false);
-    }
-    destOut.close();
-    
-    // Plot an image for the partitions used in file
-    Path imagePath = new Path(outPath, "_partitions.png");
-    int imageSize = (int) (Math.sqrt(cellInfos.length) * 300);
-    Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, Color.BLACK, false, false, false);
   }
 
   public static <S extends Shape> CellInfo[] packInRectangles(FileSystem inFS,
