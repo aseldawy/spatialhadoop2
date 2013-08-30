@@ -38,17 +38,26 @@
       if (SpatialSite.getGlobalIndex(fs, filepaths[i]) == null ||
         !fs.exists(new Path(filepaths[i], "_data.png"))) {
         out.println("File '" + filenames[i] + "' is not ready for plot<br/>");
-        out.print("<a href='");
-        out.print("/preprocess.jsp?path="+filepaths[i]);
-        out.println("'>");
-        out.println("Click here to preprocess it");
-        out.println("</a>");
+        out.println("<form action='/preprocess.jsp'>");
+        out.println("<input type='hidden' name='path' value='"+filepaths[i]+"'/>");
+        out.println("<span class='label'><label for='color'>Plot Color</label></span>");
+        out.println("<select name='color'>");
+        String[] colors = "black,blue,cyan,green,red,pink,orange".split(",");
+        for (String color : colors) {
+          out.println("<option>"+color+"</option>");
+        }
+        out.println("</select><br/>");
+        out.println("<input type='Submit' value='Preprocess'/>");
+        out.println("</form>");
         ready = false;
       }
     }
     if (ready) {
       try {
-        BufferedImage combinedImage = Plot.combineImages(conf, filepaths, false, 1000, 1000);
+        boolean showPartitions = request.getParameter("partitions") != null &&
+            request.getParameter("partitions").equals("true");
+        BufferedImage combinedImage = Plot.combineImages(conf, filepaths,
+          showPartitions, 1000, 1000);
         // Flip the image vertically if required
         if (flipVertical) {
           AffineTransform tx = AffineTransform.getScaleInstance(1, -1);

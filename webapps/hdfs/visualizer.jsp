@@ -54,6 +54,8 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
     <input type="button" value="Range Query" id="range-query-button"></input>
     <input type="button" value="kNN" id="knn-button"></input>
     <input type="button" value="Spatial Join" id="spatial-join-button"></input>
+    <input type="checkbox" name="partitions" id="partitions" value="yes"/>
+    <label for="partitions">Show Partitions</label>
   </div>
   <div id="preview-img">
     Preview place holder
@@ -127,7 +129,7 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
     <p>
     <p><span class="label"><label for="output">Output filename</label></span>
     <input name="output" type="text"/></p>
-    <textarea cols="40" rows="8"/>
+    <textarea cols="40" rows="8"> </textarea>
     </p>
     <p>
     <input type="submit" value="Submit"/>

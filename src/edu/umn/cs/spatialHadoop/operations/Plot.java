@@ -16,7 +16,6 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
@@ -76,6 +75,7 @@ public class Plot {
   private static final String ShowBorders = "plot.show_borders";
   private static final String ShowBlockCount = "plot.show_block_count";
   private static final String ShowRecordCount = "plot.show_record_count";
+  private static final String StrokeColor = "plot.stroke_color";
 
   /**
    * If the processed block is already partitioned (via global index), then
@@ -138,6 +138,7 @@ public class Plot {
     private int imageWidth, imageHeight;
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
+    private Color strokeColor;
 
     @Override
     public void configure(JobConf job) {
@@ -146,6 +147,7 @@ public class Plot {
       fileMbr = ImageOutputFormat.getFileMBR(job);
       imageWidth = ImageOutputFormat.getImageWidth(job);
       imageHeight = ImageOutputFormat.getImageHeight(job);
+      this.strokeColor = new Color(job.getInt(StrokeColor, 0));
       
       this.scale2 = (double)imageWidth * imageHeight /
           ((double)(fileMbr.x2 - fileMbr.x1) * (fileMbr.y2 - fileMbr.y1));
@@ -168,7 +170,6 @@ public class Plot {
         BufferedImage image = new BufferedImage(tile_width, tile_height,
             BufferedImage.TYPE_INT_ARGB);
         Color bg_color = new Color(0,0,0,0);
-        Color stroke_color = Color.BLUE;
 
         Graphics2D graphics;
         try {
@@ -178,7 +179,7 @@ public class Plot {
         }
         graphics.setBackground(bg_color);
         graphics.clearRect(0, 0, tile_width, tile_height);
-        graphics.setColor(stroke_color);
+        graphics.setColor(strokeColor);
         graphics.translate(-image_x1, -image_y1);
 
         while (values.hasNext()) {
@@ -347,7 +348,7 @@ public class Plot {
   }
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
-      Shape shape, int width, int height, boolean showBorders,
+      Shape shape, int width, int height, Color color, boolean showBorders,
       boolean showBlockCount, boolean showRecordCount)  throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
@@ -397,6 +398,7 @@ public class Plot {
     job.setBoolean(ShowBorders, showBorders);
     job.setBoolean(ShowBlockCount, showBlockCount);
     job.setBoolean(ShowRecordCount, showRecordCount);
+    job.setInt(StrokeColor, color.getRGB());
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
@@ -451,12 +453,11 @@ public class Plot {
   }
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
-      S shape, int width, int height, boolean showBorders,
+      S shape, int width, int height, Color color, boolean showBorders,
       boolean showBlockCount, boolean showRecordCount)
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
-    LOG.info("FieMBR: "+fileMbr);
     
     // Adjust width and height to maintain aspect ratio
     if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
@@ -474,11 +475,9 @@ public class Plot {
         BufferedImage.TYPE_INT_ARGB);
     Graphics2D graphics = image.createGraphics();
     Color bg_color = new Color(0,0,0,0);
-    bg_color = Color.WHITE;
     graphics.setBackground(bg_color);
     graphics.clearRect(0, 0, width, height);
-    Color stroke_color = Color.BLACK;
-    graphics.setColor(stroke_color);
+    graphics.setColor(color);
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
     ShapeRecordReader<S> reader =
@@ -498,15 +497,15 @@ public class Plot {
   }
   
   public static <S extends Shape> void plot(Path inFile, Path outFile,
-      S shape, int width, int height, boolean showBorders,
+      S shape, int width, int height, Color color, boolean showBorders,
       boolean showBlockCount, boolean showRecordCount)
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     if (inFStatus.isDir() || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
-      plotMapReduce(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
+      plotMapReduce(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
     } else {
-      plotLocal(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
+      plotLocal(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
     }
   }
 
@@ -639,8 +638,10 @@ public class Plot {
     
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
+    
+    Color color = cla.getColor();
 
-    plot(inFile, outFile, shape, width, height, showBorders, showBlockCount, showRecordCount);
+    plot(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
   }
 
 }

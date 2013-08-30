@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.operations;
 
+import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -378,7 +379,7 @@ public class Repartition {
     // Plot an image for the partitions used in file
     Path imagePath = new Path(outPath, "_partitions.png");
     int imageSize = (int) (Math.sqrt(cellInfos.length) * 300);
-    Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, false, false, false);
+    Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, Color.BLACK, false, false, false);
   }
 
   public static <S extends Shape> CellInfo[] packInRectangles(FileSystem inFS,

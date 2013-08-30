@@ -1,21 +1,27 @@
 $(document).ready(function() {
-  $("#file-selector").change( function() {
-    var $this = $(this);
-    var selected = $this.find(":selected");
+  function plotSelected() {
+    var fselector = $("#file-selector");
+    var selected = fselector.find(":selected");
     var files = selected.map( function(index, obj) {
       return obj.value;
     });
-    
     $.ajax({
       url: "/plotter.jsp",
-      data: {files: jQuery.makeArray(files).join(","), vflip: true},
+      data: {
+        files: jQuery.makeArray(files).join(","),
+        vflip: true,
+        partitions: $("#partitions").is(':checked')
+      },
       success: function(response) {
         $('#preview-img').html(response);
       }, error: function(xhr, status) {
         alert('err: ' + status);
       }
     });
-  });
+  }
+
+  $("#file-selector").change(plotSelected);
+  $("#partitions").change(plotSelected);
   
   // ------------ Range query --------
   $("#range-query-button").click( function() {
@@ -51,7 +57,7 @@ $(document).ready(function() {
   
   function rangeQueryUpdateQuery() {
     var query = "input = LOAD '%input%' AS (geom: Geometry);\n\
-result = FILTER %input% BY Overlap(geom, Rectangle(%query_rect%));\n\
+result = FILTER input BY Overlap(geom, Rectangle(%query_rect%));\n\
 STORE result INTO '%output%';";
     var input = $("#range-query-dialog input[name='input']").val();
     query = query.replace("%input%", input);

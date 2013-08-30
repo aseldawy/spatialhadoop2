@@ -2,6 +2,7 @@
   contentType="text/html; charset=UTF-8"
   import="org.apache.hadoop.fs.*"
   import="java.io.*"
+  import="java.awt.Color"
   import="org.apache.hadoop.io.Text"
   import="java.awt.image.BufferedImage"
   import="edu.umn.cs.spatialHadoop.operations.*"
@@ -25,7 +26,6 @@
     final Path path = new Path(request.getParameter("path"));
     final FileSystem fs = path.getFileSystem(conf);
     final javax.servlet.jsp.JspWriter jsp_out = out;
-    // TODO: Write an index file for it (if not there) and plot its image
     
     // 1- Check if index file is there
     if (SpatialSite.getGlobalIndex(fs, path) == null) {
@@ -63,8 +63,29 @@
     // 2- Check if the plotted image is there
     if (!fs.exists(new Path(path, "_data.png"))) {
       // Plot the image
+      Color color = Color.BLACK;
+      String colorName = request.getParameter("color");
+      if (colorName != null) {
+        colorName = colorName.toLowerCase();
+        if (colorName.equals("red")) {
+          color = Color.RED;
+        } else if (colorName.equals("pink")){
+          color = Color.PINK;
+        } else if (colorName.equals("blue")){
+          color = Color.BLUE;
+        } else if (colorName.equals("green")) {
+          color = Color.GREEN;
+        } else if (colorName.equals("black")) {
+          color = Color.BLACK;
+        } else if (colorName.equals("orange")) {
+          color = Color.ORANGE;
+        } else if (colorName.equals("cyan")) {
+          color = Color.CYAN;
+        }
+      }
+      
       Plot.plot(path, new Path(path, "_data.png"), new OSMPolygon(),
-        1000, 1000, false, false, false);
+        1000, 1000, color, false, false, false);
     }
   }
 %>
