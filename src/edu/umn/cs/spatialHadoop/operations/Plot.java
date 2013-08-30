@@ -31,8 +31,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -195,6 +197,61 @@ public class Plot {
         e.printStackTrace();
         throw e;
       }
+    }
+  }
+  
+  public static class PlotOutputCommitter extends FileOutputCommitter {
+    @Override
+    public void commitJob(JobContext context) throws IOException {
+      super.commitJob(context);
+      
+      JobConf job = context.getJobConf();
+      Path outFile = ImageOutputFormat.getOutputPath(job);
+      int width = ImageOutputFormat.getImageWidth(job);
+      int height = ImageOutputFormat.getImageHeight(job);
+      
+      // Combine all images in one file
+      // Rename output file
+      // Combine all output files into one file as we do with grid files
+      FileSystem outFs = outFile.getFileSystem(job);
+      Path temp = new Path(outFile.toUri().getPath()+"_temp");
+      outFs.rename(outFile, temp);
+      FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
+        @Override
+        public boolean accept(Path path) {
+          return path.toUri().getPath().contains("part-");
+        }
+      });
+      
+      if (resultFiles.length == 1) {
+        // Only one output file
+        outFs.rename(resultFiles[0].getPath(), outFile);
+      } else {
+        // Merge all images into one image (overlay)
+        BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        for (FileStatus resultFile : resultFiles) {
+          FSDataInputStream imageFile = outFs.open(resultFile.getPath());
+          BufferedImage tileImage = ImageIO.read(imageFile);
+          imageFile.close();
+
+          Graphics2D graphics;
+          try {
+            graphics = finalImage.createGraphics();
+          } catch (Throwable e) {
+            graphics = new SimpleGraphics(finalImage);
+          }
+          graphics.drawImage(tileImage, 0, 0, null);
+          graphics.dispose();
+        }
+        
+        // Finally, write the resulting image to the given output path
+        LOG.info("Writing final image");
+        OutputStream outputImage = outFs.create(outFile);
+        ImageIO.write(finalImage, "png", outputImage);
+        outputImage.close();
+      }
+      
+      outFs.delete(temp, true);
     }
   }
   
@@ -403,53 +460,14 @@ public class Plot {
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
+    // Set output committer which will stitch images together after all reducers
+    // finish
+    job.setOutputCommitter(PlotOutputCommitter.class);
     
     job.setOutputFormat(ImageOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
     
     JobClient.runJob(job);
-    
-    // Rename output file
-    // Combine all output files into one file as we do with grid files
-    FileSystem outFs = outFile.getFileSystem(job);
-    Path temp = new Path(outFile.toUri().getPath()+"_temp");
-    outFs.rename(outFile, temp);
-    FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
-      @Override
-      public boolean accept(Path path) {
-        return path.toUri().getPath().contains("part-");
-      }
-    });
-    
-    if (resultFiles.length == 1) {
-      // Only one output file
-      outFs.rename(resultFiles[0].getPath(), outFile);
-    } else {
-      // Merge all images into one image (overlay)
-      BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-      for (FileStatus resultFile : resultFiles) {
-        FSDataInputStream imageFile = outFs.open(resultFile.getPath());
-        BufferedImage tileImage = ImageIO.read(imageFile);
-        imageFile.close();
-
-        Graphics2D graphics;
-        try {
-          graphics = finalImage.createGraphics();
-        } catch (Throwable e) {
-          graphics = new SimpleGraphics(finalImage);
-        }
-        graphics.drawImage(tileImage, 0, 0, null);
-        graphics.dispose();
-      }
-      
-      // Finally, write the resulting image to the given output path
-      LOG.info("Writing final image");
-      OutputStream outputImage = outFs.create(outFile);
-      ImageIO.write(finalImage, "png", outputImage);
-      outputImage.close();
-    }
-    
-    outFs.delete(temp, true);
   }
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
