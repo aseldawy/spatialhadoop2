@@ -252,7 +252,7 @@ public class Repartition {
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
     if (sindex.equals("grid")) {
-      Rectangle input_mbr = FileMBR.fileMBRMapReduce(inFs, inFile, stockShape);
+      Rectangle input_mbr = FileMBR.fileMBRMapReduce(inFs, inFile, stockShape, false);
       long inFileSize = FileMBR.sizeOfLastProcessedFile;
       int num_partitions = calculateNumberOfPartitions(new Configuration(),
           inFileSize, outFs, outPath, blockSize);
