@@ -9,12 +9,13 @@
   import="edu.umn.cs.spatialHadoop.core.*"
   import="java.io.BufferedReader"
   import="org.apache.hadoop.http.HtmlQuoting"
-  import="edu.umn.cs.spatialHadoop.util"
+  import="edu.umn.cs.spatialHadoop.util.JspHelper"
   import="org.apache.hadoop.conf.Configuration"
   import="java.util.Arrays"
   import="java.io.ByteArrayOutputStream"
   import="javax.imageio.ImageIO"
   import="org.apache.commons.codec.binary.Base64"
+  import="org.apache.hadoop.mapred.RunningJob"
 %>
 
 <%! private static final long serialVersionUID = 1L;%>
@@ -32,7 +33,8 @@
       // Compute the MBR and store it back to disk
       FileMBR.fileMBRMapReduce(fs, path, new OSMPolygon(), true);
       RunningJob job = FileMBR.lastSubmittedJob;
-      String jobUrl = JspHelper.jobTrackUrl(job);
+      String jobUrl =
+        JspHelper.jobTrackUrl(request.getRequestURL().toString(), conf, job);
       out.println("MBR job submitted<br/>");
       out.println("<a href='"+jobUrl+"'>Track Job #"+job.getID()+" here</a><br/>");
     }
@@ -63,8 +65,9 @@
       
       Plot.plotMapReduce(path, new Path(path, "_data.png"), new OSMPolygon(),
         1000, 1000, color, false, false, false, true);
-      RunningJob job = Plot.lastSubmittedJob();
-      String jobUrl = JspHelper.jobTrackUrl(job);
+      RunningJob job = Plot.lastSubmittedJob;
+      String jobUrl =
+        JspHelper.jobTrackUrl(request.getRequestURL().toString(), conf, job);
       out.println("Plot job submitted<br/>");
       out.println("<a href='"+jobUrl+"'>Track Job #"+job.getID()+" here</a><br/>");
     }
