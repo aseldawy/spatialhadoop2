@@ -9,7 +9,7 @@
   import="edu.umn.cs.spatialHadoop.core.*"
   import="java.io.BufferedReader"
   import="org.apache.hadoop.http.HtmlQuoting"
-  import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
+  import="edu.umn.cs.spatialHadoop.util"
   import="org.apache.hadoop.conf.Configuration"
   import="java.util.Arrays"
   import="java.io.ByteArrayOutputStream"
@@ -29,35 +29,12 @@
     
     // 1- Check if index file is there
     if (SpatialSite.getGlobalIndex(fs, path) == null) {
-      // Write an index file
-      new Thread(new Runnable() {
-        public void run() {
-          try {
-            Rectangle mbr = FileMBR.fileMBR(fs, path, new OSMPolygon());
-            FileStatus[] datafiles = fs.listStatus(path,new PathFilter(){
-              public boolean accept(Path p){
-                String name = p.getName(); 
-                return !name.startsWith("_") && !name.startsWith("."); 
-              }
-            });
-            Path gindex_path = new Path(path, "_master.grid");
-            PrintStream gout = new PrintStream(fs.create(gindex_path, false));
-            for (FileStatus datafile : datafiles) {
-              gout.print(mbr.toText(new Text()));
-              gout.print(",");
-              gout.print(datafile.getPath().getName());
-              gout.println();
-            }
-            gout.close();
-          } catch (IOException e) {
-            //jsp_out.println(e);
-            //for (StackTraceElement ste : e.getStackTrace()) {
-            //  jsp_out.println(ste);
-            //  jsp_out.println("<br/>");
-            //}
-          }
-        }
-      }).start();
+      // Compute the MBR and store it back to disk
+      FileMBR.fileMBRMapReduce(fs, path, new OSMPolygon(), true);
+      RunningJob job = FileMBR.lastSubmittedJob;
+      String jobUrl = JspHelper.jobTrackUrl(job);
+      out.println("MBR job submitted<br/>");
+      out.println("<a href='"+jobUrl+"'>Track Job #"+job.getID()+" here</a><br/>");
     }
     
     // 2- Check if the plotted image is there
@@ -84,8 +61,12 @@
         }
       }
       
-      Plot.plot(path, new Path(path, "_data.png"), new OSMPolygon(),
-        1000, 1000, color, false, false, false);
+      Plot.plotMapReduce(path, new Path(path, "_data.png"), new OSMPolygon(),
+        1000, 1000, color, false, false, false, true);
+      RunningJob job = Plot.lastSubmittedJob();
+      String jobUrl = JspHelper.jobTrackUrl(job);
+      out.println("Plot job submitted<br/>");
+      out.println("<a href='"+jobUrl+"'>Track Job #"+job.getID()+" here</a><br/>");
     }
   }
 %>

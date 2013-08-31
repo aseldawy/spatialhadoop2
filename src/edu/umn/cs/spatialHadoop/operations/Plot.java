@@ -40,6 +40,7 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.RunningJob;
 
 import com.esri.core.geometry.MultiPath;
 import com.esri.core.geometry.Polygon;
@@ -256,7 +257,8 @@ public class Plot {
   }
   
   
-  static int max = 0;
+  /**Last submitted Plot job*/
+  public static RunningJob lastSubmittedJob;
   
   public static void drawShape(Graphics2D graphics, Shape s, Rectangle fileMbr,
       int imageWidth, int imageHeight, double scale) {
@@ -266,11 +268,6 @@ public class Plot {
       int y = (int) ((pt.y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
       int value = pt.value;
       
-      if (value > max) {
-        max = value;
-        System.out.println(max);
-      }
-
       if (value > 0 && x >= 0 && x < imageWidth && y >= 0 && y < imageHeight) {
         float ratio = 0.627f - 0.627f * value / 10000.0f;
         if (ratio < 0.0f)
@@ -406,7 +403,7 @@ public class Plot {
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, Color color, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount)  throws IOException {
+      boolean showBlockCount, boolean showRecordCount, boolean background)  throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
     
@@ -420,7 +417,7 @@ public class Plot {
     job.setMapOutputValueClass(shape.getClass());
     
     FileSystem inFs = inFile.getFileSystem(job);
-    Rectangle fileMbr = FileMBR.fileMBRMapReduce(inFs, inFile, shape);
+    Rectangle fileMbr = FileMBR.fileMBRMapReduce(inFs, inFile, shape, false);
     FileStatus inFileStatus = inFs.getFileStatus(inFile);
     
     CellInfo[] cellInfos;
@@ -467,7 +464,12 @@ public class Plot {
     job.setOutputFormat(ImageOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
     
-    JobClient.runJob(job);
+    if (background) {
+      JobClient jc = new JobClient(job);
+      lastSubmittedJob = jc.submitJob(job);
+    } else {
+      lastSubmittedJob = JobClient.runJob(job);
+    }
   }
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
@@ -521,7 +523,7 @@ public class Plot {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     if (inFStatus.isDir() || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
-      plotMapReduce(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
+      plotMapReduce(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount, false);
     } else {
       plotLocal(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
     }

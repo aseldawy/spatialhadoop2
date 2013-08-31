@@ -13,20 +13,24 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.Iterator;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -44,6 +48,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
@@ -59,6 +64,9 @@ public class FileMBR {
    * uncompressed size of a file.
    */
   public static long sizeOfLastProcessedFile;
+
+  /**Last submitted MBR MapReduce job*/
+  public static RunningJob lastSubmittedJob;
 
   public static class Map extends MapReduceBase implements
       Mapper<Rectangle, Shape, NullWritable, Rectangle> {
@@ -94,6 +102,56 @@ public class FileMBR {
     }
   }
   
+  public static class MBROutputCommitter extends FileOutputCommitter {
+    // If input is a directory, save the MBR to a file there
+    @Override
+    public void commitJob(JobContext context) throws IOException {
+      super.commitJob(context);
+      // Store the result back in the input file if it is a directory
+      JobConf job = context.getJobConf();
+      
+      // Read job result
+      Path outPath = TextOutputFormat.getOutputPath(job);
+      FileSystem outFs = outPath.getFileSystem(job);
+      FileStatus[] results = outFs.listStatus(outPath);
+      Rectangle mbr = new Rectangle();
+      for (FileStatus fileStatus : results) {
+        if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
+          LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
+          Text text = new Text();
+          if (lineReader.readLine(text) > 0) {
+            mbr.fromText(text);
+          }
+          lineReader.close();
+        }
+      }
+
+      // Store the result back to disk
+      Path[] inPaths = SpatialInputFormat.getInputPaths(job);
+      for (Path inPath : inPaths) {
+        FileSystem fs = inPath.getFileSystem(job);
+        if (fs.getFileStatus(inPath).isDir()) {
+          // Results can be stored back only if input is a directory
+          FileStatus[] datafiles = fs.listStatus(inPath,new PathFilter(){
+            public boolean accept(Path p){
+              String name = p.getName(); 
+              return !name.startsWith("_") && !name.startsWith("."); 
+            }
+          });
+          Path gindex_path = new Path(inPath, "_master.grid");
+          PrintStream gout = new PrintStream(fs.create(gindex_path, false));
+          for (FileStatus datafile : datafiles) {
+            gout.print(mbr.toText(new Text()));
+            gout.print(",");
+            gout.print(datafile.getPath().getName());
+            gout.println();
+          }
+          gout.close();
+        }
+      }
+    }
+  }
+  
   /**
    * Counts the exact number of lines in a file by issuing a MapReduce job
    * that does the thing
@@ -104,7 +162,7 @@ public class FileMBR {
    * @throws IOException 
    */
   public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
-      Path file, S stockShape) throws IOException {
+      Path file, S stockShape, boolean background) throws IOException {
     // Quickly get file MBR if it is globally indexed
     GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(fs, file);
     if (globalIndex != null) {
@@ -144,30 +202,37 @@ public class FileMBR {
     
     ShapeInputFormat.setInputPaths(job, file);
     TextOutputFormat.setOutputPath(job, outputPath);
+    job.setOutputCommitter(MBROutputCommitter.class);
     
     // Submit the job
-    RunningJob runningJob = JobClient.runJob(job);
-    Counters counters = runningJob.getCounters();
-    Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
-    FileMBR.sizeOfLastProcessedFile = inputBytesCounter.getValue();
-
-    // Read job result
-    FileStatus[] results = outFs.listStatus(outputPath);
-    Rectangle mbr = new Rectangle();
-    for (FileStatus fileStatus : results) {
-      if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-        LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
-        Text text = new Text();
-        if (lineReader.readLine(text) > 0) {
-          mbr.fromText(text);
+    if (background) {
+      JobClient jc = new JobClient(job);
+      lastSubmittedJob = jc.submitJob(job);
+      return null;
+    } else {
+      lastSubmittedJob = JobClient.runJob(job);
+      Counters counters = lastSubmittedJob.getCounters();
+      Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
+      FileMBR.sizeOfLastProcessedFile = inputBytesCounter.getValue();
+      
+      // Read job result
+      FileStatus[] results = outFs.listStatus(outputPath);
+      Rectangle mbr = new Rectangle();
+      for (FileStatus fileStatus : results) {
+        if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
+          LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
+          Text text = new Text();
+          if (lineReader.readLine(text) > 0) {
+            mbr.fromText(text);
+          }
+          lineReader.close();
         }
-        lineReader.close();
       }
+      
+      outFs.delete(outputPath, true);
+      
+      return mbr;
     }
-    
-    outFs.delete(outputPath, true);
-    
-    return mbr;
   }
   
   /**
@@ -208,7 +273,7 @@ public class FileMBR {
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 1) {
       // Either a directory of file or a large file
-      return fileMBRMapReduce(fs, inFile, stockShape);
+      return fileMBRMapReduce(fs, inFile, stockShape, false);
     } else {
       // A single small file, process it without MapReduce
       return fileMBRLocal(fs, inFile, stockShape);
@@ -241,7 +306,7 @@ public class FileMBR {
 
     Shape stockShape = cla.getShape(true);
     long t1 = System.currentTimeMillis();
-    Rectangle mbr = fileMBRMapReduce(fs, inputFile, stockShape);
+    Rectangle mbr = fileMBR(fs, inputFile, stockShape);
     long t2 = System.currentTimeMillis();
     System.out.println("Total processing time: "+(t2-t1)+" millis");
     System.out.println("MBR of records in file "+inputFile+" is "+mbr);
