@@ -252,6 +252,11 @@ public class CommandLineArguments {
     return null;
   }
   
+  public int getInt(String key, int defaultValue) {
+    String valstr = get(key);
+    return valstr == null ? defaultValue : Integer.parseInt(valstr);
+  }
+  
   /**
    * 
    * @param autodetect - Automatically detect shape type from input file
