@@ -190,9 +190,12 @@ public class SJMR {
         public void collect(S x, S y) {
           try {
             Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
-            if (cellInfo.contains(intersectionMBR.x1, intersectionMBR.y1)) {
-              // Report to the reduce result collector
-              output.collect(x, y);
+            // Error: intersectionMBR may be null.
+            if (intersectionMBR != null) {
+              if (cellInfo.contains(intersectionMBR.x1, intersectionMBR.y1)) {
+                // Report to the reduce result collector
+                output.collect(x, y);
+              }
             }
           } catch (IOException e) {
             e.printStackTrace();

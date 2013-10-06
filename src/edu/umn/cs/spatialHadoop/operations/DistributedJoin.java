@@ -392,7 +392,7 @@ public class DistributedJoin {
       sindex = "grid";
     else if (isReplicated && isCompact)
       sindex = "r+tree";
-    else if (isReplicated && !isCompact)
+    else if (!isReplicated && isCompact)
       sindex = "rtree";
     else
       throw new RuntimeException("Unknown index  at: "+files[1-file_to_repartition]);
