@@ -141,8 +141,10 @@ public class GridInfo extends Rectangle {
     int col1, col2, row1, row2;
     col1 = (int)Math.floor((rect.x1 - this.x1) / (this.x2 - this.x1) * columns);
     col2 = (int)Math.floor((rect.x2 - this.x1) / (this.x2 - this.x1) * columns);
+    if (col2 == columns) col2--;
     row1 = (int)Math.floor((rect.y1 - this.y1) / (this.y2 - this.y1) * rows);
     row2 = (int)Math.floor((rect.y2 - this.y1) / (this.y2 - this.y1) * rows);
+    if (row2 == rows) row2--;
     return new java.awt.Rectangle(col1, row1, col2 - col1 + 1, row2 - row1 + 1);
   }
   

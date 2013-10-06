@@ -22,7 +22,6 @@ import java.util.Iterator;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.WritableComparable;
@@ -36,8 +35,8 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
-import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
+import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -106,6 +105,10 @@ public class PlotPyramid {
       return this.y - a.y;
     }
     
+    @Override
+    public String toString() {
+      return "Level: "+level+" @("+x+","+y+")";
+    }
   }
   
   /**
@@ -138,12 +141,15 @@ public class PlotPyramid {
     public void map(Rectangle cell, Shape shape,
         OutputCollector<TileIndex, Shape> output, Reporter reporter)
         throws IOException {
+      Rectangle shapeMBR = shape.getMBR();
+      if (shapeMBR == null)
+        return;
       java.awt.Rectangle overlappingCells =
-          bottomGrid.getOverlappingCells(shape.getMBR());
+          bottomGrid.getOverlappingCells(shapeMBR);
       for (key.level = numLevels - 1; key.level >= 0; key.level--) {
-        for (int i = 0; i <= overlappingCells.width; i++) {
+        for (int i = 0; i < overlappingCells.width; i++) {
           key.x = i + overlappingCells.x;
-          for (int j = 0; j <= overlappingCells.height; j++) {
+          for (int j = 0; j < overlappingCells.height; j++) {
             key.y = j + overlappingCells.y;
             // Replicate to the cell at (x + i, y + j) on the current level
             output.collect(key, shape);
@@ -152,8 +158,8 @@ public class PlotPyramid {
         // Shrink overlapping cells to match the upper level
         int updatedX1 = overlappingCells.x / 2;
         int updatedY1 = overlappingCells.y / 2;
-        int updatedX2 = (overlappingCells.x + overlappingCells.width) / 2;
-        int updatedY2 = (overlappingCells.y + overlappingCells.height) / 2;
+        int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
+        int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
         overlappingCells.x = updatedX1;
         overlappingCells.y = updatedY1;
         overlappingCells.width = updatedX2 - updatedX1 + 1;
@@ -196,19 +202,9 @@ public class PlotPyramid {
       tileMBR.y1 = fileMBR.y1 + tileSize * tileIndex.y;
       tileMBR.x2 = tileMBR.x1 + tileSize;
       tileMBR.y2 = tileMBR.y1 + tileSize;
-      this.scale2 = (double)tileWidth * tileHeight /
-          ((double)(tileMBR.x2 - tileMBR.x1) * (tileMBR.y2 - tileMBR.y1));
+      this.scale2 = (double)tileWidth * tileHeight / (tileSize * tileSize);
       try {
         // Initialize the image
-//        int image_x1 = (int) ((cellInfo.x1 - fileMBR.x1) * imageWidth / (fileMBR.x2 - fileMBR.x1));
-//        int image_y1 = (int) ((cellInfo.y1 - fileMBR.y1) * imageHeight / (fileMBR.y2 - fileMBR.y1));
-//        int image_x2 = (int) (((cellInfo.x2) - fileMBR.x1) * imageWidth / (fileMBR.x2 - fileMBR.x1));
-//        int image_y2 = (int) (((cellInfo.y2) - fileMBR.y1) * imageHeight / (fileMBR.y2 - fileMBR.y1));
-//        int tile_width = image_x2 - image_x1;
-//        int tile_height = image_y2 - image_y1;
-//        if (tile_width == 0 || tile_height == 0)
-//          return;
-
         BufferedImage image = new BufferedImage(tileWidth, tileHeight,
             BufferedImage.TYPE_INT_ARGB);
         Color bg_color = new Color(0,0,0,0);
@@ -224,14 +220,9 @@ public class PlotPyramid {
         graphics.clearRect(0, 0, tileWidth, tileHeight);
         graphics.setColor(stroke_color);
         
-        // Translate tile origin (x1, y1) to image origin (0, 0)
-        int dx = (int) ((tileMBR.x1 - fileMBR.x1) * tileWidth / fileMBR.getWidth());
-        int dy = (int) ((tileMBR.y1 - fileMBR.y1) * tileHeight / fileMBR.getHeight());
-        graphics.translate(-dx, -dy);
-
         while (values.hasNext()) {
           Shape s = values.next();
-          Plot.drawShape(graphics, s, fileMBR, tileWidth, tileHeight, scale2);
+          Plot.drawShape(graphics, s, tileMBR, tileWidth, tileHeight, scale2);
         }
         
         graphics.dispose();
@@ -257,14 +248,20 @@ public class PlotPyramid {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setReducerClass(PlotReduce.class);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setMapOutputKeyClass(Rectangle.class);
     SpatialSite.setShapeClass(job, shape.getClass());
+    job.setMapOutputKeyClass(TileIndex.class);
     job.setMapOutputValueClass(shape.getClass());
     
     FileSystem inFs = inFile.getFileSystem(job);
     Rectangle fileMBR = FileMBR.fileMBRMapReduce(inFs, inFile, shape);
-    FileStatus inFileStatus = inFs.getFileStatus(inFile);
     
+    // Expand input file to a rectangle for compatibility with the pyramid
+    // structure
+    if (fileMBR.getWidth() > fileMBR.getHeight()) {
+      fileMBR.y2 = fileMBR.y1 + fileMBR.getWidth();
+    } else {
+      fileMBR.x2 = fileMBR.x1 + fileMBR.getHeight();
+    }
     SpatialSite.setRectangle(job, InputMBR, fileMBR);
     job.setInt(TileWidth, tileWidth);
     job.setInt(TileHeight, tileHeight);
@@ -274,7 +271,7 @@ public class PlotPyramid {
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     
-    job.setOutputFormat(ImageOutputFormat.class);
+    job.setOutputFormat(PyramidOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
     
     JobClient.runJob(job);
