@@ -253,7 +253,7 @@ public class PlotPyramid {
     job.setMapOutputValueClass(shape.getClass());
     
     FileSystem inFs = inFile.getFileSystem(job);
-    Rectangle fileMBR = FileMBR.fileMBRMapReduce(inFs, inFile, shape);
+    Rectangle fileMBR = FileMBR.fileMBRMapReduce(inFs, inFile, shape, false);
     
     // Expand input file to a rectangle for compatibility with the pyramid
     // structure
