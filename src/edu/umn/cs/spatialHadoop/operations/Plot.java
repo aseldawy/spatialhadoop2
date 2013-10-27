@@ -260,19 +260,34 @@ public class Plot {
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
   
+  static int min_value = Integer.MAX_VALUE;
+  static int max_value = Integer.MIN_VALUE;
+  
   public static void drawShape(Graphics2D graphics, Shape s, Rectangle fileMbr,
       int imageWidth, int imageHeight, double scale) {
     if (s instanceof NASAPoint) {
+      final int MinValue = 7500;
+      final int MaxValue = 16000;
       NASAPoint pt = (NASAPoint) s;
       int x = (int) ((pt.x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
       int y = (int) ((pt.y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
       int value = pt.value;
       
+      if (value < min_value && value > 1000)
+        min_value = value;
+      if (value > max_value)
+        max_value = value;
+      
       if (value > 0 && x >= 0 && x < imageWidth && y >= 0 && y < imageHeight) {
-        float ratio = 0.627f - 0.627f * value / 10000.0f;
-        if (ratio < 0.0f)
-          ratio = 0.0f;
-        Color color = Color.getHSBColor(ratio, 0.5f, 1.0f);
+        Color color;
+        if (value < MinValue) {
+          color = Color.BLACK;
+        } else if (value < MaxValue) {
+          float ratio = 0.78f - 0.78f * (value - MinValue) / (MaxValue - MinValue);
+          color = Color.getHSBColor(ratio, 0.5f, 1.0f);
+        } else {
+          color = Color.WHITE;
+        }
         graphics.setColor(color);
         graphics.fillRect(x, y, 1, 1);
       }
@@ -478,6 +493,7 @@ public class Plot {
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
+    LOG.info("FileMBR: "+fileMbr);
     
     // Adjust width and height to maintain aspect ratio
     if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
@@ -522,7 +538,7 @@ public class Plot {
           throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
+    if (inFStatus.isDir() || inFStatus.getLen() > 300 * inFStatus.getBlockSize()) {
       plotMapReduce(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount, false);
     } else {
       plotLocal(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
@@ -662,6 +678,8 @@ public class Plot {
     Color color = cla.getColor();
 
     plot(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
+    
+    System.out.println("Values range: ["+min_value+","+max_value+"]");
   }
 
 }
