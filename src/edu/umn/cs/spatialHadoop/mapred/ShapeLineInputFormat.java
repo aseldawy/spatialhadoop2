@@ -21,6 +21,7 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 
 /**
@@ -36,7 +37,7 @@ public class ShapeLineInputFormat extends SpatialInputFormat<CellInfo, Text> {
   public RecordReader<CellInfo, Text> getRecordReader(InputSplit split,
       JobConf job, Reporter reporter) throws IOException {
     reporter.setStatus(split.toString());
-    this.rrClass = (Class<? extends RecordReader<CellInfo, Text>>) ShapeLineRecordReader.class;
+    this.rrClass = (Class<? extends RecordReader<Rectangle, Text>>) ShapeLineRecordReader.class;
     return super.getRecordReader(split, job, reporter);
   }
 }
