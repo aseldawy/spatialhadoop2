@@ -4,7 +4,7 @@
   <property name="src" location="src"/>
   <property name="build" location="bin"/>
   <property name="dist"  location="dist"/>
-  <property name="version" value="2b1"/>
+  <property name="version" value="2-b2"/>
   
   <path id="lib.path.ref">
     <fileset dir="lib" includes="*.jar"/>
