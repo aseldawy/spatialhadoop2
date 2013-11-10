@@ -48,6 +48,9 @@
       </fileset>
     </copy>
     <copy file="src/conf/spatial-site.xml" todir="${dist}/conf"/>
+    <copy todir="${dist}/webapps">
+      <fileset dir="webapps"/>
+    </copy>
   </target>
   
   <target name="package" depends="dist"
