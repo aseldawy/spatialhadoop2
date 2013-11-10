@@ -64,11 +64,11 @@ The source code resides in [github](http://github.com). To clone the repository,
     git clone https://github.com/aseldawy/spatialhadoop2.git
     
 If you do not want to use git, you can still download it as a
-(single archive)[https://github.com/aseldawy/spatialhadoop2/archive/master.zip] provided by github.
+[single archive](https://github.com/aseldawy/spatialhadoop2/archive/master.zip) provided by github.
 
 Once you downloaded the source code, you need to make sure you have Any and Ivy installed on your system.
-Please check the installation guide of (Ant)[http://ant.apache.org/manual/installlist.html]
-and (Ivy)[http://ant.apache.org/ivy/download.cgi] if you do not have them installed.
+Please check the installation guide of [Ant](http://ant.apache.org/manual/installlist.html)
+and [Ivy](http://ant.apache.org/ivy/download.cgi) if you do not have them installed.
 
 To compile SpatialHadoop, navigate to the source code and run the command:
 
