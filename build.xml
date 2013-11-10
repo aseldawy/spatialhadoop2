@@ -61,7 +61,7 @@
     <!-- Build the tar file -->
     <tar destfile="${dist}/package/spatialhadoop-${version}.tar.gz"
          basedir="${dist}"
-         excludes="package"
+         excludes="package package/*"
          compression="gzip"/>
   </target>
   
