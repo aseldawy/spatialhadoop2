@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Class-Path: . lib/esri-geometry-api-1.1.1.jar lib/jts-1.8.jar
+Main-Class: edu.umn.cs.spatialHadoop.operations.Main
+
