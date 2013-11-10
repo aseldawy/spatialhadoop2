@@ -53,4 +53,34 @@ in the output file *rangequery.out*
 
     hadoop spatialhadoop*.jar rangequery test.grid rect:10,10,2000,3000 rangequery.out
     
+Compile
+=======
+
+Advanced users and contributors might like to compile SpatialHadoop on their own machines.
+SpatialHadoop can be compiled via [Ant](http://ant.apache.org/) and [Ivy](http://ant.apache.org/ivy/).
+First, you need to grab your own version of the source code. You can do this through [git](http://git-scm.com/).
+The source code resides in [github](http://github.com). To clone the repository, run the following command
+
+    git clone https://github.com/aseldawy/spatialhadoop2.git
+    
+If you do not want to use git, you can still download it as a
+(single archive)[https://github.com/aseldawy/spatialhadoop2/archive/master.zip] provided by github.
+
+Once you downloaded the source code, you need to make sure you have Any and Ivy installed on your system.
+Please check the installation guide of (Ant)[http://ant.apache.org/manual/installlist.html]
+and (Ivy)[http://ant.apache.org/ivy/download.cgi] if you do not have them installed.
+
+To compile SpatialHadoop, navigate to the source code and run the command:
+
+    ant
+
+This will automatically retrieve all dependencies and compile the source code.
+
+To build a redistribution package, run the command:
+
+    ant package
+
+This Ant task will package all classes of SpatialHadoop along with the dependent jars
+not included in Hadoop into an archive. This archive can be used to install SpatialHadoop
+on any existing Hadoop cluster.
 
