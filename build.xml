@@ -1,4 +1,4 @@
-<project name="SpatialHadoop" default="compile" basedir=".">
+<project name="SpatialHadoop" default="compile" basedir="." xmlns:ivy="antlib:org.apache.ivy.ant">
   <description>Compiles SpatialHadoop and builds packages to be installed on an existing Hadoop cluster</description>
   <!-- set global properties for this build -->
   <property name="src" location="src"/>
@@ -9,13 +9,12 @@
   <path id="lib.path.ref">
     <fileset dir="lib" includes="*.jar"/>
   </path>
-
-  <path id="hadoop.lib">
-    <fileset dir="/home/eldawy/hadoop-1.2.1" includes="*.jar"/>
-    <fileset dir="/home/eldawy/hadoop-1.2.1/lib" includes="*.jar"/>
-  </path>
   
-  <target name="init">
+  <target name="resolve" description="--> retrieve dependencies with ivy">
+    <ivy:retrieve />
+  </target>
+  
+  <target name="init" depends="resolve">
     <!-- Create the time stamp -->
     <tstamp/>
     <!-- Create the build directory structure used by compile -->
@@ -25,7 +24,7 @@
   <target name="compile" depends="init"
         description="compile the source " >
     <!-- Compile the java code from ${src} into ${build} -->
-    <javac srcdir="${src}" destdir="${build}" classpath="${toString:lib.path.ref}:${toString:hadoop.lib}"/>
+    <javac srcdir="${src}" destdir="${build}" classpath="${toString:lib.path.ref}"/>
     <copy file="${src}/spatial-default.xml" todir="${build}"/>
   </target>
   
@@ -36,12 +35,17 @@
     <mkdir dir="${dist}/lib"/>
     <mkdir dir="${dist}/conf"/>
 
-    <!-- Put everything in ${build} into the MyProject-${DSTAMP}.jar file -->
+    <!-- Put everything in ${build} into the spatialhadoop-${DSTAMP}.jar file -->
     <jar jarfile="${dist}/spatialhadoop-${version}.jar" basedir="${build}"/>
     <copy file="LICENSE.txt" todir="${dist}"/>
     <copy file="README.md" todir="${dist}"/>
     <copy todir="${dist}/lib">
-      <fileset dir="lib"/>
+      <fileset dir="lib">
+        <include name="esri-geometry-api-*.jar"/>
+        <exclude name="*sources.jar"/>
+        <exclude name="*javadoc.jar"/>
+        <include name="jts-*.jar"/>
+      </fileset>
     </copy>
     <copy file="src/conf/spatial-site.xml" todir="${dist}/conf"/>
   </target>
