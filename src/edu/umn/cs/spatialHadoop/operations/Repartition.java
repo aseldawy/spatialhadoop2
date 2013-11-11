@@ -280,7 +280,6 @@ public class Repartition {
       JobConf job = context.getJobConf();
       Path outPath = GridOutputFormat.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
-      CellInfo[] cellInfos = SpatialSite.getCells(job);
 
       // Concatenate all master files into one file
       FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
@@ -289,28 +288,36 @@ public class Repartition {
           return path.getName().contains("_master");
         }
       });
-      String ext = resultFiles[0].getPath().getName()
-          .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
-      Path masterPath = new Path(outPath, "_master" + ext);
-      OutputStream destOut = outFs.create(masterPath);
-      byte[] buffer = new byte[4096];
-      for (FileStatus f : resultFiles) {
-        InputStream in = outFs.open(f.getPath());
-        int bytes_read;
-        do {
-          bytes_read = in.read(buffer);
-          if (bytes_read > 0)
-            destOut.write(buffer, 0, bytes_read);
-        } while (bytes_read > 0);
-        in.close();
-        outFs.delete(f.getPath(), false);
+      
+      if (resultFiles.length == 0) {
+        LOG.warn("No _master files were written by reducers");
+      } else {
+        String ext = resultFiles[0].getPath().getName()
+        .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
+        Path masterPath = new Path(outPath, "_master" + ext);
+        OutputStream destOut = outFs.create(masterPath);
+        byte[] buffer = new byte[4096];
+        for (FileStatus f : resultFiles) {
+          InputStream in = outFs.open(f.getPath());
+          int bytes_read;
+          do {
+            bytes_read = in.read(buffer);
+            if (bytes_read > 0)
+              destOut.write(buffer, 0, bytes_read);
+          } while (bytes_read > 0);
+          in.close();
+          outFs.delete(f.getPath(), false);
+        }
+        destOut.close();
       }
-      destOut.close();
       
       // Plot an image for the partitions used in file
+/*      
+      CellInfo[] cellInfos = SpatialSite.getCells(job);
       Path imagePath = new Path(outPath, "_partitions.png");
       int imageSize = (int) (Math.sqrt(cellInfos.length) * 300);
       Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, Color.BLACK, false, false, false);
+*/      
     }
   }
   
