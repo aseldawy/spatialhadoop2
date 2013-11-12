@@ -2,6 +2,7 @@
   <description>Compiles SpatialHadoop and builds packages to be installed on an existing Hadoop cluster</description>
   <!-- set global properties for this build -->
   <property name="src" location="src"/>
+  <property name="doc" location="doc"/>
   <property name="build" location="bin"/>
   <property name="dist"  location="dist"/>
   <property name="version" value="2-b2"/>
@@ -26,6 +27,12 @@
     <!-- Compile the java code from ${src} into ${build} -->
     <javac srcdir="${src}" destdir="${build}" classpath="${toString:lib.path.ref}"/>
     <copy file="${src}/spatial-default.xml" todir="${build}"/>
+  </target>
+	
+  <target name="doc" depends="init"
+      description="Generates JavaDoc for the source code">
+    <mkdir dir="${doc}"/>
+    <javadoc sourcepath="${src}" destdir="${doc}"/>
   </target>
   
   <target name="dist" depends="compile"
