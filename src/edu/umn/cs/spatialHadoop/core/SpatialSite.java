@@ -127,16 +127,29 @@ public class SpatialSite {
     }
   }
   
+  /**
+   * Sets a configuration parameter with a class of type Shape.
+   * @param conf
+   * @param klass
+   */
   public static void setShapeClass(Configuration conf, Class<? extends Shape> klass) {
     conf.setClass(ShapeClass, klass, Shape.class);
   }
   
+  /**
+   * Retrieves the shape class from a configuration parameter.
+   * @param conf
+   * @return
+   */
   public static Class<? extends Shape> getShapeClass(Configuration conf) {
     return conf.getClass(ShapeClass, Point.class, Shape.class);
   }
   
   /**
-   * Creates a stock shape according to the given configuration
+   * Creates a stock shape according to the given configuration. It retrieves
+   * the shape class using {@link #getShapeClass(Configuration)} then
+   * creates an instance of this shape using {@link Class#newInstance()}.
+   * This requires the shape class to have a default empty constructor.
    * @param job
    * @return
    */
@@ -153,12 +166,30 @@ public class SpatialSite {
     return stockShape;
   }
   
+  /**
+   * Sets the specified configuration parameter to the current value of the shape.
+   * Both class name and shape values are encoded in one string and set as the
+   * value of the configuration parameter. The shape can be retrieved later
+   * using {@link #getShape(Configuration, String)}.
+   * @param conf
+   * @param param
+   * @param shape
+   */
   public static void setShape(Configuration conf, String param, Shape shape) {
     String str = shape.getClass().getName() + ",";
     str += shape.toText(new Text()).toString();
     conf.set(param, str);
   }
   
+  /**
+   * Retrieves a value of a shape set earlier using {@link #setShape(Configuration, String, Shape)}.
+   * It reads the corresponding parameter and parses it to find the class name
+   * and shape value. First, a default object is created using {@link Class#newInstance()}
+   * then the value is parsed using {@link Shape#fromText(Text)}.
+   * @param conf
+   * @param param
+   * @return
+   */
   public static Shape getShape(Configuration conf, String param) {
     String str = conf.get(param);
     String[] parts = str.split(",", 2);
@@ -179,6 +210,16 @@ public class SpatialSite {
     return shape;
   }
 
+  /**
+   * Returns the global index (partitions) of a file that is indexed using
+   * the index command. If the file is not indexed, it returns null.
+   * The return value is of type {@link GlobalIndex} where the generic
+   * parameter is specified as {@link Partition}.
+   * @param fs
+   * @param dir
+   * @return
+   * @throws IOException
+   */
   public static GlobalIndex<Partition> getGlobalIndex(FileSystem fs,
       Path dir) throws IOException {
     // Retrieve the master file (the only file with the name _master in it)
@@ -209,6 +250,19 @@ public class SpatialSite {
     return globalIndex;
   }
 
+  /**
+   * Checks whether a file is indexed using an R-tree or not. This allows
+   * an operation to use the R-tree to speedup the processing if it exists.
+   * This function opens the specified file and reads the first eight bytes
+   * which include the R-tree signature. If the signatures matches with the
+   * R-tree signature, true is returned. Otherwise, false is returned.
+   * If the parameter is a path to a directory, only the first data file in that
+   * directory is tested.
+   * @param fs
+   * @param path
+   * @return
+   * @throws IOException
+   */
   public static boolean isRTree(FileSystem fs, Path path) throws IOException {
     FileStatus file = fs.getFileStatus(path);
     Path fileToCheck;
@@ -239,6 +293,16 @@ public class SpatialSite {
     return Arrays.equals(signature, SpatialSite.RTreeFileMarkerB);
   }
   
+  /**
+   * Returns the cells (partitions) of a file. This functionality can be useful
+   * to repartition another file using the same partitioning or to draw
+   * these partitions as a high level index. This function reads the master
+   * file and returns all rectangles in it.
+   * @param fs
+   * @param path
+   * @return
+   * @throws IOException
+   */
   public static CellInfo[] cellsOf(FileSystem fs, Path path) throws IOException {
     GlobalIndex<Partition> gindex = getGlobalIndex(fs, path);
     if (gindex == null)
@@ -271,6 +335,17 @@ public class SpatialSite {
 
   }
   
+  /**
+   * Set an array of cells in the job configuration. As the array might be
+   * very large to store as one value, an alternative approach is used.
+   * The cells are all written to a temporary file, and that file is added
+   * to the DistributedCache of the job. Later on, a call to
+   * {@link #getCells(JobConf)} will open the corresponding file from
+   * DistributedCache and parse cells from that file.
+   * @param job
+   * @param cellsInfo
+   * @throws IOException
+   */
   public static void setCells(JobConf job, CellInfo[] cellsInfo) throws IOException {
     Path tempFile;
     FileSystem fs = FileSystem.get(job);
@@ -291,6 +366,14 @@ public class SpatialSite {
     LOG.info("Partitioning file into "+cellsInfo.length+" cells");
   }
   
+  /**
+   * Retrieves cells that were stored earlier using
+   * {@link #setCells(JobConf, CellInfo[])}. This function opens the corresponding
+   * file from DistributedCache and parses jobs from it.
+   * @param job
+   * @return
+   * @throws IOException
+   */
   public static CellInfo[] getCells(JobConf job) throws IOException {
     CellInfo[] cells = null;
     String cells_file = job.get(OUTPUT_CELLS);
@@ -314,13 +397,20 @@ public class SpatialSite {
     return cells;
   }
 
-  
+  /**
+   * Sets a rectangle in a job configuration. The Rectangle is serialized to
+   * text using {@link Rectangle#toText(Text)}.
+   * @param conf
+   * @param name
+   * @param rect
+   */
   public static void setRectangle(Configuration conf, String name, Rectangle rect) {
     conf.set(name, rect.toText(new Text()).toString());
   }
   
   /**
-   * Retrieves a rectangle from configuration parameter
+   * Retrieves a rectangle from configuration parameter. The value is assumed
+   * to be in text format that can be parsed using {@link Rectangle#fromText(Text)}
    * @param conf
    * @param name
    * @return

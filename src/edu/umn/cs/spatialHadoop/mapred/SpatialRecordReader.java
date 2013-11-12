@@ -51,7 +51,18 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
  * A base class to read shapes from files. It reads either single shapes,
  * list of shapes, or R-trees. It automatically detects the format of the
  * underlying block and parses it accordingly.
- * @author Ahmed ELdawy
+ * 
+ * The class implement the RecordReader interface allowing it to be used in
+ * MapReduce programs with an appropriate InputFormat. The key is always
+ * a {@link Rectangle} that indicates the MBR of the corresponding partition.
+ * In case of a non-indexed file, the key is an invalid rectangle. See
+ * {@link Rectangle#isValid()}.
+ * 
+ * @see ShapeLineRecordReader
+ * @see ShapeRecordReader
+ * @see ShapeArrayRecordReader
+ * @see RTreeRecordReader
+ * @author Ahmed Eldawy
  *
  */
 public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
@@ -93,7 +104,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
   /** Block size for the read file. Used with RTrees */
   protected long blockSize;
 
-  /** A cached value for the current cellInfo */
+  /** The boundary of the partition currently being read */
   protected Rectangle cellMbr;
 
   /**The type of the currently parsed block*/
@@ -124,7 +135,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
   }
 
   /**
-   * Initialize from a path and range
+   * Initialize from a path and file range
    * @param job
    * @param s
    * @param l
@@ -171,23 +182,8 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     initializeReader();
   }
   
-  private long getFilePosition() throws IOException {
-    long retVal;
-    if (isCompressedInput() && null != filePosition) {
-      retVal = filePosition.getPos();
-    } else {
-      retVal = pos;
-    }
-    return retVal;
-  }
-
-  private boolean isCompressedInput() {
-    return codec != null;
-  }
-  
   /**
-   * Construct from an input stream already set to the first byte
-   * to read.
+   * Construct from an input stream already set to the first byte to read.
    * @param in
    * @param offset
    * @param endOffset
@@ -202,7 +198,39 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     this.cellMbr = new Rectangle();
     initializeReader();
   }
+  
+  /**
+   * Returns the current position of the file being parsed. This is equal to
+   * the number of bytes consumed from disk regardless of whether the file is
+   * compressed or not.
+   * This function is used to report the progress.
+   * @return
+   * @throws IOException
+   */
+  private long getFilePosition() throws IOException {
+    long retVal;
+    if (isCompressedInput() && null != filePosition) {
+      retVal = filePosition.getPos();
+    } else {
+      retVal = pos;
+    }
+    return retVal;
+  }
+  
+  /**
+   * Tells whether the file being parsed is compressed or not
+   * @return
+   */
+  private boolean isCompressedInput() {
+    return codec != null;
+  }
 
+  /**
+   * Returns the current position in the data file. If the file is not
+   * compressed, this is equal to the value returned by {@link #getFilePosition()}.
+   * However, if the file is compressed, this value indicates the position
+   * in the decompressed stream.
+   */
   @Override
   public long getPos() throws IOException {
     return pos;
@@ -236,6 +264,10 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
   }
   
   /**
+   * Initializes the reader to read from the input stream or file.
+   * First, it initializes the MBR of the partition being read if the file
+   * is globally indexed. It also detects whether the file is R-tree indexed
+   * or not which allows it to skip the R-tree if not needed to be read.
    * @throws IOException
    */
   protected boolean initializeReader() throws IOException {
@@ -365,7 +397,10 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
 
   /**
    * Reads next shape from input and returns true. If no more shapes are left
-   * in the split, a false is returned.
+   * in the split, a false is returned. This function first reads a line
+   * by calling the method {@link #nextLine(Text)} then parses the returned
+   * line by calling {@link Shape#fromText(Text)} on that line. If no stock
+   * shape is set, a {@link NullPointerException} is thrown.
    * @param s
    * @return
    * @throws IOException 
@@ -378,7 +413,17 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
   }
   
   /**
-   * Reads all shapes left in the current block in one shot.
+   * Reads all shapes left in the current block in one shot. This function
+   * runs a loop where it keeps reading shapes by calling the method
+   * {@link #nextShape(Shape)} until one of the following conditions happen.
+   * 1. The whole file is read. No more records to read.
+   * 2. Number of parsed records reaches the threshold defined by the
+   *    configuration parameter spatialHadoop.mapred.MaxShapesPerRead.
+   *    To disable this check, set the configuration parameter to -1
+   * 3. Total size of parsed data from file reaches the threshold defined by
+   *    the configuration parameter spatialHadoop.mapred.MaxBytesPerRead.
+   *    To disable this check, set the configuration parameter to -1.
+   * 
    * @param shapes
    * @return
    * @throws IOException
@@ -396,8 +441,9 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       long readBytes = 0;
       
       // Read all shapes in this block
-      while (vshapes.size() < maxShapesInOneRead &&
-          readBytes < maxBytesInOneRead && nextShape(stockObject)) {
+      while ((maxShapesInOneRead <= 0 || vshapes.size() < maxShapesInOneRead) &&
+          (maxBytesInOneRead <= 0 || readBytes < maxBytesInOneRead) &&
+          nextShape(stockObject)) {
         vshapes.add(stockObject.clone());
         readBytes = getPos() - initialReadPos;
       }
@@ -418,7 +464,11 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
   }
   
   /**
-   * Reads the next RTree from file.
+   * Reads the next RTree from file. The file must be part of an R-tree index.
+   * If the file is not locally indexed using an R-tree, a runtime exception
+   * is thrown. If the file is locally indexed using an R-tree, the R-tree
+   * is consumed from the file and parsed by calling
+   * {@link RTree#readFields(DataInput)} on the input stream.
    * @param rtree
    * @return
    * @throws IOException
