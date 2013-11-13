@@ -25,7 +25,7 @@
   <target name="compile" depends="init"
         description="compile the source " >
     <!-- Compile the java code from ${src} into ${build} -->
-    <javac srcdir="${src}" destdir="${build}" classpath="${toString:lib.path.ref}"/>
+    <javac srcdir="${src}" destdir="${build}" classpath="${toString:lib.path.ref}" target="1.6"/>
     <copy file="${src}/spatial-default.xml" todir="${build}"/>
   </target>
 	
