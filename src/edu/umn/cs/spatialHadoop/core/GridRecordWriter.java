@@ -223,6 +223,28 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     }
   }
 
+  /**
+   * Write a shape given the MBR of its partition. If no partition exists with
+   * such an MBR, the corresponding partition is added first.
+   * @param rect
+   * @param shape
+   * @throws IOException
+   */
+  public synchronized void write(Rectangle rect, S shape) throws IOException {
+    int i_cell = 0;
+    while (i_cell < cells.length && !rect.equals(cells[i_cell])) {
+      i_cell++;
+    }
+    if (i_cell >= cells.length) {
+      // Cell doesn't exist, create it first
+      CellInfo[] newCells = new CellInfo[i_cell];
+      System.arraycopy(cells, 0, newCells, 0, cells.length);
+      newCells[i_cell] = new CellInfo(i_cell, rect);
+      cells = newCells;
+    }
+    write(i_cell, shape);
+  }
+
   @Override
   public void write(int cellId, S shape) throws IOException {
     writeInternal(cellId, shape);
