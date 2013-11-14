@@ -50,4 +50,9 @@ public class NASAPoint extends Point {
     text.set(bytes, 1, text.getLength() - 1);
     value = TextSerializerHelper.consumeInt(text, '\0');
   }
+  
+  @Override
+  public String toString() {
+    return super.toString() + " - "+value;
+  }
 }

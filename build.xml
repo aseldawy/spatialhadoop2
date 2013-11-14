@@ -7,7 +7,11 @@
   <property name="dist"  location="dist"/>
   <property name="version" value="2-b2"/>
   
-  <path id="lib.path.ref">
+  <path id="hdflib.path.ref">
+    <fileset dir="lib/hdflib" includes="*.jar"/>
+  </path>
+
+	<path id="lib.path.ref">
     <fileset dir="lib" includes="*.jar"/>
   </path>
   
@@ -25,7 +29,7 @@
   <target name="compile" depends="init"
         description="compile the source " >
     <!-- Compile the java code from ${src} into ${build} -->
-    <javac srcdir="${src}" destdir="${build}" classpath="${toString:lib.path.ref}" target="1.6"/>
+    <javac srcdir="${src}" destdir="${build}" classpath="${toString:hdflib.path.ref}:${toString:lib.path.ref}" target="1.6"/>
     <copy file="${src}/spatial-default.xml" todir="${build}"/>
   </target>
 	
