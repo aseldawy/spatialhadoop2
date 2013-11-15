@@ -12,7 +12,13 @@
  */
 package edu.umn.cs.spatialHadoop.mapred;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -25,7 +31,6 @@ import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.core.NASADataset;
 import edu.umn.cs.spatialHadoop.core.NASAPoint;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 /**
  * @author Ahmed Eldawy
@@ -38,6 +43,8 @@ public class HDFInputFormat extends FileInputFormat<NASADataset, NASAPoint> {
   
   /**Configuration for name of the dataset to read from HDF file*/
   public static final String DatasetName = "HDFInputFormat.DatasetName";
+  
+  private static final Pattern HDFLink = Pattern.compile("<a href=\"([^\"]*\\.hdf)\">");
 
   @Override
   public RecordReader<NASADataset, NASAPoint> getRecordReader(InputSplit split,
@@ -49,5 +56,20 @@ public class HDFInputFormat extends FileInputFormat<NASADataset, NASAPoint> {
   protected boolean isSplitable(FileSystem fs, Path filename) {
     // HDF files cannot be split
     return false;
+  }
+  
+  public static void main(String[] args) throws IOException {
+    String baseUrl = "http://e4ftl01.cr.usgs.gov/MOLT/MOD11A1.005/2013.11.13/";
+    URL website = new URL(baseUrl);
+    InputStream inStream = website.openStream();
+    BufferedReader inBuffer = new BufferedReader(new InputStreamReader(inStream));
+    String line;
+    while ((line = inBuffer.readLine()) != null) {
+      Matcher matcher = HDFLink.matcher(line);
+      while (matcher.find()) {
+        String url = matcher.group(1);
+        System.out.println(baseUrl+url);
+      }
+    }
   }
 }
