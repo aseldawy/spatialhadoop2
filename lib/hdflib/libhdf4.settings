@@ -1,0 +1,37 @@
+	    SUMMARY OF THE HDF4 CONFIGURATION
+	    =================================
+
+General Information:
+-------------------
+		   HDF4 Version: 4.2.8
+		  Configured on: Thu Aug  9 14:46:46 CDT 2012
+		  Configured by: hdftest@jam
+		 Configure mode: production
+		    Host system: i686-pc-linux-gnu
+              Uname information: Linux jam 2.6.18-194.3.1.el5PAE #1 SMP Thu May 13 13:48:44 EDT 2010 i686 i686 i386 GNU/Linux
+		      Libraries: 
+	     Installation point: /mnt/scr1/release-binary/hdf4/v4.2.8/builds/jam-static
+
+Compiling Options:
+------------------
+               Compilation Mode: production
+                     C compiler: /usr/bin/gcc ( gcc (GCC) 4.1.2 20080704 )
+                         CFLAGS:  -O3 -fomit-frame-pointer
+                       CPPFLAGS: -I/usr/include/rpc  -I/mnt/hdf/packages/zlib-125/static/Linux2.6-gcc/include -I/mnt/hdf/packages/static/jpeg/Linux2.6-gcc/include -I/mnt/hdf/packages/szip/static/encoder/Linux2.6-gcc/include -DSWAP 
+               Shared Libraries: no
+               Static Libraries: yes
+                        LDFLAGS:  -L/mnt/hdf/packages/zlib-125/static/Linux2.6-gcc/lib -L/mnt/hdf/packages/static/jpeg/Linux2.6-gcc/lib -L/mnt/hdf/packages/szip/static/encoder/Linux2.6-gcc/lib
+ 	 	Extra libraries: -lsz -ljpeg -lz  -lm
+ 		       Archiver: ar
+ 		 	 Ranlib: ranlib
+
+Languages:
+----------
+                        Fortran: yes
+               Fortran Compiler: /usr/bin/gfortran ( GNU Fortran (GCC) 4.1.2 20080704 )
+                         FFLAGS:  -O
+
+Features:
+---------
+               SZIP compression: enabled with encoder
+   Support for netCDF API 2.3.2: yes

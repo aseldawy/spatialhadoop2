@@ -185,6 +185,8 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
 
   @Override
   public boolean next(NASADataset key, NASAPoint point) throws IOException {
+    if (dataArray == null)
+      return false;
     // Key doesn't need to be changed because all points in the same dataset
     // have the same key
     while (position < Array.getLength(dataArray)) {
@@ -238,7 +240,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
 
   @Override
   public float getProgress() throws IOException {
-    return (float)position / Array.getLength(dataArray);
+    return dataArray == null ? 0 : (float)position / Array.getLength(dataArray);
   }
 
   public static void main(String[] args) throws Exception {
@@ -246,7 +248,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
         "MOD11A1.A2007002.h23v07.004.2007004095814.hdf"), 0, 23613446,
         new String[] {});
     HDFRecordReader reader = new HDFRecordReader(new Configuration(),
-        hdfFileSplit, "LST_Night_1km", false);
+        hdfFileSplit, "LST_Night_1km", true);
     
     NASADataset dataset = reader.createKey();
     NASAPoint point = reader.createValue();

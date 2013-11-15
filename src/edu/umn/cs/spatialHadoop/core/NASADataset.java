@@ -54,7 +54,7 @@ public class NASADataset {
 
       String date = findMetadata(metadata, "CoreMetadata.0/INVENTORYMETADATA/RANGEDATETIME/RANGEBEGINNINGDATE/VALUE");
       String time = findMetadata(metadata, "CoreMetadata.0/INVENTORYMETADATA/RANGEDATETIME/RANGEBEGINNINGTIME/VALUE");
-      SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+      SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
       this.time = dateFormat.parse(date+" "+time).getTime();
       String granuleId = findMetadata(metadata, "CoreMetadata.0/INVENTORYMETADATA/ECSDATAGRANULE/LOCALGRANULEID/VALUE");
       this.cellName = granuleId.split("\\.")[2];

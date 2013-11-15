@@ -231,20 +231,44 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @throws IOException
    */
   public synchronized void write(Rectangle rect, S shape) throws IOException {
-    int i_cell = 0;
+    int i_cell = 1;
+    if (cells == null) {
+      // Initialize cells array if null
+      cells = new CellInfo[1];
+    }
     while (i_cell < cells.length && !rect.equals(cells[i_cell])) {
       i_cell++;
     }
     if (i_cell >= cells.length) {
       // Cell doesn't exist, create it first
-      CellInfo[] newCells = new CellInfo[i_cell];
+      CellInfo[] newCells = new CellInfo[i_cell+1];
       System.arraycopy(cells, 0, newCells, 0, cells.length);
       newCells[i_cell] = new CellInfo(i_cell, rect);
       cells = newCells;
+      
+      // Expand auxiliary data structures too
+      Path[] newIntermediateCellPath = new Path[cells.length];
+      if (intermediateCellPath != null)
+        System.arraycopy(intermediateCellPath, 0, newIntermediateCellPath, 0,
+      		  intermediateCellPath.length);
+      intermediateCellPath = newIntermediateCellPath;
+      
+      OutputStream[] newIntermediateCellStreams = new OutputStream[cells.length];
+      if (intermediateCellStreams != null)
+        System.arraycopy(intermediateCellStreams, 0, newIntermediateCellStreams,
+      		  0, intermediateCellStreams.length);
+      intermediateCellStreams = newIntermediateCellStreams;
+      
+      Rectangle[] newCellsMbr = new Rectangle[cells.length];
+      if (cellsMbr != null)
+        System.arraycopy(cellsMbr, 0, newCellsMbr, 0, cellsMbr.length);
+      newCellsMbr[i_cell] = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
+      cellsMbr = newCellsMbr;
     }
     write(i_cell, shape);
   }
-
+  
   @Override
   public void write(int cellId, S shape) throws IOException {
     writeInternal(cellId, shape);

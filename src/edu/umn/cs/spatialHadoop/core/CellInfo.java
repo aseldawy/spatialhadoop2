@@ -62,7 +62,7 @@ public class CellInfo extends Rectangle {
   public CellInfo(long id, Rectangle cellInfo) {
     this(id, cellInfo.x1, cellInfo.y1, cellInfo.x2, cellInfo.y2);
     if (id == 0)
-      throw new RuntimeException("Invalid cell id: -1");
+      throw new RuntimeException("Invalid cell id: "+id);
   }
   
   public void set(CellInfo c) {

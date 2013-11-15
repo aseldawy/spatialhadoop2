@@ -115,7 +115,21 @@ public class HDFToText {
       return;
     }
     
+    boolean overwrite = cla.isOverwrite();
+    FileSystem outFs = outPath.getFileSystem(conf);
+    if (outFs.exists(outPath)) {
+      if (overwrite)
+        outFs.delete(outPath, true);
+      else
+        throw new RuntimeException("Output file exists and overwrite flag is not set");
+    }
+
     String datasetName = cla.get("dataset");
+    if (datasetName == null) {
+      printUsage();
+      System.err.println("Please specify the dataset you want to extract");
+      return;
+    }
     boolean skipFillValue = cla.is("skipfillvalue");
 
     HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
