@@ -78,6 +78,39 @@
          excludes="package package/*"
          compression="gzip"/>
   </target>
+	
+	<target name="infect" depends="package"
+	    description="Changes an existing Hadoop binary archive to include SpatialHadoop">
+		<!-- Create a temporary directory for the archive -->
+		<mkdir dir="hadoop-temp"/>
+		
+		<!-- Extract the clean Hadoop archive into the temporary directory -->
+		<untar src="${hadoop.archive}" dest="hadoop-temp" compression="gzip"/>
+
+		<basename file="${hadoop.archive}" property="hadoop_base_name-i" suffix=".tar.gz"/>
+		<basename file="${hadoop_base_name-i}" property="hadoop_base_name" suffix="-bin"/>
+
+		<!-- Rename the directory to include SpatialHadoop name and version -->
+		<property name="shadoop_ext_name" value="spatialhadoop-${version}-${hadoop_base_name}"/>
+		<move tofile="hadoop-temp/${shadoop_ext_name}">
+			<dirset dir="hadoop-temp">
+				<include name="*"/>
+			</dirset>
+		</move>
+    
+    <!-- Copy SpatialHadoop distribution files into that directory -->
+    <untar src="${dist}/package/spatialhadoop-${version}.tar.gz"
+           dest="hadoop-temp/${shadoop_ext_name}" compression="gzip"/>
+    
+    
+    <!-- Build a new archive for the directory -->
+    <tar destfile="${dist}/package/${shadoop_ext_name}.tar.gz"
+         basedir="hadoop-temp" compression="gzip"/>
+  
+    <!-- Cleanup. Remove temporary directory -->
+    <delete dir="hadoop-temp"/>
+		
+	</target>
   
   <target name="clean"
         description="clean up" >
