@@ -171,7 +171,9 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
     
     // A buffer used between source and destination
     byte[] buffer = new byte[1024*1024];
-    long length = split.getLength();
+    // Get file length. Don't depend on split.getLength as we don't set it in
+    // HDFInputFormat for performance reasons
+    long length = fs.getFileStatus(split.getPath()).getLen();
     while (length > 0) {
       int numBytesRead = in.read(buffer, 0, (int)Math.min(length, buffer.length));
       out.write(buffer, 0, numBytesRead);
