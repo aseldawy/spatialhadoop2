@@ -57,9 +57,7 @@
         <exclude name="*javadoc.jar"/>
         <include name="jts-*.jar"/>
       </fileset>
-    	<fileset dir="lib/hdflib">
-    		<include name="*"/>
-    	</fileset>
+    	<fileset dir="lib/hdflib"/>
     </copy>
     <copy file="src/conf/spatial-site.xml" todir="${dist}/conf"/>
     <copy todir="${dist}/webapps">

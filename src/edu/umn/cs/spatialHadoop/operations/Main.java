@@ -34,18 +34,21 @@ public class Main {
 
       pgd.addClass("knn", KNN.class,
           "Finds the k nearest neighbor in a file to a point");
-      pgd.addClass(
-          "dj",
-          DistributedJoin.class,
+
+      pgd.addClass("dj", DistributedJoin.class,
           "Computes the spatial join between two input files using the " +
           "distributed join algorithm");
+      
       pgd.addClass("sjmr", SJMR.class,
           "Computes the spatial join between two input files using the " +
           "SJMR algorithm");
+      
       pgd.addClass("index", Repartition.class,
           "Builds an index on an input file");
+      
       pgd.addClass("mbr", FileMBR.class,
           "Finds the minimal bounding rectangle of an input file");
+      
       pgd.addClass("readfile", ReadFile.class,
           "Retrieve some information about the global index of a file");
 
@@ -60,6 +63,12 @@ public class Main {
 
       pgd.addClass("plot", Plot.class,
           "Plots a file to an image");
+
+      pgd.addClass("plotp", PlotPyramid.class,
+          "Plots a file to a set of images used with Google-Maps-like engine");
+      
+      pgd.addClass("hdfx", HDFToText.class,
+          "Extracts data from a set of HDF files to text files");
 
       pgd.addClass("skyline", Skyline.class,
           "Computes the skyline of an input set of points");
