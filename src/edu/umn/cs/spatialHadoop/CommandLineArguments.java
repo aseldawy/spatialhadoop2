@@ -47,6 +47,12 @@ public class CommandLineArguments {
   
   private String[] args;
 
+  static {
+    // Load configuration from files
+    Configuration.addDefaultResource("spatial-default.xml");
+    Configuration.addDefaultResource("spatial-site.xml");
+  }
+  
   public CommandLineArguments(String[] args) {
     this.args = args;
   }

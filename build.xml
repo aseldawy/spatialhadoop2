@@ -29,7 +29,9 @@
   <target name="compile" depends="init"
         description="compile the source " >
     <!-- Compile the java code from ${src} into ${build} -->
-    <javac srcdir="${src}" destdir="${build}" classpath="${toString:hdflib.path.ref}:${toString:lib.path.ref}" target="1.6"/>
+    <javac srcdir="${src}" destdir="${build}"
+    	  classpath="${toString:hdflib.path.ref}:${toString:lib.path.ref}"
+    	  target="1.6" source="1.6" debug="true" debuglevel="lines,vars,source"/>
     <copy file="${src}/spatial-default.xml" todir="${build}"/>
   </target>
 	

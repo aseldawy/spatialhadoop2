@@ -12,9 +12,12 @@
  */
 package edu.umn.cs.spatialHadoop.operations;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Random;
 
 import org.apache.commons.logging.Log;
@@ -27,6 +30,9 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableComparable;
+import org.apache.hadoop.io.WritableComparator;
+import org.apache.hadoop.io.NullWritable.Comparator;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
@@ -35,6 +41,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
@@ -59,7 +66,6 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  *
  */
 public class Sampler {
-  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(Sampler.class);
 
   /**Name of the configuration line for sample ratio*/
@@ -67,6 +73,48 @@ public class Sampler {
   
   private static final String InClass = "sampler.InClass";
   private static final String OutClass = "sampler.OutClass";
+  
+  public static class NullWritableRnd
+        implements WritableComparable<NullWritableRnd> {
+    private static final NullWritableRnd Instance = new NullWritableRnd();
+    private NullWritableRnd() {}
+    public static NullWritableRnd get() { return Instance; }
+    
+    @Override
+    public int hashCode() {
+      return (int) (Math.random() * Integer.MAX_VALUE);
+    }
+
+    public boolean equals(Object other) { return other instanceof NullWritableRnd; }
+    public void readFields(DataInput in) throws IOException {}
+    public void write(DataOutput out) throws IOException {}
+
+    /** A Comparator &quot;optimized&quot; for NullWritable. */
+    public static class Comparator extends WritableComparator {
+      public Comparator() {
+        super(NullWritableRnd.class);
+      }
+
+      /**
+       * Compare the buffers in serialized form.
+       */
+      public int compare(byte[] b1, int s1, int l1,
+                         byte[] b2, int s2, int l2) {
+        assert 0 == l1;
+        assert 0 == l2;
+        return 0;
+      }
+    }
+
+    static {                               // register this comparator
+      WritableComparator.define(NullWritableRnd.class, new Comparator());
+    }
+
+    @Override
+    public int compareTo(NullWritableRnd o) {
+      return 0;
+    }
+  }
   
   /**
    * Keeps track of the (uncompressed) size of the last processed file or
@@ -78,13 +126,13 @@ public class Sampler {
   private static final String RANDOM_SEED = "sampler.RandomSeed";
   
   public static class Map extends MapReduceBase implements
-  Mapper<CellInfo, Text, NullWritable, Text> {
+  Mapper<CellInfo, Text, NullWritableRnd, Text> {
 
     /**Ratio of lines to sample*/
     private double sampleRatio;
     
     /**A dummy key for all keys*/
-    private final NullWritable dummyKey = NullWritable.get();
+    private final NullWritableRnd dummyKey = NullWritableRnd.get();
     
     /**Random number generator to use*/
     private Random random;
@@ -131,7 +179,7 @@ public class Sampler {
     }
     
     public void map(CellInfo cell, Text line,
-        OutputCollector<NullWritable, Text> output, Reporter reporter)
+        OutputCollector<NullWritableRnd, Text> output, Reporter reporter)
             throws IOException {
       if (random.nextFloat() < sampleRatio) {
         switch (conversion) {
@@ -158,6 +206,26 @@ public class Sampler {
           }
           break;
         }
+      }
+    }
+  }
+  
+  /**
+   * The job of the reduce function is to change the key from NullWritableRnd
+   * to NullWritable. TextOutputFormat only understands that NullWritable
+   * is not to be written to output not NullWritableRnd.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class Reduce extends MapReduceBase implements
+  Reducer<NullWritableRnd, Text, NullWritable, Text> {
+    @Override
+    public void reduce(NullWritableRnd dummy, Iterator<Text> values,
+        OutputCollector<NullWritable, Text> output, Reporter reporter)
+            throws IOException {
+      while (values.hasNext()) {
+        Text x = values.next();
+        output.collect(NullWritable.get(), x);
       }
     }
   }
@@ -199,7 +267,7 @@ public class Sampler {
    * @throws IOException
    */
   public static <T extends TextSerializable, O extends TextSerializable> int sampleMapReduceWithRatio(
-      FileSystem fs, Path[] files, double ratio, long threshold, long seed,
+      FileSystem fs, Path[] files, double ratio, long sampleSize, long seed,
       final ResultCollector<O> output, T inObj, O outObj) throws IOException {
     JobConf job = new JobConf(FileMBR.class);
     
@@ -211,7 +279,7 @@ public class Sampler {
     } while (outFs.exists(outputPath));
     
     job.setJobName("Sample");
-    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputKeyClass(NullWritableRnd.class);
     job.setMapOutputValueClass(Text.class);
     job.setClass(InClass, inObj.getClass(), TextSerializable.class);
     job.setClass(OutClass, outObj.getClass(), TextSerializable.class);
@@ -219,10 +287,14 @@ public class Sampler {
     job.setMapperClass(Map.class);
     job.setLong(RANDOM_SEED, seed);
     job.setFloat(SAMPLE_RATIO, (float) ratio);
+    job.setReducerClass(Reduce.class);
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setNumReduceTasks(0);
+    // Number of reduces can be set to zero. However, setting it to a reasonable
+    // number ensures that number of output files is limited to that number
+    job.setNumReduceTasks(
+        Math.max(1, (int)Math.round(clusterStatus.getMaxReduceTasks() * 0.9)));
     
     job.setInputFormat(ShapeLineInputFormat.class);
     job.setOutputFormat(TextOutputFormat.class);
@@ -236,6 +308,12 @@ public class Sampler {
     Counters counters = run_job.getCounters();
     Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
     final long resultCount = outputRecordCounter.getValue();
+    
+    Counter outputSizeConter = counters.findCounter(Task.Counter.MAP_OUTPUT_BYTES);
+    final long resultSize = outputSizeConter.getValue();
+    
+    LOG.info("resultSize: "+resultSize);
+    LOG.info("resultCount: "+resultCount);
 
     Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
     Sampler.sizeOfLastProcessedFile = inputBytesCounter.getValue();
@@ -243,32 +321,47 @@ public class Sampler {
     // Ratio of records to return from output based on the threshold
     // Note that any number greater than or equal to one will cause all
     // elements to be returned
-    final double selectRatio = (double)threshold / resultCount;
+    final double selectRatio = (double)sampleSize / resultSize;
     
     // Read job result
     int result_size = 0;
     if (output != null) {
-      Text line = new Text();
-      FileStatus[] results = outFs.listStatus(outputPath);
-      
-      for (FileStatus fileStatus : results) {
-        if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-          LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
-          try {
-            while (lineReader.readLine(line) > 0) {
-              if (Math.random() < selectRatio) {
-                if (output != null) {
-                  outObj.fromText(line);
-                  output.collect(outObj);
+      if (selectRatio > 0.1) {
+        // Returning a (big) subset of the records extracted by the MR job
+        Random rand = new Random(seed);
+        if (selectRatio >= 1.0)
+          LOG.info("Returning all "+resultCount+" records");
+        else
+          LOG.info("Returning "+selectRatio+" of "+resultCount+" records");
+        Text line = new Text();
+        FileStatus[] results = outFs.listStatus(outputPath);
+
+        for (FileStatus fileStatus : results) {
+          if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
+            LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
+            try {
+              while (lineReader.readLine(line) > 0) {
+                if (rand.nextDouble() < selectRatio) {
+                  if (output != null) {
+                    outObj.fromText(line);
+                    output.collect(outObj);
+                  }
+                  result_size++;
                 }
-                result_size++;
               }
+            } catch (RuntimeException e) {
+              e.printStackTrace();
             }
-          } catch (RuntimeException e) {
-            e.printStackTrace();
+            lineReader.close();
           }
-          lineReader.close();
         }
+      } else {
+        LOG.info("MapReduce return "+selectRatio+" of "+resultCount+" records");
+        // Return a (small) ratio of the result using a MapReduce job
+        // In this case, the files are very big and we need just a small ratio
+        // of them. It is better to do it in parallel
+        result_size = sampleMapReduceWithRatio(outFs, new Path[] { outputPath},
+            selectRatio, sampleSize, seed, output, outObj, outObj);
       }
     }
     
@@ -549,8 +642,9 @@ public class Sampler {
     if (size != 0) {
       sampleLocalWithSize(fs, inputFiles, size, seed, output, stockObject, outputShape);
     } else if (ratio != -1.0) {
-      long threshold = count == 1? Long.MAX_VALUE : count;
-      sampleMapReduceWithRatio(fs, inputFiles, ratio, threshold, seed,
+      long maxSampleSize = conf.getLong(SpatialSite.SAMPLE_SIZE, 1024*1024*100);
+      LOG.info("Max sample size: "+maxSampleSize);
+      sampleMapReduceWithRatio(fs, inputFiles, ratio, maxSampleSize, seed,
           output, stockObject, outputShape);
     } else {
       // The only way to sample by count is using the local sampler

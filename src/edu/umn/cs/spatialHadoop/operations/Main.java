@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.operations;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
@@ -23,6 +24,12 @@ import edu.umn.cs.spatialHadoop.ReadFile;
  *
  */
 public class Main {
+  
+  static {
+    // Load configuration from files
+    Configuration.addDefaultResource("spatial-default.xml");
+    Configuration.addDefaultResource("spatial-site.xml");
+  }
   
   public static void main(String[] args) {
     int exitCode = -1;

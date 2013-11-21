@@ -64,6 +64,7 @@ public class HDFToText {
     job.setMapOutputKeyClass(Rectangle.class);
     job.setMapOutputValueClass(NASAPoint.class);
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
+    job.setNumReduceTasks(0);
     
     // Set input information
     job.setInputFormat(HDFInputFormat.class);
