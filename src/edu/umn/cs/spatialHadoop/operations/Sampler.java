@@ -15,6 +15,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -32,7 +33,10 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
-import org.apache.hadoop.io.NullWritable.Comparator;
+import org.apache.hadoop.io.compress.CodecPool;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
@@ -338,7 +342,16 @@ public class Sampler {
 
         for (FileStatus fileStatus : results) {
           if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-            LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
+            InputStream in = outFs.open(fileStatus.getPath());
+            // See if we need a decompression coded
+            CompressionCodec codec = new CompressionCodecFactory(job).getCodec(fileStatus.getPath());
+            Decompressor decompressor = null;
+            if (codec != null) {
+              decompressor = CodecPool.getDecompressor(codec);
+              in = codec.createInputStream(in, decompressor);
+            }
+            
+            LineReader lineReader = new LineReader(in);
             try {
               while (lineReader.readLine(line) > 0) {
                 if (rand.nextDouble() < selectRatio) {
@@ -353,6 +366,8 @@ public class Sampler {
               e.printStackTrace();
             }
             lineReader.close();
+            if (decompressor != null)
+              CodecPool.returnDecompressor(decompressor);
           }
         }
       } else {
