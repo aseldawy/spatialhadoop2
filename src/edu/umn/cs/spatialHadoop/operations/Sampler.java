@@ -357,11 +357,14 @@ public class Sampler {
         }
       } else {
         LOG.info("MapReduce return "+selectRatio+" of "+resultCount+" records");
+        // Keep a copy of sizeOfLastProcessedFile because we don't want it changed
+        long tempSize = sizeOfLastProcessedFile;
         // Return a (small) ratio of the result using a MapReduce job
         // In this case, the files are very big and we need just a small ratio
         // of them. It is better to do it in parallel
         result_size = sampleMapReduceWithRatio(outFs, new Path[] { outputPath},
             selectRatio, sampleSize, seed, output, outObj, outObj);
+        sizeOfLastProcessedFile = tempSize;
       }
     }
     

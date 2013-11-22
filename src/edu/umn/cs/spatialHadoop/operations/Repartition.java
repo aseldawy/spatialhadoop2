@@ -156,7 +156,7 @@ public class Repartition {
       Rectangle shape_mbr = shape.getMBR();
       if (shape_mbr == null)
         return;
-      double maxOverlap = 0.0;
+      double maxOverlap = -1.0;
       int bestCell = -1;
       // Only send shape to output if its lowest corner lies in the cellMBR
       // This ensures that a replicated shape in an already partitioned file
@@ -166,7 +166,7 @@ public class Repartition {
           Rectangle overlap = cellInfos[cellIndex].getIntersection(shape_mbr);
           if (overlap != null) {
             double overlapArea = overlap.getWidth() * overlap.getHeight();
-            if (overlapArea > maxOverlap) {
+            if (bestCell == -1 || overlapArea > maxOverlap) {
               maxOverlap = overlapArea;
               bestCell = cellIndex;
             }
