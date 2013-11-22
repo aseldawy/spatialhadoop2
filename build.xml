@@ -5,7 +5,7 @@
   <property name="doc" location="doc"/>
   <property name="build" location="bin"/>
   <property name="dist"  location="dist"/>
-  <property name="version" value="2-b2"/>
+  <property name="version" value="2-b3"/>
   
   <path id="hdflib.path.ref">
     <fileset dir="lib/hdflib" includes="*.jar"/>
@@ -59,7 +59,7 @@
         <exclude name="*javadoc.jar"/>
         <include name="jts-*.jar"/>
       </fileset>
-    	<fileset dir="lib/hdflib"/>
+      <fileset dir="lib/hdflib"/>
     </copy>
     <copy file="src/conf/spatial-site.xml" todir="${dist}/conf"/>
     <copy todir="${dist}/webapps">
