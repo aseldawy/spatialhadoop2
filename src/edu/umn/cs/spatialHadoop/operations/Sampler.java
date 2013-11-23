@@ -131,7 +131,7 @@ public class Sampler {
   private static final String RANDOM_SEED = "sampler.RandomSeed";
   
   public static class Map extends MapReduceBase implements
-  Mapper<CellInfo, Text, NullWritableRnd, Text> {
+  Mapper<Rectangle, Text, NullWritableRnd, Text> {
 
     /**Ratio of lines to sample*/
     private double sampleRatio;
@@ -183,7 +183,7 @@ public class Sampler {
       }
     }
     
-    public void map(CellInfo cell, Text line,
+    public void map(Rectangle cell, Text line,
         OutputCollector<NullWritableRnd, Text> output, Reporter reporter)
             throws IOException {
       if (random.nextFloat() < sampleRatio) {
