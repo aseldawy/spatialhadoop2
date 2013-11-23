@@ -261,7 +261,8 @@ public class Repartition {
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
+    } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
+        sindex.equals("str") || sindex.equals("str+")) {
       // Pack in rectangles using an RTree
       cellInfos = packInRectangles(inFs, inFile, outFs, outPath, blockSize, stockShape);
     } else {
@@ -348,7 +349,7 @@ public class Repartition {
     }
     
     // Decide which map function to use depending on the type of global index
-    if (sindex.equals("rtree")) {
+    if (sindex.equals("rtree") || sindex.equals("str")) {
       // Repartition without replication
       job.setMapperClass(RepartitionMapNoReplication.class);
     } else {
@@ -359,8 +360,8 @@ public class Repartition {
     job.setMapOutputValueClass(stockShape.getClass());
     ShapeInputFormat.setInputPaths(job, inFile);
     job.setInputFormat(ShapeInputFormat.class);
-    boolean pack = sindex.equals("r+tree");
-    boolean expand = sindex.equals("rtree");
+    boolean pack = sindex.equals("r+tree") || sindex.equals("str+");
+    boolean expand = sindex.equals("rtree") || sindex.equals("str");
     job.setBoolean(SpatialSite.PACK_CELLS, pack);
     job.setBoolean(SpatialSite.EXPAND_CELLS, expand);
 
@@ -371,7 +372,7 @@ public class Repartition {
     SpatialSite.setShapeClass(job, stockShape.getClass());
   
     FileOutputFormat.setOutputPath(job,outPath);
-    if (sindex.equals("grid")) {
+    if (sindex.equals("grid") || sindex.equals("str") || sindex.equals("str+")) {
       job.setOutputFormat(GridOutputFormat.class);
     } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
       // For now, the two types of local index are the same
