@@ -56,8 +56,8 @@ public class ShapeLineRecordReader
   }
 
   @Override
-  public CellInfo createKey() {
-    return new CellInfo();
+  public Rectangle createKey() {
+    return new Rectangle();
   }
 
   @Override

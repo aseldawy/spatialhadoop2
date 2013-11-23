@@ -355,7 +355,6 @@ public class SpatialSite {
     FSDataOutputStream out = fs.create(tempFile);
     out.writeInt(cellsInfo.length);
     for (CellInfo cell : cellsInfo) {
-      LOG.info(cell);
       cell.write(out);
     }
     out.close();

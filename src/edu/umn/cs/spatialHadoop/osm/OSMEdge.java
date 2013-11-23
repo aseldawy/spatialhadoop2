@@ -108,7 +108,7 @@ public class OSMEdge implements Shape {
       min_lat = lat2;
       max_lat = lat1;
     }
-    return new Rectangle(min_lon, min_lat, max_lon - min_lon, max_lat - min_lat);
+    return new Rectangle(min_lon, min_lat, max_lon, max_lat);
   }
 
   @Override
