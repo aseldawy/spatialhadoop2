@@ -365,6 +365,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
           // There are still some bytes remaining in buffer
           byte[] tmp = new byte[buffer.length - eol];
           System.arraycopy(buffer, eol, tmp, 0, tmp.length);
+          buffer = tmp;
         } else {
           buffer = null;
         }
