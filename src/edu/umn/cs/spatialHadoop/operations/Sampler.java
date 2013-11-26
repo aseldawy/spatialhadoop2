@@ -12,8 +12,6 @@
  */
 package edu.umn.cs.spatialHadoop.operations;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -27,11 +25,10 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.WritableComparable;
-import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
@@ -51,9 +48,7 @@ import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
-import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
-import edu.umn.cs.spatialHadoop.core.RTree;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -62,7 +57,6 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineRecordReader;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
@@ -79,48 +73,6 @@ public class Sampler {
   private static final String InClass = "sampler.InClass";
   private static final String OutClass = "sampler.OutClass";
   
-  public static class NullWritableRnd
-        implements WritableComparable<NullWritableRnd> {
-    private static final NullWritableRnd Instance = new NullWritableRnd();
-    private NullWritableRnd() {}
-    public static NullWritableRnd get() { return Instance; }
-    
-    @Override
-    public int hashCode() {
-      return (int) (Math.random() * Integer.MAX_VALUE);
-    }
-
-    public boolean equals(Object other) { return other instanceof NullWritableRnd; }
-    public void readFields(DataInput in) throws IOException {}
-    public void write(DataOutput out) throws IOException {}
-
-    /** A Comparator &quot;optimized&quot; for NullWritable. */
-    public static class Comparator extends WritableComparator {
-      public Comparator() {
-        super(NullWritableRnd.class);
-      }
-
-      /**
-       * Compare the buffers in serialized form.
-       */
-      public int compare(byte[] b1, int s1, int l1,
-                         byte[] b2, int s2, int l2) {
-        assert 0 == l1;
-        assert 0 == l2;
-        return 0;
-      }
-    }
-
-    static {                               // register this comparator
-      WritableComparator.define(NullWritableRnd.class, new Comparator());
-    }
-
-    @Override
-    public int compareTo(NullWritableRnd o) {
-      return 0;
-    }
-  }
-  
   /**
    * Keeps track of the (uncompressed) size of the last processed file or
    * directory.
@@ -131,17 +83,18 @@ public class Sampler {
   private static final String RANDOM_SEED = "sampler.RandomSeed";
   
   public static class Map extends MapReduceBase implements
-  Mapper<Rectangle, Text, NullWritableRnd, Text> {
+  Mapper<Rectangle, Text, IntWritable, Text> {
 
     /**Ratio of lines to sample*/
     private double sampleRatio;
     
-    /**A dummy key for all keys*/
-    private final NullWritableRnd dummyKey = NullWritableRnd.get();
-    
     /**Random number generator to use*/
     private Random random;
 
+    /**The key assigned to all output records*/
+    private IntWritable key;
+    
+    /**Shape instance used to parse input lines*/
     private Shape inShape;
     
     enum Conversion {None, ShapeToPoint, ShapeToRect};
@@ -151,6 +104,8 @@ public class Sampler {
     public void configure(JobConf job) {
       sampleRatio = job.getFloat(SAMPLE_RATIO, 0.01f);
       random = new Random(job.getLong(RANDOM_SEED, System.currentTimeMillis()));
+      // Use one record with all keys to minimize shuffle overhead
+      key = new IntWritable(random.nextInt());
       try {
         Class<? extends TextSerializable> inClass =
             job.getClass(InClass, null).asSubclass(TextSerializable.class);
@@ -184,12 +139,12 @@ public class Sampler {
     }
     
     public void map(Rectangle cell, Text line,
-        OutputCollector<NullWritableRnd, Text> output, Reporter reporter)
+        OutputCollector<IntWritable, Text> output, Reporter reporter)
             throws IOException {
       if (random.nextFloat() < sampleRatio) {
         switch (conversion) {
         case None:
-          output.collect(dummyKey, line);
+          output.collect(key, line);
           break;
         case ShapeToPoint:
           inShape.fromText(line);
@@ -198,7 +153,7 @@ public class Sampler {
             Point center = mbr.getCenterPoint();
             line.clear();
             center.toText(line);
-            output.collect(dummyKey, line);
+            output.collect(key, line);
           }
           break;
         case ShapeToRect:
@@ -207,7 +162,7 @@ public class Sampler {
           if (mbr != null) {
             line.clear();
             mbr.toText(line);
-            output.collect(dummyKey, line);
+            output.collect(key, line);
           }
           break;
         }
@@ -223,9 +178,9 @@ public class Sampler {
    *
    */
   public static class Reduce extends MapReduceBase implements
-  Reducer<NullWritableRnd, Text, NullWritable, Text> {
+  Reducer<IntWritable, Text, NullWritable, Text> {
     @Override
-    public void reduce(NullWritableRnd dummy, Iterator<Text> values,
+    public void reduce(IntWritable dummy, Iterator<Text> values,
         OutputCollector<NullWritable, Text> output, Reporter reporter)
             throws IOException {
       while (values.hasNext()) {
@@ -284,7 +239,7 @@ public class Sampler {
     } while (outFs.exists(outputPath));
     
     job.setJobName("Sample");
-    job.setMapOutputKeyClass(NullWritableRnd.class);
+    job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(Text.class);
     job.setClass(InClass, inObj.getClass(), TextSerializable.class);
     job.setClass(OutClass, outObj.getClass(), TextSerializable.class);

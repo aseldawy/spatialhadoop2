@@ -447,13 +447,16 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
         case NEW: t.start(); break;
         case TERMINATED: closingThreads.remove(0); break;
         default:
+          // Use limited time join to indicate progress frequently
           t.join(10000);
         }
+        // Indicate progress. Useful if closing a single cell takes a long time
+        if (progressable != null)
+          progressable.progress();
       } catch (InterruptedException e) {
         e.printStackTrace();
       }
     }
-
     
     if (masterFile != null)
       masterFile.close();
