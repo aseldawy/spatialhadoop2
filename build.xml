@@ -2,6 +2,7 @@
   <description>Compiles SpatialHadoop and builds packages to be installed on an existing Hadoop cluster</description>
   <!-- set global properties for this build -->
   <property name="src" location="src"/>
+	<property name="res" location="res"/>
   <property name="doc" location="doc"/>
   <property name="build" location="bin"/>
   <property name="dist"  location="dist"/>
@@ -32,7 +33,12 @@
     <javac srcdir="${src}" destdir="${build}"
     	  classpath="${toString:hdflib.path.ref}:${toString:lib.path.ref}"
     	  target="1.6" source="1.6" debug="true" debuglevel="lines,vars,source"/>
-    <copy file="${src}/spatial-default.xml" todir="${build}"/>
+    <copy todir="${build}">
+    	<fileset dir="${res}">
+    		<include name="spatial-default.xml"/>
+    		<include name="zoom_view.html"/>
+    	</fileset>
+  	</copy>
   </target>
 	
   <target name="doc" depends="init"
@@ -49,7 +55,7 @@
     <mkdir dir="${dist}/conf"/>
 
     <!-- Put everything in ${build} into the spatialhadoop-${DSTAMP}.jar file -->
-    <jar jarfile="${dist}/spatialhadoop-${version}.jar" manifest="${src}/MANIFEST.MF" basedir="${build}"/>
+    <jar jarfile="${dist}/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
     <copy file="LICENSE.txt" todir="${dist}"/>
     <copy file="README.md" todir="${dist}"/>
     <copy todir="${dist}/lib">
@@ -61,7 +67,7 @@
       </fileset>
       <fileset dir="lib/hdflib"/>
     </copy>
-    <copy file="src/conf/spatial-site.xml" todir="${dist}/conf"/>
+    <copy file="${res}/conf/spatial-site.xml" todir="${dist}/conf"/>
     <copy todir="${dist}/webapps">
       <fileset dir="webapps"/>
     </copy>
