@@ -22,7 +22,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.SplittableCompressionCodec;
@@ -97,17 +96,10 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
     }
   }
   
-  public static final PathFilter hiddenFileFilter = new PathFilter(){
-    public boolean accept(Path p){
-      String name = p.getName(); 
-      return !name.startsWith("_") && !name.startsWith("."); 
-    }
-  };
-  
   protected void listStatus(final FileSystem fs, final Path dir,
       final List<FileStatus> result, BlockFilter filter) throws IOException {
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, dir);
-    FileStatus[] listStatus = fs.listStatus(dir, hiddenFileFilter);
+    FileStatus[] listStatus = fs.listStatus(dir, SpatialSite.HiddenFileFilter);
     if (gindex == null) {
       // Add all files under this directory
       for (FileStatus status : listStatus) {

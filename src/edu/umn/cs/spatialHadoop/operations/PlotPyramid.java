@@ -18,16 +18,22 @@ import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Iterator;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -42,6 +48,7 @@ import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
@@ -68,6 +75,10 @@ public class PlotPyramid {
   private static final String TileWidth = "PlotPyramid.TileWidth";
   /**Height of each tile in pixels*/
   private static final String TileHeight = "PlotPyramid.TileHeight";
+  /**Color uses to plot shapes and points*/
+  private static final String StrokeColor = "plot.stroke_color";
+  /**Flip the image vertically to correct +ve Y-axis direction*/
+  private static final String VFlip = "PlotPyramid.VFlip";
 
   /**
    * An internal class that indicates a position of a tile in the pyramid.
@@ -109,6 +120,17 @@ public class PlotPyramid {
     public String toString() {
       return "Level: "+level+" @("+x+","+y+")";
     }
+    
+    @Override
+    public int hashCode() {
+      return level * 31 + x * 25423 + y;
+    }
+    
+    @Override
+    public boolean equals(Object obj) {
+      TileIndex b = (TileIndex) obj;
+      return this.level == b.level && this.x == b.x && this.y == b.y;
+    }
   }
   
   /**
@@ -126,6 +148,7 @@ public class PlotPyramid {
     private GridInfo bottomGrid;
     /**Used as a key for output*/
     private TileIndex key;
+    private boolean vflip;
     
     @Override
     public void configure(JobConf job) {
@@ -135,6 +158,7 @@ public class PlotPyramid {
       bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
       bottomGrid.rows = bottomGrid.columns =
           (int) Math.round(Math.pow(2, numLevels - 1));
+      this.vflip = job.getBoolean(VFlip, false);
       this.key = new TileIndex();
     }
     
@@ -144,6 +168,8 @@ public class PlotPyramid {
       Rectangle shapeMBR = shape.getMBR();
       if (shapeMBR == null)
         return;
+      if (vflip)
+        shapeMBR = new Rectangle(shapeMBR.x1, -shapeMBR.y2, shapeMBR.x2, -shapeMBR.y1);
       java.awt.Rectangle overlappingCells =
           bottomGrid.getOverlappingCells(shapeMBR);
       for (key.level = numLevels - 1; key.level >= 0; key.level--) {
@@ -180,6 +206,8 @@ public class PlotPyramid {
     private int tileWidth, tileHeight;
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
+    private boolean vflip;
+    private Color strokeColor;
 
     @Override
     public void configure(JobConf job) {
@@ -188,12 +216,15 @@ public class PlotPyramid {
       fileMBR = SpatialSite.getRectangle(job, InputMBR);
       tileWidth = job.getInt(TileWidth, 256);
       tileHeight = job.getInt(TileHeight, 256);
+      this.vflip = job.getBoolean(VFlip, false);
+      this.strokeColor = new Color(job.getInt(StrokeColor, 0));
     }
 
     @Override
     public void reduce(TileIndex tileIndex, Iterator<Shape> values,
         OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
         throws IOException {
+      LOG.info("Reduce key: "+tileIndex);
       // Coordinates of the current tile in data coordinates
       Rectangle tileMBR = new Rectangle();
       // Edge length of tile in the current level
@@ -208,7 +239,6 @@ public class PlotPyramid {
         BufferedImage image = new BufferedImage(tileWidth, tileHeight,
             BufferedImage.TYPE_INT_ARGB);
         Color bg_color = new Color(0,0,0,0);
-        Color stroke_color = Color.BLUE;
 
         Graphics2D graphics;
         try {
@@ -218,11 +248,11 @@ public class PlotPyramid {
         }
         graphics.setBackground(bg_color);
         graphics.clearRect(0, 0, tileWidth, tileHeight);
-        graphics.setColor(stroke_color);
+        graphics.setColor(strokeColor);
         
         while (values.hasNext()) {
           Shape s = values.next();
-          Plot.drawShape(graphics, s, tileMBR, tileWidth, tileHeight, scale2);
+          Plot.drawShape(graphics, s, tileMBR, tileWidth, tileHeight, vflip, scale2);
         }
         
         graphics.dispose();
@@ -235,37 +265,85 @@ public class PlotPyramid {
       }
     }
 
-  }  
+  }
+  
+  /**
+   * Finalizes the job by combining all images of all reduces jobs into one
+   * folder.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class PlotPyramidOutputCommitter extends FileOutputCommitter {
+    @Override
+    public void commitJob(JobContext context) throws IOException {
+      super.commitJob(context);
+      
+      JobConf job = context.getJobConf();
+      Path outPath = PyramidOutputFormat.getOutputPath(job);
+      FileSystem outFs = outPath.getFileSystem(job);
+
+      // Collect all output folders
+      FileStatus[] reducesOut = outFs.listStatus(outPath, SpatialSite.HiddenFileFilter);
+      
+      if (reducesOut.length == 0) {
+        LOG.warn("No output files were written by reducers");
+      } else {
+        for (FileStatus reduceOut : reducesOut) {
+          if (outFs.isFile(reduceOut.getPath()))
+            LOG.error("Output of each reducer should be a folder");
+          FileStatus[] imageFiles = outFs.listStatus(reduceOut.getPath(),
+              SpatialSite.HiddenFileFilter);
+          for (FileStatus imageFile : imageFiles) {
+            outFs.rename(imageFile.getPath(), outPath);
+          }
+          // Remove the, now empty, reduce output folder
+          outFs.delete(reduceOut.getPath(), false);
+        }
+        // TODO Add an HTML file that visualizes the result using Google Maps
+      }
+    }
+  }
+
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
-      Shape shape, int tileWidth, int tileHeight, int numLevels)
-          throws IOException {
+      Shape shape, int tileWidth, int tileHeight, boolean vflip, Color color,
+      int numLevels) throws IOException {
     JobConf job = new JobConf(PlotPyramid.class);
     job.setJobName("Plot");
     
     job.setMapperClass(PlotMap.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setReducerClass(PlotReduce.class);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
     SpatialSite.setShapeClass(job, shape.getClass());
     job.setMapOutputKeyClass(TileIndex.class);
     job.setMapOutputValueClass(shape.getClass());
+    job.setInt(StrokeColor, color.getRGB());
+
+    job.setReducerClass(PlotReduce.class);
     
     FileSystem inFs = inFile.getFileSystem(job);
     Rectangle fileMBR = FileMBR.fileMBRMapReduce(inFs, inFile, shape, false);
+    if (vflip) {
+      double temp = fileMBR.y1;
+      fileMBR.y1 = -fileMBR.y2;
+      fileMBR.y2 = -temp;
+    }
     
     // Expand input file to a rectangle for compatibility with the pyramid
     // structure
     if (fileMBR.getWidth() > fileMBR.getHeight()) {
+      fileMBR.y1 -= (fileMBR.getWidth() - fileMBR.getHeight()) / 2;
       fileMBR.y2 = fileMBR.y1 + fileMBR.getWidth();
     } else {
+      fileMBR.x1 -= (fileMBR.getHeight() - fileMBR.getWidth() / 2);
       fileMBR.x2 = fileMBR.x1 + fileMBR.getHeight();
     }
     SpatialSite.setRectangle(job, InputMBR, fileMBR);
     job.setInt(TileWidth, tileWidth);
     job.setInt(TileHeight, tileHeight);
     job.setInt(NumLevels, numLevels);
+    job.setBoolean(VFlip, vflip);
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
@@ -273,14 +351,15 @@ public class PlotPyramid {
     
     job.setOutputFormat(PyramidOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
+    job.setOutputCommitter(PlotPyramidOutputCommitter.class);
     
     JobClient.runJob(job);
   }
   
   public static <S extends Shape> void plot(Path inFile, Path outFile,
-      S shape, int tileWidth, int tileHeight, int numLevels)
+      S shape, int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels)
           throws IOException {
-    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, numLevels);
+    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels);
   }
 
   
@@ -292,9 +371,10 @@ public class PlotPyramid {
     System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
     System.out.println("tilewidth:<w> - Width of each tile in pixels");
     System.out.println("tileheight:<h> - Height of each tile in pixels");
-//    System.out.println("color:<c> - Main color used to draw the picture (black)");
+    System.out.println("color:<c> - Main color used to draw the picture (black)");
     System.out.println("numlevels:<n> - Number of levels in the pyrmaid");
     System.out.println("-overwrite: Override output file without notice");
+    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
   }
 
   /**
@@ -305,36 +385,23 @@ public class PlotPyramid {
     System.setProperty("java.awt.headless", "true");
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(PlotPyramid.class);
+    if (!cla.checkInputOutput(conf)) {
+      printUsage();
+      return;
+    }
     Path[] files = cla.getPaths();
-    if (files.length < 2) {
-      printUsage();
-      throw new RuntimeException("Illegal arguments. File names missing");
-    }
-    
     Path inFile = files[0];
-    FileSystem inFs = inFile.getFileSystem(conf);
-    if (!inFs.exists(inFile)) {
-      printUsage();
-      throw new RuntimeException("Input file does not exist");
-    }
-    
-    boolean overwrite = cla.isOverwrite();
     Path outFile = files[1];
-    FileSystem outFs = outFile.getFileSystem(conf);
-    if (outFs.exists(outFile)) {
-      if (overwrite)
-        outFs.delete(outFile, true);
-      else
-        throw new RuntimeException("Output file exists and overwrite flag is not set");
-    }
 
     Shape shape = cla.getShape(true);
     
     int tileWidth = cla.getInt("tilewidth", 256);
     int tileHeight = cla.getInt("tileheight", 256);
     int numLevels = cla.getInt("numlevels", 8);
+    boolean vflip = cla.is("vflip");
+    Color color = cla.getColor();
     
-    plot(inFile, outFile, shape, tileWidth, tileHeight, numLevels);
+    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels);
   }
 
 }

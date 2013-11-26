@@ -263,7 +263,8 @@ public class FileMBR {
 
     while (shapeReader.next(key, shape)) {
       Rectangle rect = shape.getMBR();
-      mbr.expand(rect);
+      if (rect != null)
+        mbr.expand(rect);
     }
     return mbr;
   }

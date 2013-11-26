@@ -47,6 +47,17 @@ public class SpatialSite {
   
   private static final Log LOG = LogFactory.getLog(SpatialSite.class);
 
+  /**
+   * A filter that selects visible files and filters out hidden files.
+   * Hidden files are the ones with a names starting in '.' or '_'
+   */
+  public static final PathFilter HiddenFileFilter = new PathFilter(){
+    public boolean accept(Path p){
+      String name = p.getName(); 
+      return !name.startsWith("_") && !name.startsWith("."); 
+    }
+  };
+
   /**Enforce static only calls*/
   private SpatialSite() {}
   

@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
+import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -79,6 +80,8 @@ public class Plot {
   private static final String ShowBlockCount = "plot.show_block_count";
   private static final String ShowRecordCount = "plot.show_record_count";
   private static final String StrokeColor = "plot.stroke_color";
+  /**Flip the image vertically to correct +ve Y-axis direction*/
+  private static final String VFlip = "plot.vflip";
 
   /**
    * If the processed block is already partitioned (via global index), then
@@ -92,6 +95,7 @@ public class Plot {
     implements Mapper<Rectangle, Shape, Rectangle, Shape> {
     
     private Rectangle[] cellInfos;
+    private boolean vflip;
     
     @Override
     public void configure(JobConf job) {
@@ -108,6 +112,7 @@ public class Plot {
             this.cellInfos[i] = new Rectangle(fileCells[i]);
           }
         }
+        vflip = job.getBoolean(VFlip, false);
       } catch (IOException e) {
         e.printStackTrace();
       }
@@ -116,6 +121,14 @@ public class Plot {
     public void map(Rectangle cell, Shape shape,
         OutputCollector<Rectangle, Shape> output, Reporter reporter)
         throws IOException {
+      Rectangle shapeMbr = shape.getMBR();
+      if (shapeMbr == null)
+        return;
+      if (vflip) {
+        // We have to create a new rectangle to not modify input shape
+        // if the input shape is a rectangle
+        shapeMbr = new Rectangle(shapeMbr.x1, -shapeMbr.y2, shapeMbr.x2, -shapeMbr.y1);
+      }
       if (!cell.isValid()) {
         // Output shape to all overlapping cells
         for (Rectangle matchedCell : cellInfos)
@@ -142,6 +155,7 @@ public class Plot {
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
     private Color strokeColor;
+    private boolean vflip;
 
     @Override
     public void configure(JobConf job) {
@@ -151,6 +165,7 @@ public class Plot {
       imageWidth = ImageOutputFormat.getImageWidth(job);
       imageHeight = ImageOutputFormat.getImageHeight(job);
       this.strokeColor = new Color(job.getInt(StrokeColor, 0));
+      this.vflip = job.getBoolean(VFlip, false);
       
       this.scale2 = (double)imageWidth * imageHeight /
           ((double)(fileMbr.x2 - fileMbr.x1) * (fileMbr.y2 - fileMbr.y1));
@@ -162,10 +177,10 @@ public class Plot {
         throws IOException {
       try {
         // Initialize the image
-        int image_x1 = (int) ((cellInfo.x1 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-        int image_y1 = (int) ((cellInfo.y1 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
-        int image_x2 = (int) (((cellInfo.x2) - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-        int image_y2 = (int) (((cellInfo.y2) - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+        int image_x1 = (int) ((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        int image_y1 = (int) ((cellInfo.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_x2 = (int) ((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        int image_y2 = (int) ((cellInfo.y2 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
         if (tile_width == 0 || tile_height == 0)
@@ -187,7 +202,7 @@ public class Plot {
 
         while (values.hasNext()) {
           Shape s = values.next();
-          drawShape(graphics, s, fileMbr, imageWidth, imageHeight, scale2);
+          drawShape(graphics, s, fileMbr, imageWidth, imageHeight, vflip, scale2);
         }
         
         graphics.dispose();
@@ -263,14 +278,24 @@ public class Plot {
   static int min_value = Integer.MAX_VALUE;
   static int max_value = Integer.MIN_VALUE;
   
+  /**
+   * Plot the given shape on the provided canvas.
+   * @param graphics - the canvas to draw on
+   * @param s - the shape to draw
+   * @param fileMbr - the MBR of the input file
+   * @param imageWidth - total image width (for the whole file)
+   * @param imageHeight - total image height (for the whole file)
+   * @param vflip - set to <code>true</code> to flip the image vertically
+   * @param scale - scale between image coordinates and shape coordinates
+   */
   public static void drawShape(Graphics2D graphics, Shape s, Rectangle fileMbr,
-      int imageWidth, int imageHeight, double scale) {
+      int imageWidth, int imageHeight, boolean vflip, double scale) {
     if (s instanceof NASAPoint) {
       final int MinValue = 7500;
       final int MaxValue = 16000;
       NASAPoint pt = (NASAPoint) s;
-      int x = (int) ((pt.x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-      int y = (int) ((pt.y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+      int x = (int) ((pt.x - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+      int y = (int) (((vflip? -pt.y : pt.y) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       int value = pt.value;
       
       if (value < min_value && value > 1000)
@@ -293,17 +318,17 @@ public class Plot {
       }
     } else if (s instanceof Point) {
       Point pt = (Point) s;
-      int x = (int) ((pt.x - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-      int y = (int) ((pt.y - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+      int x = (int) ((pt.x - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+      int y = (int) (((vflip? -pt.y : pt.y) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       
       if (x >= 0 && x < imageWidth && y >= 0 && y < imageHeight)
         graphics.fillRect(x, y, 1, 1);
     } else if (s instanceof Rectangle) {
       Rectangle r = (Rectangle) s;
-      int s_x1 = (int) ((r.x1 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-      int s_y1 = (int) ((r.y1 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
-      int s_x2 = (int) (((r.x2) - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-      int s_y2 = (int) (((r.y2) - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+      int s_x1 = (int) ((r.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+      int s_y1 = (int) (((vflip? -r.y1 : r.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+      int s_x2 = (int) ((r.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+      int s_y2 = (int) (((vflip? -r.y2 : r.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
     } else if (s instanceof OGCShape) {
       OGCShape ogc_shape = (OGCShape) s;
@@ -314,7 +339,7 @@ public class Plot {
         for (int i = 0; i < geom_coll.numGeometries(); i++) {
           OGCGeometry sub_geom = geom_coll.geometryN(i);
           // Recursive call to draw each geometry
-          drawShape(graphics, new OGCShape(sub_geom), fileMbr, imageWidth, imageHeight, scale);
+          drawShape(graphics, new OGCShape(sub_geom), fileMbr, imageWidth, imageHeight, vflip, scale);
         }
       } else if (geom.getEsriGeometry() instanceof MultiPath) {
         MultiPath path = (MultiPath) geom.getEsriGeometry();
@@ -332,8 +357,8 @@ public class Plot {
           double py = path.getPoint(i).getY();
           
           // Transform a point in the polygon to image coordinates
-          xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-          ypoints[i] = (int) Math.round((py - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+          xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+          ypoints[i] = (int) Math.round(((vflip? -py : py) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         }
         
         // Draw the polygon
@@ -348,15 +373,15 @@ public class Plot {
       Geometry geom = jts_shape.geom;
       Color shape_color = graphics.getColor();
       
-      drawJTSShape(graphics, geom, fileMbr, imageWidth, imageHeight, scale,
+      drawJTSShape(graphics, geom, fileMbr, imageWidth, imageHeight, vflip, scale,
           shape_color);
     } else {
       LOG.warn("Cannot draw a shape of type: "+s.getClass());
       Rectangle r = s.getMBR();
-      int s_x1 = (int) ((r.x1 - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-      int s_y1 = (int) ((r.y1 - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
-      int s_x2 = (int) (((r.x2) - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-      int s_y2 = (int) (((r.y2) - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+      int s_x1 = (int) ((r.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+      int s_y1 = (int) ((r.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+      int s_x2 = (int) (((r.x2) - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+      int s_y2 = (int) (((r.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       if (s_x1 >= 0 && s_x1 < imageWidth && s_y1 >= 0 && s_y1 < imageHeight)
         graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
     }
@@ -373,24 +398,24 @@ public class Plot {
    * @param shape_color
    */
   private static void drawJTSShape(Graphics2D graphics, Geometry geom,
-      Rectangle fileMbr, int imageWidth, int imageHeight, double scale,
-      Color shape_color) {
+      Rectangle fileMbr, int imageWidth, int imageHeight, boolean vflip,
+      double scale, Color shape_color) {
     if (geom instanceof GeometryCollection) {
       GeometryCollection geom_coll = (GeometryCollection) geom;
       for (int i = 0; i < geom_coll.getNumGeometries(); i++) {
         Geometry sub_geom = geom_coll.getGeometryN(i);
         // Recursive call to draw each geometry
-        drawJTSShape(graphics, sub_geom, fileMbr, imageWidth, imageHeight, scale, shape_color);
+        drawJTSShape(graphics, sub_geom, fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
       }
     } else if (geom instanceof com.vividsolutions.jts.geom.Polygon) {
       com.vividsolutions.jts.geom.Polygon poly = (com.vividsolutions.jts.geom.Polygon) geom;
 
       for (int i = 0; i < poly.getNumInteriorRing(); i++) {
         LineString ring = poly.getInteriorRingN(i);
-        drawJTSShape(graphics, ring, fileMbr, imageWidth, imageHeight, scale, shape_color);
+        drawJTSShape(graphics, ring, fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
       }
       
-      drawJTSShape(graphics, poly.getExteriorRing(), fileMbr, imageWidth, imageHeight, scale, shape_color);
+      drawJTSShape(graphics, poly.getExteriorRing(), fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
     } else if (geom instanceof LineString) {
       LineString line = (LineString) geom;
       double geom_alpha = line.getLength() * scale;
@@ -406,8 +431,8 @@ public class Plot {
         double py = line.getPointN(i).getY();
         
         // Transform a point in the polygon to image coordinates
-        xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / (fileMbr.x2 - fileMbr.x1));
-        ypoints[i] = (int) Math.round((py - fileMbr.y1) * imageHeight / (fileMbr.y2 - fileMbr.y1));
+        xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        ypoints[i] = (int) Math.round(((vflip? -py : py) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       }
       
       // Draw the polygon
@@ -417,7 +442,7 @@ public class Plot {
   }
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
-      Shape shape, int width, int height, Color color, boolean showBorders,
+      Shape shape, int width, int height, boolean vflip, Color color, boolean showBorders,
       boolean showBlockCount, boolean showRecordCount, boolean background)  throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
@@ -433,6 +458,11 @@ public class Plot {
     
     FileSystem inFs = inFile.getFileSystem(job);
     Rectangle fileMbr = FileMBR.fileMBRMapReduce(inFs, inFile, shape, false);
+    if (vflip) {
+      double temp = fileMbr.y1;
+      fileMbr.y1 = -fileMbr.y2;
+      fileMbr.y2 = -temp;
+    }
     FileStatus inFileStatus = inFs.getFileStatus(inFile);
     
     CellInfo[] cellInfos;
@@ -468,6 +498,7 @@ public class Plot {
     job.setBoolean(ShowBlockCount, showBlockCount);
     job.setBoolean(ShowRecordCount, showRecordCount);
     job.setInt(StrokeColor, color.getRGB());
+    job.setBoolean(VFlip, vflip);
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
@@ -488,23 +519,28 @@ public class Plot {
   }
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
-      S shape, int width, int height, Color color, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount)
-          throws IOException {
+      S shape, int width, int height, boolean vflip, Color color,
+      boolean showBorders, boolean showBlockCount, boolean showRecordCount)
+      throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
     LOG.info("FileMBR: "+fileMbr);
+    if (vflip) {
+      double temp = fileMbr.y1;
+      fileMbr.y1 = -fileMbr.y2;
+      fileMbr.y2 = -temp;
+    }
     
     // Adjust width and height to maintain aspect ratio
-    if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
+    if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
       // Fix width and change height
-      height = (int) ((fileMbr.y2 - fileMbr.y1) * width / (fileMbr.x2 - fileMbr.x1));
+      height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
     } else {
-      width = (int) ((fileMbr.x2 - fileMbr.x1) * height / (fileMbr.y2 - fileMbr.y1));
+      width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
     }
     
     double scale2 = (double) width * height
-        / ((double) (fileMbr.x2 - fileMbr.x1) * (fileMbr.y2 - fileMbr.y1));
+        / (fileMbr.getWidth() * fileMbr.getHeight());
 
     // Create an image
     BufferedImage image = new BufferedImage(width, height,
@@ -516,12 +552,12 @@ public class Plot {
     graphics.setColor(color);
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
-    ShapeRecordReader<S> reader =
-      new ShapeRecordReader<S>(inFs.open(inFile), 0, fileLength);
+    ShapeRecordReader<S> reader = new ShapeRecordReader<S>(new Configuration(),
+        new FileSplit(inFile, 0, fileLength, new String[0]));
     
     Rectangle cell = reader.createKey();
     while (reader.next(cell, shape)) {
-      drawShape(graphics, shape, fileMbr, width, height, scale2);
+      drawShape(graphics, shape, fileMbr, width, height, vflip, scale2);
     }
     
     reader.close();
@@ -532,16 +568,15 @@ public class Plot {
     out.close();
   }
   
-  public static <S extends Shape> void plot(Path inFile, Path outFile,
-      S shape, int width, int height, Color color, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount)
-          throws IOException {
+  public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
+      int width, int height, boolean vflip, Color color, boolean showBorders,
+      boolean showBlockCount, boolean showRecordCount) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFStatus.getLen() > 300 * inFStatus.getBlockSize()) {
-      plotMapReduce(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount, false);
+    if (inFStatus.isDir() || inFStatus.getLen() > 100 * inFStatus.getBlockSize()) {
+      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, showBlockCount, showRecordCount, false);
     } else {
-      plotLocal(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
+      plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, showBlockCount, showRecordCount);
     }
   }
 
@@ -627,13 +662,14 @@ public class Plot {
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
-    System.out.println("width:<w> - Maximum width of the image (1000,1000)");
-    System.out.println("height:<h> - Maximum height of the image (1000,1000)");
-//    System.out.println("color:<c> - Main color used to draw the picture (black)");
+    System.out.println("width:<w> - Maximum width of the image (1000)");
+    System.out.println("height:<h> - Maximum height of the image (1000)");
+    System.out.println("color:<c> - Main color used to draw the picture (black)");
     System.out.println("-borders: For globally indexed files, draws the borders of partitions");
     System.out.println("-showblockcount: For globally indexed files, draws the borders of partitions");
     System.out.println("-showrecordcount: Show number of records in each partition");
     System.out.println("-overwrite: Override output file without notice");
+    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
   }
   
   /**
@@ -644,28 +680,14 @@ public class Plot {
     System.setProperty("java.awt.headless", "true");
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(Plot.class);
+    if (!cla.checkInputOutput(conf)) {
+      printUsage();
+      return;
+    }
+    
     Path[] files = cla.getPaths();
-    if (files.length < 2) {
-      printUsage();
-      throw new RuntimeException("Illegal arguments. File names missing");
-    }
-    
     Path inFile = files[0];
-    FileSystem inFs = inFile.getFileSystem(conf);
-    if (!inFs.exists(inFile)) {
-      printUsage();
-      throw new RuntimeException("Input file does not exist");
-    }
-    
-    boolean overwrite = cla.isOverwrite();
     Path outFile = files[1];
-    FileSystem outFs = outFile.getFileSystem(conf);
-    if (outFs.exists(outFile)) {
-      if (overwrite)
-        outFs.delete(outFile, true);
-      else
-        throw new RuntimeException("Output file exists and overwrite flag is not set");
-    }
 
     boolean showBorders = cla.is("borders");
     boolean showBlockCount = cla.is("showblockcount");
@@ -675,11 +697,12 @@ public class Plot {
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
     
+    // Flip image vertically to correct Y axis +ve direction
+    boolean vflip = cla.is("vflip");
+    
     Color color = cla.getColor();
 
-    plot(inFile, outFile, shape, width, height, color, showBorders, showBlockCount, showRecordCount);
-    
-    System.out.println("Values range: ["+min_value+","+max_value+"]");
+    plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, showBlockCount, showRecordCount);
   }
 
 }

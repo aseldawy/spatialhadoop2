@@ -426,15 +426,61 @@ public class CommandLineArguments {
     colorName = colorName.toLowerCase();
     if (colorName.equals("red")) {
       color = Color.RED;
+    } else if (colorName.equals("pink")){
+      color = Color.PINK;
     } else if (colorName.equals("blue")){
       color = Color.BLUE;
+    } else if (colorName.equals("cyan")){
+      color = Color.CYAN;
     } else if (colorName.equals("green")) {
       color = Color.GREEN;
     } else if (colorName.equals("black")) {
       color = Color.BLACK;
+    } else if (colorName.equals("gray")) {
+      color = Color.GRAY;
     } else if (colorName.equals("orange")) {
       color = Color.ORANGE;
     }
     return color;
+  }
+  
+  /**
+   * Makes standard checks for input and output files. It is assumed that all
+   * files are input files while the last one is the output file. First,
+   * it checks that there is at least one input file. Then, it checks that every
+   * input file exists. After that, it checks for output file, if it exists and
+   * the overwrite flag is not present, it fails.
+   * @return <code>true</code> if all checks pass. <code>false</code> otherwise.
+   * @throws IOException 
+   */
+  public boolean checkInputOutput(Configuration conf) throws IOException {
+    Path[] paths = getPaths();
+    if (paths.length == 0) {
+      LOG.error("Input file missing");
+      return false;
+    }
+    for (int i = 0; i < paths.length; i++) {
+      Path path = paths[i];
+      if (i == 0 || i < paths.length - 1) {
+        // Check input path
+        FileSystem fs = path.getFileSystem(conf);
+        if (!fs.exists(path)) {
+          LOG.error("Input file '"+path+"' does not exist");
+          return false;
+        }
+      } else {
+        // Check output path
+        FileSystem fs = path.getFileSystem(conf);
+        if (fs.exists(path)) {
+          if (this.isOverwrite()) {
+            fs.delete(path, true);
+          } else {
+            LOG.error("Output file '"+path+"' exists and overwrite flag is not set");
+            return false;
+          }
+        }
+      }
+    }
+    return true;
   }
 }
