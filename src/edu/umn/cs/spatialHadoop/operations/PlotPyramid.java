@@ -20,14 +20,17 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.Iterator;
+
+import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
@@ -39,6 +42,7 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.ImageWritable;
@@ -48,7 +52,6 @@ import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
@@ -299,7 +302,35 @@ public class PlotPyramid {
           // Remove the, now empty, reduce output folder
           outFs.delete(reduceOut.getPath(), false);
         }
-        // TODO Add an HTML file that visualizes the result using Google Maps
+        
+        // Write a default empty image to be displayed for non-generated tiles
+        int tileWidth = job.getInt(TileWidth, 256);
+        int tileHeight = job.getInt(TileHeight, 256);
+        BufferedImage emptyImg = new BufferedImage(tileWidth, tileHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = new SimpleGraphics(emptyImg);
+        g.setBackground(new Color(0,0,0,0));
+        g.clearRect(0, 0, tileWidth, tileHeight);
+        g.dispose();
+        
+        OutputStream out = outFs.create(new Path(outPath, "default.png"));
+        ImageIO.write(emptyImg, "png", out);
+        out.close();
+        
+        // Add an HTML file that visualizes the result using Google Maps
+        int numLevels = job.getInt(NumLevels, 7);
+        LineReader templateFileReader = new LineReader(getClass().getResourceAsStream("/zoom_view.html"));
+        PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath, "index.html")));
+        Text line = new Text();
+        while (templateFileReader.readLine(line) > 0) {
+          String lineStr = line.toString();
+          lineStr = lineStr.replace("#{TILE_WIDTH}", Integer.toString(tileWidth));
+          lineStr = lineStr.replace("#{TILE_HEIGHT}", Integer.toString(tileHeight));
+          lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(numLevels-1));
+          
+          htmlOut.println(lineStr);
+        }
+        templateFileReader.close();
+        htmlOut.close();
       }
     }
   }

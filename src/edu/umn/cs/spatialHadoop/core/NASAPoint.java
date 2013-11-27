@@ -55,11 +55,4 @@ public class NASAPoint extends Point {
   public String toString() {
     return super.toString() + " - "+value;
   }
-  
-  public static void main(String[] args) {
-    Point pt = new Point(-120.03958630302645,39.99999999640791);
-    Rectangle rect = new Rectangle(-123.58434601185886,34.94999999686139,-120.03958630302645,1.7976931348623157E308);
-    System.out.println(pt.isIntersected(rect));
-    System.out.println(rect.getIntersection(pt));
-  }
 }
