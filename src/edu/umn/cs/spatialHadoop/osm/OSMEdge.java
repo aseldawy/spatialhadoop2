@@ -23,6 +23,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 /**
+ * A data type used to index edges for TAREEQ project.
  * @author Ahmed Eldawy
  */
 public class OSMEdge implements Shape {

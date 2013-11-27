@@ -32,9 +32,12 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+/**
+ * A UDF for Pig to parse an XML element representing a node from OSM XML file.
+ * @author Ahmed Eldawy
+ *
+ */
 public class OSMNode extends EvalFunc<Tuple> {
-  
-  
   private DocumentBuilderFactory dbFactory;
   private DocumentBuilder dBuilder;
 

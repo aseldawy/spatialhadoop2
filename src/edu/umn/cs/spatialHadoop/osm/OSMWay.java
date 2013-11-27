@@ -34,9 +34,12 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+/**
+ * A UDF for Pig to parse an XML node representing a way in OSM XML file.
+ * @author Ahmed Eldawy
+ *
+ */
 public class OSMWay extends EvalFunc<Tuple> {
-  
-  
   private DocumentBuilderFactory dbFactory;
   private DocumentBuilder dBuilder;
 

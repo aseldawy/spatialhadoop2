@@ -335,7 +335,20 @@ public class PlotPyramid {
     }
   }
 
-  
+  /**
+   * Plot a file to a set of images in different zoom levels using a MapReduce
+   * program.
+   * @param <S> type of shapes stored in file
+   * @param inFile - Path to the input file(s)
+   * @param outFile - Path to the output file (image)
+   * @param shape - A sample object to be used for parsing input file
+   * @param tileWidth - With of each tile 
+   * @param tileHeight - Height of each tile
+   * @param vflip - Set to <code>true</code> to file the whole image vertically
+   * @param color - Color used to draw single shapes
+   * @param numLevels - Number of zoom levels to plot
+   * @throws IOException
+   */
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int tileWidth, int tileHeight, boolean vflip, Color color,
       int numLevels) throws IOException {
