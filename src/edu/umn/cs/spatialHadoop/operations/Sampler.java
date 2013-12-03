@@ -91,8 +91,8 @@ public class Sampler {
     /**Random number generator to use*/
     private Random random;
 
-    /**The key assigned to all output records*/
-    private IntWritable key;
+    /**The key assigned to all output records to reduce shuffle overhead*/
+    private IntWritable key = new IntWritable((int) (Math.random() * Integer.MAX_VALUE));
     
     /**Shape instance used to parse input lines*/
     private Shape inShape;
@@ -104,8 +104,7 @@ public class Sampler {
     public void configure(JobConf job) {
       sampleRatio = job.getFloat(SAMPLE_RATIO, 0.01f);
       random = new Random(job.getLong(RANDOM_SEED, System.currentTimeMillis()));
-      // Use one record with all keys to minimize shuffle overhead
-      key = new IntWritable(random.nextInt());
+      
       try {
         Class<? extends TextSerializable> inClass =
             job.getClass(InClass, null).asSubclass(TextSerializable.class);
