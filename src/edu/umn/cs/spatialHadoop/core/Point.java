@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.core;
 
+import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -132,6 +133,16 @@ public class Point implements Shape, Comparable<Point> {
     if (y > o.y)
       return 1;
     return 0;
+  }
+
+  @Override
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
+  		int imageHeight, boolean vflip, double scale) {
+    int imageX = (int) ((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int imageY = (int) (((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    
+    if (imageX >= 0 && imageX < imageWidth && imageY >= 0 && imageY < imageHeight)
+      g.fillRect(imageX, imageY, 1, 1);  	
   }
 
 }

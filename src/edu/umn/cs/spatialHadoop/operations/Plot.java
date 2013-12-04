@@ -43,15 +43,6 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 
-import com.esri.core.geometry.MultiPath;
-import com.esri.core.geometry.Polygon;
-import com.esri.core.geometry.Polyline;
-import com.esri.core.geometry.ogc.OGCGeometry;
-import com.esri.core.geometry.ogc.OGCGeometryCollection;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryCollection;
-import com.vividsolutions.jts.geom.LineString;
-
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
@@ -59,11 +50,7 @@ import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
-import edu.umn.cs.spatialHadoop.core.JTSShape;
-import edu.umn.cs.spatialHadoop.core.NASAPoint;
-import edu.umn.cs.spatialHadoop.core.OGCShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
-import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -202,7 +189,7 @@ public class Plot {
 
         while (values.hasNext()) {
           Shape s = values.next();
-          drawShape(graphics, s, fileMbr, imageWidth, imageHeight, vflip, scale2);
+          s.draw(graphics, fileMbr, imageWidth, imageHeight, vflip, scale2);
         }
         
         graphics.dispose();
@@ -277,169 +264,6 @@ public class Plot {
   
   static int min_value = Integer.MAX_VALUE;
   static int max_value = Integer.MIN_VALUE;
-  
-  /**
-   * Plot the given shape on the provided canvas.
-   * @param graphics - the canvas to draw on
-   * @param s - the shape to draw
-   * @param fileMbr - the MBR of the input file
-   * @param imageWidth - total image width (for the whole file)
-   * @param imageHeight - total image height (for the whole file)
-   * @param vflip - set to <code>true</code> to flip the image vertically
-   * @param scale - scale between image coordinates and shape coordinates
-   */
-  public static void drawShape(Graphics2D graphics, Shape s, Rectangle fileMbr,
-      int imageWidth, int imageHeight, boolean vflip, double scale) {
-    if (s instanceof NASAPoint) {
-      final int MinValue = 7500;
-      final int MaxValue = 16000;
-      NASAPoint pt = (NASAPoint) s;
-      int x = (int) ((pt.x - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-      int y = (int) (((vflip? -pt.y : pt.y) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-      int value = pt.value;
-      
-      if (value < min_value && value > 1000)
-        min_value = value;
-      if (value > max_value)
-        max_value = value;
-      
-      if (value > 0 && x >= 0 && x < imageWidth && y >= 0 && y < imageHeight) {
-        Color color;
-        if (value < MinValue) {
-          color = Color.BLACK;
-        } else if (value < MaxValue) {
-          float ratio = 0.78f - 0.78f * (value - MinValue) / (MaxValue - MinValue);
-          color = Color.getHSBColor(ratio, 0.5f, 1.0f);
-        } else {
-          color = Color.WHITE;
-        }
-        graphics.setColor(color);
-        graphics.fillRect(x, y, 1, 1);
-      }
-    } else if (s instanceof Point) {
-      Point pt = (Point) s;
-      int x = (int) ((pt.x - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-      int y = (int) (((vflip? -pt.y : pt.y) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-      
-      if (x >= 0 && x < imageWidth && y >= 0 && y < imageHeight)
-        graphics.fillRect(x, y, 1, 1);
-    } else if (s instanceof Rectangle) {
-      Rectangle r = (Rectangle) s;
-      int s_x1 = (int) ((r.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-      int s_y1 = (int) (((vflip? -r.y1 : r.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-      int s_x2 = (int) ((r.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-      int s_y2 = (int) (((vflip? -r.y2 : r.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-      graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
-    } else if (s instanceof OGCShape) {
-      OGCShape ogc_shape = (OGCShape) s;
-      OGCGeometry geom = ogc_shape.geom;
-      Color shape_color = graphics.getColor();
-      if (geom instanceof OGCGeometryCollection) {
-        OGCGeometryCollection geom_coll = (OGCGeometryCollection) geom;
-        for (int i = 0; i < geom_coll.numGeometries(); i++) {
-          OGCGeometry sub_geom = geom_coll.geometryN(i);
-          // Recursive call to draw each geometry
-          drawShape(graphics, new OGCShape(sub_geom), fileMbr, imageWidth, imageHeight, vflip, scale);
-        }
-      } else if (geom.getEsriGeometry() instanceof MultiPath) {
-        MultiPath path = (MultiPath) geom.getEsriGeometry();
-        double sub_geom_alpha = path.calculateLength2D() * scale;
-        int color_alpha = sub_geom_alpha > 1.0 ? 255 : (int) Math.round(sub_geom_alpha * 255);
-
-        if (color_alpha == 0)
-          return;
-
-        int[] xpoints = new int[path.getPointCount()];
-        int[] ypoints = new int[path.getPointCount()];
-        
-        for (int i = 0; i < path.getPointCount(); i++) {
-          double px = path.getPoint(i).getX();
-          double py = path.getPoint(i).getY();
-          
-          // Transform a point in the polygon to image coordinates
-          xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-          ypoints[i] = (int) Math.round(((vflip? -py : py) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-        }
-        
-        // Draw the polygon
-        graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
-        if (path instanceof Polygon)
-          graphics.drawPolygon(xpoints, ypoints, path.getPointCount());
-        else if (path instanceof Polyline)
-          graphics.drawPolyline(xpoints, ypoints, path.getPointCount());
-      }
-    } else if (s instanceof JTSShape) {
-      JTSShape jts_shape = (JTSShape) s;
-      Geometry geom = jts_shape.geom;
-      Color shape_color = graphics.getColor();
-      
-      drawJTSShape(graphics, geom, fileMbr, imageWidth, imageHeight, vflip, scale,
-          shape_color);
-    } else {
-      LOG.warn("Cannot draw a shape of type: "+s.getClass());
-      Rectangle r = s.getMBR();
-      int s_x1 = (int) ((r.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-      int s_y1 = (int) ((r.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-      int s_x2 = (int) (((r.x2) - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-      int s_y2 = (int) (((r.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-      if (s_x1 >= 0 && s_x1 < imageWidth && s_y1 >= 0 && s_y1 < imageHeight)
-        graphics.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
-    }
-  }
-
-  /**
-   * Plots a Geometry from the library JTS into the given image.
-   * @param graphics
-   * @param geom
-   * @param fileMbr
-   * @param imageWidth
-   * @param imageHeight
-   * @param scale
-   * @param shape_color
-   */
-  private static void drawJTSShape(Graphics2D graphics, Geometry geom,
-      Rectangle fileMbr, int imageWidth, int imageHeight, boolean vflip,
-      double scale, Color shape_color) {
-    if (geom instanceof GeometryCollection) {
-      GeometryCollection geom_coll = (GeometryCollection) geom;
-      for (int i = 0; i < geom_coll.getNumGeometries(); i++) {
-        Geometry sub_geom = geom_coll.getGeometryN(i);
-        // Recursive call to draw each geometry
-        drawJTSShape(graphics, sub_geom, fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
-      }
-    } else if (geom instanceof com.vividsolutions.jts.geom.Polygon) {
-      com.vividsolutions.jts.geom.Polygon poly = (com.vividsolutions.jts.geom.Polygon) geom;
-
-      for (int i = 0; i < poly.getNumInteriorRing(); i++) {
-        LineString ring = poly.getInteriorRingN(i);
-        drawJTSShape(graphics, ring, fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
-      }
-      
-      drawJTSShape(graphics, poly.getExteriorRing(), fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
-    } else if (geom instanceof LineString) {
-      LineString line = (LineString) geom;
-      double geom_alpha = line.getLength() * scale;
-      int color_alpha = geom_alpha > 1.0 ? 255 : (int) Math.round(geom_alpha * 255);
-      if (color_alpha == 0)
-        return;
-      
-      int[] xpoints = new int[line.getNumPoints()];
-      int[] ypoints = new int[line.getNumPoints()];
-
-      for (int i = 0; i < xpoints.length; i++) {
-        double px = line.getPointN(i).getX();
-        double py = line.getPointN(i).getY();
-        
-        // Transform a point in the polygon to image coordinates
-        xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        ypoints[i] = (int) Math.round(((vflip? -py : py) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-      }
-      
-      // Draw the polygon
-      graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
-      graphics.drawPolyline(xpoints, ypoints, xpoints.length);
-    }
-  }
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, boolean vflip, Color color, boolean showBorders,
@@ -557,7 +381,7 @@ public class Plot {
     
     Rectangle cell = reader.createKey();
     while (reader.next(cell, shape)) {
-      drawShape(graphics, shape, fileMbr, width, height, vflip, scale2);
+//      shape.draw(graphics, fileMbr, width, height, vflip, scale2);
     }
     
     reader.close();
@@ -702,7 +526,7 @@ public class Plot {
     
     Color color = cla.getColor();
 
-    plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, showBlockCount, showRecordCount);
+    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, showBlockCount, showRecordCount);
   }
 
 }

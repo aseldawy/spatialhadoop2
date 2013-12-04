@@ -12,6 +12,8 @@
  */
 package edu.umn.cs.spatialHadoop.core;
 
+import java.awt.Graphics;
+
 import org.apache.hadoop.io.Writable;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
@@ -49,4 +51,15 @@ public interface Shape extends Writable, Cloneable, TextSerializable {
    * @throws CloneNotSupportedException
    */
   public Shape clone();
+  
+  /**
+   * Draws a shape to the given graphics.
+   * @param g - the graphics or canvas to draw to
+   * @param fileMBR - the MBR of the file in which the shape is contained
+   * @param imageWidth - width of the image to draw
+   * @param imageHeight - height of the image to draw
+   * @param vflip - whether the generated image is flipped vertically or not
+   * @param scale - the scale used to convert shape coordinates to image coordinates
+   */
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth, int imageHeight, boolean vflip, double scale);
 }

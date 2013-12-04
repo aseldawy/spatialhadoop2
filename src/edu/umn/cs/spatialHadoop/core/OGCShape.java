@@ -12,6 +12,8 @@
  */
 package edu.umn.cs.spatialHadoop.core;
 
+import java.awt.Color;
+import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -22,6 +24,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.Text;
 
+import com.esri.core.geometry.MultiPath;
+import com.esri.core.geometry.Polygon;
+import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
 import com.esri.core.geometry.ogc.OGCGeometry;
 import com.esri.core.geometry.ogc.OGCGeometryCollection;
@@ -280,5 +285,46 @@ public class OGCShape implements Shape {
   @Override
   public String toString() {
     return super.toString()+","+extra;
+  }
+  
+  @Override
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
+      int imageHeight, boolean vflip, double scale) {
+    OGCGeometry geom = this.geom;
+    Color shape_color = g.getColor();
+    if (geom instanceof OGCGeometryCollection) {
+      OGCGeometryCollection geom_coll = (OGCGeometryCollection) geom;
+      for (int i = 0; i < geom_coll.numGeometries(); i++) {
+        OGCGeometry sub_geom = geom_coll.geometryN(i);
+        // Recursive call to draw each geometry
+        new OGCShape(sub_geom).draw(g, fileMBR, imageWidth, imageHeight, vflip, scale);
+      }
+    } else if (geom.getEsriGeometry() instanceof MultiPath) {
+      MultiPath path = (MultiPath) geom.getEsriGeometry();
+      double sub_geom_alpha = path.calculateLength2D() * scale;
+      int color_alpha = sub_geom_alpha > 1.0 ? 255 : (int) Math.round(sub_geom_alpha * 255);
+
+      if (color_alpha == 0)
+        return;
+
+      int[] xpoints = new int[path.getPointCount()];
+      int[] ypoints = new int[path.getPointCount()];
+      
+      for (int i = 0; i < path.getPointCount(); i++) {
+        double px = path.getPoint(i).getX();
+        double py = path.getPoint(i).getY();
+        
+        // Transform a point in the polygon to image coordinates
+        xpoints[i] = (int) Math.round((px - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+        ypoints[i] = (int) Math.round(((vflip? -py : py) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+      }
+      
+      // Draw the polygon
+      g.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+      if (path instanceof Polygon)
+        g.drawPolygon(xpoints, ypoints, path.getPointCount());
+      else if (path instanceof Polyline)
+        g.drawPolyline(xpoints, ypoints, path.getPointCount());
+    }
   }
 }

@@ -255,7 +255,7 @@ public class PlotPyramid {
         
         while (values.hasNext()) {
           Shape s = values.next();
-          Plot.drawShape(graphics, s, tileMBR, tileWidth, tileHeight, vflip, scale2);
+          s.draw(graphics, tileMBR, tileWidth, tileHeight, vflip, scale2);
         }
         
         graphics.dispose();

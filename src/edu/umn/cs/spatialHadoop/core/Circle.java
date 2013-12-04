@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.core;
 
+import java.awt.Graphics;
 import java.awt.geom.Arc2D;
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -129,5 +130,11 @@ public class Circle extends Arc2D.Double implements Shape {
   
   public Circle clone() {
     return new Circle(getCenterX(), getCenterY(), getWidth() / 2);
+  }
+  
+  @Override
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
+      int imageHeight, boolean vflip, double scale) {
+    throw new RuntimeException("Not implemented yet");
   }
 }

@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.core;
 
+import java.awt.Graphics;
 import java.awt.geom.Rectangle2D;
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -122,4 +123,9 @@ public class Polygon extends java.awt.Polygon implements Shape {
     return new Polygon(xpoints, ypoints, npoints);
   }
 
+  @Override
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
+      int imageHeight, boolean vflip, double scale) {
+    throw new RuntimeException("Not implemented yet");
+  }
 }
