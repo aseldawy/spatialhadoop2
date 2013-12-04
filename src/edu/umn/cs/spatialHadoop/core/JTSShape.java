@@ -12,6 +12,9 @@
  */
 package edu.umn.cs.spatialHadoop.core;
 
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -22,6 +25,7 @@ import org.apache.hadoop.io.Text;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.Polygon;
 import com.vividsolutions.jts.io.ParseException;
@@ -244,5 +248,70 @@ public class JTSShape implements Shape {
     String str = "POLYGON ((-78.647906 35.31423899999999, -78.647785 35.31423899999999, -78.647785 35.314638, -78.647906 35.314638, -78.647906 35.31423899999999))";
     Geometry read = new WKTReader().read(str);
     System.out.println(read.toText());
+  }
+  
+  @Override
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
+      int imageHeight, boolean vflip, double scale) {
+    Geometry geom = this.geom;
+    Color shape_color = g.getColor();
+    
+    drawJTSShape(g, geom, fileMBR, imageWidth, imageHeight, vflip, scale,
+        shape_color);
+    
+  }
+
+  /**
+   * Plots a Geometry from the library JTS into the given image.
+   * @param graphics
+   * @param geom
+   * @param fileMbr
+   * @param imageWidth
+   * @param imageHeight
+   * @param scale
+   * @param shape_color
+   */
+  private static void drawJTSShape(Graphics graphics, Geometry geom,
+      Rectangle fileMbr, int imageWidth, int imageHeight, boolean vflip,
+      double scale, Color shape_color) {
+    if (geom instanceof GeometryCollection) {
+      GeometryCollection geom_coll = (GeometryCollection) geom;
+      for (int i = 0; i < geom_coll.getNumGeometries(); i++) {
+        Geometry sub_geom = geom_coll.getGeometryN(i);
+        // Recursive call to draw each geometry
+        drawJTSShape(graphics, sub_geom, fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
+      }
+    } else if (geom instanceof com.vividsolutions.jts.geom.Polygon) {
+      com.vividsolutions.jts.geom.Polygon poly = (com.vividsolutions.jts.geom.Polygon) geom;
+
+      for (int i = 0; i < poly.getNumInteriorRing(); i++) {
+        LineString ring = poly.getInteriorRingN(i);
+        drawJTSShape(graphics, ring, fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
+      }
+      
+      drawJTSShape(graphics, poly.getExteriorRing(), fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
+    } else if (geom instanceof LineString) {
+      LineString line = (LineString) geom;
+      double geom_alpha = line.getLength() * scale;
+      int color_alpha = geom_alpha > 1.0 ? 255 : (int) Math.round(geom_alpha * 255);
+      if (color_alpha == 0)
+        return;
+      
+      int[] xpoints = new int[line.getNumPoints()];
+      int[] ypoints = new int[line.getNumPoints()];
+
+      for (int i = 0; i < xpoints.length; i++) {
+        double px = line.getPointN(i).getX();
+        double py = line.getPointN(i).getY();
+        
+        // Transform a point in the polygon to image coordinates
+        xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        ypoints[i] = (int) Math.round(((vflip? -py : py) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+      }
+      
+      // Draw the polygon
+      graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+      graphics.drawPolyline(xpoints, ypoints, xpoints.length);
+    }
   }
 }

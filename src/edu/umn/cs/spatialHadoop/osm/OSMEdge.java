@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.osm;
 
+import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -135,5 +136,15 @@ public class OSMEdge implements Shape {
     c.wayId = this.wayId;
     c.tags = this.tags;
     return c;
+  }
+  
+  @Override
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
+      int imageHeight, boolean vflip, double scale) {
+    int x1 = (int) ((this.lon1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int y1 = (int) (((vflip? -this.lat1 : this.lat1) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int x2 = (int) ((this.lon2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int y2 = (int) (((vflip? -this.lat2 : this.lat2) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    g.drawLine(x1, y1, x2, y2);
   }
 }

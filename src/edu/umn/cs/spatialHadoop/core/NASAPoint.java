@@ -1,5 +1,7 @@
 package edu.umn.cs.spatialHadoop.core;
 
+import java.awt.Color;
+import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -54,5 +56,28 @@ public class NASAPoint extends Point {
   @Override
   public String toString() {
     return super.toString() + " - "+value;
+  }
+  
+  @Override
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
+      int imageHeight, boolean vflip, double scale) {
+    final int MinValue = 7500;
+    final int MaxValue = 16000;
+    int imageX = (int) ((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int imageY = (int) (((vflip? this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    
+    if (value > 0 && imageX >= 0 && imageX < imageWidth && imageY >= 0 && imageY < imageHeight) {
+      Color color;
+      if (value < MinValue) {
+        color = Color.BLACK;
+      } else if (value < MaxValue) {
+        float ratio = 0.78f - 0.78f * (value - MinValue) / (MaxValue - MinValue);
+        color = Color.getHSBColor(ratio, 0.5f, 1.0f);
+      } else {
+        color = Color.WHITE;
+      }
+      g.setColor(color);
+      g.fillRect(imageX, imageY, 1, 1);
+    }
   }
 }
