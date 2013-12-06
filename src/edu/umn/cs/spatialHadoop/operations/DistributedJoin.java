@@ -593,8 +593,8 @@ public class DistributedJoin {
     cost_without_repartition = gIndexes[0] != null && gIndexes[1] != null ?
         GlobalIndex.spatialJoin(gIndexes[0], gIndexes[1], null) :
         (numBlocks[0] * numBlocks[1]);
-    // Total cost = Cost of repartition (2 * numBlocks[0]) +
-    //    cost of join (numBlocks[0] + numBlocks[1])
+    // Total cost = Cost of repartition (=== 2 * numBlocks[0]) +
+    //    cost of join (=== numBlocks[0] + numBlocks[1])
     cost_with_repartition = numBlocks[0] * 3 + numBlocks[1];
     LOG.info("Cost with repartition is estimated to "+cost_with_repartition);
     LOG.info("Cost without repartition is estimated to "+cost_without_repartition);
