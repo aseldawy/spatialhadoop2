@@ -889,8 +889,6 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
   
   /**
    * k nearest neighbor query
-   * Note: Current algorithm is approximate just for simplicity. Writing an exact
-   * algorithm is on our TODO list
    * @param qx
    * @param qy
    * @param k

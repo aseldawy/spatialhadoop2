@@ -17,6 +17,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.Text;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -28,6 +30,8 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * @author Ahmed Eldawy
  */
 public class OSMEdge implements Shape {
+  private static final Log LOG = LogFactory.getLog(OSMEdge.class);
+  
   public long edgeId;
   public long nodeId1;
   public double lat1, lon1;

@@ -381,7 +381,7 @@ public class Plot {
     
     Rectangle cell = reader.createKey();
     while (reader.next(cell, shape)) {
-//      shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+      shape.draw(graphics, fileMbr, width, height, vflip, scale2);
     }
     
     reader.close();
