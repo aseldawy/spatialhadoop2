@@ -341,17 +341,17 @@ public class DistributedJoin {
     int largest_partitioned_file = -1;
     long largest_size = 0;
     
-    for (int i = 0; i < files.length; i++) {
-      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, files[i]);
+    for (int i_file = 0; i_file < files.length; i_file++) {
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, files[i_file]);
       if (gindex != null) {
         // Compute total size (all files in directory)
         long total_size = 0;
         for (Partition p : gindex) {
-          Path file = new Path(files[i], p.filename);
+          Path file = new Path(files[i_file], p.filename);
           total_size += fs.getFileStatus(file).getLen();
         }
         if (total_size > largest_size) {
-          largest_partitioned_file = i;
+          largest_partitioned_file = i_file;
           largest_size = total_size;
         }
       }
@@ -551,7 +551,7 @@ public class DistributedJoin {
     }
     
     // Sort files by length (size)
-    IndexedSortable filesSortable = new IndexedSortable() {
+    IndexedSortable filesBySize = new IndexedSortable() {
       @Override
       public void swap(int i, int j) {
         Path tmp1 = inputFiles[i];
@@ -569,12 +569,25 @@ public class DistributedJoin {
       }
     };
     
-    new QuickSort().sort(filesSortable, 0, inputFiles.length);
+    new QuickSort().sort(filesBySize, 0, inputFiles.length);
     GlobalIndex<Partition>[] gIndexes = new GlobalIndex[fStatus.length];
     int[] numBlocks = new int[fStatus.length];
     for (int i_file = 0; i_file < fStatus.length; i_file++) {
       gIndexes[i_file] = SpatialSite.getGlobalIndex(outFs, fStatus[i_file].getPath());
-      numBlocks[i_file] = outFs.getFileBlockLocations(fStatus[i_file], 0, fStatus[i_file].getLen()).length;
+      if (gIndexes[i_file] != null) {
+        // Number of blocks is equal to number of partitions in global index
+        numBlocks[i_file] = gIndexes[i_file].size();
+      } else if (fStatus[i_file].isDir()) {
+        // Add up number of file system blocks in all subfiles of this directory
+        numBlocks[i_file] = 0;
+        FileStatus[] subfiles = outFs.listStatus(inputFiles[i_file], SpatialSite.NonHiddenFileFilter);
+        for (FileStatus subfile : subfiles) {
+          numBlocks[i_file] += outFs.getFileBlockLocations(subfile, 0, subfile.getLen()).length;
+        }
+      } else {
+        // Number of file system blocks in input file
+        numBlocks[i_file] = outFs.getFileBlockLocations(fStatus[i_file], 0, fStatus[i_file].getLen()).length;
+      }
     }
     
     cost_without_repartition = gIndexes[0] != null && gIndexes[1] != null ?

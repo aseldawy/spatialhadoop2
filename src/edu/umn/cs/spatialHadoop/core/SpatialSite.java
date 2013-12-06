@@ -51,7 +51,7 @@ public class SpatialSite {
    * A filter that selects visible files and filters out hidden files.
    * Hidden files are the ones with a names starting in '.' or '_'
    */
-  public static final PathFilter HiddenFileFilter = new PathFilter(){
+  public static final PathFilter NonHiddenFileFilter = new PathFilter(){
     public boolean accept(Path p){
       String name = p.getName(); 
       return !name.startsWith("_") && !name.startsWith("."); 
