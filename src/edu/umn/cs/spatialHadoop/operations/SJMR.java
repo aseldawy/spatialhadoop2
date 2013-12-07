@@ -135,7 +135,11 @@ public class SJMR {
       Text tempText = new Text(value);
       outputValue.text = value;
       shape.fromText(tempText);
-      java.awt.Rectangle cells = gridInfo.getOverlappingCells(shape.getMBR());
+      Rectangle shapeMBR = shape.getMBR();
+      if (shapeMBR == null)
+        return;
+      
+      java.awt.Rectangle cells = gridInfo.getOverlappingCells(shapeMBR);
       for (int col = cells.x; col < cells.x + cells.width; col++) {
         for (int row = cells.y; row < cells.y + cells.height; row++) {
           cellId.set(row * gridInfo.columns + col + 1);
