@@ -110,7 +110,7 @@ public class Repartition {
       // doesn't get send to output from all partitions
       if (!cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
         for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
-          if (cellInfos[cellIndex].isIntersected(shape)) {
+          if (cellInfos[cellIndex].isIntersected(shape_mbr)) {
             cellId.set((int) cellInfos[cellIndex].cellId);
             output.collect(cellId, shape);
           }
