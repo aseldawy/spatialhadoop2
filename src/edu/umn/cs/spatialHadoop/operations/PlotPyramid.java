@@ -286,7 +286,7 @@ public class PlotPyramid {
       FileSystem outFs = outPath.getFileSystem(job);
 
       // Collect all output folders
-      FileStatus[] reducesOut = outFs.listStatus(outPath, SpatialSite.HiddenFileFilter);
+      FileStatus[] reducesOut = outFs.listStatus(outPath, SpatialSite.NonHiddenFileFilter);
       
       if (reducesOut.length == 0) {
         LOG.warn("No output files were written by reducers");
@@ -295,7 +295,7 @@ public class PlotPyramid {
           if (outFs.isFile(reduceOut.getPath()))
             LOG.error("Output of each reducer should be a folder");
           FileStatus[] imageFiles = outFs.listStatus(reduceOut.getPath(),
-              SpatialSite.HiddenFileFilter);
+              SpatialSite.NonHiddenFileFilter);
           for (FileStatus imageFile : imageFiles) {
             outFs.rename(imageFile.getPath(), outPath);
           }

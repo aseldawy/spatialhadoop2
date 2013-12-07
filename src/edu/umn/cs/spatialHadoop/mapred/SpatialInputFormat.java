@@ -100,7 +100,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       final List<FileStatus> result, BlockFilter filter) throws IOException {
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, dir);
     if (gindex == null) {
-      FileStatus[] listStatus = fs.listStatus(dir, SpatialSite.HiddenFileFilter);
+      FileStatus[] listStatus = fs.listStatus(dir, SpatialSite.NonHiddenFileFilter);
       // Add all files under this directory
       for (FileStatus status : listStatus) {
         if (status.isDir()) {
