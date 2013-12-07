@@ -395,7 +395,7 @@ public class DistributedJoin {
     else if (!isReplicated && isCompact)
       sindex = "rtree";
     else
-      throw new RuntimeException("Unknown index  at: "+files[1-file_to_repartition]);
+      throw new RuntimeException("Unknown index at: "+files[1-file_to_repartition]);
     
     Repartition.repartitionMapReduce(files[file_to_repartition],
         partitioned_file, stockShape, 0, cells, sindex, true);

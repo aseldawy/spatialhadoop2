@@ -98,7 +98,7 @@ public class SJMR {
    */
   public static class SJMRMap extends MapReduceBase
   implements
-  Mapper<CellInfo, Text, IntWritable, IndexedText> {
+  Mapper<Rectangle, Text, IntWritable, IndexedText> {
     /**List of cells used by the mapper*/
     private Shape shape;
     private IndexedText outputValue = new IndexedText();
@@ -119,7 +119,7 @@ public class SJMR {
     }
 
     @Override
-    public void map(CellInfo dummy, Text value,
+    public void map(Rectangle dummy, Text value,
         OutputCollector<IntWritable, IndexedText> output,
         Reporter reporter) throws IOException {
       if (reporter.getInputSplit() != currentSplit) {

@@ -20,7 +20,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 
-import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 
@@ -31,13 +30,13 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  *
  * @param <S>
  */
-public class ShapeLineInputFormat extends SpatialInputFormat<CellInfo, Text> {
+public class ShapeLineInputFormat extends SpatialInputFormat<Rectangle, Text> {
   
   @Override
-  public RecordReader<CellInfo, Text> getRecordReader(InputSplit split,
+  public RecordReader<Rectangle, Text> getRecordReader(InputSplit split,
       JobConf job, Reporter reporter) throws IOException {
     reporter.setStatus(split.toString());
-    this.rrClass = (Class<? extends RecordReader<Rectangle, Text>>) ShapeLineRecordReader.class;
+    this.rrClass = ShapeLineRecordReader.class;
     return super.getRecordReader(split, job, reporter);
   }
 }
