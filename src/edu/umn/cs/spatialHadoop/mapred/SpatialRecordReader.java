@@ -328,7 +328,14 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
         
         if (skip_another_line_from_stream) {
           // Didn't find an EOL in the buffer, need to skip it from the stream
-          pos += lineReader.readLine(tempLine, 0, (int)(end - pos));
+          pos += lineReader.readLine(tempLine, Integer.MAX_VALUE, (int)(end - pos));
+          if (pos >= end) {
+            // Special case when the whole split is in the middle of a line
+            // Skip the split
+            // Increase position beyond end to ensure the next call to
+            // nextLine would return false
+            pos++;
+          }
         }
       }
     }

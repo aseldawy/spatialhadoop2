@@ -180,7 +180,7 @@ public class OGCShape implements Shape {
         byte[] binary = hexToBytes(str);
         geom = OGCGeometry.fromBinary(ByteBuffer.wrap(binary));
       } catch (RuntimeException e1) {
-        throw new RuntimeException("Cannot parse the shape: "+str);
+        throw new RuntimeException("Cannot parse the shape: "+str, e1);
       }
     }
     return geom;
@@ -284,7 +284,7 @@ public class OGCShape implements Shape {
   
   @Override
   public String toString() {
-    return super.toString()+","+extra;
+    return geom.asText()+","+extra;
   }
   
   @Override

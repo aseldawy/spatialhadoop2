@@ -102,11 +102,13 @@ public class DistributedJoin {
           ArrayList<Shape> r = new ArrayList<Shape>();
           ArrayList<Shape> s = new ArrayList<Shape>();
           for (Shape shape : (Shape[])((ArrayWritable) value.first).get()) {
-            if (mapperMBR.isIntersected(shape))
+            Rectangle mbr = shape.getMBR();
+            if (mbr != null && mapperMBR.isIntersected(mbr))
               r.add(shape);
           }
           for (Shape shape : (Shape[])((ArrayWritable) value.second).get()) {
-            if (mapperMBR.isIntersected(shape))
+            Rectangle mbr = shape.getMBR();
+            if (mbr != null && mapperMBR.isIntersected(mbr))
               s.add(shape);
           }
           SpatialAlgorithms.SpatialJoin_planeSweep(r, s, new ResultCollector2<Shape, Shape>() {
@@ -124,23 +126,29 @@ public class DistributedJoin {
             }
           });
         } else {
-          ArrayWritable ar1 = (ArrayWritable) value.first;
-          ArrayWritable ar2 = (ArrayWritable) value.second;
-          SpatialAlgorithms.SpatialJoin_planeSweep(
-              (Shape[])ar1.get(), (Shape[])ar2.get(),
-              new ResultCollector2<Shape, Shape>() {
-                @Override
-                public void collect(Shape x, Shape y) {
-                  try {
-                    // No need to do reference point technique because input
-                    // blocks are not indexed (mapperMBR is null)
-                    output.collect(x, y);
-                  } catch (IOException e) {
-                    e.printStackTrace();
-                  }
-                }
+
+          ArrayList<Shape> r = new ArrayList<Shape>();
+          ArrayList<Shape> s = new ArrayList<Shape>();
+          // Copy non-empty records
+          for (Shape shape : (Shape[])((ArrayWritable) value.first).get()) {
+            if (shape.getMBR() != null)
+              r.add(shape);
+          }
+          for (Shape shape : (Shape[])((ArrayWritable) value.second).get()) {
+            if (shape.getMBR() != null)
+              s.add(shape);
+          }
+
+          SpatialAlgorithms.SpatialJoin_planeSweep(r, s, new ResultCollector2<Shape, Shape>() {
+            @Override
+            public void collect(Shape r, Shape s) {
+              try {
+                output.collect(r, s);
+              } catch (IOException e) {
+                e.printStackTrace();
               }
-              );
+            }
+          });
         }
       } else if (value.first instanceof RTree && value.second instanceof RTree) {
         // Join two R-trees
@@ -198,11 +206,13 @@ public class DistributedJoin {
           ArrayList<Shape> r = new ArrayList<Shape>();
           ArrayList<Shape> s = new ArrayList<Shape>();
           for (Shape shape : (Shape[])((ArrayWritable) value.first).get()) {
-            if (mapperMBR.isIntersected(shape))
+            Rectangle mbr = shape.getMBR();
+            if (mbr != null && mapperMBR.isIntersected(mbr))
               r.add(shape);
           }
           for (Shape shape : (Shape[])((ArrayWritable) value.second).get()) {
-            if (mapperMBR.isIntersected(shape))
+            Rectangle mbr = shape.getMBR();
+            if (mbr != null && mapperMBR.isIntersected(mbr))
               s.add(shape);
           }
           SpatialAlgorithms.SpatialJoin_planeSweep(r, s, new ResultCollector2<Shape, Shape>() {
@@ -216,23 +226,28 @@ public class DistributedJoin {
             }
           });
         } else {
-          ArrayWritable ar1 = (ArrayWritable) value.first;
-          ArrayWritable ar2 = (ArrayWritable) value.second;
-          SpatialAlgorithms.SpatialJoin_planeSweep(
-              (Shape[])ar1.get(), (Shape[])ar2.get(),
-              new ResultCollector2<Shape, Shape>() {
-                @Override
-                public void collect(Shape x, Shape y) {
-                  try {
-                    // No need to do reference point technique because input
-                    // blocks are not indexed (mapperMBR is null)
-                    output.collect(x, y);
-                  } catch (IOException e) {
-                    e.printStackTrace();
-                  }
-                }
+          ArrayList<Shape> r = new ArrayList<Shape>();
+          ArrayList<Shape> s = new ArrayList<Shape>();
+          // Copy non-empty records
+          for (Shape shape : (Shape[])((ArrayWritable) value.first).get()) {
+            if (shape.getMBR() != null)
+              r.add(shape);
+          }
+          for (Shape shape : (Shape[])((ArrayWritable) value.second).get()) {
+            if (shape.getMBR() != null)
+              s.add(shape);
+          }
+
+          SpatialAlgorithms.SpatialJoin_planeSweep(r, s, new ResultCollector2<Shape, Shape>() {
+            @Override
+            public void collect(Shape r, Shape s) {
+              try {
+                output.collect(r, s);
+              } catch (IOException e) {
+                e.printStackTrace();
               }
-              );
+            }
+          });
         }
       } else if (value.first instanceof RTree && value.second instanceof RTree) {
         // Join two R-trees
