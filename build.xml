@@ -55,7 +55,7 @@
     <mkdir dir="${dist}/conf"/>
 
     <!-- Put everything in ${build} into the spatialhadoop-${DSTAMP}.jar file -->
-    <jar jarfile="${dist}/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
+    <jar jarfile="${dist}/lib/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
     <copy file="LICENSE.txt" todir="${dist}"/>
     <copy file="README.md" todir="${dist}"/>
     <copy todir="${dist}/lib">
@@ -68,8 +68,13 @@
       <fileset dir="lib/hdflib"/>
     </copy>
     <copy file="${res}/conf/spatial-site.xml" todir="${dist}/conf"/>
-    <copy todir="${dist}/webapps">
-      <fileset dir="webapps"/>
+
+    <copy todir="${dist}/bin">
+      <fileset dir="${res}/bin"/>
+    </copy>
+    
+  	<copy todir="${dist}/webapps">
+      <fileset dir="${res}/webapps"/>
     </copy>
   </target>
   

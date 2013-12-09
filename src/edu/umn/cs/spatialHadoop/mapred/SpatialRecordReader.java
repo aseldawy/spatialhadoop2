@@ -303,7 +303,6 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       // For globally indexed blocks, never skip the first line in the block
       boolean skipFirstLine = getPos() != 0;
       if (skipFirstLine) {
-        LOG.info("Skip line");
         // Search for the first occurrence of a new line
         int eol = RTree.skipToEOL(buffer, 0);
         // If we found an end of line in the buffer, we do not need to skip
