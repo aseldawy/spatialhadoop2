@@ -90,6 +90,16 @@
          excludes="package package/*"
          compression="gzip"/>
   </target>
+  
+	<target name="install" depends="package"
+	    description="Install SpatialHadoop on an existing Hadoop installation">
+	  <!-- Extract the constructed package file (tar) in the destination directory -->
+		<untar src="${dist}/package/spatialhadoop-${version}.tar.gz"
+           dest="${hadoop.dir}" compression="gzip"/>
+  </target>
+
+	<!-- Build targets for Hadoop 2 -->
+	
 
   <target name="dist2" depends="compile"
         description="generate a distribution for Hadoop 2" >
@@ -122,9 +132,9 @@
     </copy>
   </target>
 
-	
+  
   <target name="package2" depends="dist2"
-      description="create a package files for the distribution">
+    description="create a package files for the distribution for Hadoop 2">
     <!-- Create the package directory -->
     <mkdir dir="${dist2}/package"/>
     
@@ -134,41 +144,16 @@
          excludes="package package/*"
          compression="gzip"/>
   </target>
-  
-	<target name="install" depends="package"
-	    description="Changes an existing Hadoop binary archive to include SpatialHadoop">
-		<!-- Create a temporary directory for the archive -->
-		<mkdir dir="hadoop-temp"/>
-		
-		<!-- Extract the clean Hadoop archive into the temporary directory -->
-		<untar src="${hadoop.archive}" dest="hadoop-temp" compression="gzip"/>
 
-		<basename file="${hadoop.archive}" property="hadoop_base_name-i" suffix=".tar.gz"/>
-		<basename file="${hadoop_base_name-i}" property="hadoop_base_name" suffix="-bin"/>
 
-		<!-- Rename the directory to include SpatialHadoop name and version -->
-		<property name="shadoop_ext_name" value="spatialhadoop-${version}-${hadoop_base_name}"/>
-		<move tofile="hadoop-temp/${shadoop_ext_name}">
-			<dirset dir="hadoop-temp">
-				<include name="*"/>
-			</dirset>
-		</move>
-    
-    <!-- Copy SpatialHadoop distribution files into that directory -->
-    <untar src="${dist}/package/spatialhadoop-${version}.tar.gz"
-           dest="hadoop-temp/${shadoop_ext_name}" compression="gzip"/>
-    
-    
-    <!-- Build a new archive for the directory -->
-    <tar destfile="${dist}/package/${shadoop_ext_name}.tar.gz"
-         basedir="hadoop-temp" compression="gzip"/>
-  
-    <!-- Cleanup. Remove temporary directory -->
-    <delete dir="hadoop-temp"/>
-		
-	</target>
-  
-  <target name="clean"
+  <target name="install2" depends="package2"
+    description="Install SpatialHadoop on an existing Hadoop 2 installation">
+    <!-- Extract the constructed package file (tar) in the destination directory -->
+    <untar src="${dist}/package2/spatialhadoop-${version}.tar.gz"
+           dest="${hadoop2.dir}" compression="gzip"/>
+  </target>
+
+	<target name="clean"
         description="clean up" >
     <!-- Delete the ${build} and ${dist} directory trees -->
     <delete dir="${build}"/>
