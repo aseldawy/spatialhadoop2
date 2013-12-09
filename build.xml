@@ -6,6 +6,7 @@
   <property name="doc" location="doc"/>
   <property name="build" location="bin"/>
   <property name="dist"  location="dist"/>
+  <property name="dist2"  location="dist2"/>
   <property name="version" value="2-b3"/>
   
   <path id="hdflib.path.ref">
@@ -89,8 +90,52 @@
          excludes="package package/*"
          compression="gzip"/>
   </target>
+
+  <target name="dist2" depends="compile"
+        description="generate a distribution for Hadoop 2" >
+    <!-- Create the distribution directory -->
+    <mkdir dir="${dist2}"/>
+    <mkdir dir="${dist2}/share/hadoop/common/lib"/>
+    <mkdir dir="${dist2}/etc/hadoop"/>
+
+    <!-- Put everything in ${build} into the spatialhadoop-${DSTAMP}.jar file -->
+    <jar jarfile="${dist2}/share/hadoop/common/lib/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
+    <copy file="LICENSE.txt" todir="${dist}"/>
+    <copy file="README.md" todir="${dist}"/>
+    <copy todir="${dist2}/share/hadoop/common/lib">
+      <fileset dir="lib">
+        <include name="esri-geometry-api-*.jar"/>
+        <exclude name="*sources.jar"/>
+        <exclude name="*javadoc.jar"/>
+        <include name="jts-*.jar"/>
+      </fileset>
+      <fileset dir="lib/hdflib"/>
+    </copy>
+    <copy file="${res}/conf/spatial-site.xml" todir="${dist2}/etc/hadoop"/>
+
+    <copy todir="${dist}/bin">
+      <fileset dir="${res}/bin"/>
+    </copy>
+    
+    <copy todir="${dist}/hadoop/hdfs/webapps/hdfs">
+      <fileset dir="${res}/webapps"/>
+    </copy>
+  </target>
+
 	
-	<target name="infect" depends="package"
+  <target name="package2" depends="dist2"
+      description="create a package files for the distribution">
+    <!-- Create the package directory -->
+    <mkdir dir="${dist2}/package"/>
+    
+    <!-- Build the tar file -->
+    <tar destfile="${dist2}/package/spatialhadoop-${version}-2.tar.gz"
+         basedir="${dist2}"
+         excludes="package package/*"
+         compression="gzip"/>
+  </target>
+  
+	<target name="install" depends="package"
 	    description="Changes an existing Hadoop binary archive to include SpatialHadoop">
 		<!-- Create a temporary directory for the archive -->
 		<mkdir dir="hadoop-temp"/>
@@ -128,5 +173,6 @@
     <!-- Delete the ${build} and ${dist} directory trees -->
     <delete dir="${build}"/>
     <delete dir="${dist}"/>
+    <delete dir="${dist2}"/>
   </target>
 </project>

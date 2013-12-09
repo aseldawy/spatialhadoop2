@@ -6,7 +6,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.net.NetUtils;
 
-public class JspHelper extends org.apache.hadoop.hdfs.server.namenode.JspHelper {
+public class JspSpatialHelper {
   public static String jobTrackUrl(String requestUrl, Configuration conf, RunningJob job) {
     // Create a link to the status of the running job
     String trackerAddress = conf.get("mapred.job.tracker.http.address");

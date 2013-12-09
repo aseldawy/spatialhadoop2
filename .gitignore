@@ -1,4 +1,5 @@
 bin/*
 lib/*.jar
 dist/*
+dist2/*
 /bin
