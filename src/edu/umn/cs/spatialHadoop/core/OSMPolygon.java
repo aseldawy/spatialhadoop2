@@ -62,4 +62,9 @@ public class OSMPolygon extends OGCShape {
     c.geom = this.geom;
     return c;
   }
+  
+  @Override
+  public boolean equals(Object obj) {
+    return ((OSMPolygon)obj).id == this.id;
+  }
 }

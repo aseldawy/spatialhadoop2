@@ -106,7 +106,9 @@ public class SpatialAlgorithms {
 
         while ((jj < S.size())
             && ((s = S.get(jj)).getMBR().x1 <= r.getMBR().x2)) {
-          if (r.isIntersected(s)) {
+          // Check if r and s are overlapping but not the same object
+          // for self join
+          if (r.isIntersected(s) && !r.equals(s)) {
             if (output != null)
               output.collect(r, s);
             count++;
@@ -120,7 +122,7 @@ public class SpatialAlgorithms {
 
         while ((ii < R.size())
             && ((r = R.get(ii)).getMBR().x1 <= s.getMBR().x2)) {
-          if (r.isIntersected(s)) {
+          if (r.isIntersected(s) && !r.equals(s)) {
             if (output != null)
               output.collect(r, s);
             count++;

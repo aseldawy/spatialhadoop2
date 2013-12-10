@@ -1190,7 +1190,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
               // Do Cartesian product between records to find overlapping pairs
               for (int i_r = 0; i_r < r_records.length && r_records[i_r] != null; i_r++) {
                 for (int i_s = 0; i_s < s_records.length && s_records[i_s] != null; i_s++) {
-                  if (r_records[i_r].isIntersected(s_records[i_s])) {
+                  if (r_records[i_r].isIntersected(s_records[i_s]) &&
+                      !r_records[i_r].equals(s_records[i_s])) {
                     result_count++;
                     if (output != null) {
                       output.collect((S1)r_records[i_r], (S2)s_records[i_s]);
