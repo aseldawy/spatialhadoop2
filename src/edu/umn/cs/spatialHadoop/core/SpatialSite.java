@@ -18,6 +18,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -319,30 +321,21 @@ public class SpatialSite {
     if (gindex == null)
       return null;
     
-    // Find all partitions of the given file. If two partitions overlap,
-    // we consider the union of them. This case corresponds to an R-tree
-    // index where a partition is stored as multiple R-tree. Since we compact
-    // each R-tree when it is stored, different compactions might lead to
-    // different partitions all overlapping the same area. In this case, we
-    // union them to ensure the whole area is covered without having overlaps
-    // between returned partitions.
-    
-    ArrayList<CellInfo> cellSet = new ArrayList<CellInfo>();
+    // Find all partitions of the given file. If two partitions have the same
+    // cell ID, it indicates that they are two blocks of the same cell. This
+    // means they represent one partition and should be merged together.
+    // They might have different MBRs as each block has its own MBR according
+    // to the data stored in it.
+    Map<Long, CellInfo> cells = new HashMap<Long, CellInfo>();
     for (Partition p : gindex) {
-      Rectangle r = p;
-      boolean overlapping = false;
-      for (int i = 0; i < cellSet.size(); i++) {
-        if (r.isIntersected(cellSet.get(i))) {
-          overlapping = true;
-          cellSet.get(i).expand(r);
-          r = cellSet.get(i);
-        }
-      }
-      if (overlapping == false) {
-        cellSet.add(new CellInfo(cellSet.size() + 1, p));
+      CellInfo cell = cells.get(p.cellId);
+      if (cell == null) {
+        cells.put(p.cellId, cell = new CellInfo(p));
+      } else {
+        cell.expand(p);
       }
     }
-    return cellSet.toArray(new CellInfo[cellSet.size()]);
+    return cells.values().toArray(new CellInfo[cells.size()]);
 
   }
   

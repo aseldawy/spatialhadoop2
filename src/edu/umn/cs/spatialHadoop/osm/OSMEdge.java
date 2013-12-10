@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.osm;
 
+import java.awt.Color;
 import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -142,6 +143,13 @@ public class OSMEdge implements Shape {
     return c;
   }
   
+  public double getLength() {
+    // TODO use a more accurate function that takes earth roundness into effect
+    double dlat = this.lat1 - this.lat2;
+    double dlon = this.lon1 - this.lon2;
+    return Math.sqrt(dlat*dlat + dlon*dlon);
+  }
+  
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, boolean vflip, double scale) {
@@ -149,6 +157,15 @@ public class OSMEdge implements Shape {
     int y1 = (int) (((vflip? -this.lat1 : this.lat1) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     int x2 = (int) ((this.lon2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
     int y2 = (int) (((vflip? -this.lat2 : this.lat2) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    Color shape_color = g.getColor();
+    
+    // Compute alpha to use based on edge length and image scale
+    double geom_alpha = this.getLength() * scale;
+    int color_alpha = geom_alpha > 1.0 ? 255 : (int) Math.round(geom_alpha * 255);
+    if (color_alpha == 0)
+      return;
+
+    g.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
     g.drawLine(x1, y1, x2, y2);
   }
 }

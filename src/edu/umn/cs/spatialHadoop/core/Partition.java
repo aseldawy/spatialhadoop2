@@ -18,7 +18,7 @@ import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
 
-public class Partition extends Rectangle {
+public class Partition extends CellInfo {
   /**Name of the file that contains the data*/
   public String filename;
   

@@ -65,6 +65,10 @@ public class CellInfo extends Rectangle {
       throw new RuntimeException("Invalid cell id: "+id);
   }
   
+  public CellInfo(CellInfo c) {
+    this.set(c);
+  }
+
   public void set(CellInfo c) {
     if (c == null) {
       this.cellId = 0; // Invalid number
