@@ -52,33 +52,11 @@
         description="generate the distribution" >
     <!-- Create the distribution directory -->
     <mkdir dir="${dist}"/>
-    <mkdir dir="${dist}/lib"/>
-    <mkdir dir="${dist}/conf"/>
 
     <!-- Put everything in ${build} into the spatialhadoop-${DSTAMP}.jar file -->
-    <jar jarfile="${dist}/lib/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
-    <copy file="LICENSE.txt" todir="${dist}"/>
-    <copy file="README.md" todir="${dist}"/>
-    <copy todir="${dist}/lib">
-      <fileset dir="lib">
-        <include name="esri-geometry-api-*.jar"/>
-        <exclude name="*sources.jar"/>
-        <exclude name="*javadoc.jar"/>
-        <include name="jts-*.jar"/>
-      </fileset>
-      <fileset dir="lib/hdflib"/>
-    </copy>
-    <copy file="${res}/conf/spatial-site.xml" todir="${dist}/conf"/>
-
-    <copy todir="${dist}/bin">
-      <fileset dir="${res}/bin"/>
-    </copy>
-    
-  	<copy todir="${dist}/webapps">
-      <fileset dir="${res}/webapps"/>
-    </copy>
+    <jar jarfile="${dist}/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
   </target>
-  
+
   <target name="package" depends="dist"
       description="create a package files for the distribution">
     <!-- Create the package directory -->
@@ -86,11 +64,36 @@
     
     <!-- Build the tar file -->
     <tar destfile="${dist}/package/spatialhadoop-${version}.tar.gz"
-         basedir="${dist}"
-         excludes="package package/*"
-         compression="gzip"/>
+         compression="gzip">
+      <tarfileset dir=".">
+        <include name="README.md"/>
+        <include name="LICENSE.txt"/>
+      </tarfileset>
+    	
+    	<tarfileset dir="${res}" filemode="755">
+        <include name="bin/shadoop"/>
+      </tarfileset>
+      <tarfileset dir="${res}">
+        <include name="webapps/**"/>
+    		<include name="conf/spatial-site.xml"/>
+    	</tarfileset>
+      
+    	<tarfileset dir="lib" prefix="lib/">
+        <include name="esri-geometry-api-*.jar"/>
+        <exclude name="*sources.jar"/>
+        <exclude name="*javadoc.jar"/>
+        <include name="jts-*.jar"/>
+      </tarfileset>
+
+      <tarfileset dir="${dist}" prefix="lib/">
+        <include name="spatialhadoop-*.jar"/>
+      </tarfileset>
+
+    	<tarfileset dir="lib/hdflib" prefix="lib/"/>
+    	
+    </tar>
   </target>
-  
+
 	<target name="install" depends="package"
 	    description="Install SpatialHadoop on an existing Hadoop installation">
 	  <!-- Extract the constructed package file (tar) in the destination directory -->
@@ -126,12 +129,14 @@
     <copy todir="${dist2}/bin">
       <fileset dir="${res}/bin"/>
     </copy>
+  	
+  	<!-- Make the binary file executable as copy task removes permissions --> 
+  	<chmod file="${dist2}/bin/shadoop" perm="+x"/>
     
     <copy todir="${dist2}/hadoop/hdfs/webapps/hdfs">
       <fileset dir="${res}/webapps"/>
     </copy>
   </target>
-
   
   <target name="package2" depends="dist2"
     description="create a package files for the distribution for Hadoop 2">
@@ -144,7 +149,6 @@
          excludes="package package/*"
          compression="gzip"/>
   </target>
-
 
   <target name="install2" depends="package2"
     description="Install SpatialHadoop on an existing Hadoop 2 installation">
