@@ -110,8 +110,8 @@
 
     <!-- Put everything in ${build} into the spatialhadoop-${DSTAMP}.jar file -->
     <jar jarfile="${dist2}/share/hadoop/common/lib/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
-    <copy file="LICENSE.txt" todir="${dist}"/>
-    <copy file="README.md" todir="${dist}"/>
+    <copy file="LICENSE.txt" todir="${dist2}"/>
+    <copy file="README.md" todir="${dist2}"/>
     <copy todir="${dist2}/share/hadoop/common/lib">
       <fileset dir="lib">
         <include name="esri-geometry-api-*.jar"/>
@@ -123,11 +123,11 @@
     </copy>
     <copy file="${res}/conf/spatial-site.xml" todir="${dist2}/etc/hadoop"/>
 
-    <copy todir="${dist}/bin">
+    <copy todir="${dist2}/bin">
       <fileset dir="${res}/bin"/>
     </copy>
     
-    <copy todir="${dist}/hadoop/hdfs/webapps/hdfs">
+    <copy todir="${dist2}/hadoop/hdfs/webapps/hdfs">
       <fileset dir="${res}/webapps"/>
     </copy>
   </target>
@@ -149,7 +149,7 @@
   <target name="install2" depends="package2"
     description="Install SpatialHadoop on an existing Hadoop 2 installation">
     <!-- Extract the constructed package file (tar) in the destination directory -->
-    <untar src="${dist}/package2/spatialhadoop-${version}.tar.gz"
+    <untar src="${dist2}/package/spatialhadoop-${version}-2.tar.gz"
            dest="${hadoop2.dir}" compression="gzip"/>
   </target>
 
