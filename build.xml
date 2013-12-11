@@ -90,7 +90,6 @@
       </tarfileset>
 
     	<tarfileset dir="lib/hdflib" prefix="lib/"/>
-    	
     </tar>
   </target>
 
@@ -102,53 +101,42 @@
   </target>
 
 	<!-- Build targets for Hadoop 2 -->
-	
 
-  <target name="dist2" depends="compile"
-        description="generate a distribution for Hadoop 2" >
-    <!-- Create the distribution directory -->
-    <mkdir dir="${dist2}"/>
-    <mkdir dir="${dist2}/share/hadoop/common/lib"/>
-    <mkdir dir="${dist2}/etc/hadoop"/>
-
-    <!-- Put everything in ${build} into the spatialhadoop-${DSTAMP}.jar file -->
-    <jar jarfile="${dist2}/share/hadoop/common/lib/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
-    <copy file="LICENSE.txt" todir="${dist2}"/>
-    <copy file="README.md" todir="${dist2}"/>
-    <copy todir="${dist2}/share/hadoop/common/lib">
-      <fileset dir="lib">
+	<target name="package2" depends="dist">
+    <!-- Build the tar file -->
+    <tar destfile="${dist}/package/spatialhadoop-${version}-2.tar.gz"
+         compression="gzip">
+      <tarfileset dir=".">
+        <include name="README.md"/>
+        <include name="LICENSE.txt"/>
+      </tarfileset>
+      
+      <tarfileset dir="${res}" filemode="755">
+        <include name="bin/shadoop"/>
+      </tarfileset>
+    	
+      <tarfileset dir="${res}" prefix="etc/hadoop">
+        <include name="conf/spatial-site.xml"/>
+      </tarfileset>    	
+    	
+      <tarfileset dir="${res}" prefix="hadoop/hdfs/webapps/hdfs">
+        <include name="webapps/**"/>
+      </tarfileset>
+      
+      <tarfileset dir="lib" prefix="share/hadoop/common/lib/">
         <include name="esri-geometry-api-*.jar"/>
         <exclude name="*sources.jar"/>
         <exclude name="*javadoc.jar"/>
         <include name="jts-*.jar"/>
-      </fileset>
-      <fileset dir="lib/hdflib"/>
-    </copy>
-    <copy file="${res}/conf/spatial-site.xml" todir="${dist2}/etc/hadoop"/>
+      </tarfileset>
 
-    <copy todir="${dist2}/bin">
-      <fileset dir="${res}/bin"/>
-    </copy>
-  	
-  	<!-- Make the binary file executable as copy task removes permissions --> 
-  	<chmod file="${dist2}/bin/shadoop" perm="+x"/>
-    
-    <copy todir="${dist2}/hadoop/hdfs/webapps/hdfs">
-      <fileset dir="${res}/webapps"/>
-    </copy>
-  </target>
-  
-  <target name="package2" depends="dist2"
-    description="create a package files for the distribution for Hadoop 2">
-    <!-- Create the package directory -->
-    <mkdir dir="${dist2}/package"/>
-    
-    <!-- Build the tar file -->
-    <tar destfile="${dist2}/package/spatialhadoop-${version}-2.tar.gz"
-         basedir="${dist2}"
-         excludes="package package/*"
-         compression="gzip"/>
-  </target>
+      <tarfileset dir="${dist}" prefix="share/hadoop/common/lib/">
+        <include name="spatialhadoop-*.jar"/>
+      </tarfileset>
+
+      <tarfileset dir="lib/hdflib" prefix="share/hadoop/common/lib/"/>
+    </tar>
+	</target>
 
   <target name="install2" depends="package2"
     description="Install SpatialHadoop on an existing Hadoop 2 installation">
@@ -157,8 +145,7 @@
            dest="${hadoop2.dir}" compression="gzip"/>
   </target>
 
-	<target name="clean"
-        description="clean up" >
+	<target name="clean" description="clean up" >
     <!-- Delete the ${build} and ${dist} directory trees -->
     <delete dir="${build}"/>
     <delete dir="${dist}"/>
