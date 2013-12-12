@@ -53,8 +53,22 @@
     <!-- Create the distribution directory -->
     <mkdir dir="${dist}"/>
 
-    <!-- Put everything in ${build} into the spatialhadoop-${DSTAMP}.jar file -->
-    <jar jarfile="${dist}/spatialhadoop-${version}.jar" manifest="${res}/MANIFEST.MF" basedir="${build}"/>
+    <!-- Put everything in ${build} into the spatialhadoop-${version}.jar file -->
+    <jar jarfile="${dist}/spatialhadoop-${version}.jar" basedir="${build}">
+      <manifest>
+        <attribute name="Manifest-Version" value="1.0"/>
+        <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
+      </manifest>
+  	</jar>
+
+  	<!-- For backward compatibility, provide a jar that contains just the main class-->
+    <jar jarfile="${dist}/spatialhadoop-main.jar">
+    	<fileset dir="${build}" includes="edu/umn/cs/spatialHadoop/operations/Main.class"/>
+    	<manifest>
+        <attribute name="Manifest-Version" value="1.0"/>
+        <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
+    	</manifest>
+  	</jar>
   </target>
 
   <target name="package" depends="dist"
@@ -86,7 +100,11 @@
       </tarfileset>
 
       <tarfileset dir="${dist}" prefix="lib/">
-        <include name="spatialhadoop-*.jar"/>
+        <include name="spatialhadoop-${version}.jar"/>
+      </tarfileset>
+
+      <tarfileset dir="${dist}">
+        <include name="spatialhadoop-main.jar"/>
       </tarfileset>
 
     	<tarfileset dir="lib/hdflib" prefix="lib/"/>
@@ -131,7 +149,11 @@
       </tarfileset>
 
       <tarfileset dir="${dist}" prefix="share/hadoop/common/lib/">
-        <include name="spatialhadoop-*.jar"/>
+        <include name="spatialhadoop-${version}.jar"/>
+      </tarfileset>
+
+      <tarfileset dir="${dist}">
+        <include name="spatialhadoop-main.jar"/>
       </tarfileset>
 
       <tarfileset dir="lib/hdflib" prefix="share/hadoop/common/lib/"/>
