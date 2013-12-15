@@ -39,6 +39,7 @@ import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
@@ -50,10 +51,14 @@ import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.NASADataset;
+import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.HDFInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
@@ -64,8 +69,6 @@ public class Plot {
   
   /**Whether or not to show partition borders (boundaries) in generated image*/
   private static final String ShowBorders = "plot.show_borders";
-  private static final String ShowBlockCount = "plot.show_block_count";
-  private static final String ShowRecordCount = "plot.show_record_count";
   private static final String StrokeColor = "plot.stroke_color";
   /**Flip the image vertically to correct +ve Y-axis direction*/
   private static final String VFlip = "plot.vflip";
@@ -266,8 +269,8 @@ public class Plot {
   static int max_value = Integer.MIN_VALUE;
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
-      Shape shape, int width, int height, boolean vflip, Color color, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount, boolean background)  throws IOException {
+      Shape shape, int width, int height, boolean vflip, Color color,
+      boolean showBorders, String hdfDataset, boolean background) throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
     
@@ -298,8 +301,6 @@ public class Plot {
       gridInfo.calculateCellDimensions(inFileStatus.getLen(),
           inFileStatus.getBlockSize());
       cellInfos = gridInfo.getAllCells();
-      // Doesn't make sense to show any partition information in a heap file
-      showBorders = showBlockCount = showRecordCount = false;
     } else {
       cellInfos = SpatialSite.cellsOf(inFs, inFile);
     }
@@ -319,13 +320,18 @@ public class Plot {
     ImageOutputFormat.setImageWidth(job, width);
     ImageOutputFormat.setImageHeight(job, height);
     job.setBoolean(ShowBorders, showBorders);
-    job.setBoolean(ShowBlockCount, showBlockCount);
-    job.setBoolean(ShowRecordCount, showRecordCount);
     job.setInt(StrokeColor, color.getRGB());
     job.setBoolean(VFlip, vflip);
     
     // Set input and output
-    job.setInputFormat(ShapeInputFormat.class);
+    if (hdfDataset != null) {
+      // Input is HDF
+      job.setInputFormat(HDFInputFormat.class);
+      job.set(HDFInputFormat.DatasetName, hdfDataset);
+      job.setBoolean(HDFInputFormat.SkipFillValue, true);
+    } else {
+      job.setInputFormat(ShapeInputFormat.class);
+    }
     ShapeInputFormat.addInputPath(job, inFile);
     // Set output committer which will stitch images together after all reducers
     // finish
@@ -344,27 +350,8 @@ public class Plot {
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
       S shape, int width, int height, boolean vflip, Color color,
-      boolean showBorders, boolean showBlockCount, boolean showRecordCount)
-      throws IOException {
+      boolean showBorders, String hdfDataset) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
-    Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
-    LOG.info("FileMBR: "+fileMbr);
-    if (vflip) {
-      double temp = fileMbr.y1;
-      fileMbr.y1 = -fileMbr.y2;
-      fileMbr.y2 = -temp;
-    }
-    
-    // Adjust width and height to maintain aspect ratio
-    if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
-      // Fix width and change height
-      height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
-    } else {
-      width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
-    }
-    
-    double scale2 = (double) width * height
-        / (fileMbr.getWidth() * fileMbr.getHeight());
 
     // Create an image
     BufferedImage image = new BufferedImage(width, height,
@@ -376,15 +363,53 @@ public class Plot {
     graphics.setColor(color);
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
-    ShapeRecordReader<S> reader = new ShapeRecordReader<S>(new Configuration(),
-        new FileSplit(inFile, 0, fileLength, new String[0]));
-    
-    Rectangle cell = reader.createKey();
-    while (reader.next(cell, shape)) {
-      shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+    if (hdfDataset != null) {
+      RecordReader<NASADataset, NASAPoint> reader = new HDFRecordReader(new Configuration(), new FileSplit(inFile, 0, fileLength, new String[0]), hdfDataset, true);
+      NASADataset dataset = reader.createKey();
+        Rectangle fileMbr = dataset.getMBR();
+      LOG.info("FileMBR: "+fileMbr);
+      if (vflip) {
+        double temp = fileMbr.y1;
+        fileMbr.y1 = -fileMbr.y2;
+        fileMbr.y2 = -temp;
+      }
+      
+      NASAPoint point = (NASAPoint) shape;
+      while (reader.next(dataset, point)) {
+        point.draw(graphics, fileMbr, width, height, vflip, 0.0);
+      }
+      reader.close();
+    }
+    else {
+      // Determine file MBR to be able to scale shapes correctly
+      Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
+      LOG.info("FileMBR: "+fileMbr);
+      if (vflip) {
+        double temp = fileMbr.y1;
+        fileMbr.y1 = -fileMbr.y2;
+        fileMbr.y2 = -temp;
+      }
+      
+      // Adjust width and height to maintain aspect ratio
+      if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
+        // Fix width and change height
+        height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
+      } else {
+        width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
+      }
+      
+      double scale2 = (double) width * height
+          / (fileMbr.getWidth() * fileMbr.getHeight());
+      
+      ShapeRecordReader<S> reader = new ShapeRecordReader<S>(new Configuration(),
+          new FileSplit(inFile, 0, fileLength, new String[0]));
+      Rectangle cell = reader.createKey();
+      while (reader.next(cell, shape)) {
+        shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+      }
+      reader.close();
     }
     
-    reader.close();
     graphics.dispose();
     FileSystem outFs = outFile.getFileSystem(new Configuration());
     OutputStream out = outFs.create(outFile, true);
@@ -394,13 +419,13 @@ public class Plot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
       int width, int height, boolean vflip, Color color, boolean showBorders,
-      boolean showBlockCount, boolean showRecordCount) throws IOException {
+      String hdfDataset) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     if (inFStatus.isDir() || inFStatus.getLen() > 100 * inFStatus.getBlockSize()) {
-      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, showBlockCount, showRecordCount, false);
+      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, false);
     } else {
-      plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, showBlockCount, showRecordCount);
+      plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset);
     }
   }
 
@@ -514,8 +539,6 @@ public class Plot {
     Path outFile = files[1];
 
     boolean showBorders = cla.is("borders");
-    boolean showBlockCount = cla.is("showblockcount");
-    boolean showRecordCount = cla.is("showrecordcount");
     Shape shape = cla.getShape(true);
     
     int width = cla.getWidth(1000);
@@ -526,7 +549,9 @@ public class Plot {
     
     Color color = cla.getColor();
 
-    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, showBlockCount, showRecordCount);
+    String hdfDataset = cla.get("dataset");
+    
+    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset);
   }
 
 }

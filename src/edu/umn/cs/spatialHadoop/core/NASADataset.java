@@ -19,13 +19,12 @@ import ncsa.hdf.object.Group;
  *  - Name of the cell in the Sinusoidal grid
  *  - Name of the dataset in the HDF file
  *  - Resolution of the dataset
+ * This class extends {@link Rectangle} to make it compatible to use as a key
+ * with SpatialInputFormat
  * @author Ahmed Eldawy
  *
  */
-public class NASADataset {
-  /**Minimal bounding rectangle of the data in the dataset in lat/lon */
-  public Rectangle mbr;
-  
+public class NASADataset extends Rectangle {
   /**Time instance of this dataset as millis since the epoch*/
   public long time;
   
@@ -64,9 +63,8 @@ public class NASADataset {
       String south = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/SOUTHBOUNDINGCOORDINATE/VALUE");
       String west = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/WESTBOUNDINGCOORDINATE/VALUE");
       String east = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/EASTBOUNDINGCOORDINATE/VALUE");
-      this.mbr = new Rectangle(Double.parseDouble(west),
-          Double.parseDouble(south), Double.parseDouble(east),
-          Double.parseDouble(north));
+      super.set(Double.parseDouble(west), Double.parseDouble(south),
+          Double.parseDouble(east), Double.parseDouble(north));
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -75,7 +73,7 @@ public class NASADataset {
   @Override
   public String toString() {
     String formattedTime = SimpleDateFormat.getInstance().format(new Date(time));
-    return datasetName+": "+mbr+" ("+cellName+") @"+formattedTime+"-"+resolution;
+    return datasetName+": "+super.toString()+" ("+cellName+") @"+formattedTime+"-"+resolution;
   }
   
   public static Map<String, Object> parseMetadata(List<Attribute> attrs) {

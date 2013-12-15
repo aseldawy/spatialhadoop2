@@ -42,11 +42,15 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 /**
  * An input format used with spatial data. It filters generated splits before
  * creating record readers.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   
+  /**
+   * Used to check whether files are compressed or not. Some compressed files
+   * (e.g., gz) are not splittable.
+   */
   private CompressionCodecFactory compressionCodecs = null;
   
   /**
@@ -54,10 +58,9 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
    * CmobineFileRecordReader
    **/
   @SuppressWarnings("rawtypes")
-  static final Class [] constructorSignature = new Class [] 
-      { Configuration.class, 
-       FileSplit.class};
-  
+  static final Class[] constructorSignature = new Class[] {
+      Configuration.class, FileSplit.class };
+
   @SuppressWarnings("rawtypes")
   protected Class<? extends RecordReader> rrClass;
   
@@ -130,8 +133,10 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   @Override
   protected FileStatus[] listStatus(JobConf job) throws IOException {
     try {
+      // Create the compressionCodecs to be used by isSplittable
       if (compressionCodecs == null)
         compressionCodecs = new CompressionCodecFactory(job);
+      // Retrieve the BlockFilter set by the developers in the JobConf
       Class<? extends BlockFilter> blockFilterClass =
           job.getClass(SpatialSite.FilterClass, null, BlockFilter.class);
       if (blockFilterClass == null) {
@@ -167,6 +172,9 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
 
   @Override
   protected boolean isSplitable(FileSystem fs, Path file) {
+    // HDF files are not splittable
+    if (file.getName().matches("(?i:.*\\.hdf$)"))
+      return false;
     final CompressionCodec codec = compressionCodecs.getCodec(file);
     if (codec != null && !(codec instanceof SplittableCompressionCodec))
       return false;

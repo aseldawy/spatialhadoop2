@@ -192,7 +192,7 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   
   @Override
   public Rectangle getMBR() {
-    return this;
+    return new Rectangle(this);
   }
   
   public boolean isIntersected(Shape s) {

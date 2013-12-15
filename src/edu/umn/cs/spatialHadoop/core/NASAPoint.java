@@ -64,7 +64,7 @@ public class NASAPoint extends Point {
     final int MinValue = 7500;
     final int MaxValue = 16000;
     int imageX = (int) ((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int imageY = (int) (((vflip? this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int imageY = (int) (((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     
     if (value > 0 && imageX >= 0 && imageX < imageWidth && imageY >= 0 && imageY < imageHeight) {
       Color color;

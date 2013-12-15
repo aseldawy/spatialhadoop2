@@ -71,12 +71,15 @@ public class HDFInputFormat extends FileInputFormat<NASADataset, NASAPoint> {
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
     // If the input files is a text files, parse it and retrieve all URLs in it
     Path[] inputPaths = getInputPaths(job);
-    if (inputPaths[0].getName().matches("(?i:.*\\.hdf$)")) {
+    FileSystem fs = inputPaths[0].getFileSystem(job);
+
+    if (inputPaths[0].getName().matches("(?i:.*\\.hdf$)") ||
+        fs.getFileStatus(inputPaths[0]).isDir()) {
       // An HDF file, use the default behavior
+      // Or a directory filled with HDF files
       return super.getSplits(job, numSplits);
     }
     // A text file, parse it and generate a split for each file
-    FileSystem fs = inputPaths[0].getFileSystem(job);
     FSDataInputStream in = fs.open(inputPaths[0]);
     LineRecordReader lineReader = new LineRecordReader(in, 0, Long.MAX_VALUE, job);
     LongWritable key = lineReader.createKey();
@@ -87,7 +90,7 @@ public class HDFInputFormat extends FileInputFormat<NASADataset, NASAPoint> {
       // The next two lines would get the correct file length but we don't need
       // it as HDFRecordReader doesn't really use file length in FileSplit.
       // HDFRecordReader will compute file size itself. This is expected to be
-      // faster and more scalable and RecordReaders are instantiated and run
+      // faster and more scalable as RecordReaders are instantiated and run
       // on slave nodes while the InputFormat runs on the single master node
       // which is not parallelized
 //      FileSystem hdfFs = hdfPath.getFileSystem(job);

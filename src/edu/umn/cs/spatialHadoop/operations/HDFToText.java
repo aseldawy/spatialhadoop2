@@ -38,7 +38,7 @@ public class HDFToText {
     public void map(NASADataset dataset, NASAPoint point,
         OutputCollector<Rectangle, NASAPoint> output, Reporter reporter)
             throws IOException {
-      output.collect(dataset.mbr, point);
+      output.collect(dataset, point);
     }
   }
   

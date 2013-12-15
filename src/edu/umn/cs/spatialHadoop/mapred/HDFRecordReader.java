@@ -195,11 +195,11 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
       // TODO set the x and y to longitude and latitude by doing the correct projection
       int row = position / nasaDataset.resolution;
       int col = position % nasaDataset.resolution;
-      point.x = (nasaDataset.mbr.x1 * col +
-          nasaDataset.mbr.x2 * (nasaDataset.resolution - col))
+      point.x = (nasaDataset.x1 * (nasaDataset.resolution - col) +
+          nasaDataset.x2 * col)
           / nasaDataset.resolution;
-      point.y = (nasaDataset.mbr.y1 * row +
-          nasaDataset.mbr.y2 * (nasaDataset.resolution - row))
+      point.y = (nasaDataset.y1 * row +
+          nasaDataset.y2 * (nasaDataset.resolution - row))
           / nasaDataset.resolution;
       
       // Read next value

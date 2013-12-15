@@ -71,8 +71,6 @@ public class FileMBR {
   public static class Map extends MapReduceBase implements
       Mapper<Rectangle, Shape, NullWritable, Rectangle> {
     
-    private final Rectangle MBR = new Rectangle();
-    
     public void map(Rectangle dummy, Shape shape,
         OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
             throws IOException {
@@ -80,8 +78,7 @@ public class FileMBR {
 
       // Skip writing rectangle to output if totally contained in mbr_so_far
       if (mbr != null) {
-        MBR.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-        output.collect(Dummy, MBR);
+        output.collect(Dummy, mbr);
       }
     }
   }
