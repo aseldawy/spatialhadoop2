@@ -76,7 +76,6 @@ public class FileMBR {
             throws IOException {
       Rectangle mbr = shape.getMBR();
 
-      // Skip writing rectangle to output if totally contained in mbr_so_far
       if (mbr != null) {
         output.collect(Dummy, mbr);
       }
@@ -269,7 +268,7 @@ public class FileMBR {
   public static Rectangle fileMBR(FileSystem fs, Path inFile, Shape stockShape) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 1) {
+    if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 3) {
       // Either a directory of file or a large file
       return fileMBRMapReduce(fs, inFile, stockShape, false);
     } else {

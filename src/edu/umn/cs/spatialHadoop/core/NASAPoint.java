@@ -7,6 +7,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
+import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 

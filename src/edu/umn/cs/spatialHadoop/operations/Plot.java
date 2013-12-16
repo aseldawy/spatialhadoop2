@@ -49,11 +49,9 @@ import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.NASADataset;
 import edu.umn.cs.spatialHadoop.core.NASAPoint;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -85,7 +83,6 @@ public class Plot {
     implements Mapper<Rectangle, Shape, Rectangle, Shape> {
     
     private Rectangle[] cellInfos;
-    private boolean vflip;
     
     @Override
     public void configure(JobConf job) {
@@ -102,7 +99,6 @@ public class Plot {
             this.cellInfos[i] = new Rectangle(fileCells[i]);
           }
         }
-        vflip = job.getBoolean(VFlip, false);
       } catch (IOException e) {
         e.printStackTrace();
       }
@@ -114,21 +110,10 @@ public class Plot {
       Rectangle shapeMbr = shape.getMBR();
       if (shapeMbr == null)
         return;
-      if (vflip) {
-        // We have to create a new rectangle to not modify input shape
-        // if the input shape is a rectangle
-        shapeMbr = new Rectangle(shapeMbr.x1, -shapeMbr.y2, shapeMbr.x2, -shapeMbr.y1);
-      }
-      if (!cell.isValid()) {
-        // Output shape to all overlapping cells
-        for (Rectangle matchedCell : cellInfos)
-          if (matchedCell.isIntersected(shape))
-            output.collect(matchedCell, shape);
-      } else {
-        // Input is already partitioned
-        // Output shape to containing cell only
-        output.collect(cell, shape);
-      }
+      // Output shape to all overlapping cells
+      for (Rectangle matchedCell : cellInfos)
+        if (matchedCell.isIntersected(shape))
+          output.collect(matchedCell, shape);
     }
   }
   
@@ -157,8 +142,14 @@ public class Plot {
       this.strokeColor = new Color(job.getInt(StrokeColor, 0));
       this.vflip = job.getBoolean(VFlip, false);
       
+      if (vflip) {
+        double temp = fileMbr.y1;
+        fileMbr.y1 = -fileMbr.y2;
+        fileMbr.y2 = -temp;
+      }
+
       this.scale2 = (double)imageWidth * imageHeight /
-          ((double)(fileMbr.x2 - fileMbr.x1) * (fileMbr.y2 - fileMbr.y1));
+          ((double)fileMbr.getWidth() * fileMbr.getHeight());
     }
 
     @Override
@@ -168,13 +159,14 @@ public class Plot {
       try {
         // Initialize the image
         int image_x1 = (int) ((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y1 = (int) ((cellInfo.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_y1 = (int) (((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int image_x2 = (int) ((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y2 = (int) ((cellInfo.y2 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_y2 = (int) (((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
         if (tile_width == 0 || tile_height == 0)
           return;
+        LOG.info("Creating image with dimensions: "+image_x1+","+image_y1+","+image_x2+","+image_y2);
         BufferedImage image = new BufferedImage(tile_width, tile_height,
             BufferedImage.TYPE_INT_ARGB);
         Color bg_color = new Color(0,0,0,0);
@@ -284,26 +276,15 @@ public class Plot {
     job.setMapOutputValueClass(shape.getClass());
     
     FileSystem inFs = inFile.getFileSystem(job);
-    Rectangle fileMbr = FileMBR.fileMBRMapReduce(inFs, inFile, shape, false);
-    if (vflip) {
-      double temp = fileMbr.y1;
-      fileMbr.y1 = -fileMbr.y2;
-      fileMbr.y2 = -temp;
-    }
-    FileStatus inFileStatus = inFs.getFileStatus(inFile);
+    Rectangle fileMbr = FileMBR.fileMBR(inFs, inFile, shape);
+    LOG.info("File MBR: "+fileMbr);
     
     CellInfo[] cellInfos;
-    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, inFile);
-    if (gindex == null) {
-      // A heap file. The map function should partition the file
-      GridInfo gridInfo = new GridInfo(fileMbr.x1, fileMbr.y1, fileMbr.x2,
-          fileMbr.y2);
-      gridInfo.calculateCellDimensions(inFileStatus.getLen(),
-          inFileStatus.getBlockSize());
-      cellInfos = gridInfo.getAllCells();
-    } else {
-      cellInfos = SpatialSite.cellsOf(inFs, inFile);
-    }
+    // A heap file. The map function should partition the file
+    GridInfo gridInfo = new GridInfo(fileMbr.x1, fileMbr.y1, fileMbr.x2,
+        fileMbr.y2);
+    gridInfo.calculateCellDimensions(job.getNumReduceTasks());
+    cellInfos = gridInfo.getAllCells();
     
     // Set cell information in the job configuration to be used by the mapper
     SpatialSite.setCells(job, cellInfos);
@@ -326,12 +307,10 @@ public class Plot {
     // Set input and output
     if (hdfDataset != null) {
       // Input is HDF
-      job.setInputFormat(HDFInputFormat.class);
       job.set(HDFInputFormat.DatasetName, hdfDataset);
       job.setBoolean(HDFInputFormat.SkipFillValue, true);
-    } else {
-      job.setInputFormat(ShapeInputFormat.class);
     }
+    job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     // Set output committer which will stitch images together after all reducers
     // finish
@@ -353,34 +332,42 @@ public class Plot {
       boolean showBorders, String hdfDataset) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
 
-    // Create an image
-    BufferedImage image = new BufferedImage(width, height,
-        BufferedImage.TYPE_INT_ARGB);
-    Graphics2D graphics = image.createGraphics();
-    Color bg_color = new Color(0,0,0,0);
-    graphics.setBackground(bg_color);
-    graphics.clearRect(0, 0, width, height);
-    graphics.setColor(color);
-
     long fileLength = inFs.getFileStatus(inFile).getLen();
     if (hdfDataset != null) {
-      RecordReader<NASADataset, NASAPoint> reader = new HDFRecordReader(new Configuration(), new FileSplit(inFile, 0, fileLength, new String[0]), hdfDataset, true);
+      RecordReader<NASADataset, NASAPoint> reader = new HDFRecordReader(
+          new Configuration(), new FileSplit(inFile, 0, fileLength,
+              new String[0]), hdfDataset, true);
       NASADataset dataset = reader.createKey();
-        Rectangle fileMbr = dataset.getMBR();
+      Rectangle fileMbr = dataset.getMBR();
       LOG.info("FileMBR: "+fileMbr);
       if (vflip) {
         double temp = fileMbr.y1;
         fileMbr.y1 = -fileMbr.y2;
         fileMbr.y2 = -temp;
       }
+
+      // Create an image
+      BufferedImage image = new BufferedImage(width, height,
+          BufferedImage.TYPE_INT_ARGB);
+      Graphics2D graphics = image.createGraphics();
+      Color bg_color = new Color(0,0,0,0);
+      graphics.setBackground(bg_color);
+      graphics.clearRect(0, 0, width, height);
+      graphics.setColor(color);
       
       NASAPoint point = (NASAPoint) shape;
       while (reader.next(dataset, point)) {
         point.draw(graphics, fileMbr, width, height, vflip, 0.0);
       }
       reader.close();
-    }
-    else {
+
+      // Write image to output
+      graphics.dispose();
+      FileSystem outFs = outFile.getFileSystem(new Configuration());
+      OutputStream out = outFs.create(outFile, true);
+      ImageIO.write(image, "png", out);
+      out.close();
+    } else {
       // Determine file MBR to be able to scale shapes correctly
       Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
       LOG.info("FileMBR: "+fileMbr);
@@ -389,7 +376,7 @@ public class Plot {
         fileMbr.y1 = -fileMbr.y2;
         fileMbr.y2 = -temp;
       }
-      
+
       // Adjust width and height to maintain aspect ratio
       if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
         // Fix width and change height
@@ -400,6 +387,15 @@ public class Plot {
       
       double scale2 = (double) width * height
           / (fileMbr.getWidth() * fileMbr.getHeight());
+
+      // Create an image
+      BufferedImage image = new BufferedImage(width, height,
+          BufferedImage.TYPE_INT_ARGB);
+      Graphics2D graphics = image.createGraphics();
+      Color bg_color = new Color(0,0,0,0);
+      graphics.setBackground(bg_color);
+      graphics.clearRect(0, 0, width, height);
+      graphics.setColor(color);
       
       ShapeRecordReader<S> reader = new ShapeRecordReader<S>(new Configuration(),
           new FileSplit(inFile, 0, fileLength, new String[0]));
@@ -408,13 +404,14 @@ public class Plot {
         shape.draw(graphics, fileMbr, width, height, vflip, scale2);
       }
       reader.close();
+      // Write image to output
+      graphics.dispose();
+      FileSystem outFs = outFile.getFileSystem(new Configuration());
+      OutputStream out = outFs.create(outFile, true);
+      ImageIO.write(image, "png", out);
+      out.close();
     }
     
-    graphics.dispose();
-    FileSystem outFs = outFile.getFileSystem(new Configuration());
-    OutputStream out = outFs.create(outFile, true);
-    ImageIO.write(image, "png", out);
-    out.close();
   }
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
@@ -539,7 +536,6 @@ public class Plot {
     Path outFile = files[1];
 
     boolean showBorders = cla.is("borders");
-    Shape shape = cla.getShape(true);
     
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
@@ -550,6 +546,7 @@ public class Plot {
     Color color = cla.getColor();
 
     String hdfDataset = cla.get("dataset");
+    Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
     
     plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset);
   }
