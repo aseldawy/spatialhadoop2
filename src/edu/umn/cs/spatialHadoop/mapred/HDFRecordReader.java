@@ -21,6 +21,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
@@ -168,6 +169,10 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
   static String copyFileSplit(Configuration conf, FileSplit split) throws IOException {
     // Open input file for read
     FileSystem fs = split.getPath().getFileSystem(conf);
+    
+    // Special case of a local file. Skip copying the file
+    if (fs instanceof LocalFileSystem && split.getStart() == 0)
+      return split.getPath().toUri().getPath();
     FSDataInputStream in = fs.open(split.getPath());
     in.seek(split.getStart());
     

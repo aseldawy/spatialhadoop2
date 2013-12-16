@@ -294,7 +294,7 @@ public class Repartition {
         LOG.warn("No _master files were written by reducers");
       } else {
         String ext = resultFiles[0].getPath().getName()
-        .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
+              .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
         Path masterPath = new Path(outPath, "_master" + ext);
         OutputStream destOut = outFs.create(masterPath);
         byte[] buffer = new byte[4096];

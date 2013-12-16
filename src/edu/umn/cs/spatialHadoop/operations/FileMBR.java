@@ -20,7 +20,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -28,6 +27,7 @@ import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -57,8 +57,6 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  *
  */
 public class FileMBR {
-  private static final NullWritable Dummy = NullWritable.get();
-  
   /**
    * Keeps track of the size of last processed file. Used to determine the
    * uncompressed size of a file.
@@ -69,24 +67,34 @@ public class FileMBR {
   public static RunningJob lastSubmittedJob;
 
   public static class Map extends MapReduceBase implements
-      Mapper<Rectangle, Shape, NullWritable, Rectangle> {
+      Mapper<Rectangle, Shape, Text, Rectangle> {
+    
+    /**Last input split processed (initially null)*/
+    private InputSplit lastSplit = null;
+    
+    /**Name of the file currently being processed*/
+    private Text fileName;
     
     public void map(Rectangle dummy, Shape shape,
-        OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
+        OutputCollector<Text, Rectangle> output, Reporter reporter)
             throws IOException {
+      if (lastSplit != reporter.getInputSplit()) {
+        lastSplit = reporter.getInputSplit();
+        fileName = new Text(((FileSplit)lastSplit).getPath().getName());
+      }
       Rectangle mbr = shape.getMBR();
 
       if (mbr != null) {
-        output.collect(Dummy, mbr);
+        output.collect(fileName, mbr);
       }
     }
   }
   
-  public static class Reduce extends MapReduceBase implements
-  Reducer<NullWritable, Rectangle, NullWritable, Rectangle> {
+  public static class Combine extends MapReduceBase implements
+  Reducer<Text, Rectangle, Text, Rectangle> {
     @Override
-    public void reduce(NullWritable dummy, Iterator<Rectangle> values,
-        OutputCollector<NullWritable, Rectangle> output, Reporter reporter)
+    public void reduce(Text filename, Iterator<Rectangle> values,
+        OutputCollector<Text, Rectangle> output, Reporter reporter)
             throws IOException {
       Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
           -Double.MAX_VALUE, -Double.MAX_VALUE);
@@ -94,57 +102,59 @@ public class FileMBR {
         Rectangle rect = values.next();
         mbr.expand(rect);
       }
-      output.collect(dummy, mbr);
+      output.collect(filename, mbr);
+    }
+  }
+  
+  public static class Reduce extends MapReduceBase implements
+  Reducer<Text, Rectangle, NullWritable, Partition> {
+    @Override
+    public void reduce(Text filename, Iterator<Rectangle> values,
+        OutputCollector<NullWritable, Partition> output, Reporter reporter)
+            throws IOException {
+      Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
+      while (values.hasNext()) {
+        Rectangle rect = values.next();
+        mbr.expand(rect);
+      }
+      Partition partition = new Partition(filename.toString(), mbr);
+      partition.cellId = Math.abs(filename.hashCode());
+      output.collect(NullWritable.get(), partition);
     }
   }
   
   public static class MBROutputCommitter extends FileOutputCommitter {
-    // If input is a directory, save the MBR to a file there
+    // If input is a directory, save the MBR to a _master file there
     @Override
     public void commitJob(JobContext context) throws IOException {
       super.commitJob(context);
       // Store the result back in the input file if it is a directory
       JobConf job = context.getJobConf();
-      
-      // Read job result
+
+      Path[] inPaths = SpatialInputFormat.getInputPaths(job);
+      Path inPath = inPaths[0]; // TODO Handle multiple file input
+      FileSystem inFs = inPath.getFileSystem(job);
+      if (!inFs.getFileStatus(inPath).isDir())
+        return;
+      Path gindex_path = new Path(inPath, "_master.grid");
+      PrintStream gout = new PrintStream(inFs.create(gindex_path, false));
+
+      // Read job result and concatenate everything to the master file
       Path outPath = TextOutputFormat.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
       FileStatus[] results = outFs.listStatus(outPath);
-      Rectangle mbr = new Rectangle();
       for (FileStatus fileStatus : results) {
         if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
           LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
           Text text = new Text();
-          if (lineReader.readLine(text) > 0) {
-            mbr.fromText(text);
+          while (lineReader.readLine(text) > 0) {
+            gout.println(text);
           }
           lineReader.close();
         }
       }
-
-      // Store the result back to disk
-      Path[] inPaths = SpatialInputFormat.getInputPaths(job);
-      for (Path inPath : inPaths) {
-        FileSystem fs = inPath.getFileSystem(job);
-        if (fs.getFileStatus(inPath).isDir()) {
-          // Results can be stored back only if input is a directory
-          FileStatus[] datafiles = fs.listStatus(inPath,new PathFilter(){
-            public boolean accept(Path p){
-              String name = p.getName(); 
-              return !name.startsWith("_") && !name.startsWith("."); 
-            }
-          });
-          Path gindex_path = new Path(inPath, "_master.grid");
-          PrintStream gout = new PrintStream(fs.create(gindex_path, false));
-          for (FileStatus datafile : datafiles) {
-            gout.print(mbr.toText(new Text()));
-            gout.print(",");
-            gout.print(datafile.getPath().getName());
-            gout.println();
-          }
-          gout.close();
-        }
-      }
+      gout.close();
     }
   }
   
@@ -183,12 +193,12 @@ public class FileMBR {
     } while (outFs.exists(outputPath));
     
     job.setJobName("FileMBR");
-    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputKeyClass(Text.class);
     job.setMapOutputValueClass(Rectangle.class);
 
     job.setMapperClass(Map.class);
     job.setReducerClass(Reduce.class);
-    job.setCombinerClass(Reduce.class);
+    job.setCombinerClass(Combine.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     
@@ -213,15 +223,11 @@ public class FileMBR {
       
       // Read job result
       FileStatus[] results = outFs.listStatus(outputPath);
-      Rectangle mbr = new Rectangle();
+      Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
       for (FileStatus fileStatus : results) {
         if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-          LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
-          Text text = new Text();
-          if (lineReader.readLine(text) > 0) {
-            mbr.fromText(text);
-          }
-          lineReader.close();
+          mbr.expand(fileMBRLocal(outFs, fileStatus.getPath(), new Partition()));
         }
       }
       
