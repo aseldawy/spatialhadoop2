@@ -35,8 +35,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LineRecordReader;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.lib.CombineFileRecordReader;
-import org.apache.hadoop.mapred.lib.CombineFileSplit;
 
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
@@ -72,18 +70,23 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   @Override
   public RecordReader<K, V> getRecordReader(InputSplit split, JobConf job,
       Reporter reporter) throws IOException {
+    // Create compressionCodecs to be used by isSplitable method
     if (compressionCodecs == null)
       compressionCodecs = new CompressionCodecFactory(job);
-    if (split instanceof CombineFileSplit) {
-      return new CombineFileRecordReader<K, V>(job, (CombineFileSplit)split,
-          reporter, (Class<RecordReader<K, V>>) rrClass);
-    } else if (split instanceof FileSplit) {
+    if (split instanceof FileSplit) {
+      FileSplit fsplit = (FileSplit) split;
+      if (fsplit.getPath().getName().matches("(?i:.*\\.hdf$)")) {
+        // HDF File. Create HDFRecordReader
+        return (RecordReader<K, V>) new HDFRecordReader(job, fsplit,
+            job.get(HDFInputFormat.DatasetName),
+            job.getBoolean(HDFInputFormat.SkipFillValue, false));
+      }
       try {
         @SuppressWarnings("rawtypes")
         Constructor<? extends RecordReader> rrConstructor;
         rrConstructor = rrClass.getDeclaredConstructor(constructorSignature);
         rrConstructor.setAccessible(true);
-        return rrConstructor.newInstance(new Object [] {job, (FileSplit)split});
+        return rrConstructor.newInstance(new Object [] {job, fsplit});
       } catch (SecurityException e) {
         e.printStackTrace();
       } catch (NoSuchMethodException e) {
@@ -145,7 +148,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   @Override
   protected FileStatus[] listStatus(JobConf job) throws IOException {
     try {
-      // Create the compressionCodecs to be used by isSplittable
+      // Create the compressionCodecs to be used by isSplitable
       if (compressionCodecs == null)
         compressionCodecs = new CompressionCodecFactory(job);
       // Retrieve the BlockFilter set by the developers in the JobConf

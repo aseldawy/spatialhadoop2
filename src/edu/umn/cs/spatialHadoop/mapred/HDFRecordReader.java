@@ -108,7 +108,8 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
     Stack<Group> groups2bSearched = new Stack<Group>();
     groups2bSearched.add(root);
     
-    Dataset dataset = null;
+    Dataset firstDataset = null;
+    Dataset matchDataset = null;
     
     while (!groups2bSearched.isEmpty()) {
       Group top = groups2bSearched.pop();
@@ -117,22 +118,27 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
       for (HObject member : memberList) {
         if (member instanceof Group) {
           groups2bSearched.add((Group) member);
-        } else if (member instanceof Dataset &&
-            member.getName().equalsIgnoreCase(datasetName)) {
-          dataset = (Dataset) member;
-          break;
+        } else if (member instanceof Dataset) {
+          if (firstDataset == null)
+            firstDataset = (Dataset) member;
+          if (member.getName().equalsIgnoreCase(datasetName)) {
+            matchDataset = (Dataset) member;
+            break;
+          }
         }
       }
     }
     
-    if (dataset == null) {
+    if (matchDataset == null) {
       LOG.warn("Dataset "+datasetName+" not found in file "+split.getPath());
-      return;
     }
+    
+    // Just work on the first dataset to ensure we return some data
+    matchDataset = firstDataset;
 
     nasaDataset = new NASADataset(root);
     nasaDataset.datasetName = datasetName;
-    List<Attribute> attrs = dataset.getMetadata();
+    List<Attribute> attrs = matchDataset.getMetadata();
     String fillValueStr = null;
     for (Attribute attr : attrs) {
       if (attr.getName().equals("_FillValue")) {
@@ -145,7 +151,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
       this.fillValue = Integer.parseInt(fillValueStr);
     }
     
-    dataArray = dataset.read();
+    dataArray = matchDataset.read();
     
     // No longer need the HDF file
     hdfFile.close();

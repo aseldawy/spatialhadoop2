@@ -52,7 +52,8 @@ public class HDFInputFormat extends FileInputFormat<NASADataset, NASAPoint> {
   @Override
   public RecordReader<NASADataset, NASAPoint> getRecordReader(InputSplit split,
       JobConf job, Reporter reporter) throws IOException {
-    return new HDFRecordReader(job, (FileSplit)split, job.get(DatasetName), job.getBoolean(SkipFillValue, true));
+    return new HDFRecordReader(job, (FileSplit)split, job.get(DatasetName),
+        job.getBoolean(SkipFillValue, true));
   }
 
   @Override
