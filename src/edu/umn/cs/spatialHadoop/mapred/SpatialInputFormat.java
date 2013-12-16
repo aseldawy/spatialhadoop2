@@ -19,9 +19,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.SplittableCompressionCodec;
@@ -29,6 +32,7 @@ import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.LineRecordReader;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileRecordReader;
@@ -108,6 +112,14 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       for (FileStatus status : listStatus) {
         if (status.isDir()) {
           listStatus(fs, status.getPath(), result, filter);
+        } else if (status.getPath().getName().matches("(?i:.*\\.list$)")) {
+          LineRecordReader in = new LineRecordReader(fs.open(status.getPath()), 0, status.getLen(), Integer.MAX_VALUE);
+          LongWritable key = in.createKey();
+          Text value = in.createValue();
+          while (in.next(key, value)) {
+            result.add(fs.getFileStatus(new Path(status.getPath().getParent(), value.toString())));
+          }
+          in.close();
         } else {
           result.add(status);
         }
