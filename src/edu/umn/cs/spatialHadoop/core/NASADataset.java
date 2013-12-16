@@ -31,12 +31,14 @@ public class NASADataset extends Rectangle {
   /**Name of the cell in the sinusoidal grid (h:xx v:xx)*/
   public String cellName;
   
+  /**Cell coordinates in MODIS Sinusoidal grid*/
+  public int h, v;
+  
   /**Name of the dataset as it appears in the HDF file*/
   public String datasetName;
   
   /**Resolution of the dataset in terms of number of rows/columns*/
   public int resolution;
-  
   
   public NASADataset() {}
   
@@ -57,7 +59,8 @@ public class NASADataset extends Rectangle {
       this.time = dateFormat.parse(date+" "+time).getTime();
       String granuleId = findMetadata(metadata, "CoreMetadata.0/INVENTORYMETADATA/ECSDATAGRANULE/LOCALGRANULEID/VALUE");
       this.cellName = granuleId.split("\\.")[2];
-
+      this.h = Integer.parseInt(this.cellName.substring(1, 3));
+      this.v = Integer.parseInt(this.cellName.substring(4, 6));
 
       String north = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/NORTHBOUNDINGCOORDINATE/VALUE");
       String south = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/SOUTHBOUNDINGCOORDINATE/VALUE");

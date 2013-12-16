@@ -198,15 +198,16 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
     // Key doesn't need to be changed because all points in the same dataset
     // have the same key
     while (position < Array.getLength(dataArray)) {
-      // TODO set the x and y to longitude and latitude by doing the correct projection
+      // Set the x and y to longitude and latitude by doing the correct projection
       int row = position / nasaDataset.resolution;
       int col = position % nasaDataset.resolution;
-      point.x = (nasaDataset.x1 * (nasaDataset.resolution - col) +
-          nasaDataset.x2 * col)
-          / nasaDataset.resolution;
-      point.y = (nasaDataset.y1 * row +
-          nasaDataset.y2 * (nasaDataset.resolution - row))
-          / nasaDataset.resolution;
+      point.y = (90 - nasaDataset.v * 10) -
+          (double) row * 10 / nasaDataset.resolution;
+      point.x = ((nasaDataset.h * 10 - 180) +
+          (double) (col) * 10 / nasaDataset.resolution) / Math.cos(point.y * Math.PI / 180);
+      if (!nasaDataset.contains(point)) {
+        LOG.warn("Point: "+point+" not inside dataset MBR: "+nasaDataset);
+      }
       
       // Read next value
       Object value = Array.get(dataArray, position);
