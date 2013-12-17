@@ -159,7 +159,7 @@ public class FileMBR {
           }
         }
         gout.close();
-      } catch (IOException e) {
+      } catch (RuntimeException e) {
         // This might happen of the input directory is read only
         LOG.info("Error caching the output of FileMBR");
       }
