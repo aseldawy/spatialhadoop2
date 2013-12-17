@@ -184,7 +184,7 @@ public class HTTPFileSystem extends FileSystem {
   public FileStatus getFileStatus(Path f) throws IOException {
     URL url = f.toUri().toURL();
     URLConnection connection = url.openConnection();
-    long length = connection.getContentLengthLong();
+    long length = Long.parseLong(connection.getHeaderField("content-Length"));
     long modificationTime = connection.getLastModified();
     if (modificationTime == 0)
       modificationTime = connection.getDate();
