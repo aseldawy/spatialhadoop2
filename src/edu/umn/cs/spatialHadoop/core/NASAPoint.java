@@ -70,12 +70,12 @@ public class NASAPoint extends Point {
     if (value > 0 && imageX >= 0 && imageX < imageWidth && imageY >= 0 && imageY < imageHeight) {
       Color color;
       if (value < MinValue) {
-        color = Color.BLACK;
+        color = Color.getHSBColor(0.78f, 0.5f, 1.0f);
       } else if (value < MaxValue) {
         float ratio = 0.78f - 0.78f * (value - MinValue) / (MaxValue - MinValue);
         color = Color.getHSBColor(ratio, 0.5f, 1.0f);
       } else {
-        color = Color.WHITE;
+        color = Color.getHSBColor(0.0f, 0.5f, 1.0f);
       }
       g.setColor(color);
       g.fillRect(imageX, imageY, 1, 1);
