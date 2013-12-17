@@ -184,11 +184,13 @@ public class HTTPFileSystem extends FileSystem {
   public FileStatus getFileStatus(Path f) throws IOException {
     URL url = f.toUri().toURL();
     URLConnection connection = url.openConnection();
-    long length = Long.parseLong(connection.getHeaderField("content-Length"));
+    String lengthStr = connection.getHeaderField("content-Length");
+    long length = lengthStr == null? 0 : Long.parseLong(lengthStr);
     long modificationTime = connection.getLastModified();
     if (modificationTime == 0)
       modificationTime = connection.getDate();
-    return new FileStatus(length, false, 1, BLOCK_SIZE, modificationTime, 0,
+    boolean isdir = url.getPath().endsWith("/");
+    return new FileStatus(length, isdir, 1, BLOCK_SIZE, modificationTime, 0,
         null, null, null, f);
   }
 
