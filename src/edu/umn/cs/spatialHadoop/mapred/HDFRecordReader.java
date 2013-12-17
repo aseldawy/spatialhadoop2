@@ -3,12 +3,8 @@ package edu.umn.cs.spatialHadoop.mapred;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLConnection;
 import java.util.List;
 import java.util.Stack;
 
@@ -23,10 +19,10 @@ import ncsa.hdf.object.HObject;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 
@@ -177,38 +173,20 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
    * @throws IOException 
    */
   static String copyFileSplit(Configuration conf, FileSplit split) throws IOException {
-    InputStream in; // A stream to input file
+    FileSystem fs = split.getPath().getFileSystem(conf);
+
+    // Special case of a local file. Skip copying the file
+    if (fs instanceof LocalFileSystem && split.getStart() == 0)
+      return split.getPath().toUri().getPath();
+
     // Length of input file. We do not depend on split.length because it is not
     // set by input format for performance reason. Setting it in the input
     // format would cost a lot of time because it runs on the client machine
     // while the record reader runs on slave nodes in parallel
-    long length;
-    FileSystem fs; // File system of input file
+    long length = fs.getFileStatus(split.getPath()).getLen();
 
-    try {
-      fs = split.getPath().getFileSystem(conf);
-
-      // Special case of a local file. Skip copying the file
-      if (fs instanceof LocalFileSystem && split.getStart() == 0)
-        return split.getPath().toUri().getPath();
-
-      length = fs.getFileStatus(split.getPath()).getLen();
-
-      in = fs.open(split.getPath());
-      ((Seekable)in).seek(split.getStart());
-    } catch (IOException e) {
-      // Cannot open input file. Might be caused by an unsupported scheme (http)
-      URI uri = split.getPath().toUri();
-      if (uri.getScheme().equalsIgnoreCase("http")) {
-        // Copy this file as from HTTP
-        URL url = uri.toURL();
-        URLConnection urlConnection = url.openConnection();
-        length = Long.parseLong(urlConnection.getHeaderField("content-Length"));
-        in = urlConnection.getInputStream();
-      } else {
-        throw e;
-      }
-    }
+    FSDataInputStream in = fs.open(split.getPath());
+    in.seek(split.getStart());
     
     // Prepare output file for write
     File tempFile = File.createTempFile(split.getPath().getName(), "hdf");
