@@ -42,10 +42,13 @@ import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.NASADataset;
+import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat;
@@ -255,18 +258,33 @@ public class FileMBR {
     long file_size = fs.getFileStatus(file).getLen();
     sizeOfLastProcessedFile = file_size;
     
-    ShapeRecordReader<Shape> shapeReader = new ShapeRecordReader<Shape>(
-        new Configuration(), new FileSplit(file, 0, file_size, new String[] {}));
-
-    Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-        -Double.MAX_VALUE, -Double.MAX_VALUE);
+    Rectangle mbr = null;
     
-    Rectangle key = shapeReader.createKey();
+    if (file.getName().matches("(?i:.*\\.hdf$)")) {
+      // HDF file
+      HDFRecordReader reader = new HDFRecordReader(new Configuration(),
+          new FileSplit(file, 0, file_size, new String[] {}), null, true);
+      NASADataset key = reader.createKey();
+      NASAPoint point = reader.createValue();
+      if (reader.next(key, point)) {
+        mbr = key.getMBR();
+      }
+      reader.close();
+    } else {
+      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(
+          new Configuration(), new FileSplit(file, 0, file_size, new String[] {}));
+      
+      mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
 
-    while (shapeReader.next(key, shape)) {
-      Rectangle rect = shape.getMBR();
-      if (rect != null)
-        mbr.expand(rect);
+      Rectangle key = reader.createKey();
+      
+      while (reader.next(key, shape)) {
+        Rectangle rect = shape.getMBR();
+        if (rect != null)
+          mbr.expand(rect);
+      }
+      reader.close();
     }
     return mbr;
   }
