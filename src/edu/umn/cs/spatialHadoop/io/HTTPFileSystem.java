@@ -189,7 +189,8 @@ public class HTTPFileSystem extends FileSystem {
     long modificationTime = connection.getLastModified();
     if (modificationTime == 0)
       modificationTime = connection.getDate();
-    boolean isdir = url.getPath().endsWith("/");
+    // Hard coded to work with LP DAAC archives
+    boolean isdir = !f.getName().matches("(?i:.*\\.(hdf|xml|jpg)$)");
     return new FileStatus(length, isdir, 1, BLOCK_SIZE, modificationTime, 0,
         null, null, null, f);
   }
