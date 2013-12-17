@@ -40,6 +40,7 @@ import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.io.HTTPFileSystem;
 
 /**
  * An input format used with spatial data. It filters generated splits before
@@ -196,7 +197,11 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       return false;
 
     try {
-      return !SpatialSite.isRTree(fs, file);
+      // For performance reasons, skip checking isRTree if the file is on http
+      // isRTree needs to open the file and reads the first 8 bytes. Doing this
+      // in the input format means it will open all files in input which is
+      // very costly.
+      return !(fs instanceof HTTPFileSystem) && !SpatialSite.isRTree(fs, file);
     } catch (IOException e) {
       return super.isSplitable(fs, file);
     }
