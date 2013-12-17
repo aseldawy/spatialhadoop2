@@ -59,6 +59,14 @@ public class HTTPFileSystem extends FileSystem {
   /**URI for this FileSystem*/
   private URI uri;
 
+  /**Current working directory*/
+  private Path workingDir;
+  
+  static {
+    // Associate this class with http scheme in default configuration
+    Configuration.addDefaultResource("spatial-default.xml");
+  }
+
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException { // get
     super.initialize(uri, conf);
@@ -165,14 +173,12 @@ public class HTTPFileSystem extends FileSystem {
 
   @Override
   public void setWorkingDirectory(Path new_dir) {
-    // TODO Auto-generated method stub
-
+    this.workingDir = new_dir;
   }
 
   @Override
   public Path getWorkingDirectory() {
-    // TODO Auto-generated method stub
-    return null;
+    return this.workingDir;
   }
 
   @Override
@@ -195,4 +201,14 @@ public class HTTPFileSystem extends FileSystem {
         null, null, null, f);
   }
 
+  public static void main(String[] args) throws IOException {
+    Path p = new Path("http://e4ftl01.cr.usgs.gov/MOLT/MOD11A1.005/2000.03.05/");
+    FileSystem fs = p.getFileSystem(new Configuration());
+    FileStatus[] statuses = fs.listStatus(p);
+    for (FileStatus status : statuses) {
+      System.out.println(status.getPath());
+      FileStatus subStatus = fs.getFileStatus(status.getPath());
+    }
+    System.out.println("total files: "+statuses.length);
+  }
 }
