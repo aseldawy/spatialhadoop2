@@ -55,7 +55,6 @@ import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapred.HDFInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
@@ -307,8 +306,8 @@ public class Plot {
     // Set input and output
     if (hdfDataset != null) {
       // Input is HDF
-      job.set(HDFInputFormat.DatasetName, hdfDataset);
-      job.setBoolean(HDFInputFormat.SkipFillValue, true);
+      job.set(HDFRecordReader.DatasetName, hdfDataset);
+      job.setBoolean(HDFRecordReader.SkipFillValue, true);
     }
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);

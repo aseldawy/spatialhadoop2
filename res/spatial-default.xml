@@ -56,4 +56,10 @@
   a file as an array</description>
 </property>
 
+<property>
+  <name>fs.http.impl</name>
+  <value>edu.umn.cs.spatialHadoop.io.HTTPFileSystem</value>
+  <description>Implementation for HTTP file system</description>
+</property>
+
 </configuration>

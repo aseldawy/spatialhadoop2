@@ -21,7 +21,8 @@ import edu.umn.cs.spatialHadoop.core.NASADataset;
 import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat3;
-import edu.umn.cs.spatialHadoop.mapred.HDFInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 
 /**
  * This operation transforms one or more HDF files into text files which can
@@ -67,10 +68,10 @@ public class HDFToText {
     job.setNumReduceTasks(0);
     
     // Set input information
-    job.setInputFormat(HDFInputFormat.class);
-    HDFInputFormat.setInputPaths(job, inPath);
-    job.set(HDFInputFormat.DatasetName, datasetName);
-    job.setBoolean(HDFInputFormat.SkipFillValue, skipFillValue);
+    job.setInputFormat(ShapeInputFormat.class);
+    ShapeInputFormat.setInputPaths(job, inPath);
+    job.set(HDFRecordReader.DatasetName, datasetName);
+    job.setBoolean(HDFRecordReader.SkipFillValue, skipFillValue);
     
     // Set output information
     job.setOutputFormat(GridOutputFormat3.class);

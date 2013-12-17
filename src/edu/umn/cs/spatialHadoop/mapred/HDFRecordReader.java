@@ -3,8 +3,12 @@ package edu.umn.cs.spatialHadoop.mapred;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLConnection;
 import java.util.List;
 import java.util.Stack;
 
@@ -19,10 +23,10 @@ import ncsa.hdf.object.HObject;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 
@@ -59,6 +63,12 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
   
   /**Whether or not to skip fill value when returning values in a dataset*/
   private boolean skipFillValue;
+
+  /**Configuration for name of the dataset to read from HDF file*/
+  public static final String DatasetName = "HDFInputFormat.DatasetName";
+
+  /**The configuration entry for skipping the fill value*/
+  public static final String SkipFillValue = "HDFRecordReader.SkipFillValue";
   
 
   /**
@@ -167,14 +177,38 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
    * @throws IOException 
    */
   static String copyFileSplit(Configuration conf, FileSplit split) throws IOException {
-    // Open input file for read
-    FileSystem fs = split.getPath().getFileSystem(conf);
-    
-    // Special case of a local file. Skip copying the file
-    if (fs instanceof LocalFileSystem && split.getStart() == 0)
-      return split.getPath().toUri().getPath();
-    FSDataInputStream in = fs.open(split.getPath());
-    in.seek(split.getStart());
+    InputStream in; // A stream to input file
+    // Length of input file. We do not depend on split.length because it is not
+    // set by input format for performance reason. Setting it in the input
+    // format would cost a lot of time because it runs on the client machine
+    // while the record reader runs on slave nodes in parallel
+    long length;
+    FileSystem fs; // File system of input file
+
+    try {
+      fs = split.getPath().getFileSystem(conf);
+
+      // Special case of a local file. Skip copying the file
+      if (fs instanceof LocalFileSystem && split.getStart() == 0)
+        return split.getPath().toUri().getPath();
+
+      length = fs.getFileStatus(split.getPath()).getLen();
+
+      in = fs.open(split.getPath());
+      ((Seekable)in).seek(split.getStart());
+    } catch (IOException e) {
+      // Cannot open input file. Might be caused by an unsupported scheme (http)
+      URI uri = split.getPath().toUri();
+      if (uri.getScheme().equalsIgnoreCase("http")) {
+        // Copy this file as from HTTP
+        URL url = uri.toURL();
+        URLConnection urlConnection = url.openConnection();
+        length = Long.parseLong(urlConnection.getHeaderField("content-Length"));
+        in = urlConnection.getInputStream();
+      } else {
+        throw e;
+      }
+    }
     
     // Prepare output file for write
     File tempFile = File.createTempFile(split.getPath().getName(), "hdf");
@@ -182,9 +216,6 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
     
     // A buffer used between source and destination
     byte[] buffer = new byte[1024*1024];
-    // Get file length. Don't depend on split.getLength as we don't set it in
-    // HDFInputFormat for performance reasons
-    long length = fs.getFileStatus(split.getPath()).getLen();
     while (length > 0) {
       int numBytesRead = in.read(buffer, 0, (int)Math.min(length, buffer.length));
       out.write(buffer, 0, numBytesRead);
@@ -258,9 +289,9 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
   }
 
   public static void main(String[] args) throws Exception {
-    FileSplit hdfFileSplit = new FileSplit(new Path(
-        "MOD11A1.A2007002.h23v07.004.2007004095814.hdf"), 0, 23613446,
-        new String[] {});
+    FileSplit hdfFileSplit = new FileSplit(
+        new Path("http://e4ftl01.cr.usgs.gov/MOLT/MOD11A1.005/2000.03.05/MOD11A1.A2000065.h35v08.005.2007176170906.hdf"),
+        0, 0, new String[] {});
     HDFRecordReader reader = new HDFRecordReader(new Configuration(),
         hdfFileSplit, "LST_Night_1km", true);
     

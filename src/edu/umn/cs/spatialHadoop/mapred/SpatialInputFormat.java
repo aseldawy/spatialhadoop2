@@ -78,8 +78,8 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       if (fsplit.getPath().getName().matches("(?i:.*\\.hdf$)")) {
         // HDF File. Create HDFRecordReader
         return (RecordReader<K, V>) new HDFRecordReader(job, fsplit,
-            job.get(HDFInputFormat.DatasetName),
-            job.getBoolean(HDFInputFormat.SkipFillValue, true));
+            job.get(HDFRecordReader.DatasetName),
+            job.getBoolean(HDFRecordReader.SkipFillValue, true));
       }
       try {
         @SuppressWarnings("rawtypes")
@@ -148,9 +148,10 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   @Override
   protected FileStatus[] listStatus(JobConf job) throws IOException {
     try {
-      // Create the compressionCodecs to be used by isSplitable
+      // Create the compressionCodecs to be used later by isSplitable
       if (compressionCodecs == null)
         compressionCodecs = new CompressionCodecFactory(job);
+      
       // Retrieve the BlockFilter set by the developers in the JobConf
       Class<? extends BlockFilter> blockFilterClass =
           job.getClass(SpatialSite.FilterClass, null, BlockFilter.class);
