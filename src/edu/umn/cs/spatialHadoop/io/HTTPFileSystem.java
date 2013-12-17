@@ -188,6 +188,7 @@ public class HTTPFileSystem extends FileSystem {
 
   @Override
   public FileStatus getFileStatus(Path f) throws IOException {
+    f = f.makeQualified(this);
     URL url = f.toUri().toURL();
     URLConnection connection = url.openConnection();
     String lengthStr = connection.getHeaderField("content-Length");
