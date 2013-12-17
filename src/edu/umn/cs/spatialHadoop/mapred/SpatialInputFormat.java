@@ -79,7 +79,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
         // HDF File. Create HDFRecordReader
         return (RecordReader<K, V>) new HDFRecordReader(job, fsplit,
             job.get(HDFInputFormat.DatasetName),
-            job.getBoolean(HDFInputFormat.SkipFillValue, false));
+            job.getBoolean(HDFInputFormat.SkipFillValue, true));
       }
       try {
         @SuppressWarnings("rawtypes")

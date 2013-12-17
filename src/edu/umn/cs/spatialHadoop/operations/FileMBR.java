@@ -297,12 +297,14 @@ public class FileMBR {
     JobConf conf = new JobConf(FileMBR.class);
     Path inputFile = cla.getPath();
     if (inputFile == null) {
+      System.err.println("Please provide the input file");
       printUsage();
       return;
     }
     
     FileSystem fs = inputFile.getFileSystem(conf);
     if (!fs.exists(inputFile)) {
+      System.err.println("Input file '"+inputFile+"' does not exist");
       printUsage();
       return;
     }
