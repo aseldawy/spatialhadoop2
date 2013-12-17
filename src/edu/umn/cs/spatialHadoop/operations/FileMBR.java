@@ -131,33 +131,38 @@ public class FileMBR {
     // If input is a directory, save the MBR to a _master file there
     @Override
     public void commitJob(JobContext context) throws IOException {
-      super.commitJob(context);
-      // Store the result back in the input file if it is a directory
-      JobConf job = context.getJobConf();
+      try {
+        super.commitJob(context);
+        // Store the result back in the input file if it is a directory
+        JobConf job = context.getJobConf();
 
-      Path[] inPaths = SpatialInputFormat.getInputPaths(job);
-      Path inPath = inPaths[0]; // TODO Handle multiple file input
-      FileSystem inFs = inPath.getFileSystem(job);
-      if (!inFs.getFileStatus(inPath).isDir())
-        return;
-      Path gindex_path = new Path(inPath, "_master.grid");
-      PrintStream gout = new PrintStream(inFs.create(gindex_path, false));
+        Path[] inPaths = SpatialInputFormat.getInputPaths(job);
+        Path inPath = inPaths[0]; // TODO Handle multiple file input
+        FileSystem inFs = inPath.getFileSystem(job);
+        if (!inFs.getFileStatus(inPath).isDir())
+          return;
+        Path gindex_path = new Path(inPath, "_master.grid");
+        PrintStream gout = new PrintStream(inFs.create(gindex_path, false));
 
-      // Read job result and concatenate everything to the master file
-      Path outPath = TextOutputFormat.getOutputPath(job);
-      FileSystem outFs = outPath.getFileSystem(job);
-      FileStatus[] results = outFs.listStatus(outPath);
-      for (FileStatus fileStatus : results) {
-        if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-          LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
-          Text text = new Text();
-          while (lineReader.readLine(text) > 0) {
-            gout.println(text);
+        // Read job result and concatenate everything to the master file
+        Path outPath = TextOutputFormat.getOutputPath(job);
+        FileSystem outFs = outPath.getFileSystem(job);
+        FileStatus[] results = outFs.listStatus(outPath);
+        for (FileStatus fileStatus : results) {
+          if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
+            LineReader lineReader = new LineReader(outFs.open(fileStatus.getPath()));
+            Text text = new Text();
+            while (lineReader.readLine(text) > 0) {
+              gout.println(text);
+            }
+            lineReader.close();
           }
-          lineReader.close();
         }
+        gout.close();
+      } catch (RuntimeException e) {
+        // This might happen of the input directory is read only
+        LOG.info("Error caching the output of FileMBR");
       }
-      gout.close();
     }
   }
   

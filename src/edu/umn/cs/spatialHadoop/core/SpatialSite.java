@@ -234,33 +234,39 @@ public class SpatialSite {
    * @throws IOException
    */
   public static GlobalIndex<Partition> getGlobalIndex(FileSystem fs,
-      Path dir) throws IOException {
-    // Retrieve the master file (the only file with the name _master in it)
-    FileStatus[] masterFiles = fs.listStatus(dir, new PathFilter() {
-      @Override
-      public boolean accept(Path path) {
-        return path.getName().contains("_master");
+      Path dir) {
+    try {
+      // Retrieve the master file (the only file with the name _master in it)
+      FileStatus[] masterFiles = fs.listStatus(dir, new PathFilter() {
+        @Override
+        public boolean accept(Path path) {
+          return path.getName().contains("_master");
+        }
+      });
+      // Check if the given file is indexed
+      if (masterFiles.length == 0)
+        return null;
+      if (masterFiles.length > 1)
+        throw new RuntimeException("Found more than one master file in "+dir);
+      Path masterFile = masterFiles[0].getPath();
+      ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(
+          fs.open(masterFile), 0, fs.getFileStatus(masterFile).getLen());
+      CellInfo dummy = new CellInfo();
+      Partition partition = new Partition();
+      ArrayList<Partition> partitions = new ArrayList<Partition>();
+      while (reader.next(dummy, partition)) {
+        partitions.add(partition.clone());
       }
-    });
-    // Check if the given file is indexed
-    if (masterFiles.length == 0)
+      GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
+      globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
+      globalIndex.setCompact(masterFile.getName().endsWith("rtree") || masterFile.getName().endsWith("r+tree"));
+      globalIndex.setReplicated(masterFile.getName().endsWith("r+tree") || masterFile.getName().endsWith("grid"));
+      return globalIndex;
+    } catch (IOException e) {
+      LOG.info("Error retrieving global index of '"+dir+"'");
+      LOG.info(e);
       return null;
-    if (masterFiles.length > 1)
-      throw new RuntimeException("Found more than one master file in "+dir);
-    Path masterFile = masterFiles[0].getPath();
-    ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(
-        fs.open(masterFile), 0, fs.getFileStatus(masterFile).getLen());
-    CellInfo dummy = new CellInfo();
-    Partition partition = new Partition();
-    ArrayList<Partition> partitions = new ArrayList<Partition>();
-    while (reader.next(dummy, partition)) {
-      partitions.add(partition.clone());
     }
-    GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
-    globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
-    globalIndex.setCompact(masterFile.getName().endsWith("rtree") || masterFile.getName().endsWith("r+tree"));
-    globalIndex.setReplicated(masterFile.getName().endsWith("r+tree") || masterFile.getName().endsWith("grid"));
-    return globalIndex;
   }
 
   /**

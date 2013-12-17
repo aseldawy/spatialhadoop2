@@ -133,7 +133,17 @@ public class HTTPFileSystem extends FileSystem {
   }
 
   private static long parseSize(String size) {
-    return 0;
+    char lastChar = size.charAt(size.length()-1);
+    if (!Character.isDigit(lastChar)) {
+      size = size.substring(0, size.length() - 1);
+    }
+    double dsize = Double.parseDouble(size);
+    switch (lastChar) {
+    case 'G': case 'g': dsize *= 1024;
+    case 'M': case 'm': dsize *= 1024;
+    case 'K': case 'k': dsize *= 1024;
+    }
+    return (long)dsize;
   }
   
   private static long parseDateTime(String date, String time) {
@@ -154,6 +164,7 @@ public class HTTPFileSystem extends FileSystem {
   public FileStatus[] listStatus(Path f) throws IOException {
     Vector<FileStatus> statuses = new Vector<FileStatus>();
     final Pattern httpEntryPattern = Pattern.compile("<a href=\"[^\"]+\">(.+)</a>\\s*(\\d+-\\w+-\\d+)\\s+(\\d+:\\d+)\\s+([\\d\\.]+[KMG]|-)");
+    f = f.makeQualified(this);
     URL url = f.toUri().toURL();
     InputStream inStream = url.openStream();
     BufferedReader inBuffer = new BufferedReader(new InputStreamReader(inStream));
@@ -214,18 +225,8 @@ public class HTTPFileSystem extends FileSystem {
     if (modificationTime == 0)
       modificationTime = connection.getDate();
     // Hard coded to work with LP DAAC archives
-    boolean isdir = !f.getName().matches("(?i:.*\\.(hdf|xml|jpg)$)");
+    boolean isdir = !f.getName().matches("(?i:([^*\\?])*\\.(hdf|xml|jpg)$)");
     return new FileStatus(length, isdir, 1, BLOCK_SIZE, modificationTime, 0,
         null, null, null, f);
-  }
-
-  public static void main(String[] args) throws IOException {
-    Path p = new Path("http://e4ftl01.cr.usgs.gov/MOLT/MOD11A1.005/2000.03.05/");
-    FileSystem fs = p.getFileSystem(new Configuration());
-    FileStatus[] statuses = fs.listStatus(p);
-    for (FileStatus status : statuses) {
-      System.out.println(status.getPath());
-    }
-    System.out.println("total files: "+statuses.length);
   }
 }
