@@ -38,14 +38,19 @@ import org.apache.hadoop.util.Progressable;
 
 /**
  * A {@link FileSystem} that is able to open HTTP files. Note that certain
- * features are not supported by the HTTP scheme by design. First, it is read-only
- * which makes all write functionality not supported. Second, it cannot list
- * contents of a directory. For listing, some web browsers provide a default
- * behavior that lists contents of a directory as HTTP links. We try to use
- * this feature as much as possible to simulate the list functionality.
+ * features are not supported by the HTTP scheme by design. First, it is
+ * read-only which makes all write functionality not supported. Second, it
+ * cannot list contents of a directory. For listing, some web browsers provide a
+ * default behavior that lists contents of a directory as HTTP links. We try to
+ * use this feature as much as possible to simulate the list functionality.
+ * 
+ * The browsing feature in this class is designed specifically to browse LP DAAC
+ * NASA archives. Although most of the implementation is generic, there are some
+ * features that are hard-coded to work with LP DAAC and might not work with
+ * other web sites.
  * 
  * @author Ahmed Eldawy
- *
+ * 
  */
 public class HTTPFileSystem extends FileSystem {
   public static final Log LOG = LogFactory.getLog(HTTPFileSystem.class);
@@ -140,6 +145,11 @@ public class HTTPFileSystem extends FileSystem {
     }
   }
   
+  /**
+   * Lists all files and directories in a given Path that points to a directory.
+   * While this function is written in a generic way, it was designed and tested
+   * only with LP DAAC archives.
+   */
   @Override
   public FileStatus[] listStatus(Path f) throws IOException {
     Vector<FileStatus> statuses = new Vector<FileStatus>();
@@ -186,6 +196,13 @@ public class HTTPFileSystem extends FileSystem {
     throw new RuntimeException("Unsupported method #create in HTTP");
   }
 
+  /**
+   * Returns the status of a file. This method is designed specifically to work
+   * with LP DAAC archive and will not work correctly with other web sites.
+   * Since HTTP does not tell whether a URL points to a file or directory,
+   * we assume that URLs ending with HDF, XML and JPG are files while anything
+   * else is considered a directory.
+   */
   @Override
   public FileStatus getFileStatus(Path f) throws IOException {
     f = f.makeQualified(this);
@@ -208,7 +225,6 @@ public class HTTPFileSystem extends FileSystem {
     FileStatus[] statuses = fs.listStatus(p);
     for (FileStatus status : statuses) {
       System.out.println(status.getPath());
-      FileStatus subStatus = fs.getFileStatus(status.getPath());
     }
     System.out.println("total files: "+statuses.length);
   }
