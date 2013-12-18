@@ -7,7 +7,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
-import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
@@ -59,20 +58,21 @@ public class NASAPoint extends Point {
     return super.toString() + " - "+value;
   }
   
+  /**Valid range of values. Used for drawing.*/
+  public static float minValue, maxValue;
+  
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, boolean vflip, double scale) {
-    final int MinValue = 7500;
-    final int MaxValue = 16000;
     int imageX = (int) ((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
     int imageY = (int) (((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     
     if (value > 0 && imageX >= 0 && imageX < imageWidth && imageY >= 0 && imageY < imageHeight) {
       Color color;
-      if (value < MinValue) {
+      if (value < minValue) {
         color = Color.getHSBColor(0.78f, 0.5f, 1.0f);
-      } else if (value < MaxValue) {
-        float ratio = 0.78f - 0.78f * (value - MinValue) / (MaxValue - MinValue);
+      } else if (value < maxValue) {
+        float ratio = 0.78f - 0.78f * (value - minValue) / (maxValue - minValue);
         color = Color.getHSBColor(ratio, 0.5f, 1.0f);
       } else {
         color = Color.getHSBColor(0.0f, 0.5f, 1.0f);

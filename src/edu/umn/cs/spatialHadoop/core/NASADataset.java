@@ -40,6 +40,9 @@ public class NASADataset extends Rectangle {
   /**Resolution of the dataset in terms of number of rows/columns*/
   public int resolution;
   
+  /**Minimum and maximum values for this dataset as stored in its metadata*/
+  public int minValue, maxValue;
+  
   public NASADataset() {}
   
   /**

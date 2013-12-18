@@ -50,6 +50,7 @@ import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.NASADataset;
+import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -94,6 +95,8 @@ public class PlotPyramid {
    */
   public static class TileIndex implements WritableComparable<TileIndex> {
     public int level, x, y;
+    /**For NASAPoint, valid range of value. Used for drawing a heatmap.*/
+    public int minValue, maxValue;
     
     public TileIndex() {}
     
@@ -102,6 +105,8 @@ public class PlotPyramid {
       level = in.readInt();
       x = in.readInt();
       y = in.readInt();
+      minValue = in.readInt();
+      maxValue = in.readInt();
     }
 
     @Override
@@ -109,6 +114,8 @@ public class PlotPyramid {
       out.writeInt(level);
       out.writeInt(x);
       out.writeInt(y);
+      out.writeInt(minValue);
+      out.writeInt(maxValue);
     }
 
     @Override
@@ -182,6 +189,8 @@ public class PlotPyramid {
         if (cell instanceof NASADataset) {
           // Calculate the ratio of replicating a point to each level
           NASADataset dataset = (NASADataset) cell;
+          key.minValue = dataset.minValue;
+          key.maxValue = dataset.maxValue;
           this.levelProb[0] = 1.0 *
               // Number of pixels in one tile
               (double) tileWidth * tileHeight /
@@ -266,6 +275,8 @@ public class PlotPyramid {
     public void reduce(TileIndex tileIndex, Iterator<Shape> values,
         OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
         throws IOException {
+      NASAPoint.minValue = tileIndex.minValue;
+      NASAPoint.maxValue = tileIndex.maxValue;
       // Coordinates of the current tile in data coordinates
       Rectangle tileMBR = new Rectangle();
       // Edge length of tile in the current level

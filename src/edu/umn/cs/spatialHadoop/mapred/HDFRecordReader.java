@@ -150,6 +150,12 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
     for (Attribute attr : attrs) {
       if (attr.getName().equals("_FillValue")) {
         fillValueStr = Array.get(attr.getValue(), 0).toString();
+      } else if (attr.getName().equals("valid_range")) {
+        nasaDataset.minValue = Integer.parseInt(Array.get(attr.getValue(), 0).toString());
+        nasaDataset.maxValue = Integer.parseInt(Array.get(attr.getValue(), 1).toString());
+        if (nasaDataset.maxValue < 0) {
+          nasaDataset.maxValue += 65536;
+        }
       }
     }
     if (fillValueStr == null) {
