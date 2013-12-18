@@ -18,7 +18,6 @@ import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.Iterator;
@@ -34,6 +33,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -49,6 +49,7 @@ import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.NASADataset;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -152,30 +153,68 @@ public class PlotPyramid {
     /**Used as a key for output*/
     private TileIndex key;
     private boolean vflip;
+    private int tileWidth, tileHeight;
+    private InputSplit currentSplit;
+    /**The probability of replicating a point to level i*/
+    private double[] levelProb;
     
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      numLevels = job.getInt(NumLevels, 1);
+      this.numLevels = job.getInt(NumLevels, 1);
       Rectangle inputMBR = SpatialSite.getRectangle(job, InputMBR);
-      bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
-      bottomGrid.rows = bottomGrid.columns =
+      this.bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
+      this.bottomGrid.rows = bottomGrid.columns =
           (int) Math.round(Math.pow(2, numLevels - 1));
       this.vflip = job.getBoolean(VFlip, false);
       this.key = new TileIndex();
+      this.tileWidth = job.getInt(TileWidth, 256);
+      this.tileHeight = job.getInt(TileHeight, 256);
+      this.currentSplit = null;
+      this.levelProb = new double[this.numLevels];
     }
     
     public void map(Rectangle cell, Shape shape,
         OutputCollector<TileIndex, Shape> output, Reporter reporter)
         throws IOException {
+      if (currentSplit != reporter.getInputSplit()) {
+        this.currentSplit = reporter.getInputSplit();
+        if (cell instanceof NASADataset) {
+          // Calculate the ratio of replicating a point to each level
+          NASADataset dataset = (NASADataset) cell;
+          this.levelProb[0] = 1.0 *
+              // Number of pixels in one tile
+              (double) tileWidth * tileHeight /
+              // Area of a tile at level 0
+              (bottomGrid.getWidth() * bottomGrid.getHeight()) /(
+              // Number of points in file
+              (double) dataset.resolution * dataset.resolution /
+              // Area of file
+              (dataset.getWidth() * dataset.getHeight())
+              );
+          for (int level = 1; level < numLevels; level++) {
+            this.levelProb[level] = this.levelProb[level - 1] * 4;
+          }
+        }
+      }
       Rectangle shapeMBR = shape.getMBR();
       if (shapeMBR == null)
         return;
       if (vflip)
         shapeMBR = new Rectangle(shapeMBR.x1, -shapeMBR.y2, shapeMBR.x2, -shapeMBR.y1);
+      
+      int min_level = 0;
+//      if (cell instanceof NASADataset) {
+//        // Special handling for NASA data
+//        double p = Math.random();
+//        // Skip levels that do not satisfy the probability
+//        while (min_level < numLevels && p > levelProb[min_level])
+//          min_level++;
+//      }
+      
       java.awt.Rectangle overlappingCells =
           bottomGrid.getOverlappingCells(shapeMBR);
-      for (key.level = numLevels - 1; key.level >= 0; key.level--) {
+      for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
         for (int i = 0; i < overlappingCells.width; i++) {
           key.x = i + overlappingCells.x;
           for (int j = 0; j < overlappingCells.height; j++) {
@@ -227,7 +266,6 @@ public class PlotPyramid {
     public void reduce(TileIndex tileIndex, Iterator<Shape> values,
         OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
         throws IOException {
-      LOG.info("Reduce key: "+tileIndex);
       // Coordinates of the current tile in data coordinates
       Rectangle tileMBR = new Rectangle();
       // Edge length of tile in the current level
@@ -253,10 +291,13 @@ public class PlotPyramid {
         graphics.clearRect(0, 0, tileWidth, tileHeight);
         graphics.setColor(strokeColor);
         
+        int count = 0;
         while (values.hasNext()) {
           Shape s = values.next();
           s.draw(graphics, tileMBR, tileWidth, tileHeight, vflip, scale2);
+          count++;
         }
+        System.out.println("Number of points at tile "+tileIndex+" = "+count);
         
         graphics.dispose();
         
