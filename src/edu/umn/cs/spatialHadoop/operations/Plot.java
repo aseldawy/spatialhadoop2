@@ -67,6 +67,8 @@ public class Plot {
   /**Whether or not to show partition borders (boundaries) in generated image*/
   private static final String ShowBorders = "plot.show_borders";
   private static final String StrokeColor = "plot.stroke_color";
+  private static final String MinValue = "plot.min_value";
+  private static final String MaxValue = "plot.max_value";
   /**Flip the image vertically to correct +ve Y-axis direction*/
   private static final String VFlip = "plot.vflip";
 
@@ -149,6 +151,9 @@ public class Plot {
 
       this.scale2 = (double)imageWidth * imageHeight /
           ((double)fileMbr.getWidth() * fileMbr.getHeight());
+
+      NASAPoint.minValue = job.getInt(MinValue, 0);
+      NASAPoint.maxValue = job.getInt(MaxValue, 65535);
     }
 
     @Override
@@ -256,9 +261,6 @@ public class Plot {
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
   
-  static int min_value = Integer.MAX_VALUE;
-  static int max_value = Integer.MIN_VALUE;
-  
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, boolean vflip, Color color,
       boolean showBorders, String hdfDataset, boolean background) throws IOException {
@@ -308,6 +310,10 @@ public class Plot {
       // Input is HDF
       job.set(HDFRecordReader.DatasetName, hdfDataset);
       job.setBoolean(HDFRecordReader.SkipFillValue, true);
+      // Determine the range of values by opening one of the HDF files
+      Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
+      job.setInt(MinValue, minMax.minValue);
+      job.setInt(MaxValue, minMax.maxValue);
     }
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);

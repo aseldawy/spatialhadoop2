@@ -54,6 +54,7 @@ import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
@@ -84,6 +85,9 @@ public class PlotPyramid {
   private static final String StrokeColor = "plot.stroke_color";
   /**Flip the image vertically to correct +ve Y-axis direction*/
   private static final String VFlip = "PlotPyramid.VFlip";
+  /**Valid range of values for HDF dataset*/
+  private static final String MinValue = "plot.min_value";
+  private static final String MaxValue = "plot.max_value";
 
   /**
    * An internal class that indicates a position of a tile in the pyramid.
@@ -95,8 +99,6 @@ public class PlotPyramid {
    */
   public static class TileIndex implements WritableComparable<TileIndex> {
     public int level, x, y;
-    /**For NASAPoint, valid range of value. Used for drawing a heatmap.*/
-    public int minValue, maxValue;
     
     public TileIndex() {}
     
@@ -105,8 +107,6 @@ public class PlotPyramid {
       level = in.readInt();
       x = in.readInt();
       y = in.readInt();
-      minValue = in.readInt();
-      maxValue = in.readInt();
     }
 
     @Override
@@ -114,8 +114,6 @@ public class PlotPyramid {
       out.writeInt(level);
       out.writeInt(x);
       out.writeInt(y);
-      out.writeInt(minValue);
-      out.writeInt(maxValue);
     }
 
     @Override
@@ -189,8 +187,6 @@ public class PlotPyramid {
         if (cell instanceof NASADataset) {
           // Calculate the ratio of replicating a point to each level
           NASADataset dataset = (NASADataset) cell;
-          key.minValue = dataset.minValue;
-          key.maxValue = dataset.maxValue;
           this.levelProb[0] = 1.0 *
               // Number of pixels in one tile
               (double) tileWidth * tileHeight /
@@ -269,14 +265,14 @@ public class PlotPyramid {
       tileHeight = job.getInt(TileHeight, 256);
       this.vflip = job.getBoolean(VFlip, false);
       this.strokeColor = new Color(job.getInt(StrokeColor, 0));
+      NASAPoint.minValue = job.getInt(MinValue, 0);
+      NASAPoint.maxValue = job.getInt(MaxValue, 65535);
     }
 
     @Override
     public void reduce(TileIndex tileIndex, Iterator<Shape> values,
         OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
         throws IOException {
-      NASAPoint.minValue = tileIndex.minValue;
-      NASAPoint.maxValue = tileIndex.maxValue;
       // Coordinates of the current tile in data coordinates
       Rectangle tileMBR = new Rectangle();
       // Edge length of tile in the current level
@@ -308,7 +304,6 @@ public class PlotPyramid {
           s.draw(graphics, tileMBR, tileWidth, tileHeight, vflip, scale2);
           count++;
         }
-        System.out.println("Number of points at tile "+tileIndex+" = "+count);
         
         graphics.dispose();
         
@@ -403,9 +398,9 @@ public class PlotPyramid {
    */
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int tileWidth, int tileHeight, boolean vflip, Color color,
-      int numLevels) throws IOException {
+      int numLevels, String hdfDataset) throws IOException {
     JobConf job = new JobConf(PlotPyramid.class);
-    job.setJobName("Plot");
+    job.setJobName("PlotPyramid");
     
     job.setMapperClass(PlotMap.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
@@ -442,6 +437,17 @@ public class PlotPyramid {
     job.setBoolean(VFlip, vflip);
     
     // Set input and output
+    if (hdfDataset != null) {
+      // Input is HDF
+      job.set(HDFRecordReader.DatasetName, hdfDataset);
+      job.setBoolean(HDFRecordReader.SkipFillValue, true);
+      // Determine the range of values by opening one of the HDF files
+      Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
+      job.setInt(MinValue, minMax.minValue);
+      job.setInt(MaxValue, minMax.maxValue);
+    }
+    
+    // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     
@@ -453,9 +459,9 @@ public class PlotPyramid {
   }
   
   public static <S extends Shape> void plot(Path inFile, Path outFile,
-      S shape, int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels)
+      S shape, int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels, String hdfDataset)
           throws IOException {
-    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels);
+    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset);
   }
 
   
@@ -489,15 +495,16 @@ public class PlotPyramid {
     Path inFile = files[0];
     Path outFile = files[1];
 
-    Shape shape = cla.getShape(true);
-    
     int tileWidth = cla.getInt("tilewidth", 256);
     int tileHeight = cla.getInt("tileheight", 256);
     int numLevels = cla.getInt("numlevels", 8);
     boolean vflip = cla.is("vflip");
     Color color = cla.getColor();
     
-    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels);
+    String hdfDataset = cla.get("dataset");
+    Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+    
+    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset);
   }
 
 }
