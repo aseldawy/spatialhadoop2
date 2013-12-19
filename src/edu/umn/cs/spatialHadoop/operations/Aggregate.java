@@ -38,6 +38,7 @@ import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.core.NASADataset;
 import edu.umn.cs.spatialHadoop.core.NASAPoint;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
@@ -52,47 +53,55 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  */
 public class Aggregate {
   
-  public static class MinMax implements Writable, TextSerializable {
+  /**
+   * A structure to hold some aggregate values used to draw HDF files efficiently
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class MinMax extends Rectangle implements Writable, TextSerializable {
     int minValue, maxValue;
 
-    public MinMax() {}
-    
-    public MinMax(int minValue, int maxValue) {
-      this.minValue = minValue;
-      this.maxValue = maxValue;
+    public MinMax() {
+      super(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
+      minValue = Integer.MAX_VALUE;
+      maxValue = Integer.MIN_VALUE;
     }
-
+    
     @Override
     public void write(DataOutput out) throws IOException {
+      super.write(out);
       out.writeInt(minValue);
       out.writeInt(maxValue);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
+      super.readFields(in);
       minValue = in.readInt();
       maxValue = in.readInt();
     }
     
     @Override
     public String toString() {
-      return minValue+","+maxValue;
+      return super.toString()+","+minValue+","+maxValue;
     }
 
     @Override
     public Text toText(Text text) {
       TextSerializerHelper.serializeLong(minValue, text, ',');
-      TextSerializerHelper.serializeLong(maxValue, text, '\0');
-      return text;
+      TextSerializerHelper.serializeLong(maxValue, text, ',');
+      return super.toText(text);
     }
 
     @Override
     public void fromText(Text text) {
       minValue = TextSerializerHelper.consumeInt(text, ',');
-      maxValue = TextSerializerHelper.consumeInt(text, '\0');
+      maxValue = TextSerializerHelper.consumeInt(text, ',');
+      super.fromText(text);
     }
 
     public void expand(MinMax value) {
+      super.expand(value);
       if (value.minValue < minValue)
         minValue = value.minValue;
       if (value.maxValue > maxValue)
@@ -108,6 +117,8 @@ public class Aggregate {
         OutputCollector<NullWritable, MinMax> output, Reporter reporter)
             throws IOException {
       minMax.minValue = minMax.maxValue = point.value;
+      // Set spatial boundaries
+      minMax.set(point);
       output.collect(NullWritable.get(), minMax);
     }
   }
@@ -118,13 +129,9 @@ public class Aggregate {
     public void reduce(NullWritable dummy, Iterator<MinMax> values,
         OutputCollector<NullWritable, MinMax> output, Reporter reporter)
             throws IOException {
-      MinMax agg = new MinMax(Integer.MAX_VALUE, Integer.MIN_VALUE);
+      MinMax agg = new MinMax();
       while (values.hasNext()) {
-        MinMax val = values.next();
-        if (val.minValue < agg.minValue)
-          agg.minValue = val.minValue;
-        if (val.maxValue > agg.maxValue)
-          agg.maxValue = val.maxValue;
+        agg.expand(values.next());
       }
       output.collect(dummy, agg);
     }
@@ -171,7 +178,7 @@ public class Aggregate {
       
     // Read job result
     FileStatus[] results = outFs.listStatus(outputPath);
-    MinMax minMax = new MinMax(Integer.MAX_VALUE, Integer.MIN_VALUE);
+    MinMax minMax = new MinMax();
     for (FileStatus status : results) {
       if (status.getLen() > 0 && status.getPath().getName().startsWith("part-")) {
         BufferedReader reader = new BufferedReader(new InputStreamReader(outFs.open(status.getPath())));
@@ -201,7 +208,7 @@ public class Aggregate {
   public static MinMax aggregateLocal(FileSystem fs, Path file) throws IOException {
     long file_size = fs.getFileStatus(file).getLen();
     
-    MinMax minMax = new MinMax(Integer.MAX_VALUE, Integer.MIN_VALUE);
+    MinMax minMax = new MinMax();
     
     // HDF file
     HDFRecordReader reader = new HDFRecordReader(new Configuration(),
@@ -213,6 +220,7 @@ public class Aggregate {
         minMax.minValue = point.value;
       if (point.value > minMax.maxValue)
         minMax.maxValue = point.value;
+      minMax.expand(point);
     }
     reader.close();
     return minMax;

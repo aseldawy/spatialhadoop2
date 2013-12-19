@@ -414,7 +414,21 @@ public class PlotPyramid {
     job.setReducerClass(PlotReduce.class);
     
     FileSystem inFs = inFile.getFileSystem(job);
-    Rectangle fileMBR = FileMBR.fileMBRMapReduce(inFs, inFile, shape, false);
+
+    Rectangle fileMBR;
+    if (hdfDataset != null) {
+      // Input is HDF
+      job.set(HDFRecordReader.DatasetName, hdfDataset);
+      job.setBoolean(HDFRecordReader.SkipFillValue, true);
+      // Determine the range of values by opening one of the HDF files
+      Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
+      job.setInt(MinValue, minMax.minValue);
+      job.setInt(MaxValue, minMax.maxValue);
+      fileMBR = minMax.getMBR();
+    } else {
+      fileMBR = FileMBR.fileMBR(inFs, inFile, shape);
+    }
+    
     if (vflip) {
       double temp = fileMBR.y1;
       fileMBR.y1 = -fileMBR.y2;
@@ -435,17 +449,6 @@ public class PlotPyramid {
     job.setInt(TileHeight, tileHeight);
     job.setInt(NumLevels, numLevels);
     job.setBoolean(VFlip, vflip);
-    
-    // Set input and output
-    if (hdfDataset != null) {
-      // Input is HDF
-      job.set(HDFRecordReader.DatasetName, hdfDataset);
-      job.setBoolean(HDFRecordReader.SkipFillValue, true);
-      // Determine the range of values by opening one of the HDF files
-      Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
-      job.setInt(MinValue, minMax.minValue);
-      job.setInt(MaxValue, minMax.maxValue);
-    }
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);

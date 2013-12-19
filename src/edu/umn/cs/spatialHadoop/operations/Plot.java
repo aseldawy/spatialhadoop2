@@ -277,7 +277,20 @@ public class Plot {
     job.setMapOutputValueClass(shape.getClass());
     
     FileSystem inFs = inFile.getFileSystem(job);
-    Rectangle fileMbr = FileMBR.fileMBR(inFs, inFile, shape);
+    Rectangle fileMbr;
+    // Set input and output
+    if (hdfDataset != null) {
+      // Input is HDF
+      job.set(HDFRecordReader.DatasetName, hdfDataset);
+      job.setBoolean(HDFRecordReader.SkipFillValue, true);
+      // Determine the range of values by opening one of the HDF files
+      Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
+      job.setInt(MinValue, minMax.minValue);
+      job.setInt(MaxValue, minMax.maxValue);
+      fileMbr = minMax.getMBR();
+    } else {
+      fileMbr = FileMBR.fileMBR(inFs, inFile, shape);
+    }
     LOG.info("File MBR: "+fileMbr);
     
     CellInfo[] cellInfos;
@@ -305,16 +318,6 @@ public class Plot {
     job.setInt(StrokeColor, color.getRGB());
     job.setBoolean(VFlip, vflip);
     
-    // Set input and output
-    if (hdfDataset != null) {
-      // Input is HDF
-      job.set(HDFRecordReader.DatasetName, hdfDataset);
-      job.setBoolean(HDFRecordReader.SkipFillValue, true);
-      // Determine the range of values by opening one of the HDF files
-      Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
-      job.setInt(MinValue, minMax.minValue);
-      job.setInt(MaxValue, minMax.maxValue);
-    }
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     // Set output committer which will stitch images together after all reducers

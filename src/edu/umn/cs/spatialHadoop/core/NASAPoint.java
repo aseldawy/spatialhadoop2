@@ -16,7 +16,7 @@ public class NASAPoint extends Point {
   
   /**Value stored at this point*/
   public int value;
-
+  
   public NASAPoint() {
   }
 
