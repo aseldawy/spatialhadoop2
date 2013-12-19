@@ -175,14 +175,21 @@ public class CommandLineArguments {
   public String getRepartition() {
     return get("repartition");
   }
-  
+
   public boolean is(String flag) {
-    String expected_arg = "-"+flag;
+    return is(flag, false);
+  }
+  
+  public boolean is(String flag, boolean defaultValue) {
+    String expected_true = "-"+flag;
+    String expected_false = "-no-"+flag;
     for (String arg : args) {
-      if (arg.equals(expected_arg))
+      if (arg.equals(expected_true))
         return true;
+      if (arg.equals(expected_false))
+        return false;
     }
-    return false;
+    return defaultValue;
   }
 
   public int getCount() {

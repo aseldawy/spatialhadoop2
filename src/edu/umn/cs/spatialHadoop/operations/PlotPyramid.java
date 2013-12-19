@@ -398,7 +398,7 @@ public class PlotPyramid {
    */
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int tileWidth, int tileHeight, boolean vflip, Color color,
-      int numLevels, String hdfDataset) throws IOException {
+      int numLevels, String hdfDataset, boolean keepAspectRatio) throws IOException {
     JobConf job = new JobConf(PlotPyramid.class);
     job.setJobName("PlotPyramid");
     
@@ -435,15 +435,18 @@ public class PlotPyramid {
       fileMBR.y2 = -temp;
     }
     
-    // Expand input file to a rectangle for compatibility with the pyramid
-    // structure
-    if (fileMBR.getWidth() > fileMBR.getHeight()) {
-      fileMBR.y1 -= (fileMBR.getWidth() - fileMBR.getHeight()) / 2;
-      fileMBR.y2 = fileMBR.y1 + fileMBR.getWidth();
-    } else {
-      fileMBR.x1 -= (fileMBR.getHeight() - fileMBR.getWidth() / 2);
-      fileMBR.x2 = fileMBR.x1 + fileMBR.getHeight();
+    if (keepAspectRatio) {
+      // Expand input file to a rectangle for compatibility with the pyramid
+      // structure
+      if (fileMBR.getWidth() > fileMBR.getHeight()) {
+        fileMBR.y1 -= (fileMBR.getWidth() - fileMBR.getHeight()) / 2;
+        fileMBR.y2 = fileMBR.y1 + fileMBR.getWidth();
+      } else {
+        fileMBR.x1 -= (fileMBR.getHeight() - fileMBR.getWidth() / 2);
+        fileMBR.x2 = fileMBR.x1 + fileMBR.getHeight();
+      }
     }
+
     SpatialSite.setRectangle(job, InputMBR, fileMBR);
     job.setInt(TileWidth, tileWidth);
     job.setInt(TileHeight, tileHeight);
@@ -462,9 +465,9 @@ public class PlotPyramid {
   }
   
   public static <S extends Shape> void plot(Path inFile, Path outFile,
-      S shape, int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels, String hdfDataset)
+      S shape, int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels, String hdfDataset, boolean keepAspectRatio)
           throws IOException {
-    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset);
+    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, keepAspectRatio);
   }
 
   
@@ -506,8 +509,10 @@ public class PlotPyramid {
     
     String hdfDataset = cla.get("dataset");
     Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+
+    boolean keepAspectRatio = cla.is("keep-ratio", true);
     
-    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset);
+    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, keepAspectRatio);
   }
 
 }

@@ -263,7 +263,7 @@ public class Plot {
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, boolean vflip, Color color,
-      boolean showBorders, String hdfDataset, boolean background) throws IOException {
+      boolean showBorders, String hdfDataset, boolean keepAspectRatio, boolean background) throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
     
@@ -303,13 +303,16 @@ public class Plot {
     // Set cell information in the job configuration to be used by the mapper
     SpatialSite.setCells(job, cellInfos);
     
-    // Adjust width and height to maintain aspect ratio
-    if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
-      // Fix width and change height
-      height = (int) ((fileMbr.y2 - fileMbr.y1) * width / (fileMbr.x2 - fileMbr.x1));
-    } else {
-      width = (int) ((fileMbr.x2 - fileMbr.x1) * height / (fileMbr.y2 - fileMbr.y1));
+    if (keepAspectRatio) {
+      // Adjust width and height to maintain aspect ratio
+      if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
+        // Fix width and change height
+        height = (int) ((fileMbr.y2 - fileMbr.y1) * width / (fileMbr.x2 - fileMbr.x1));
+      } else {
+        width = (int) ((fileMbr.x2 - fileMbr.x1) * height / (fileMbr.y2 - fileMbr.y1));
+      }
     }
+
     LOG.info("Creating an image of size "+width+"x"+height);
     ImageOutputFormat.setFileMBR(job, fileMbr);
     ImageOutputFormat.setImageWidth(job, width);
@@ -337,7 +340,7 @@ public class Plot {
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
       S shape, int width, int height, boolean vflip, Color color,
-      boolean showBorders, String hdfDataset) throws IOException {
+      boolean showBorders, String hdfDataset, boolean keepAspectRatio) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
@@ -352,6 +355,16 @@ public class Plot {
         double temp = fileMbr.y1;
         fileMbr.y1 = -fileMbr.y2;
         fileMbr.y2 = -temp;
+      }
+      
+      if (keepAspectRatio) {
+        // Adjust width and height to maintain aspect ratio
+        if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
+          // Fix width and change height
+          height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
+        } else {
+          width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
+        }
       }
 
       // Create an image
@@ -385,12 +398,14 @@ public class Plot {
         fileMbr.y2 = -temp;
       }
 
-      // Adjust width and height to maintain aspect ratio
-      if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
-        // Fix width and change height
-        height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
-      } else {
-        width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
+      if (keepAspectRatio) {
+        // Adjust width and height to maintain aspect ratio
+        if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
+          // Fix width and change height
+          height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
+        } else {
+          width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
+        }
       }
       
       double scale2 = (double) width * height
@@ -424,13 +439,13 @@ public class Plot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
       int width, int height, boolean vflip, Color color, boolean showBorders,
-      String hdfDataset) throws IOException {
+      String hdfDataset, boolean keepAspectRatio) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     if (inFStatus.isDir() || inFStatus.getLen() > 100 * inFStatus.getBlockSize()) {
-      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, false);
+      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, keepAspectRatio, false);
     } else {
-      plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset);
+      plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, keepAspectRatio);
     }
   }
 
@@ -555,8 +570,10 @@ public class Plot {
 
     String hdfDataset = cla.get("dataset");
     Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+
+    boolean keepAspectRatio = cla.is("keep-ratio", true);
     
-    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset);
+    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, keepAspectRatio);
   }
 
 }
