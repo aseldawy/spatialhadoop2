@@ -452,6 +452,8 @@ public class Plot {
   /**
    * Combines images of different datasets into one image that is displayed
    * to users.
+   * This method is called from the web interface to display one image for
+   * multiple selected datasets.
    * @param fs The file system that contains the datasets and images
    * @param files Paths to directories which contains the datasets
    * @param includeBoundaries Also plot the indexing boundaries of datasets
