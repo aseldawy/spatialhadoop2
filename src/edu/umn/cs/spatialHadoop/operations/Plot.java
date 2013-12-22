@@ -137,20 +137,20 @@ public class Plot {
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
-      fileMbr = ImageOutputFormat.getFileMBR(job);
-      imageWidth = ImageOutputFormat.getImageWidth(job);
-      imageHeight = ImageOutputFormat.getImageHeight(job);
+      this.fileMbr = ImageOutputFormat.getFileMBR(job);
+      this.imageWidth = ImageOutputFormat.getImageWidth(job);
+      this.imageHeight = ImageOutputFormat.getImageHeight(job);
       this.strokeColor = new Color(job.getInt(StrokeColor, 0));
       this.vflip = job.getBoolean(VFlip, false);
       
       if (vflip) {
-        double temp = fileMbr.y1;
-        fileMbr.y1 = -fileMbr.y2;
-        fileMbr.y2 = -temp;
+        double temp = this.fileMbr.y1;
+        this.fileMbr.y1 = -this.fileMbr.y2;
+        this.fileMbr.y2 = -temp;
       }
 
       this.scale2 = (double)imageWidth * imageHeight /
-          ((double)fileMbr.getWidth() * fileMbr.getHeight());
+          (this.fileMbr.getWidth() * this.fileMbr.getHeight());
 
       NASAPoint.minValue = job.getInt(MinValue, 0);
       NASAPoint.maxValue = job.getInt(MaxValue, 65535);

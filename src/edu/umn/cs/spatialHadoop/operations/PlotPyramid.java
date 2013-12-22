@@ -276,12 +276,13 @@ public class PlotPyramid {
       // Coordinates of the current tile in data coordinates
       Rectangle tileMBR = new Rectangle();
       // Edge length of tile in the current level
-      double tileSize = fileMBR.getWidth() / Math.pow(2, tileIndex.level);
-      tileMBR.x1 = fileMBR.x1 + tileSize * tileIndex.x;
-      tileMBR.y1 = fileMBR.y1 + tileSize * tileIndex.y;
-      tileMBR.x2 = tileMBR.x1 + tileSize;
-      tileMBR.y2 = tileMBR.y1 + tileSize;
-      this.scale2 = (double)tileWidth * tileHeight / (tileSize * tileSize);
+      double tileSizeW = fileMBR.getWidth() / Math.pow(2, tileIndex.level);
+      double tileSizeH = fileMBR.getHeight() / Math.pow(2, tileIndex.level);
+      tileMBR.x1 = fileMBR.x1 + tileSizeW * tileIndex.x;
+      tileMBR.y1 = fileMBR.y1 + tileSizeH * tileIndex.y;
+      tileMBR.x2 = tileMBR.x1 + tileSizeW;
+      tileMBR.y2 = tileMBR.y1 + tileSizeH;
+      this.scale2 = (double)tileWidth * tileHeight / (tileSizeW * tileSizeH);
       try {
         // Initialize the image
         BufferedImage image = new BufferedImage(tileWidth, tileHeight,
@@ -298,11 +299,9 @@ public class PlotPyramid {
         graphics.clearRect(0, 0, tileWidth, tileHeight);
         graphics.setColor(strokeColor);
         
-        int count = 0;
         while (values.hasNext()) {
           Shape s = values.next();
           s.draw(graphics, tileMBR, tileWidth, tileHeight, vflip, scale2);
-          count++;
         }
         
         graphics.dispose();
