@@ -75,13 +75,9 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
    * @param datasetName - Name of the dataset to read (case insensitive)
    * @throws Exception
    */
-  public HDFRecordReader(Configuration job, FileSplit split, String datasetName, boolean skipFillValue) {
-    try {
-      this.skipFillValue = skipFillValue;
-      init(job, split, datasetName);
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
+  public HDFRecordReader(Configuration job, FileSplit split, String datasetName, boolean skipFillValue) throws IOException {
+    this.skipFillValue = skipFillValue;
+    init(job, split, datasetName);
   }
 
   /**
@@ -94,80 +90,84 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
    * @param datasetName
    * @throws Exception
    */
-  private void init(Configuration job, FileSplit split, String datasetName) throws Exception {
-    // HDF library can only deal with local files. So, we need to copy the file
-    // to a local temporary directory before using the HDF Java library
-    String localFile = copyFileSplit(job, split);
-    
-    // retrieve an instance of H4File
-    FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
-    
-    hdfFile = fileFormat.createInstance(localFile, FileFormat.READ);
-    
-    // open the file and retrieve the file structure
-    hdfFile.open();
-    
-    // Retrieve the root of the HDF file structure
-    Group root =
-        (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
-    
-    // Search for the datset of interest in file
-    Stack<Group> groups2bSearched = new Stack<Group>();
-    groups2bSearched.add(root);
-    
-    Dataset firstDataset = null;
-    Dataset matchDataset = null;
-    
-    while (!groups2bSearched.isEmpty()) {
-      Group top = groups2bSearched.pop();
-      List<HObject> memberList = top.getMemberList();
+  private void init(Configuration job, FileSplit split, String datasetName) throws IOException {
+    try {
+      // HDF library can only deal with local files. So, we need to copy the file
+      // to a local temporary directory before using the HDF Java library
+      String localFile = copyFileSplit(job, split);
       
-      for (HObject member : memberList) {
-        if (member instanceof Group) {
-          groups2bSearched.add((Group) member);
-        } else if (member instanceof Dataset) {
-          if (firstDataset == null)
-            firstDataset = (Dataset) member;
-          if (member.getName().equalsIgnoreCase(datasetName)) {
-            matchDataset = (Dataset) member;
-            break;
+      // retrieve an instance of H4File
+      FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
+      
+      hdfFile = fileFormat.createInstance(localFile, FileFormat.READ);
+      
+      // open the file and retrieve the file structure
+      hdfFile.open();
+      
+      // Retrieve the root of the HDF file structure
+      Group root =
+          (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
+      
+      // Search for the datset of interest in file
+      Stack<Group> groups2bSearched = new Stack<Group>();
+      groups2bSearched.add(root);
+      
+      Dataset firstDataset = null;
+      Dataset matchDataset = null;
+      
+      while (!groups2bSearched.isEmpty()) {
+        Group top = groups2bSearched.pop();
+        List<HObject> memberList = top.getMemberList();
+        
+        for (HObject member : memberList) {
+          if (member instanceof Group) {
+            groups2bSearched.add((Group) member);
+          } else if (member instanceof Dataset) {
+            if (firstDataset == null)
+              firstDataset = (Dataset) member;
+            if (member.getName().equalsIgnoreCase(datasetName)) {
+              matchDataset = (Dataset) member;
+              break;
+            }
           }
         }
       }
-    }
-    
-    if (matchDataset == null) {
-      LOG.warn("Dataset "+datasetName+" not found in file "+split.getPath());
-    }
-    
-    // Just work on the first dataset to ensure we return some data
-    matchDataset = firstDataset;
+      
+      if (matchDataset == null) {
+        LOG.warn("Dataset "+datasetName+" not found in file "+split.getPath());
+      }
+      
+      // Just work on the first dataset to ensure we return some data
+      matchDataset = firstDataset;
 
-    nasaDataset = new NASADataset(root);
-    nasaDataset.datasetName = datasetName;
-    List<Attribute> attrs = matchDataset.getMetadata();
-    String fillValueStr = null;
-    for (Attribute attr : attrs) {
-      if (attr.getName().equals("_FillValue")) {
-        fillValueStr = Array.get(attr.getValue(), 0).toString();
-      } else if (attr.getName().equals("valid_range")) {
-        nasaDataset.minValue = Integer.parseInt(Array.get(attr.getValue(), 0).toString());
-        nasaDataset.maxValue = Integer.parseInt(Array.get(attr.getValue(), 1).toString());
-        if (nasaDataset.maxValue < 0) {
-          nasaDataset.maxValue += 65536;
+      nasaDataset = new NASADataset(root);
+      nasaDataset.datasetName = datasetName;
+      List<Attribute> attrs = matchDataset.getMetadata();
+      String fillValueStr = null;
+      for (Attribute attr : attrs) {
+        if (attr.getName().equals("_FillValue")) {
+          fillValueStr = Array.get(attr.getValue(), 0).toString();
+        } else if (attr.getName().equals("valid_range")) {
+          nasaDataset.minValue = Integer.parseInt(Array.get(attr.getValue(), 0).toString());
+          nasaDataset.maxValue = Integer.parseInt(Array.get(attr.getValue(), 1).toString());
+          if (nasaDataset.maxValue < 0) {
+            nasaDataset.maxValue += 65536;
+          }
         }
       }
+      if (fillValueStr == null) {
+        this.skipFillValue = false;
+      } else {
+        this.fillValue = Integer.parseInt(fillValueStr);
+      }
+      
+      dataArray = matchDataset.read();
+      
+      // No longer need the HDF file
+      hdfFile.close();
+    } catch (Exception e) {
+      throw new RuntimeException("Error reading HDF file '"+split.getPath()+"'", e);
     }
-    if (fillValueStr == null) {
-      this.skipFillValue = false;
-    } else {
-      this.fillValue = Integer.parseInt(fillValueStr);
-    }
-    
-    dataArray = matchDataset.read();
-    
-    // No longer need the HDF file
-    hdfFile.close();
   }
 
   /**
