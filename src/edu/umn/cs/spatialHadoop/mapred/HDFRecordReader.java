@@ -138,10 +138,10 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
     
     if (matchDataset == null) {
       LOG.warn("Dataset "+datasetName+" not found in file "+split.getPath());
+      // Just work on the first dataset to ensure we return some data
+      matchDataset = firstDataset;
     }
     
-    // Just work on the first dataset to ensure we return some data
-    matchDataset = firstDataset;
 
     nasaDataset = new NASADataset(root);
     nasaDataset.datasetName = datasetName;
