@@ -215,7 +215,7 @@ public class Aggregate {
         new FileSplit(file, 0, file_size, new String[] {}), null, true);
     NASADataset key = reader.createKey();
     NASAPoint point = reader.createValue();
-    if (reader.next(key, point)) {
+    while (reader.next(key, point)) {
       if (point.value < minMax.minValue)
         minMax.minValue = point.value;
       if (point.value > minMax.maxValue)

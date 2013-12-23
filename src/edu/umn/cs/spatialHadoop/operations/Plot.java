@@ -59,6 +59,7 @@ import edu.umn.cs.spatialHadoop.mapred.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 
 public class Plot {
   /**Logger*/
@@ -278,7 +279,7 @@ public class Plot {
     
     FileSystem inFs = inFile.getFileSystem(job);
     Rectangle fileMbr;
-    // Set input and output
+    // Collects some stats about the file to plot it correctly
     if (hdfDataset != null) {
       // Input is HDF
       job.set(HDFRecordReader.DatasetName, hdfDataset);
@@ -345,11 +346,11 @@ public class Plot {
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
     if (hdfDataset != null) {
-      RecordReader<NASADataset, NASAPoint> reader = new HDFRecordReader(
-          new Configuration(), new FileSplit(inFile, 0, fileLength,
-              new String[0]), hdfDataset, true);
-      NASADataset dataset = reader.createKey();
-      Rectangle fileMbr = dataset.getMBR();
+      // Collects some stats about the HDF file
+      MinMax hdfStats = Aggregate.aggregateLocal(inFs, inFile);
+      Rectangle fileMbr = hdfStats.getMBR();
+      NASAPoint.minValue = hdfStats.minValue;
+      NASAPoint.maxValue = hdfStats.maxValue;
       LOG.info("FileMBR: "+fileMbr);
       if (vflip) {
         double temp = fileMbr.y1;
@@ -366,6 +367,13 @@ public class Plot {
           width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
         }
       }
+
+      // Read points from the HDF file
+      RecordReader<NASADataset, NASAPoint> reader = new HDFRecordReader(
+          new Configuration(), new FileSplit(inFile, 0, fileLength,
+              new String[0]), hdfDataset, true);
+      NASADataset dataset = reader.createKey();
+
 
       // Create an image
       BufferedImage image = new BufferedImage(width, height,
