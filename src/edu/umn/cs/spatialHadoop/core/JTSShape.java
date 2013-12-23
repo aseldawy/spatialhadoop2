@@ -14,7 +14,6 @@ package edu.umn.cs.spatialHadoop.core;
 
 import java.awt.Color;
 import java.awt.Graphics;
-import java.awt.Graphics2D;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;

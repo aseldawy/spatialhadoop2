@@ -276,12 +276,13 @@ public class PlotPyramid {
       // Coordinates of the current tile in data coordinates
       Rectangle tileMBR = new Rectangle();
       // Edge length of tile in the current level
-      double tileSize = fileMBR.getWidth() / Math.pow(2, tileIndex.level);
-      tileMBR.x1 = fileMBR.x1 + tileSize * tileIndex.x;
-      tileMBR.y1 = fileMBR.y1 + tileSize * tileIndex.y;
-      tileMBR.x2 = tileMBR.x1 + tileSize;
-      tileMBR.y2 = tileMBR.y1 + tileSize;
-      this.scale2 = (double)tileWidth * tileHeight / (tileSize * tileSize);
+      double tileSizeW = fileMBR.getWidth() / Math.pow(2, tileIndex.level);
+      double tileSizeH = fileMBR.getHeight() / Math.pow(2, tileIndex.level);
+      tileMBR.x1 = fileMBR.x1 + tileSizeW * tileIndex.x;
+      tileMBR.y1 = fileMBR.y1 + tileSizeH * tileIndex.y;
+      tileMBR.x2 = tileMBR.x1 + tileSizeW;
+      tileMBR.y2 = tileMBR.y1 + tileSizeH;
+      this.scale2 = (double)tileWidth * tileHeight / (tileSizeW * tileSizeH);
       try {
         // Initialize the image
         BufferedImage image = new BufferedImage(tileWidth, tileHeight,
@@ -298,11 +299,9 @@ public class PlotPyramid {
         graphics.clearRect(0, 0, tileWidth, tileHeight);
         graphics.setColor(strokeColor);
         
-        int count = 0;
         while (values.hasNext()) {
           Shape s = values.next();
           s.draw(graphics, tileMBR, tileWidth, tileHeight, vflip, scale2);
-          count++;
         }
         
         graphics.dispose();
@@ -398,7 +397,7 @@ public class PlotPyramid {
    */
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int tileWidth, int tileHeight, boolean vflip, Color color,
-      int numLevels, String hdfDataset) throws IOException {
+      int numLevels, String hdfDataset, boolean keepAspectRatio) throws IOException {
     JobConf job = new JobConf(PlotPyramid.class);
     job.setJobName("PlotPyramid");
     
@@ -435,15 +434,18 @@ public class PlotPyramid {
       fileMBR.y2 = -temp;
     }
     
-    // Expand input file to a rectangle for compatibility with the pyramid
-    // structure
-    if (fileMBR.getWidth() > fileMBR.getHeight()) {
-      fileMBR.y1 -= (fileMBR.getWidth() - fileMBR.getHeight()) / 2;
-      fileMBR.y2 = fileMBR.y1 + fileMBR.getWidth();
-    } else {
-      fileMBR.x1 -= (fileMBR.getHeight() - fileMBR.getWidth() / 2);
-      fileMBR.x2 = fileMBR.x1 + fileMBR.getHeight();
+    if (keepAspectRatio) {
+      // Expand input file to a rectangle for compatibility with the pyramid
+      // structure
+      if (fileMBR.getWidth() > fileMBR.getHeight()) {
+        fileMBR.y1 -= (fileMBR.getWidth() - fileMBR.getHeight()) / 2;
+        fileMBR.y2 = fileMBR.y1 + fileMBR.getWidth();
+      } else {
+        fileMBR.x1 -= (fileMBR.getHeight() - fileMBR.getWidth() / 2);
+        fileMBR.x2 = fileMBR.x1 + fileMBR.getHeight();
+      }
     }
+
     SpatialSite.setRectangle(job, InputMBR, fileMBR);
     job.setInt(TileWidth, tileWidth);
     job.setInt(TileHeight, tileHeight);
@@ -462,9 +464,9 @@ public class PlotPyramid {
   }
   
   public static <S extends Shape> void plot(Path inFile, Path outFile,
-      S shape, int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels, String hdfDataset)
+      S shape, int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels, String hdfDataset, boolean keepAspectRatio)
           throws IOException {
-    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset);
+    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, keepAspectRatio);
   }
 
   
@@ -506,8 +508,10 @@ public class PlotPyramid {
     
     String hdfDataset = cla.get("dataset");
     Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+
+    boolean keepAspectRatio = cla.is("keep-ratio", true);
     
-    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset);
+    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, keepAspectRatio);
   }
 
 }

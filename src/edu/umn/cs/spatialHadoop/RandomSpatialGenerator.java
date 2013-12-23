@@ -12,7 +12,6 @@
  */
 package edu.umn.cs.spatialHadoop;
 
-import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -32,7 +31,6 @@ import org.apache.hadoop.mapred.JobConf;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.ShapeRecordWriter;
@@ -41,7 +39,6 @@ import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RandomInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
-import edu.umn.cs.spatialHadoop.operations.Plot;
 import edu.umn.cs.spatialHadoop.operations.Repartition;
 import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionReduce;
 
@@ -161,11 +158,6 @@ public class RandomSpatialGenerator {
       outFs.delete(f.getPath(), false);
     }
     destOut.close();
-    
-    // Plot an image for the partitions used in file
-    Path imagePath = new Path(file, "_partitions.png");
-    int imageSize = (int) (Math.sqrt(cells.length) * 300);
-    Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, false, Color.BLACK, false, null);
   }
   
 
