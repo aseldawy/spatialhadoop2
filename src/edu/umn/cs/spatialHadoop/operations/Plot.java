@@ -288,7 +288,7 @@ public class Plot {
       Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
-      fileMbr = minMax.getMBR();
+      fileMbr = new Rectangle(-180, -90, 180, 90);
     } else {
       fileMbr = FileMBR.fileMBR(inFs, inFile, shape);
     }
@@ -348,7 +348,7 @@ public class Plot {
     if (hdfDataset != null) {
       // Collects some stats about the HDF file
       MinMax hdfStats = Aggregate.aggregateLocal(inFs, inFile);
-      Rectangle fileMbr = hdfStats.getMBR();
+      Rectangle fileMbr = new Rectangle(-180, -90, 180, 90);
       NASAPoint.minValue = hdfStats.minValue;
       NASAPoint.maxValue = hdfStats.maxValue;
       LOG.info("FileMBR: "+fileMbr);

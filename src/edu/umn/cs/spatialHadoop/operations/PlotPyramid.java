@@ -423,7 +423,7 @@ public class PlotPyramid {
       Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
-      fileMBR = minMax.getMBR();
+      fileMBR = new Rectangle(-180, -90, 180, 90);
     } else {
       fileMBR = FileMBR.fileMBR(inFs, inFile, shape);
     }
