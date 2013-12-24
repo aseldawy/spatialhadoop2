@@ -64,8 +64,13 @@ public class NASAPoint extends Point {
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, boolean vflip, double scale) {
+    // Use the Mercator projection to draw an image similar to Google Maps
+    // http://stackoverflow.com/questions/14329691/covert-latitude-longitude-point-to-a-pixels-x-y-on-mercator-projection
     int imageX = (int) ((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int imageY = (int) (((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    double latRad = this.y * Math.PI / 180.0;
+    double mercN = Math.log(Math.tan((Math.PI/4)+(latRad/2)));
+    //int imageY = (int) (((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int imageY = (int) (((double) imageHeight / 2) - (imageWidth * mercN / (2 * Math.PI)));
     
     if (value > 0 && imageX >= 0 && imageX < imageWidth && imageY >= 0 && imageY < imageHeight) {
       Color color;
