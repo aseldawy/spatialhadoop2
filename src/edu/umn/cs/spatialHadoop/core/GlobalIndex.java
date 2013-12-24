@@ -141,31 +141,19 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
    * @return - The MBR of all objects or <code>null</code> if empty
    */
   public Rectangle getMBR() {
-    double x1, y1, x2, y2;
     Iterator<S> i = this.iterator();
     if (!i.hasNext())
       return null;
-    Rectangle mbr = i.next().getMBR();
-    x1 = mbr.x1;
-    y1 = mbr.y1;
-    x2 = mbr.x2;
-    y2 = mbr.y2;
+    Rectangle globalMBR = new Rectangle(-Double.MAX_VALUE, -Double.MAX_VALUE,
+        Double.MIN_VALUE, Double.MIN_VALUE);
     while (i.hasNext()) {
-      mbr = i.next().getMBR();
-      if (mbr.x2 < x1)
-        x1 = mbr.x1;
-      if (mbr.y1 < y1)
-        y1 = mbr.y1;
-      if (mbr.x2 > x2)
-        x2 = mbr.x2;
-      if (mbr.y2 > y2)
-        y2 = mbr.y2;
+      globalMBR.expand(i.next().getMBR());
     }
-    return new Rectangle(x1, y1, x2, y2);
+    return globalMBR;
   }
 
   public int knn(final double qx, final double qy, int k, ResultCollector2<S, Double> output) {
-    double query_area = ((getMBR().x2 - getMBR().x1) * (getMBR().y2 - getMBR().y1)) * k / size();
+    double query_area = (getMBR().getWidth() * getMBR().getHeight()) * k / size();
     double query_radius = Math.sqrt(query_area / Math.PI);
 
     boolean result_correct;
