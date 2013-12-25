@@ -102,6 +102,13 @@ public class PlotPyramid {
     
     public TileIndex() {}
     
+    public TileIndex(int level, int x, int y) {
+      super();
+      this.level = level;
+      this.x = x;
+      this.y = y;
+    }
+
     @Override
     public void readFields(DataInput in) throws IOException {
       level = in.readInt();
@@ -157,7 +164,6 @@ public class PlotPyramid {
     private GridInfo bottomGrid;
     /**Used as a key for output*/
     private TileIndex key;
-    private boolean vflip;
     private int tileWidth, tileHeight;
     private InputSplit currentSplit;
     /**The probability of replicating a point to level i*/
@@ -171,7 +177,6 @@ public class PlotPyramid {
       this.bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
       this.bottomGrid.rows = bottomGrid.columns =
           (int) Math.round(Math.pow(2, numLevels - 1));
-      this.vflip = job.getBoolean(VFlip, false);
       this.key = new TileIndex();
       this.tileWidth = job.getInt(TileWidth, 256);
       this.tileHeight = job.getInt(TileHeight, 256);
@@ -205,8 +210,6 @@ public class PlotPyramid {
       Rectangle shapeMBR = shape.getMBR();
       if (shapeMBR == null)
         return;
-      if (vflip)
-        shapeMBR = new Rectangle(shapeMBR.x1, -shapeMBR.y2, shapeMBR.x2, -shapeMBR.y1);
       
       int min_level = 0;
 //      if (cell instanceof NASADataset) {
@@ -264,6 +267,11 @@ public class PlotPyramid {
       tileWidth = job.getInt(TileWidth, 256);
       tileHeight = job.getInt(TileHeight, 256);
       this.vflip = job.getBoolean(VFlip, false);
+      if (vflip) {
+        double temp = this.fileMBR.y1;
+        this.fileMBR.y1 = -this.fileMBR.y2;
+        this.fileMBR.y2 = -temp;
+      }
       this.strokeColor = new Color(job.getInt(StrokeColor, 0));
       NASAPoint.minValue = job.getInt(MinValue, 0);
       NASAPoint.maxValue = job.getInt(MaxValue, 65535);
@@ -273,16 +281,16 @@ public class PlotPyramid {
     public void reduce(TileIndex tileIndex, Iterator<Shape> values,
         OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
         throws IOException {
-      // Coordinates of the current tile in data coordinates
-      Rectangle tileMBR = new Rectangle();
-      // Edge length of tile in the current level
-      double tileSizeW = fileMBR.getWidth() / Math.pow(2, tileIndex.level);
-      double tileSizeH = fileMBR.getHeight() / Math.pow(2, tileIndex.level);
-      tileMBR.x1 = fileMBR.x1 + tileSizeW * tileIndex.x;
-      tileMBR.y1 = fileMBR.y1 + tileSizeH * tileIndex.y;
-      tileMBR.x2 = tileMBR.x1 + tileSizeW;
-      tileMBR.y2 = tileMBR.y1 + tileSizeH;
-      this.scale2 = (double)tileWidth * tileHeight / (tileSizeW * tileSizeH);
+      if (vflip)
+        tileIndex = new TileIndex(tileIndex.level, tileIndex.x, ((1 << tileIndex.level) - 1) - tileIndex.y);
+      // Size of the whole file in pixels at current level
+      int imageWidth = tileWidth * (1 << tileIndex.level);
+      int imageHeight = tileHeight * (1 << tileIndex.level);
+      // Coordinates of this tile in image coordinates
+      int tileX1 = tileWidth * tileIndex.x;
+      int tileY1 = tileHeight * tileIndex.y;
+      this.scale2 = (double)imageWidth * imageHeight/ (fileMBR.getWidth() * fileMBR.getHeight());
+      
       try {
         // Initialize the image
         BufferedImage image = new BufferedImage(tileWidth, tileHeight,
@@ -298,10 +306,11 @@ public class PlotPyramid {
         graphics.setBackground(bg_color);
         graphics.clearRect(0, 0, tileWidth, tileHeight);
         graphics.setColor(strokeColor);
+        graphics.translate(-tileX1, -tileY1);
         
         while (values.hasNext()) {
           Shape s = values.next();
-          s.draw(graphics, tileMBR, tileWidth, tileHeight, vflip, scale2);
+          s.draw(graphics, fileMBR, imageWidth, imageHeight, vflip, scale2);
         }
         
         graphics.dispose();
@@ -426,12 +435,6 @@ public class PlotPyramid {
       fileMBR = new Rectangle(-180, -90, 180, 90);
     } else {
       fileMBR = FileMBR.fileMBR(inFs, inFile, shape);
-    }
-    
-    if (vflip) {
-      double temp = fileMBR.y1;
-      fileMBR.y1 = -fileMBR.y2;
-      fileMBR.y2 = -temp;
     }
     
     if (keepAspectRatio) {

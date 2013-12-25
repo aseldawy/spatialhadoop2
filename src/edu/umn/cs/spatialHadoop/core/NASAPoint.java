@@ -72,18 +72,16 @@ public class NASAPoint extends Point {
     //int imageY = (int) (((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     int imageY = (int) (((double) imageHeight / 2) - (imageWidth * mercN / (2 * (fileMBR.getHeight() * Math.PI / 180.0))));
     
-    if (value > 0 && imageX >= 0 && imageX < imageWidth && imageY >= 0 && imageY < imageHeight) {
-      Color color;
-      if (value < minValue) {
-        color = Color.getHSBColor(0.78f, 0.5f, 1.0f);
-      } else if (value < maxValue) {
-        float ratio = 0.78f - 0.78f * (value - minValue) / (maxValue - minValue);
-        color = Color.getHSBColor(ratio, 0.5f, 1.0f);
-      } else {
-        color = Color.getHSBColor(0.0f, 0.5f, 1.0f);
-      }
-      g.setColor(color);
-      g.fillRect(imageX, imageY, 1, 1);
+    Color color;
+    if (value < minValue) {
+      color = Color.getHSBColor(0.78f, 0.5f, 1.0f);
+    } else if (value < maxValue) {
+      float ratio = 0.78f - 0.78f * (value - minValue) / (maxValue - minValue);
+      color = Color.getHSBColor(ratio, 0.5f, 1.0f);
+    } else {
+      color = Color.getHSBColor(0.0f, 0.5f, 1.0f);
     }
+    g.setColor(color);
+    g.fillRect(imageX, imageY, 1, 1);
   }
 }
