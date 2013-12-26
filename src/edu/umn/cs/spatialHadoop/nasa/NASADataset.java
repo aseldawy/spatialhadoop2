@@ -1,4 +1,4 @@
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.nasa;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import ncsa.hdf.object.Attribute;
 import ncsa.hdf.object.Group;
 

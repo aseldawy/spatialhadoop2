@@ -1,4 +1,4 @@
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.nasa;
 
 import java.awt.Color;
 import java.awt.Graphics;
@@ -8,6 +8,8 @@ import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
 
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 public class NASAPoint extends Point {

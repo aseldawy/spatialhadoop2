@@ -1,4 +1,4 @@
-package edu.umn.cs.spatialHadoop.mapred;
+package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -25,9 +25,6 @@ import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
-
-import edu.umn.cs.spatialHadoop.core.NASADataset;
-import edu.umn.cs.spatialHadoop.core.NASAPoint;
 
 /**
  * Reads a specific dataset from an HDF file. Upon instantiation, the portion

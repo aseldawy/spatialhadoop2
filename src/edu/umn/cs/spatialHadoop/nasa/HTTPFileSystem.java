@@ -10,7 +10,7 @@
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and limitations under the License.
  */
-package edu.umn.cs.spatialHadoop.io;
+package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.BufferedReader;
 import java.io.IOException;

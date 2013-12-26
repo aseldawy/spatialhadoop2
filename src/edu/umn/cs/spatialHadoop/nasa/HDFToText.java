@@ -1,4 +1,4 @@
-package edu.umn.cs.spatialHadoop.operations;
+package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
 
@@ -17,11 +17,8 @@ import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
-import edu.umn.cs.spatialHadoop.core.NASADataset;
-import edu.umn.cs.spatialHadoop.core.NASAPoint;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat3;
-import edu.umn.cs.spatialHadoop.mapred.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 
 /**
