@@ -13,13 +13,13 @@
 package edu.umn.cs.spatialHadoop.nasa;
 
 /**
- * Converts a point from the sinusoidal projection to another projection.
+ * Converts a point from the latitude/longitude space to another projection.
  * @author Ahmed Eldawy
  *
  */
 public interface GeoProjector {
   /**
-   * Converts the given point (in-place) from the sinusoidal projection.
+   * Converts the given point (in-place) provided in latitude/longitude space.
    * @param pt
    */
   public void projectPoint(NASAPoint pt);

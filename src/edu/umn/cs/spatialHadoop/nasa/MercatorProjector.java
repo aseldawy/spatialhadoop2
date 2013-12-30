@@ -20,23 +20,14 @@ package edu.umn.cs.spatialHadoop.nasa;
  * @author Ahmed Eldawy
  *
  */
-public class MercatorProjector extends LatLonProjector {
+public class MercatorProjector implements GeoProjector {
   
   @Override
   public void projectPoint(NASAPoint pt) {
-    super.projectPoint(pt);
     // Use the Mercator projection to draw an image similar to Google Maps
     // http://stackoverflow.com/questions/14329691/covert-latitude-longitude-point-to-a-pixels-x-y-on-mercator-projection
     double latRad = pt.y * Math.PI / 180.0;
     double mercN = Math.log(Math.tan(Math.PI/4-latRad/2));
     pt.y = -180 * mercN / Math.PI;
-    //int imageY = (int) (((double) imageHeight / 2) - (imageWidth * mercN / (2 * (fileMBR.getHeight() * Math.PI / 180.0))));
-  }
-  
-  public static void main(String[] args) {
-    NASAPoint pt = new NASAPoint(0, -80, 0);
-    MercatorProjector proj = new MercatorProjector();
-    proj.projectPoint(pt);
-    System.out.println(pt);
   }
 }

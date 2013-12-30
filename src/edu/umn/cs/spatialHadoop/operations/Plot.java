@@ -59,7 +59,7 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.GeoProjector;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
-import edu.umn.cs.spatialHadoop.nasa.LatLonProjector;
+import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
@@ -281,7 +281,7 @@ public class Plot {
     job.setMapOutputKeyClass(IntWritable.class);
     SpatialSite.setShapeClass(job, shape.getClass());
     job.setMapOutputValueClass(shape.getClass());
-    job.setClass(HDFRecordReader.ProjectorClass, LatLonProjector.class, GeoProjector.class);
+    job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class, GeoProjector.class);
 
     FileSystem inFs = inFile.getFileSystem(job);
     Rectangle fileMbr;

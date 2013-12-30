@@ -249,6 +249,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
           (double) row * 10 / nasaDataset.resolution;
       point.x = (nasaDataset.h * 10 - 180) +
           (double) (col) * 10 / nasaDataset.resolution;
+      point.x /= Math.cos(point.y * Math.PI / 180);
       if (projector != null)
         projector.projectPoint(point);
       
