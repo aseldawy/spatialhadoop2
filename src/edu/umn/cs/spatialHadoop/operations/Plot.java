@@ -281,10 +281,9 @@ public class Plot {
     job.setMapOutputKeyClass(IntWritable.class);
     SpatialSite.setShapeClass(job, shape.getClass());
     job.setMapOutputValueClass(shape.getClass());
-    job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class, GeoProjector.class);
 
     FileSystem inFs = inFile.getFileSystem(job);
-    Rectangle fileMbr;
+    Rectangle fileMBR;
     // Collects some stats about the file to plot it correctly
     long inputSize;
     if (hdfDataset != null) {
@@ -295,26 +294,28 @@ public class Plot {
       Aggregate.MinMax minMax = Aggregate.aggregate(inFs, inFile);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
-      fileMbr = new Rectangle(-180, -140, 180, 169);
+      fileMBR = new Rectangle(-180, -140, 180, 169);
       inputSize = Aggregate.sizeOfLastProcessedFile;
+      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+          GeoProjector.class);
     } else {
-      fileMbr = FileMBR.fileMBR(inFs, inFile, shape);
+      fileMBR = FileMBR.fileMBR(inFs, inFile, shape);
       inputSize = FileMBR.sizeOfLastProcessedFile;
     }
-    LOG.info("File MBR: "+fileMbr);
+    LOG.info("File MBR: "+fileMBR);
     
     if (keepAspectRatio) {
       // Adjust width and height to maintain aspect ratio
-      if ((fileMbr.x2 - fileMbr.x1) / (fileMbr.y2 - fileMbr.y1) > (double) width / height) {
+      if ((fileMBR.x2 - fileMBR.x1) / (fileMBR.y2 - fileMBR.y1) > (double) width / height) {
         // Fix width and change height
-        height = (int) ((fileMbr.y2 - fileMbr.y1) * width / (fileMbr.x2 - fileMbr.x1));
+        height = (int) ((fileMBR.y2 - fileMBR.y1) * width / (fileMBR.x2 - fileMBR.x1));
       } else {
-        width = (int) ((fileMbr.x2 - fileMbr.x1) * height / (fileMbr.y2 - fileMbr.y1));
+        width = (int) ((fileMBR.x2 - fileMBR.x1) * height / (fileMBR.y2 - fileMBR.y1));
       }
     }
     
     LOG.info("Creating an image of size "+width+"x"+height);
-    ImageOutputFormat.setFileMBR(job, fileMbr);
+    ImageOutputFormat.setFileMBR(job, fileMBR);
     ImageOutputFormat.setImageWidth(job, width);
     ImageOutputFormat.setImageHeight(job, height);
     job.setBoolean(ShowBorders, showBorders);
@@ -322,8 +323,8 @@ public class Plot {
     job.setBoolean(VFlip, vflip);
     
     // A heap file. The map function should partition the file
-    GridInfo partitionGrid = new GridInfo(fileMbr.x1, fileMbr.y1, fileMbr.x2,
-        fileMbr.y2);
+    GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+        fileMBR.y2);
     partitionGrid.calculateCellDimensions((int)
         Math.max(1, inputSize / outFile.getFileSystem(job).getDefaultBlockSize(outFile)));
     SpatialSite.setShape(job, PartitionGrid, partitionGrid);

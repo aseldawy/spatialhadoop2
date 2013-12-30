@@ -54,7 +54,9 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.nasa.GeoProjector;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 
@@ -432,7 +434,10 @@ public class PlotPyramid {
       Aggregate.MinMax minMax = Aggregate.aggregate(inFs, inFile);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
-      fileMBR = new Rectangle(-180, -90, 180, 90);
+      //fileMBR = new Rectangle(-180, -90, 180, 90);
+      fileMBR = new Rectangle(-180, -140, 180, 169);
+      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+          GeoProjector.class);
     } else {
       fileMBR = FileMBR.fileMBR(inFs, inFile, shape);
     }
