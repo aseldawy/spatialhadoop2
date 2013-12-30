@@ -36,6 +36,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
@@ -52,6 +53,12 @@ import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
  *
  */
 public class Aggregate {
+  
+  /**
+   * Keeps track of the size of last processed file. Used to determine the
+   * uncompressed size of a file.
+   */
+  public static long sizeOfLastProcessedFile;
   
   /**
    * A structure to hold some aggregate values used to draw HDF files efficiently
@@ -227,8 +234,24 @@ public class Aggregate {
   }
   
   public static MinMax aggregate(FileSystem fs, Path inFile) throws IOException {
+    // Compute file size by adding up sizes of all files assuming they are
+    // not compressed
+    long totalLength = 0;
+    FileStatus[] matches;
+    if (fs.getFileStatus(inFile).isDir()) {
+      matches = fs.listStatus(inFile);
+    } else {
+      matches = new FileStatus[] {fs.getFileStatus(inFile)};
+    }
+    for (FileStatus match : matches) {
+      if (fs.exists(match.getPath()))
+        totalLength += match.getLen();
+    }
+    sizeOfLastProcessedFile = totalLength;
+
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
+    
     if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 3) {
       // Either a directory of file or a large file
       return aggregateMapReduce(fs, inFile);

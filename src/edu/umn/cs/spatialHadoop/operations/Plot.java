@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
@@ -56,7 +57,9 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.nasa.GeoProjector;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.nasa.LatLonProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
@@ -72,6 +75,8 @@ public class Plot {
   private static final String MaxValue = "plot.max_value";
   /**Flip the image vertically to correct +ve Y-axis direction*/
   private static final String VFlip = "plot.vflip";
+  /**The grid used to partition data across reducers*/
+  private static final String PartitionGrid = "plot.partition_grid";
 
   /**
    * If the processed block is already partitioned (via global index), then
@@ -82,40 +87,33 @@ public class Plot {
    *
    */
   public static class PlotMap extends MapReduceBase 
-    implements Mapper<Rectangle, Shape, Rectangle, Shape> {
+    implements Mapper<Rectangle, Shape, IntWritable, Shape> {
     
-    private Rectangle[] cellInfos;
+    private GridInfo partitionGrid;
+    private IntWritable cellNumber;
     
     @Override
     public void configure(JobConf job) {
-      try {
-        super.configure(job);
-        CellInfo[] fileCells = SpatialSite.getCells(job);
-        if (fileCells == null) {
-          cellInfos = null;
-        } else {
-          // Fill cellInfos with Rectangles to be able to use them as map
-          // output
-          this.cellInfos = new Rectangle[fileCells.length];
-          for (int i = 0; i < this.cellInfos.length; i++) {
-            this.cellInfos[i] = new Rectangle(fileCells[i]);
-          }
-        }
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
+      super.configure(job);
+      partitionGrid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+      cellNumber = new IntWritable();
     }
     
     public void map(Rectangle cell, Shape shape,
-        OutputCollector<Rectangle, Shape> output, Reporter reporter)
+        OutputCollector<IntWritable, Shape> output, Reporter reporter)
         throws IOException {
       Rectangle shapeMbr = shape.getMBR();
       if (shapeMbr == null)
         return;
-      // Output shape to all overlapping cells
-      for (Rectangle matchedCell : cellInfos)
-        if (matchedCell.isIntersected(shape))
-          output.collect(matchedCell, shape);
+      java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
+      for (int i = 0; i < overlappingCells.width; i++) {
+        int x = overlappingCells.x + i;
+        for (int j = 0; j < overlappingCells.height; j++) {
+          int y = overlappingCells.y + j;
+          cellNumber.set(y * partitionGrid.columns + x + 1);
+          output.collect(cellNumber, shape);
+        }
+      }
     }
   }
   
@@ -125,8 +123,9 @@ public class Plot {
    *
    */
   public static class PlotReduce extends MapReduceBase
-      implements Reducer<Rectangle, Shape, Rectangle, ImageWritable> {
+      implements Reducer<IntWritable, Shape, Rectangle, ImageWritable> {
     
+    private GridInfo partitionGrid;
     private Rectangle fileMbr;
     private int imageWidth, imageHeight;
     private ImageWritable sharedValue = new ImageWritable();
@@ -138,6 +137,7 @@ public class Plot {
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
+      this.partitionGrid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
       this.fileMbr = ImageOutputFormat.getFileMBR(job);
       this.imageWidth = ImageOutputFormat.getImageWidth(job);
       this.imageHeight = ImageOutputFormat.getImageHeight(job);
@@ -158,19 +158,24 @@ public class Plot {
     }
 
     @Override
-    public void reduce(Rectangle cellInfo, Iterator<Shape> values,
+    public void reduce(IntWritable cellNumber, Iterator<Shape> values,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
         throws IOException {
       try {
+        CellInfo cellInfo = partitionGrid.getCell(cellNumber.get());
+        if (vflip) {
+          double temp = cellInfo.y1;
+          cellInfo.y1 = -cellInfo.y2;
+          cellInfo.y2 = -temp;
+        }
         // Initialize the image
         int image_x1 = (int) ((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y1 = (int) (((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_y1 = (int) ((cellInfo.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int image_x2 = (int) ((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y2 = (int) (((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_y2 = (int) ((cellInfo.y2 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
-        if (tile_width == 0 || tile_height == 0)
-          return;
+
         LOG.info("Creating image with dimensions: "+image_x1+","+image_y1+","+image_x2+","+image_y2);
         BufferedImage image = new BufferedImage(tile_width, tile_height,
             BufferedImage.TYPE_INT_ARGB);
@@ -273,36 +278,30 @@ public class Plot {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setReducerClass(PlotReduce.class);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setMapOutputKeyClass(Rectangle.class);
+    job.setMapOutputKeyClass(IntWritable.class);
     SpatialSite.setShapeClass(job, shape.getClass());
     job.setMapOutputValueClass(shape.getClass());
-    
+    job.setClass(HDFRecordReader.ProjectorClass, LatLonProjector.class, GeoProjector.class);
+
     FileSystem inFs = inFile.getFileSystem(job);
     Rectangle fileMbr;
     // Collects some stats about the file to plot it correctly
+    long inputSize;
     if (hdfDataset != null) {
       // Input is HDF
       job.set(HDFRecordReader.DatasetName, hdfDataset);
       job.setBoolean(HDFRecordReader.SkipFillValue, true);
       // Determine the range of values by opening one of the HDF files
-      Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
+      Aggregate.MinMax minMax = Aggregate.aggregate(inFs, inFile);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
-      fileMbr = new Rectangle(-180, -90, 180, 90);
+      fileMbr = new Rectangle(-180, -140, 180, 169);
+      inputSize = Aggregate.sizeOfLastProcessedFile;
     } else {
       fileMbr = FileMBR.fileMBR(inFs, inFile, shape);
+      inputSize = FileMBR.sizeOfLastProcessedFile;
     }
     LOG.info("File MBR: "+fileMbr);
-    
-    CellInfo[] cellInfos;
-    // A heap file. The map function should partition the file
-    GridInfo gridInfo = new GridInfo(fileMbr.x1, fileMbr.y1, fileMbr.x2,
-        fileMbr.y2);
-    gridInfo.calculateCellDimensions(job.getNumReduceTasks());
-    cellInfos = gridInfo.getAllCells();
-    
-    // Set cell information in the job configuration to be used by the mapper
-    SpatialSite.setCells(job, cellInfos);
     
     if (keepAspectRatio) {
       // Adjust width and height to maintain aspect ratio
@@ -313,7 +312,7 @@ public class Plot {
         width = (int) ((fileMbr.x2 - fileMbr.x1) * height / (fileMbr.y2 - fileMbr.y1));
       }
     }
-
+    
     LOG.info("Creating an image of size "+width+"x"+height);
     ImageOutputFormat.setFileMBR(job, fileMbr);
     ImageOutputFormat.setImageWidth(job, width);
@@ -321,6 +320,13 @@ public class Plot {
     job.setBoolean(ShowBorders, showBorders);
     job.setInt(StrokeColor, color.getRGB());
     job.setBoolean(VFlip, vflip);
+    
+    // A heap file. The map function should partition the file
+    GridInfo partitionGrid = new GridInfo(fileMbr.x1, fileMbr.y1, fileMbr.x2,
+        fileMbr.y2);
+    partitionGrid.calculateCellDimensions((int)
+        Math.max(1, inputSize / outFile.getFileSystem(job).getDefaultBlockSize(outFile)));
+    SpatialSite.setShape(job, PartitionGrid, partitionGrid);
     
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);

@@ -429,7 +429,7 @@ public class PlotPyramid {
       job.set(HDFRecordReader.DatasetName, hdfDataset);
       job.setBoolean(HDFRecordReader.SkipFillValue, true);
       // Determine the range of values by opening one of the HDF files
-      Aggregate.MinMax minMax = Aggregate.aggregateMapReduce(inFs, inFile);
+      Aggregate.MinMax minMax = Aggregate.aggregate(inFs, inFile);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
       fileMBR = new Rectangle(-180, -90, 180, 90);

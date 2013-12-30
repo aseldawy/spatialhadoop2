@@ -1,3 +1,15 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
+ * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
+ * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is
+ * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and limitations under the License.
+ */
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.File;
@@ -56,12 +68,18 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
   
   /**Whether or not to skip fill value when returning values in a dataset*/
   private boolean skipFillValue;
+  
+  /**The projector used to convert NASA points to a different space*/
+  private GeoProjector projector;
 
   /**Configuration for name of the dataset to read from HDF file*/
   public static final String DatasetName = "HDFInputFormat.DatasetName";
 
   /**The configuration entry for skipping the fill value*/
   public static final String SkipFillValue = "HDFRecordReader.SkipFillValue";
+  
+  /**The class used to project NASA points upon read*/
+  public static final String ProjectorClass = "HDFRecordReader.ProjectorClass";
   
 
   /**
@@ -75,6 +93,16 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
   public HDFRecordReader(Configuration job, FileSplit split, String datasetName, boolean skipFillValue) throws IOException {
     this.skipFillValue = skipFillValue;
     init(job, split, datasetName);
+    try {
+      Class<? extends GeoProjector> projectorClass =
+          job.getClass(ProjectorClass, null, GeoProjector.class);
+      if (projectorClass != null)
+        this.projector = projectorClass.newInstance();
+    } catch (InstantiationException e) {
+      e.printStackTrace();
+    } catch (IllegalAccessException e) {
+      e.printStackTrace();
+    }
   }
 
   /**
@@ -219,11 +247,10 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
       int col = position % nasaDataset.resolution;
       point.y = (90 - nasaDataset.v * 10) -
           (double) row * 10 / nasaDataset.resolution;
-      point.x = ((nasaDataset.h * 10 - 180) +
-          (double) (col) * 10 / nasaDataset.resolution) / Math.cos(point.y * Math.PI / 180);
-      if (!nasaDataset.contains(point)) {
-        LOG.warn("Point: "+point+" not inside dataset MBR: "+nasaDataset);
-      }
+      point.x = (nasaDataset.h * 10 - 180) +
+          (double) (col) * 10 / nasaDataset.resolution;
+      if (projector != null)
+        projector.projectPoint(point);
       
       // Read next value
       Object value = Array.get(dataArray, position);
