@@ -238,14 +238,16 @@ public class Aggregate {
     // not compressed
     long totalLength = 0;
     FileStatus[] matches;
-    if (fs.getFileStatus(inFile).isDir()) {
+    if (inFile.toString().contains("*") || inFile.toString().contains("?")) {
+      // Wild card
+      matches = fs.globStatus(inFile);
+    } else if (fs.getFileStatus(inFile).isDir()) {
       matches = fs.listStatus(inFile);
     } else {
       matches = new FileStatus[] {fs.getFileStatus(inFile)};
     }
     for (FileStatus match : matches) {
-      if (fs.exists(match.getPath()))
-        totalLength += match.getLen();
+      totalLength += match.getLen();
     }
     sizeOfLastProcessedFile = totalLength;
 
