@@ -27,6 +27,8 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.Counters;
+import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -35,9 +37,9 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapred.Task;
 
-import edu.umn.cs.spatialHadoop.core.Partition;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
@@ -65,25 +67,22 @@ public class Aggregate {
    * @author Ahmed Eldawy
    *
    */
-  public static class MinMax extends Rectangle implements Writable, TextSerializable {
+  public static class MinMax implements Writable, TextSerializable {
     int minValue, maxValue;
 
     public MinMax() {
-      super(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
       minValue = Integer.MAX_VALUE;
       maxValue = Integer.MIN_VALUE;
     }
     
     @Override
     public void write(DataOutput out) throws IOException {
-      super.write(out);
       out.writeInt(minValue);
       out.writeInt(maxValue);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-      super.readFields(in);
       minValue = in.readInt();
       maxValue = in.readInt();
     }
@@ -96,19 +95,17 @@ public class Aggregate {
     @Override
     public Text toText(Text text) {
       TextSerializerHelper.serializeLong(minValue, text, ',');
-      TextSerializerHelper.serializeLong(maxValue, text, ',');
-      return super.toText(text);
+      TextSerializerHelper.serializeLong(maxValue, text, '\0');
+      return text;
     }
 
     @Override
     public void fromText(Text text) {
       minValue = TextSerializerHelper.consumeInt(text, ',');
-      maxValue = TextSerializerHelper.consumeInt(text, ',');
-      super.fromText(text);
+      maxValue = TextSerializerHelper.consumeInt(text, '\0');
     }
 
     public void expand(MinMax value) {
-      super.expand(value);
       if (value.minValue < minValue)
         minValue = value.minValue;
       if (value.maxValue > maxValue)
@@ -124,8 +121,6 @@ public class Aggregate {
         OutputCollector<NullWritable, MinMax> output, Reporter reporter)
             throws IOException {
       minMax.minValue = minMax.maxValue = point.value;
-      // Set spatial boundaries
-      minMax.set(point);
       output.collect(NullWritable.get(), minMax);
     }
   }
@@ -181,7 +176,11 @@ public class Aggregate {
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job
-    JobClient.runJob(job);
+    RunningJob lastSubmittedJob = JobClient.runJob(job);
+    
+    Counters counters = lastSubmittedJob.getCounters();
+    Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
+    Aggregate.sizeOfLastProcessedFile = inputBytesCounter.getValue();
       
     // Read job result
     FileStatus[] results = outFs.listStatus(outputPath);
@@ -227,16 +226,17 @@ public class Aggregate {
         minMax.minValue = point.value;
       if (point.value > minMax.maxValue)
         minMax.maxValue = point.value;
-      minMax.expand(point);
     }
     reader.close();
+    
+    Aggregate.sizeOfLastProcessedFile = file_size;
     return minMax;
   }
   
   public static MinMax aggregate(FileSystem fs, Path inFile) throws IOException {
-    // Compute file size by adding up sizes of all files assuming they are
-    // not compressed
-    long totalLength = 0;
+    MinMax min_max = null;
+
+    // Check if we have cached values for the given dataset
     FileStatus[] matches;
     if (inFile.toString().contains("*") || inFile.toString().contains("?")) {
       // Wild card
@@ -246,21 +246,44 @@ public class Aggregate {
     } else {
       matches = new FileStatus[] {fs.getFileStatus(inFile)};
     }
-    for (FileStatus match : matches) {
-      totalLength += match.getLen();
-    }
-    sizeOfLastProcessedFile = totalLength;
 
-    FileSystem inFs = inFile.getFileSystem(new Configuration());
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    if (matches.length == 0)
+      return min_max;
     
-    if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 3) {
-      // Either a directory of file or a large file
-      return aggregateMapReduce(fs, inFile);
-    } else {
-      // A single small file, process it without MapReduce
-      return aggregateLocal(fs, inFile);
+    // Extract the dataset from the filename of the first file
+    String firstFilename = matches[0].getPath().getName();
+    String dataset = firstFilename.split("\\.", 2)[0];
+    if (dataset.equals("MOD11A1")) {
+      // Land temperature
+      min_max = new MinMax();
+      min_max.minValue = 10000; // 200 K, -73 C, -100 F
+      min_max.maxValue = 18000; // 360 K,  87 C,  188 F
     }
+
+    if (min_max != null) {
+      // Compute file size by adding up sizes of all files assuming they are
+      // not compressed. Useful for Plot to be able to partition input file
+      // based on its size
+      long totalLength = 0;
+      for (FileStatus match : matches) {
+        totalLength += match.getLen();
+      }
+      sizeOfLastProcessedFile = totalLength;
+    } else {
+      // Need to process input files to get stats from it and calculate its size
+      FileSystem inFs = inFile.getFileSystem(new Configuration());
+      FileStatus inFStatus = inFs.getFileStatus(inFile);
+      
+      if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 3) {
+        // Either a directory of file or a large file
+        min_max = aggregateMapReduce(fs, inFile);
+      } else {
+        // A single small file, process it without MapReduce
+        min_max = aggregateLocal(fs, inFile);
+      }
+    }
+    
+    return min_max;
   }
 
 }

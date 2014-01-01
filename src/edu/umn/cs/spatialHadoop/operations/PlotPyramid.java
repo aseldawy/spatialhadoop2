@@ -52,6 +52,7 @@ import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.GeoProjector;
@@ -59,6 +60,7 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
+import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
  * Plots all tile images needed to naviagte through the image using Google Maps.
@@ -408,7 +410,7 @@ public class PlotPyramid {
    */
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int tileWidth, int tileHeight, boolean vflip, Color color,
-      int numLevels, String hdfDataset, boolean keepAspectRatio) throws IOException {
+      int numLevels, String hdfDataset, Rectangle rect, boolean keepAspectRatio) throws IOException {
     JobConf job = new JobConf(PlotPyramid.class);
     job.setJobName("PlotPyramid");
     
@@ -463,6 +465,10 @@ public class PlotPyramid {
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
+    if (rect != null) {
+      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+      RangeFilter.setQueryRange(job, rect); // Set query range for filter
+    }
     
     job.setOutputFormat(PyramidOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
@@ -471,10 +477,11 @@ public class PlotPyramid {
     JobClient.runJob(job);
   }
   
-  public static <S extends Shape> void plot(Path inFile, Path outFile,
-      S shape, int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels, String hdfDataset, boolean keepAspectRatio)
+  public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
+      int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels,
+      String hdfDataset, Rectangle rect, boolean keepAspectRatio)
           throws IOException {
-    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, keepAspectRatio);
+    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, rect, keepAspectRatio);
   }
 
   
@@ -486,9 +493,10 @@ public class PlotPyramid {
     System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
     System.out.println("tilewidth:<w> - Width of each tile in pixels");
     System.out.println("tileheight:<h> - Height of each tile in pixels");
-    System.out.println("color:<c> - Main color used to draw the picture (black)");
+    System.out.println("color:<c> - Main color used to draw shapes (black)");
     System.out.println("numlevels:<n> - Number of levels in the pyrmaid");
     System.out.println("-overwrite: Override output file without notice");
+    System.out.println("rect:<x1,y1,x2,y2> - Limit drawing to the selected area");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
   }
 
@@ -516,10 +524,12 @@ public class PlotPyramid {
     
     String hdfDataset = cla.get("dataset");
     Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+    Rectangle rect = cla.getRectangle();
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
     
-    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, keepAspectRatio);
+    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color,
+        numLevels, hdfDataset, rect, keepAspectRatio);
   }
 
 }

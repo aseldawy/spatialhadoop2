@@ -296,25 +296,4 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
     return dataArray == null ? 0 : (float)position / Array.getLength(dataArray);
   }
 
-  public static void main(String[] args) throws Exception {
-    FileSplit hdfFileSplit = new FileSplit(
-        new Path("http://e4ftl01.cr.usgs.gov/MOLT/MOD11A1.005/2000.03.05/MOD11A1.A2000065.h35v08.005.2007176170906.hdf"),
-        0, 0, new String[] {});
-    HDFRecordReader reader = new HDFRecordReader(new Configuration(),
-        hdfFileSplit, "LST_Night_1km", true);
-    
-    NASADataset dataset = reader.createKey();
-    NASAPoint point = reader.createValue();
-    
-    System.out.println(dataset);
-    
-    int count = 0;
-    while (reader.next(dataset, point)) {
-      count++;
-    }
-    
-    System.out.println("Read "+count+" values");
-    
-    reader.close();
-  }
 }
