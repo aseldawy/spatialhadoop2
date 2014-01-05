@@ -253,7 +253,7 @@ public class Aggregate {
     // Extract the dataset from the filename of the first file
     String firstFilename = matches[0].getPath().getName();
     String dataset = firstFilename.split("\\.", 2)[0];
-    if (dataset.equals("MOD11A1")) {
+    if (dataset.equals("MOD11A1") || dataset.equals("MYD11A1")) {
       // Land temperature
       min_max = new MinMax();
       min_max.minValue = 10000; // 200 K, -73 C, -100 F
