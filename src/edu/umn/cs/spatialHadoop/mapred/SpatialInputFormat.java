@@ -153,12 +153,14 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
         }
         gindex = new GlobalIndex<Partition>();
         gindex.bulkLoad(partitions);
+        // The directory that contains the files (remove wildcard)
+        final Path indexDir = listStatus[0].getPath().getParent();
         // Use the generated global index to limit files
         filter.selectCells(gindex, new ResultCollector<Partition>() {
           @Override
           public void collect(Partition partition) {
             try {
-              Path cell_path = new Path(dir, partition.filename);
+              Path cell_path = new Path(indexDir, partition.filename);
               if (!fs.exists(cell_path))
                 LOG.warn("Matched file not found: "+cell_path);
               result.add(fs.getFileStatus(cell_path));
