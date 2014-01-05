@@ -114,7 +114,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, dir);
     if (gindex == null) {
       FileStatus[] listStatus;
-      if (dir.toString().matches("\\*|\\?")) {
+      if (dir.toString().indexOf('*') != -1 || dir.toString().indexOf('?') != -1) {
         // Wild card
         listStatus = fs.globStatus(dir);
       } else {
