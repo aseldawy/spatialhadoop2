@@ -355,6 +355,7 @@ public class PlotPyramid {
             LOG.error("Output of each reducer should be a folder");
           FileStatus[] imageFiles = outFs.listStatus(reduceOut.getPath(),
               SpatialSite.NonHiddenFileFilter);
+          // Move all images to one folder
           for (FileStatus imageFile : imageFiles) {
             outFs.rename(imageFile.getPath(), outPath);
           }
