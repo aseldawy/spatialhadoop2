@@ -9,7 +9,8 @@
   import="edu.umn.cs.spatialHadoop.core.*"
   import="java.io.BufferedReader"
   import="org.apache.hadoop.http.HtmlQuoting"
-  import="edu.umn.cs.spatialHadoop.util.JspHelper"
+  import="edu.umn.cs.spatialHadoop.util.JspSpatialHelper"
+  import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
   import="org.apache.hadoop.conf.Configuration"
   import="java.util.Arrays"
   import="java.io.ByteArrayOutputStream"
@@ -20,6 +21,7 @@
 
 <%! private static final long serialVersionUID = 1L;%>
 <%! static JspHelper jspHelper = new JspHelper(); %>
+<%! static JspSpatialHelper jspSpatialHelper = new JspSpatialHelper(); %>
 
 <%
   final Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
@@ -27,19 +29,8 @@
     final Path path = new Path(request.getParameter("path"));
     final FileSystem fs = path.getFileSystem(conf);
     final javax.servlet.jsp.JspWriter jsp_out = out;
-    
-    // 1- Check if index file is there
-    if (SpatialSite.getGlobalIndex(fs, path) == null) {
-      // Compute the MBR and store it back to disk
-      FileMBR.fileMBRMapReduce(fs, path, new OSMPolygon(), true);
-      RunningJob job = FileMBR.lastSubmittedJob;
-      String jobUrl =
-        JspHelper.jobTrackUrl(request.getRequestURL().toString(), conf, job);
-      out.println("MBR job submitted<br/>");
-      out.println("<a href='"+jobUrl+"'>Track Job #"+job.getID()+" here</a><br/>");
-    }
-    
-    // 2- Check if the plotted image is there
+
+    // Check if the plotted image is there
     if (!fs.exists(new Path(path, "_data.png"))) {
       // Plot the image
       Color color = Color.BLACK;
@@ -64,10 +55,10 @@
       }
       
       Plot.plotMapReduce(path, new Path(path, "_data.png"), new OSMPolygon(),
-        1000, 1000, color, false, false, false, true);
+        1000, 1000, true, color, false, null, true, true);
       RunningJob job = Plot.lastSubmittedJob;
       String jobUrl =
-        JspHelper.jobTrackUrl(request.getRequestURL().toString(), conf, job);
+        JspSpatialHelper.jobTrackUrl(request.getRequestURL().toString(), conf, job);
       out.println("Plot job submitted<br/>");
       out.println("<a href='"+jobUrl+"'>Track Job #"+job.getID()+" here</a><br/>");
     }

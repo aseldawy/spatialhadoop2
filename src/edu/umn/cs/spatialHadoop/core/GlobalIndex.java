@@ -144,8 +144,8 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
     Iterator<S> i = this.iterator();
     if (!i.hasNext())
       return null;
-    Rectangle globalMBR = new Rectangle(-Double.MAX_VALUE, -Double.MAX_VALUE,
-        Double.MIN_VALUE, Double.MIN_VALUE);
+    Rectangle globalMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
     while (i.hasNext()) {
       globalMBR.expand(i.next().getMBR());
     }

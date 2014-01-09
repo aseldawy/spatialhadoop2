@@ -142,6 +142,9 @@ public class FileMBR {
         if (!inFs.getFileStatus(inPath).isDir())
           return;
         Path gindex_path = new Path(inPath, "_master.grid");
+        // Answer has been already cached (may be by another job)
+        if (inFs.exists(gindex_path))
+          return;
         PrintStream gout = new PrintStream(inFs.create(gindex_path, false));
 
         // Read job result and concatenate everything to the master file

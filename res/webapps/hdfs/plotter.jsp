@@ -27,7 +27,6 @@
 <%
   Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
   String files = request.getParameter("files");
-  boolean flipVertical = request.getParameter("vflip") != null;
   if (files != null) {
     String[] filenames = HtmlQuoting.unquoteHtmlChars(files).split(",");
     Path[] filepaths = new Path[filenames.length];
@@ -58,13 +57,6 @@
             request.getParameter("partitions").equals("true");
         BufferedImage combinedImage = Plot.combineImages(conf, filepaths,
           showPartitions, 1000, 1000);
-        // Flip the image vertically if required
-        if (flipVertical) {
-          AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-          tx.translate(0, -combinedImage.getHeight(null));
-          AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-          combinedImage = op.filter(combinedImage, null);
-        }
         
         // Encode the image in base64
         ByteArrayOutputStream imageOut = new ByteArrayOutputStream();
