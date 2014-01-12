@@ -63,6 +63,8 @@ public class NASAPoint extends Point {
   /**Valid range of values. Used for drawing.*/
   public static float minValue, maxValue;
   
+  public static final float MaxHue = 0.78f;
+  
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, boolean vflip, double scale) {
@@ -71,9 +73,9 @@ public class NASAPoint extends Point {
     
     Color color;
     if (value < minValue) {
-      color = Color.getHSBColor(0.78f, 0.5f, 1.0f);
+      color = Color.getHSBColor(MaxHue, 0.5f, 1.0f);
     } else if (value < maxValue) {
-      float ratio = 0.78f - 0.78f * (value - minValue) / (maxValue - minValue);
+      float ratio = MaxHue - MaxHue * (value - minValue) / (maxValue - minValue);
       color = Color.getHSBColor(ratio, 0.5f, 1.0f);
     } else {
       color = Color.getHSBColor(0.0f, 0.5f, 1.0f);

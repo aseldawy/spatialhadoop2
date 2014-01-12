@@ -17,6 +17,7 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
+import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 
 /**
@@ -74,6 +75,9 @@ public class Main {
 
       pgd.addClass("plotp", PlotPyramid.class,
           "Plots a file to a set of images used with Google-Maps-like engine");
+
+      pgd.addClass("hdfplot", HDFPlot.class,
+          "Plots NASA datasets in the spatiotemporal range provided by user");
       
       pgd.addClass("hdfx", HDFToText.class,
           "Extracts data from a set of HDF files to text files");
