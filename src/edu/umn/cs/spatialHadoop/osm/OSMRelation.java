@@ -127,24 +127,32 @@ public class OSMRelation extends EvalFunc<Tuple> {
   @Override
   public Schema outputSchema(Schema input) {
     try {
-      Schema nodeSchema = new Schema();
-      nodeSchema.add(new Schema.FieldSchema("id", DataType.LONG));
-      nodeSchema.add(new Schema.FieldSchema("lat", DataType.DOUBLE));
-      nodeSchema.add(new Schema.FieldSchema("lon", DataType.DOUBLE));
-      nodeSchema.add(new Schema.FieldSchema("user", DataType.CHARARRAY));
-      nodeSchema.add(new Schema.FieldSchema("uid", DataType.LONG));
-      nodeSchema.add(new Schema.FieldSchema("visible", DataType.BOOLEAN));
-      nodeSchema.add(new Schema.FieldSchema("version", DataType.INTEGER));
-      nodeSchema.add(new Schema.FieldSchema("changeset", DataType.INTEGER));
-      nodeSchema.add(new Schema.FieldSchema("timestamp", DataType.CHARARRAY));
+      Schema relationSchema = new Schema();
+      relationSchema.add(new Schema.FieldSchema("id", DataType.LONG));
+      relationSchema.add(new Schema.FieldSchema("user", DataType.CHARARRAY));
+      relationSchema.add(new Schema.FieldSchema("uid", DataType.LONG));
+      relationSchema.add(new Schema.FieldSchema("version", DataType.INTEGER));
+      relationSchema.add(new Schema.FieldSchema("changeset", DataType.INTEGER));
+      relationSchema.add(new Schema.FieldSchema("timestamp", DataType.CHARARRAY));
+
+      Schema memberSchema = new Schema();
+      memberSchema.add(new Schema.FieldSchema("member_pos", DataType.INTEGER));
+      memberSchema.add(new Schema.FieldSchema("member_type", DataType.CHARARRAY));
+      memberSchema.add(new Schema.FieldSchema("member_id", DataType.LONG));
+      memberSchema.add(new Schema.FieldSchema("member_role", DataType.CHARARRAY));
+      FieldSchema temp = new Schema.FieldSchema("members", memberSchema);
+      temp.type = DataType.BAG;
+      relationSchema.add(temp);
+
+      
       Schema tagSchema = new Schema();
       tagSchema.add(new Schema.FieldSchema("value", DataType.CHARARRAY));
-      FieldSchema temp = new Schema.FieldSchema("tags", tagSchema);
+      temp = new Schema.FieldSchema("tags", tagSchema);
       temp.type = DataType.MAP;
-      nodeSchema.add(temp);
-
+      relationSchema.add(temp);
+      
       return new Schema(new Schema.FieldSchema(getSchemaName(this.getClass()
-          .getName().toLowerCase(), input), nodeSchema, DataType.TUPLE));
+          .getName().toLowerCase(), input), relationSchema, DataType.TUPLE));
     } catch (Exception e) {
       return null;
     }
