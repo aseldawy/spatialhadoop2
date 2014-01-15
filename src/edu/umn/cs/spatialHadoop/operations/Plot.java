@@ -54,6 +54,7 @@ import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
@@ -63,6 +64,7 @@ import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
+import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 public class Plot {
   /**Logger*/
@@ -91,12 +93,14 @@ public class Plot {
     
     private GridInfo partitionGrid;
     private IntWritable cellNumber;
+    private Shape queryRange;
     
     @Override
     public void configure(JobConf job) {
       super.configure(job);
       partitionGrid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
       cellNumber = new IntWritable();
+      queryRange = RangeFilter.getQueryRange(job);
     }
     
     public void map(Rectangle cell, Shape shape,
@@ -104,6 +108,9 @@ public class Plot {
         throws IOException {
       Rectangle shapeMbr = shape.getMBR();
       if (shapeMbr == null)
+        return;
+      // Skip shapes outside query range if query range is set
+      if (queryRange != null && !shapeMbr.isIntersected(queryRange))
         return;
       java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
       for (int i = 0; i < overlappingCells.width; i++) {
@@ -269,7 +276,8 @@ public class Plot {
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, boolean vflip, Color color,
-      boolean showBorders, String hdfDataset, boolean keepAspectRatio, boolean background) throws IOException {
+      boolean showBorders, String hdfDataset, Shape range,
+      boolean keepAspectRatio, boolean background) throws IOException {
     JobConf job = new JobConf(Plot.class);
     job.setJobName("Plot");
     
@@ -321,6 +329,10 @@ public class Plot {
     job.setBoolean(ShowBorders, showBorders);
     job.setInt(StrokeColor, color.getRGB());
     job.setBoolean(VFlip, vflip);
+    if (range != null) {
+      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+      RangeFilter.setQueryRange(job, range); // Set query range for filter
+    }
     
     // A heap file. The map function should partition the file
     GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
@@ -348,7 +360,7 @@ public class Plot {
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
       S shape, int width, int height, boolean vflip, Color color,
-      boolean showBorders, String hdfDataset, boolean keepAspectRatio) throws IOException {
+      boolean showBorders, String hdfDataset, Shape range, boolean keepAspectRatio) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
@@ -381,7 +393,6 @@ public class Plot {
               new String[0]), hdfDataset, true);
       NASADataset dataset = reader.createKey();
 
-
       // Create an image
       BufferedImage image = new BufferedImage(width, height,
           BufferedImage.TYPE_INT_ARGB);
@@ -393,7 +404,9 @@ public class Plot {
       
       NASAPoint point = (NASAPoint) shape;
       while (reader.next(dataset, point)) {
-        point.draw(graphics, fileMbr, width, height, vflip, 0.0);
+        if (range == null || point.isIntersected(point)) {
+          point.draw(graphics, fileMbr, width, height, vflip, 0.0);
+        }
       }
       reader.close();
 
@@ -439,7 +452,8 @@ public class Plot {
           new FileSplit(inFile, 0, fileLength, new String[0]));
       Rectangle cell = reader.createKey();
       while (reader.next(cell, shape)) {
-        shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+        if (range == null || shape.isIntersected(range))
+          shape.draw(graphics, fileMbr, width, height, vflip, scale2);
       }
       reader.close();
       // Write image to output
@@ -454,13 +468,13 @@ public class Plot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
       int width, int height, boolean vflip, Color color, boolean showBorders,
-      String hdfDataset, boolean keepAspectRatio) throws IOException {
+      String hdfDataset, Shape range, boolean keepAspectRatio) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     if (inFStatus.isDir() || inFStatus.getLen() > 100 * inFStatus.getBlockSize()) {
-      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, keepAspectRatio, false);
+      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, range, keepAspectRatio, false);
     } else {
-      plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, keepAspectRatio);
+      plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, range, keepAspectRatio);
     }
   }
 
@@ -587,10 +601,11 @@ public class Plot {
 
     String hdfDataset = cla.get("dataset");
     Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+    Rectangle rect = cla.getRectangle();
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
     
-    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, keepAspectRatio);
+    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, rect, keepAspectRatio);
   }
 
 }

@@ -92,6 +92,10 @@ public class RangeQuery {
       SpatialSite.setShape(job, QUERY_SHAPE, shape);
     }
     
+    public static Shape getQueryRange(JobConf job) {
+      return SpatialSite.getShape(job, QUERY_SHAPE);
+    }
+    
     @Override
     public void configure(JobConf job) {
       this.queryRange = SpatialSite.getShape(job, QUERY_SHAPE);

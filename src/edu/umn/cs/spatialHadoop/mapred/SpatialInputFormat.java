@@ -78,7 +78,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       compressionCodecs = new CompressionCodecFactory(job);
     if (split instanceof FileSplit) {
       FileSplit fsplit = (FileSplit) split;
-      if (fsplit.getPath().getName().matches("(?i:.*\\.hdf$)")) {
+      if (fsplit.getPath().getName().toLowerCase().endsWith(".hdf")) {
         // HDF File. Create HDFRecordReader
         return (RecordReader<K, V>) new HDFRecordReader(job, fsplit,
             job.get(HDFRecordReader.DatasetName),
@@ -122,7 +122,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       }
       // Special case for HDF files. Extract MBR from file name and use filter
       if (filter != null && listStatus.length > 0 &&
-          listStatus[0].getPath().getName().matches("(?i:.*\\.hdf$)")) {
+          listStatus[0].getPath().getName().toLowerCase().endsWith(".hdf")) {
         // Create a global index on the fly for these files based on their names
         Partition[] partitions = new Partition[listStatus.length];
         for (int i = 0; i < listStatus.length; i++) {
@@ -174,7 +174,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
         for (FileStatus status : listStatus) {
           if (status.isDir()) {
             listStatus(fs, status.getPath(), result, filter);
-          } else if (status.getPath().getName().matches("(?i:.*\\.list$)")) {
+          } else if (status.getPath().getName().toLowerCase().endsWith(".list")) {
             LineRecordReader in = new LineRecordReader(fs.open(status.getPath()), 0, status.getLen(), Integer.MAX_VALUE);
             LongWritable key = in.createKey();
             Text value = in.createValue();
@@ -249,7 +249,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   @Override
   protected boolean isSplitable(FileSystem fs, Path file) {
     // HDF files are not splittable
-    if (file.getName().matches("(?i:.*\\.hdf$)"))
+    if (file.getName().toLowerCase().endsWith(".hdf"))
       return false;
     final CompressionCodec codec = compressionCodecs.getCodec(file);
     if (codec != null && !(codec instanceof SplittableCompressionCodec))
