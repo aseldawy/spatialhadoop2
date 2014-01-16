@@ -56,6 +56,7 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
     private final int image_width;
     private final Rectangle fileMbr;
     private final int image_height;
+    private boolean vflip;
     
     private BufferedImage image;
 
@@ -71,11 +72,17 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
           BufferedImage.TYPE_INT_ARGB);
     }
 
+    public void setVflip(boolean vflip) {
+      this.vflip = vflip;
+    }
+    
     @Override
     public void write(Rectangle cell, ImageWritable value) throws IOException {
       progress.progress();
-      int tile_x = (int) ((cell.x1 - fileMbr.x1) * image_width / (fileMbr.x2 - fileMbr.x1));
-      int tile_y = (int) ((cell.y1 - fileMbr.y1) * image_height / (fileMbr.y2 - fileMbr.y1));
+      int tile_x = (int) ((cell.x1 - fileMbr.x1) * image_width / fileMbr.getWidth());
+      int tile_y = vflip?
+          (int) ((-cell.y2 - -fileMbr.y2) * image_height / fileMbr.getHeight()):
+          (int) ((cell.y1 - fileMbr.y1) * image_height / fileMbr.getHeight());
       Graphics2D graphics;
       try {
         graphics = image.createGraphics();

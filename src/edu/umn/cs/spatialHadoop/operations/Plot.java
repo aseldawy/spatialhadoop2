@@ -170,20 +170,14 @@ public class Plot {
         throws IOException {
       try {
         CellInfo cellInfo = partitionGrid.getCell(cellNumber.get());
-        if (vflip) {
-          double temp = cellInfo.y1;
-          cellInfo.y1 = -cellInfo.y2;
-          cellInfo.y2 = -temp;
-        }
         // Initialize the image
         int image_x1 = (int) ((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y1 = (int) ((cellInfo.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_y1 = (int) (((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int image_x2 = (int) ((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y2 = (int) ((cellInfo.y2 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_y2 = (int) (((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
 
-        LOG.info("Creating image with dimensions: "+image_x1+","+image_y1+","+image_x2+","+image_y2);
         BufferedImage image = new BufferedImage(tile_width, tile_height,
             BufferedImage.TYPE_INT_ARGB);
         Color bg_color = new Color(0,0,0,0);
@@ -302,23 +296,26 @@ public class Plot {
       Aggregate.MinMax minMax = Aggregate.aggregate(inFs, inFile);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
-      fileMBR = new Rectangle(-180, -140, 180, 169);
+      fileMBR = range != null?
+          range.getMBR() : new Rectangle(-180, -140, 180, 169);
       inputSize = Aggregate.sizeOfLastProcessedFile;
       job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
           GeoProjector.class);
     } else {
       fileMBR = FileMBR.fileMBR(inFs, inFile, shape);
       inputSize = FileMBR.sizeOfLastProcessedFile;
+      if (range != null)
+        fileMBR = range.getMBR();
     }
     LOG.info("File MBR: "+fileMBR);
     
     if (keepAspectRatio) {
       // Adjust width and height to maintain aspect ratio
-      if ((fileMBR.x2 - fileMBR.x1) / (fileMBR.y2 - fileMBR.y1) > (double) width / height) {
+      if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
         // Fix width and change height
-        height = (int) ((fileMBR.y2 - fileMBR.y1) * width / (fileMBR.x2 - fileMBR.x1));
+        height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
       } else {
-        width = (int) ((fileMBR.x2 - fileMBR.x1) * height / (fileMBR.y2 - fileMBR.y1));
+        width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
       }
     }
     
@@ -367,7 +364,8 @@ public class Plot {
     if (hdfDataset != null) {
       // Collects some stats about the HDF file
       MinMax hdfStats = Aggregate.aggregateLocal(inFs, inFile);
-      Rectangle fileMbr = new Rectangle(-180, -90, 180, 90);
+      Rectangle fileMbr = range == null ? new Rectangle(-180, -90, 180, 90)
+          : range.getMBR();
       NASAPoint.minValue = hdfStats.minValue;
       NASAPoint.maxValue = hdfStats.maxValue;
       LOG.info("FileMBR: "+fileMbr);
@@ -418,7 +416,8 @@ public class Plot {
       out.close();
     } else {
       // Determine file MBR to be able to scale shapes correctly
-      Rectangle fileMbr = FileMBR.fileMBRLocal(inFs, inFile, shape);
+      Rectangle fileMbr = range == null ?
+          FileMBR.fileMBRLocal(inFs, inFile, shape) : range.getMBR();
       LOG.info("FileMBR: "+fileMbr);
       if (vflip) {
         double temp = fileMbr.y1;
@@ -471,7 +470,7 @@ public class Plot {
       String hdfDataset, Shape range, boolean keepAspectRatio) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFStatus.getLen() > 100 * inFStatus.getBlockSize()) {
+    if (inFStatus.isDir() || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
       plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, range, keepAspectRatio, false);
     } else {
       plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, range, keepAspectRatio);
