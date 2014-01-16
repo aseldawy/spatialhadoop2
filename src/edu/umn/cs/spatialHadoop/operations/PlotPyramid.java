@@ -45,6 +45,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
@@ -87,8 +88,6 @@ public class PlotPyramid {
   private static final String TileHeight = "PlotPyramid.TileHeight";
   /**Color uses to plot shapes and points*/
   private static final String StrokeColor = "plot.stroke_color";
-  /**Flip the image vertically to correct +ve Y-axis direction*/
-  private static final String VFlip = "PlotPyramid.VFlip";
   /**Valid range of values for HDF dataset*/
   private static final String MinValue = "plot.min_value";
   private static final String MaxValue = "plot.max_value";
@@ -270,7 +269,7 @@ public class PlotPyramid {
       fileMBR = SpatialSite.getRectangle(job, InputMBR);
       tileWidth = job.getInt(TileWidth, 256);
       tileHeight = job.getInt(TileHeight, 256);
-      this.vflip = job.getBoolean(VFlip, false);
+      this.vflip = job.getBoolean(ImageOutputFormat.VFlip, false);
       if (vflip) {
         double temp = this.fileMBR.y1;
         this.fileMBR.y1 = -this.fileMBR.y2;
@@ -461,7 +460,7 @@ public class PlotPyramid {
     job.setInt(TileWidth, tileWidth);
     job.setInt(TileHeight, tileHeight);
     job.setInt(NumLevels, numLevels);
-    job.setBoolean(VFlip, vflip);
+    job.setBoolean(ImageOutputFormat.VFlip, vflip);
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);

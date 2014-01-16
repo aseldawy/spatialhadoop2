@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -38,6 +40,7 @@ import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapred.JobConf;
 
+import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 /**
@@ -205,6 +208,8 @@ public class SpatialSite {
    */
   public static Shape getShape(Configuration conf, String param) {
     String str = conf.get(param);
+    if (str == null)
+      return null;
     String[] parts = str.split(",", 2);
     String shapeClassName = parts[0];
     Shape shape = null;
@@ -236,32 +241,77 @@ public class SpatialSite {
   public static GlobalIndex<Partition> getGlobalIndex(FileSystem fs,
       Path dir) {
     try {
-      // Retrieve the master file (the only file with the name _master in it)
-      FileStatus[] masterFiles = fs.listStatus(dir, new PathFilter() {
-        @Override
-        public boolean accept(Path path) {
-          return path.getName().contains("_master");
-        }
-      });
-      // Check if the given file is indexed
-      if (masterFiles.length == 0)
-        return null;
-      if (masterFiles.length > 1)
-        throw new RuntimeException("Found more than one master file in "+dir);
-      Path masterFile = masterFiles[0].getPath();
-      ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(
-          fs.open(masterFile), 0, fs.getFileStatus(masterFile).getLen());
-      CellInfo dummy = new CellInfo();
-      Partition partition = new Partition();
-      ArrayList<Partition> partitions = new ArrayList<Partition>();
-      while (reader.next(dummy, partition)) {
-        partitions.add(partition.clone());
+      FileStatus[] allFiles;
+      if (CommandLineArguments.isWildcard(dir)) {
+        allFiles = fs.globStatus(dir);
+      } else {
+        allFiles = fs.listStatus(dir);
       }
-      GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
-      globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
-      globalIndex.setCompact(masterFile.getName().endsWith("rtree") || masterFile.getName().endsWith("r+tree"));
-      globalIndex.setReplicated(masterFile.getName().endsWith("r+tree") || masterFile.getName().endsWith("grid"));
-      return globalIndex;
+      
+      FileStatus masterFile = null;
+      int hdfFiles = 0;
+      for (FileStatus fileStatus : allFiles) {
+        if (fileStatus.getPath().getName().startsWith("_master")) {
+          if (masterFile != null)
+            throw new RuntimeException("Found more than one master file in "+dir);
+          masterFile = fileStatus;
+        } else if (fileStatus.getPath().getName().toLowerCase().endsWith(".hdf")) {
+          hdfFiles++;
+        }
+      }
+      if (masterFile != null) {
+        ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(
+            fs.open(masterFile.getPath()), 0, masterFile.getLen());
+        CellInfo dummy = new CellInfo();
+        Partition partition = new Partition();
+        ArrayList<Partition> partitions = new ArrayList<Partition>();
+        while (reader.next(dummy, partition)) {
+          partitions.add(partition.clone());
+        }
+        GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
+        globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
+        globalIndex.setCompact(masterFile.getPath().getName().endsWith("rtree") || masterFile.getPath().getName().endsWith("r+tree"));
+        globalIndex.setReplicated(masterFile.getPath().getName().endsWith("r+tree") || masterFile.getPath().getName().endsWith("grid"));
+        return globalIndex;
+      } else if (hdfFiles > allFiles.length / 2) {
+        // A folder that contains HDF files
+        // Create a global index on the fly for these files based on their names
+        Partition[] partitions = new Partition[allFiles.length];
+        for (int i = 0; i < allFiles.length; i++) {
+          final Pattern cellRegex = Pattern.compile(".*(h\\d\\dv\\d\\d).*");
+          String filename = allFiles[i].getPath().getName();
+          Matcher matcher = cellRegex.matcher(filename);
+          Partition partition = new Partition();
+          partition.filename = filename;
+          if (matcher.matches()) {
+            String cellname = matcher.group(1);
+            int h = Integer.parseInt(cellname.substring(1, 3));
+            int v = Integer.parseInt(cellname.substring(4, 6));
+            partition.cellId = v * 36 + h;
+            // Calculate coordinates on MODIS Sinusoidal grid
+            partition.x1 = h * 10 - 180;
+            partition.y2 = (18 - v) * 10 - 90;
+            partition.x2 = partition.x1 + 10;
+            partition.y1 = partition.y2 - 10;
+            // Convert to Latitude Longitude
+            double lon1 = partition.x1 / Math.cos(partition.y1 * Math.PI / 180);
+            double lon2 = partition.x1 / Math.cos(partition.y2 * Math.PI / 180);
+            partition.x1 = Math.min(lon1, lon2);
+            lon1 = partition.x2 / Math.cos(partition.y1 * Math.PI / 180);
+            lon2 = partition.x2 / Math.cos(partition.y2 * Math.PI / 180);
+            partition.x2 = Math.max(lon1, lon2);
+          } else {
+            partition.set(-180, -90, 180, 90);
+            partition.cellId = allFiles.length + i;
+          }
+          partitions[i] = partition;
+        }
+        GlobalIndex<Partition> gindex = new GlobalIndex<Partition>();
+        gindex.bulkLoad(partitions);
+        return gindex;
+      } else {
+        return null;
+      }
     } catch (IOException e) {
       LOG.info("Error retrieving global index of '"+dir+"'");
       LOG.info(e);

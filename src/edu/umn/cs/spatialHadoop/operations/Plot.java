@@ -75,8 +75,6 @@ public class Plot {
   private static final String StrokeColor = "plot.stroke_color";
   private static final String MinValue = "plot.min_value";
   private static final String MaxValue = "plot.max_value";
-  /**Flip the image vertically to correct +ve Y-axis direction*/
-  private static final String VFlip = "plot.vflip";
   /**The grid used to partition data across reducers*/
   private static final String PartitionGrid = "plot.partition_grid";
 
@@ -149,7 +147,7 @@ public class Plot {
       this.imageWidth = ImageOutputFormat.getImageWidth(job);
       this.imageHeight = ImageOutputFormat.getImageHeight(job);
       this.strokeColor = new Color(job.getInt(StrokeColor, 0));
-      this.vflip = job.getBoolean(VFlip, false);
+      this.vflip = job.getBoolean(ImageOutputFormat.VFlip, false);
       
       if (vflip) {
         double temp = this.fileMbr.y1;
@@ -171,10 +169,10 @@ public class Plot {
       try {
         CellInfo cellInfo = partitionGrid.getCell(cellNumber.get());
         // Initialize the image
-        int image_x1 = (int) ((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y1 = (int) (((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-        int image_x2 = (int) ((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y2 = (int) (((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_x1 = (int) Math.round((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        int image_y1 = (int) Math.round(((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_x2 = (int) Math.round((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        int image_y2 = (int) Math.round(((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
 
@@ -287,7 +285,6 @@ public class Plot {
     FileSystem inFs = inFile.getFileSystem(job);
     Rectangle fileMBR;
     // Collects some stats about the file to plot it correctly
-    long inputSize;
     if (hdfDataset != null) {
       // Input is HDF
       job.set(HDFRecordReader.DatasetName, hdfDataset);
@@ -298,14 +295,11 @@ public class Plot {
       job.setInt(MaxValue, minMax.maxValue);
       fileMBR = range != null?
           range.getMBR() : new Rectangle(-180, -140, 180, 169);
-      inputSize = Aggregate.sizeOfLastProcessedFile;
       job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
           GeoProjector.class);
     } else {
-      fileMBR = FileMBR.fileMBR(inFs, inFile, shape);
-      inputSize = FileMBR.sizeOfLastProcessedFile;
-      if (range != null)
-        fileMBR = range.getMBR();
+      fileMBR = range != null ? range.getMBR() :
+        FileMBR.fileMBR(inFs, inFile, shape);
     }
     LOG.info("File MBR: "+fileMBR);
     
@@ -325,7 +319,7 @@ public class Plot {
     ImageOutputFormat.setImageHeight(job, height);
     job.setBoolean(ShowBorders, showBorders);
     job.setInt(StrokeColor, color.getRGB());
-    job.setBoolean(VFlip, vflip);
+    job.setBoolean(ImageOutputFormat.VFlip, vflip);
     if (range != null) {
       job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
       RangeFilter.setQueryRange(job, range); // Set query range for filter
@@ -468,12 +462,21 @@ public class Plot {
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
       int width, int height, boolean vflip, Color color, boolean showBorders,
       String hdfDataset, Shape range, boolean keepAspectRatio) throws IOException {
-    FileSystem inFs = inFile.getFileSystem(new Configuration());
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
-      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, range, keepAspectRatio, false);
+    if (CommandLineArguments.isWildcard(inFile)) {
+      // plotLocal cannot handle wild cards
+      plotMapReduce(inFile, outFile, shape, width, height, vflip, color,
+          showBorders, hdfDataset, range, keepAspectRatio, false);
     } else {
-      plotLocal(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, range, keepAspectRatio);
+      FileSystem inFs = inFile.getFileSystem(new Configuration());
+      FileStatus inFStatus = inFs.getFileStatus(inFile);
+      if (inFStatus.isDir()
+          || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
+        plotMapReduce(inFile, outFile, shape, width, height, vflip, color,
+            showBorders, hdfDataset, range, keepAspectRatio, false);
+      } else {
+        plotLocal(inFile, outFile, shape, width, height, vflip, color,
+            showBorders, hdfDataset, range, keepAspectRatio);
+      }
     }
   }
 

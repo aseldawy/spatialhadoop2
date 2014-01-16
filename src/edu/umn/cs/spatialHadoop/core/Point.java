@@ -138,8 +138,8 @@ public class Point implements Shape, Comparable<Point> {
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
   		int imageHeight, boolean vflip, double scale) {
-    int imageX = (int) ((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int imageY = (int) (((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int imageX = (int) Math.round((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int imageY = (int) Math.round(((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     
     if (imageX >= 0 && imageX < imageWidth && imageY >= 0 && imageY < imageHeight)
       g.fillRect(imageX, imageY, 1, 1);  	

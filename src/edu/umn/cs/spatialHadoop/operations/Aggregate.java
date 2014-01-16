@@ -40,6 +40,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 
+import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
@@ -238,8 +239,7 @@ public class Aggregate {
 
     // Check if we have cached values for the given dataset
     FileStatus[] matches;
-    if (inFile.toString().contains("*") || inFile.toString().contains("?")) {
-      // Wild card
+    if (CommandLineArguments.isWildcard(inFile)) {
       matches = fs.globStatus(inFile);
     } else if (fs.getFileStatus(inFile).isDir()) {
       matches = fs.listStatus(inFile);

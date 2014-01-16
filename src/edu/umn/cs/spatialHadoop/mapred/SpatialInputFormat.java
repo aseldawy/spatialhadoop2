@@ -37,6 +37,7 @@ import org.apache.hadoop.mapred.LineRecordReader;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 
+import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
@@ -109,91 +110,42 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
     }
   }
   
-  protected void listStatus(final FileSystem fs, final Path dir,
+  protected void listStatus(final FileSystem fs, Path dir,
       final List<FileStatus> result, BlockFilter filter) throws IOException {
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, dir);
     if (gindex == null) {
       FileStatus[] listStatus;
-      if (dir.toString().indexOf('*') != -1 || dir.toString().indexOf('?') != -1) {
+      if (CommandLineArguments.isWildcard(dir)) {
         // Wild card
         listStatus = fs.globStatus(dir);
       } else {
         listStatus = fs.listStatus(dir, SpatialSite.NonHiddenFileFilter);
       }
-      // Special case for HDF files. Extract MBR from file name and use filter
-      if (filter != null && listStatus.length > 0 &&
-          listStatus[0].getPath().getName().toLowerCase().endsWith(".hdf")) {
-        // Create a global index on the fly for these files based on their names
-        Partition[] partitions = new Partition[listStatus.length];
-        for (int i = 0; i < listStatus.length; i++) {
-          final Pattern cellRegex = Pattern.compile(".*(h\\d\\dv\\d\\d).*");
-          String filename = listStatus[i].getPath().getName();
-          Matcher matcher = cellRegex.matcher(filename);
-          if (matcher.matches()) {
-            String cellname = matcher.group(1);
-            int h = Integer.parseInt(cellname.substring(1, 3));
-            int v = Integer.parseInt(cellname.substring(4, 6));
-            Partition partition = new Partition();
-            partition.cellId = v * 36 + h;
-            partition.filename = filename;
-            // Calculate coordinates on MODIS Sinusoidal grid
-            partition.x1 = h * 10 - 180;
-            partition.y2 = (18 - v) * 10 - 90;
-            partition.x2 = partition.x1 + 10;
-            partition.y1 = partition.y2 - 10;
-            // Convert to Latitude Longitude
-            double lon1 = partition.x1 / Math.cos(partition.y1 * Math.PI / 180);
-            double lon2 = partition.x1 / Math.cos(partition.y2 * Math.PI / 180);
-            partition.x1 = Math.min(lon1, lon2);
-            lon1 = partition.x2 / Math.cos(partition.y1 * Math.PI / 180);
-            lon2 = partition.x2 / Math.cos(partition.y2 * Math.PI / 180);
-            partition.x2 = Math.max(lon1, lon2);
-            partitions[i] = partition;
+      // Add all files under this directory
+      for (FileStatus status : listStatus) {
+        if (status.isDir()) {
+          listStatus(fs, status.getPath(), result, filter);
+        } else if (status.getPath().getName().toLowerCase().endsWith(".list")) {
+          LineRecordReader in = new LineRecordReader(fs.open(status.getPath()), 0, status.getLen(), Integer.MAX_VALUE);
+          LongWritable key = in.createKey();
+          Text value = in.createValue();
+          while (in.next(key, value)) {
+            result.add(fs.getFileStatus(new Path(status.getPath().getParent(), value.toString())));
           }
-        }
-        gindex = new GlobalIndex<Partition>();
-        gindex.bulkLoad(partitions);
-        // The directory that contains the files (remove wildcard)
-        final Path indexDir = listStatus[0].getPath().getParent();
-        // Use the generated global index to limit files
-        filter.selectCells(gindex, new ResultCollector<Partition>() {
-          @Override
-          public void collect(Partition partition) {
-            try {
-              Path cell_path = new Path(indexDir, partition.filename);
-              if (!fs.exists(cell_path))
-                LOG.warn("Matched file not found: "+cell_path);
-              result.add(fs.getFileStatus(cell_path));
-            } catch (IOException e) {
-              e.printStackTrace();
-            }
-          }
-        });
-      } else {
-        // Add all files under this directory
-        for (FileStatus status : listStatus) {
-          if (status.isDir()) {
-            listStatus(fs, status.getPath(), result, filter);
-          } else if (status.getPath().getName().toLowerCase().endsWith(".list")) {
-            LineRecordReader in = new LineRecordReader(fs.open(status.getPath()), 0, status.getLen(), Integer.MAX_VALUE);
-            LongWritable key = in.createKey();
-            Text value = in.createValue();
-            while (in.next(key, value)) {
-              result.add(fs.getFileStatus(new Path(status.getPath().getParent(), value.toString())));
-            }
-            in.close();
-          } else {
-            result.add(status);
-          }
+          in.close();
+        } else {
+          result.add(status);
         }
       }
     } else {
+      final Path indexDir = CommandLineArguments.isWildcard(dir)?
+          dir.getParent() : dir;
       // Use the global index to limit files
       filter.selectCells(gindex, new ResultCollector<Partition>() {
         @Override
         public void collect(Partition partition) {
           try {
-            Path cell_path = new Path(dir, partition.filename);
+            Path cell_path = new Path(indexDir, partition.filename);
             if (!fs.exists(cell_path))
               LOG.warn("Matched file not found: "+cell_path);
             result.add(fs.getFileStatus(cell_path));

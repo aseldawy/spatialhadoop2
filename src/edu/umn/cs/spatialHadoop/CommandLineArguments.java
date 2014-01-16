@@ -468,6 +468,9 @@ public class CommandLineArguments {
     }
     for (int i = 0; i < paths.length; i++) {
       Path path = paths[i];
+      // Skip wild cards
+      if (isWildcard(path))
+        continue;
       if (i == 0 || i < paths.length - 1) {
         // Check input path
         FileSystem fs = path.getFileSystem(conf);
@@ -489,5 +492,10 @@ public class CommandLineArguments {
       }
     }
     return true;
+  }
+
+  public static boolean isWildcard(Path path) {
+    return path.toString().indexOf('*') != -1 ||
+        path.toString().indexOf('?') != -1;
   }
 }

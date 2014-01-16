@@ -14,6 +14,7 @@ package edu.umn.cs.spatialHadoop;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 
@@ -48,6 +49,9 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
 
   /**Used to indicate the progress*/
   private Progressable progress;
+
+  /**Flip the image vertically to correct +ve Y-axis direction*/
+  public static final String VFlip = "plot.vflip";
   
   class ImageRecordWriter implements RecordWriter<Rectangle, ImageWritable> {
 
@@ -56,33 +60,30 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
     private final int image_width;
     private final Rectangle fileMbr;
     private final int image_height;
-    private boolean vflip;
+    private final boolean vflip;
     
     private BufferedImage image;
 
     ImageRecordWriter(Path out, FileSystem outFs,
-        int width, int height, Rectangle fileMbr) {
+        int width, int height, Rectangle fileMbr, boolean vflip) {
       System.setProperty("java.awt.headless", "true");
       this.out = out;
       this.outFs = outFs;
       this.image_width = width;
       this.image_height = height;
       this.fileMbr = fileMbr;
+      this.vflip = vflip;
       this.image = new BufferedImage(image_width, image_height,
           BufferedImage.TYPE_INT_ARGB);
     }
 
-    public void setVflip(boolean vflip) {
-      this.vflip = vflip;
-    }
-    
     @Override
     public void write(Rectangle cell, ImageWritable value) throws IOException {
       progress.progress();
-      int tile_x = (int) ((cell.x1 - fileMbr.x1) * image_width / fileMbr.getWidth());
-      int tile_y = vflip?
-          (int) ((-cell.y2 - -fileMbr.y2) * image_height / fileMbr.getHeight()):
-          (int) ((cell.y1 - fileMbr.y1) * image_height / fileMbr.getHeight());
+      int tile_x = (int) Math.round((cell.x1 - fileMbr.x1) * image_width / fileMbr.getWidth());
+      int tile_y = (int) Math.round(vflip?
+          ((-cell.y2 - -fileMbr.y2) * image_height / fileMbr.getHeight()):
+          ((cell.y1 - fileMbr.y1) * image_height / fileMbr.getHeight()));
       Graphics2D graphics;
       try {
         graphics = image.createGraphics();
@@ -111,9 +112,9 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
     Rectangle fileMbr = getFileMBR(job);
     int imageWidth = getImageWidth(job);
     int imageHeight = getImageHeight(job);
-    
+    boolean vflip = job.getBoolean(VFlip, false);
 
-    return new ImageRecordWriter(file, fs, imageWidth, imageHeight, fileMbr);
+    return new ImageRecordWriter(file, fs, imageWidth, imageHeight, fileMbr, vflip);
   }
 
   public static void setImageWidth(Configuration conf, int width) {

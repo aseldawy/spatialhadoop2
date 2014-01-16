@@ -112,7 +112,7 @@ public class GridInfo extends Rectangle {
     super.fromText(text);
     if (text.getLength() > 0) {
       // Remove the first comma
-      System.arraycopy(text.getBytes(), 1, text.getBytes(), 0, text.getLength() - 1);
+      text.set(text.getBytes(), 1, text.getLength() - 1);
       columns = (int) TextSerializerHelper.consumeInt(text, ',');
       rows = (int) TextSerializerHelper.consumeInt(text, '\0');
     }
