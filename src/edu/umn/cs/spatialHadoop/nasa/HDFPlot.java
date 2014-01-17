@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.operations.Plot;
 import edu.umn.cs.spatialHadoop.operations.PlotPyramid;
 
 /**
@@ -94,6 +95,7 @@ public class HDFPlot {
       return;
     }
     boolean overwrite = cla.isOverwrite();
+    boolean pyramid = cla.is("pyramid");
     Configuration conf = new Configuration();
     FileSystem outFs = output.getFileSystem(conf);
     while (dateFrom.compareTo(dateTo) <= 0) {
@@ -103,7 +105,10 @@ public class HDFPlot {
         String[] plotArgs = vargs.toArray(new String[vargs.size() + 2]);
         plotArgs[vargs.size()] = inputPath.toString();
         plotArgs[vargs.size() + 1] = outputPath.toString();
-        PlotPyramid.main(plotArgs);
+        if (pyramid)
+          PlotPyramid.main(plotArgs);
+        else
+          Plot.main(plotArgs);
       }
       // Advance one day
       dateFrom = new Date(dateFrom.getTime() + ONE_DAY);

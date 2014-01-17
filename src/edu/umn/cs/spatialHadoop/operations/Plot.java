@@ -328,8 +328,8 @@ public class Plot {
     // A heap file. The map function should partition the file
     GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
         fileMBR.y2);
-    partitionGrid.calculateCellDimensions((int)
-        Math.max(1, inputSize / outFile.getFileSystem(job).getDefaultBlockSize(outFile)));
+    partitionGrid.calculateCellDimensions(
+        (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
     SpatialSite.setShape(job, PartitionGrid, partitionGrid);
     
     job.setInputFormat(ShapeInputFormat.class);
