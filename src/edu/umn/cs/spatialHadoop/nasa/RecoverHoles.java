@@ -73,25 +73,29 @@ public class RecoverHoles {
       int i1, i2, increment;
       if (iter % 2 == 0) {
         i1 = hollowImages.size() - 2;
-        i2 = 0;
+        i2 = -1;
         increment = -1;
       } else {
         i1 = 1;
-        i2 = hollowImages.size() - 1;
+        i2 = hollowImages.size();
         increment = 1;
       }
       for (int i_img = i1; i_img != i2; i_img += increment) {
-        FSDataInputStream instream = fs.open(allImages[i_img].getPath());
+        System.out.println("Working on image "+allImages[hollowImages.get(i_img)].getPath().getName());
+        FSDataInputStream instream =
+            fs.open(allImages[hollowImages.get(i_img)].getPath());
         BufferedImage img = ImageIO.read(instream);
         instream.close();
-        instream = fs.open(allImages[i_img - increment].getPath());
+        instream =
+            fs.open(allImages[hollowImages.get(i_img) - increment].getPath());
         BufferedImage img_bg = ImageIO.read(instream);
         instream.close();
         
         Graphics2D graphics = img_bg.createGraphics();
         graphics.drawImage(img, 0, 0, null);
         graphics.dispose();
-        FSDataOutputStream outstream = fs.create(allImages[i_img].getPath(), true);
+        FSDataOutputStream outstream =
+            fs.create(allImages[hollowImages.get(i_img)].getPath(), true);
         ImageIO.write(img_bg, "png", outstream);
         outstream.close();
       }
