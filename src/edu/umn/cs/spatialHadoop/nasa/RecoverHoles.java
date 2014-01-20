@@ -12,6 +12,8 @@
  */
 package edu.umn.cs.spatialHadoop.nasa;
 
+import java.awt.Color;
+import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -53,7 +55,7 @@ public class RecoverHoles {
    * @param dir
    * @throws IOException 
    */
-  public static void recoverLocal(Path dir) throws IOException {
+  public static void recoverNearest(Path dir) throws IOException {
     FileSystem fs = dir.getFileSystem(new Configuration());
     FileStatus[] allImages = CommandLineArguments.isWildcard(dir)?
         fs.globStatus(dir) : fs.listStatus(dir);
@@ -69,7 +71,6 @@ public class RecoverHoles {
     for (int i_image = 0; i_image < allImages.length; i_image++)
       hollowImages.add(i_image);
     for (int iter = 0; iter < allImages.length; iter++) {
-      System.out.println("Iteration #"+iter);
       int i1, i2, increment;
       if (iter % 2 == 0) {
         i1 = hollowImages.size() - 2;
@@ -81,7 +82,6 @@ public class RecoverHoles {
         increment = 1;
       }
       for (int i_img = i1; i_img != i2; i_img += increment) {
-        System.out.println("Working on image "+allImages[hollowImages.get(i_img)].getPath().getName());
         FSDataInputStream instream =
             fs.open(allImages[hollowImages.get(i_img)].getPath());
         BufferedImage img = ImageIO.read(instream);
@@ -103,11 +103,106 @@ public class RecoverHoles {
   }
   
   /**
+   * Recover all images in the given directory by performing an interpolation
+   * on each missing point from the two nearest points on each side on its
+   * horizontal line (the nearest left and right points).
+   * 
+   * To determine which points should be interpolated (e.g., under cloud) and
+   * which points should remain blank (e.g., in sea), we first overlay all
+   * images on top of each other. If a point is missing from all images, it
+   * indicates with very high probability that it should remain blank. 
+   * @param dir
+   * @throws IOException
+   */
+  public static void recoverInterpolation(Path dir) throws IOException {
+    FileSystem fs = dir.getFileSystem(new Configuration());
+    FileStatus[] allImages = CommandLineArguments.isWildcard(dir)?
+        fs.globStatus(dir) : fs.listStatus(dir);
+    Arrays.sort(allImages, new Comparator<FileStatus>() {
+      @Override
+      public int compare(FileStatus o1, FileStatus o2) {
+        // Sort alphabetically based on file name
+        return o1.getPath().getName().compareTo(o2.getPath().getName());
+      }
+    });
+
+    // Create a mask of valid points by overlaying all images on each other
+    BufferedImage mask = null;
+    Graphics g = null;
+    for (FileStatus imageFile : allImages) {
+      FSDataInputStream instream = fs.open(imageFile.getPath());
+      BufferedImage img = ImageIO.read(instream);
+      instream.close();
+      
+      if (g == null) {
+        mask = img;
+        g = mask.getGraphics();
+      } else {
+        g.drawImage(img, 0, 0, null);
+      }
+    }
+    g.dispose();
+    
+    // Recover missing points on each image
+    for (FileStatus imageFile : allImages) {
+      FSDataInputStream instream = fs.open(imageFile.getPath());
+      BufferedImage img = ImageIO.read(instream);
+      instream.close();
+      
+      // Go over this image row by row
+      for (int y = 0; y < img.getHeight(); y++) {
+        // First empty point in current run
+        int x1 = 0;
+        // Last non-empty point in current run
+        int x2 = 0;
+        while (x1 < img.getWidth()) {
+          // Detect next run of empty points
+          x1 = x2;
+          while (x1 < img.getWidth() && (img.getRGB(x1, y) >> 24) != 0)
+            x1++;
+          x2 = x1;
+          while (x2 < img.getWidth() && (img.getRGB(x2, y) >> 24) == 0)
+            x2++;
+          if (x1 > 0 && x2 < img.getWidth()) {
+            float[] hsbvals = new float[3];
+            int color1 = img.getRGB(x1-1, y);
+            Color.RGBtoHSB((color1 >> 16) & 0xff, (color1 >> 8) & 0xff, color1 & 0xff, hsbvals);
+            float hue1 = hsbvals[0];
+
+            int color2 = img.getRGB(x2, y);
+            Color.RGBtoHSB((color2 >> 16) & 0xff, (color2 >> 8) & 0xff, color2 & 0xff, hsbvals);
+            float hue2 = hsbvals[0];
+            
+            int[] recoveredPoints = new int[x2 - x1];
+            
+            // Recover all missing points that should be recovered in this run
+            for (int x = x1; x < x2; x++) {
+              if (mask.getRGB(x, y) != 0) {
+                // Should be recovered
+                float recoveredHue = (hue1 * (x2 - x) + hue2 * (x - x1)) / (x2 - x1);
+                int recoveredColor = Color.HSBtoRGB(recoveredHue, hsbvals[1], hsbvals[2]);
+                recoveredPoints[x - x1] = recoveredColor;
+                img.setRGB(x, y, recoveredColor);
+              }
+            }
+            //img.setRGB(x1, y, x2 - x1, 1, recoveredPoints, 0, 0);
+          }
+        }
+      }
+      
+      FSDataOutputStream outstream = fs.create(imageFile.getPath(), true);
+      ImageIO.write(img, "png", outstream);
+      outstream.close();
+      break;
+    }
+  }
+  
+  /**
    * @param args
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    recoverLocal(new Path("jan"));
+    recoverInterpolation(new Path("jan"));
   }
 
 }
