@@ -63,6 +63,8 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
+import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
+import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
@@ -169,10 +171,12 @@ public class Plot {
       try {
         CellInfo cellInfo = partitionGrid.getCell(cellNumber.get());
         // Initialize the image
-        int image_x1 = (int) Math.round((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y1 = (int) Math.round(((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-        int image_x2 = (int) Math.round((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y2 = (int) Math.round(((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_x1 = (int) Math.floor((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        int image_y1 = (int) Math.floor(((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_x2 = (int) Math.ceil((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        int image_y2 = (int) Math.ceil(((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        System.out.print(cellInfo+"   ");
+        System.out.println("Cell #"+cellNumber+" "+new Rectangle(image_x1, image_y1, image_x2, image_y2));
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
 
@@ -329,7 +333,7 @@ public class Plot {
     GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
         fileMBR.y2);
     partitionGrid.calculateCellDimensions(
-        (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+        (int) Math.max(9, clusterStatus.getMaxReduceTasks()));
     SpatialSite.setShape(job, PartitionGrid, partitionGrid);
     
     job.setInputFormat(ShapeInputFormat.class);
@@ -380,7 +384,7 @@ public class Plot {
       }
 
       // Read points from the HDF file
-      RecordReader<NASADataset, NASAPoint> reader = new HDFRecordReader(
+      RecordReader<NASADataset, NASAShape> reader = new HDFRecordReader(
           new Configuration(), new FileSplit(inFile, 0, fileLength,
               new String[0]), hdfDataset, true);
       NASADataset dataset = reader.createKey();

@@ -1,3 +1,16 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
+ * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
+ * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
+ * except in compliance with the License. You may obtain a copy of the License at
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is
+ * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and limitations under the License.
+ */
+
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.awt.Color;
@@ -8,25 +21,35 @@ import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
 
-import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
-public class NASAPoint extends Point implements NASAShape {
-  
+/**
+ * @author Ahmed Eldawy
+ *
+ */
+public class NASARectangle extends Rectangle implements NASAShape {
   private static final byte[] Separator = {','};
   
   /**Value stored at this point*/
   public int value;
-  
-  public NASAPoint() {
+
+  public NASARectangle() {
   }
 
-  public NASAPoint(double x, double y, int value) {
-    super(x, y);
+  public NASARectangle(Rectangle r) {
+    super(r);
+  }
+
+  public NASARectangle(double x1, double y1, double x2, double y2) {
+    this(x1, y1, x2, y2, 0);
+  }
+
+  public NASARectangle(double x1, double y1, double x2, double y2, int value) {
+    super(x1, y1, x2, y2);
     this.value = value;
   }
-
+  
   public int getValue() {
     return value;
   }
@@ -40,11 +63,11 @@ public class NASAPoint extends Point implements NASAShape {
     super.write(out);
     out.writeInt(value);
   }
-  
+
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
-    this.value = in.readInt();
+    value = in.readInt();
   }
   
   @Override
@@ -67,20 +90,17 @@ public class NASAPoint extends Point implements NASAShape {
   public String toString() {
     return super.toString() + " - "+value;
   }
-  
-  /**Valid range of values. Used for drawing.*/
-  public static float minValue, maxValue;
-  
-  public static final float MaxHue = 0.78f;
-  
+
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, boolean vflip, double scale) {
     Color color;
-    if (value < minValue) {
-      color = Color.getHSBColor(MaxHue, 0.5f, 1.0f);
-    } else if (value < maxValue) {
-      float ratio = MaxHue - MaxHue * (value - minValue) / (maxValue - minValue);
+    if (value < NASAPoint.minValue) {
+      color = Color.getHSBColor(NASAPoint.MaxHue, 0.5f, 1.0f);
+    } else if (value < NASAPoint.maxValue) {
+      float ratio = NASAPoint.MaxHue - NASAPoint.MaxHue
+          * (value - NASAPoint.minValue)
+          / (NASAPoint.maxValue - NASAPoint.minValue);
       color = Color.getHSBColor(ratio, 0.5f, 1.0f);
     } else {
       color = Color.getHSBColor(0.0f, 0.5f, 1.0f);
@@ -88,4 +108,5 @@ public class NASAPoint extends Point implements NASAShape {
     g.setColor(color);
     super.draw(g, fileMBR, imageWidth, imageHeight, vflip, scale);
   }
+
 }

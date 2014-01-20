@@ -34,9 +34,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
+
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * Reads a specific dataset from an HDF file. Upon instantiation, the portion
@@ -48,7 +51,7 @@ import org.apache.hadoop.mapred.RecordReader;
  * @author Ahmed Eldawy
  *
  */
-public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
+public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
   private static final Log LOG = LogFactory.getLog(HDFRecordReader.class);
 
   /** The HDF file being read*/
@@ -71,6 +74,9 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
   
   /**The projector used to convert NASA points to a different space*/
   private GeoProjector projector;
+  
+  /**Shape returned by the reader*/
+  private NASAShape value;
 
   /**Configuration for name of the dataset to read from HDF file*/
   public static final String DatasetName = "HDFInputFormat.DatasetName";
@@ -90,7 +96,8 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
    * @param datasetName - Name of the dataset to read (case insensitive)
    * @throws Exception
    */
-  public HDFRecordReader(Configuration job, FileSplit split, String datasetName, boolean skipFillValue) throws IOException {
+  public HDFRecordReader(Configuration job, FileSplit split,
+      String datasetName, boolean skipFillValue) throws IOException {
     this.skipFillValue = skipFillValue;
     init(job, split, datasetName);
     try {
@@ -120,30 +127,30 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
       // HDF library can only deal with local files. So, we need to copy the file
       // to a local temporary directory before using the HDF Java library
       String localFile = copyFileSplit(job, split);
-      
+
       // retrieve an instance of H4File
       FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
-      
+
       hdfFile = fileFormat.createInstance(localFile, FileFormat.READ);
-      
+
       // open the file and retrieve the file structure
       hdfFile.open();
-      
+
       // Retrieve the root of the HDF file structure
       Group root =
           (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
-      
+
       // Search for the datset of interest in file
       Stack<Group> groups2bSearched = new Stack<Group>();
       groups2bSearched.add(root);
-      
+
       Dataset firstDataset = null;
       Dataset matchDataset = null;
-      
+
       while (!groups2bSearched.isEmpty()) {
         Group top = groups2bSearched.pop();
         List<HObject> memberList = top.getMemberList();
-        
+
         for (HObject member : memberList) {
           if (member instanceof Group) {
             groups2bSearched.add((Group) member);
@@ -157,13 +164,13 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
           }
         }
       }
-    
-    if (matchDataset == null) {
-      LOG.warn("Dataset "+datasetName+" not found in file "+split.getPath());
-      // Just work on the first dataset to ensure we return some data
-      matchDataset = firstDataset;
-    }
-    
+
+      if (matchDataset == null) {
+        LOG.warn("Dataset "+datasetName+" not found in file "+split.getPath());
+        // Just work on the first dataset to ensure we return some data
+        matchDataset = firstDataset;
+      }
+
       nasaDataset = new NASADataset(root);
       nasaDataset.datasetName = datasetName;
       List<Attribute> attrs = matchDataset.getMetadata();
@@ -179,14 +186,17 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
           }
         }
       }
+      
+      this.value = (NASAShape) SpatialSite.createStockShape(job);
+      
       if (fillValueStr == null) {
         this.skipFillValue = false;
       } else {
         this.fillValue = Integer.parseInt(fillValueStr);
       }
-      
+
       dataArray = matchDataset.read();
-      
+
       // No longer need the HDF file
       hdfFile.close();
     } catch (Exception e) {
@@ -236,7 +246,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
   }
 
   @Override
-  public boolean next(NASADataset key, NASAPoint point) throws IOException {
+  public boolean next(NASADataset key, NASAShape shape) throws IOException {
     if (dataArray == null)
       return false;
     // Key doesn't need to be changed because all points in the same dataset
@@ -245,27 +255,54 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
       // Set the x and y to longitude and latitude by doing the correct projection
       int row = position / nasaDataset.resolution;
       int col = position % nasaDataset.resolution;
-      point.y = (90 - nasaDataset.v * 10) -
-          (double) row * 10 / nasaDataset.resolution;
-      point.x = (nasaDataset.h * 10 - 180) +
-          (double) (col) * 10 / nasaDataset.resolution;
-      point.x /= Math.cos(point.y * Math.PI / 180);
+      if (shape instanceof Point) {
+        Point pt = (Point) shape;
+        pt.y = (90 - nasaDataset.v * 10) -
+            (double) row * 10 / nasaDataset.resolution;
+        pt.x = (nasaDataset.h * 10 - 180) +
+            (double) (col) * 10 / nasaDataset.resolution;
+        pt.x /= Math.cos(pt.y * Math.PI / 180);
+      } else if (shape instanceof Rectangle) {
+        Rectangle rect = (Rectangle) shape;
+        rect.y2 = (90 - nasaDataset.v * 10) -
+            (double) row * 10 / nasaDataset.resolution;
+        rect.y1 = (90 - nasaDataset.v * 10) -
+            (double) (row + 1) * 10 / nasaDataset.resolution;
+        double[] xs = new double[4];
+        xs[0] = xs[1] = (nasaDataset.h * 10 - 180) +
+            (double) (col) * 10 / nasaDataset.resolution;
+        xs[2] = xs[3] = (nasaDataset.h * 10 - 180) +
+            (double) (col+1) * 10 / nasaDataset.resolution;
+
+        // Project all four corners and select the min-max for the rectangle
+        xs[0] /= Math.cos(rect.y1 * Math.PI / 180);
+        xs[1] /= Math.cos(rect.y2 * Math.PI / 180);
+        xs[2] /= Math.cos(rect.y1 * Math.PI / 180);
+        xs[3] /= Math.cos(rect.y2 * Math.PI / 180);
+        rect.x1 = rect.x2 = xs[0];
+        for (double x : xs) {
+          if (x < rect.x1)
+            rect.x1 = x;
+          if (x > rect.x2)
+            rect.x2 = x;
+        }
+      }
       if (projector != null)
-        projector.projectPoint(point);
+        projector.project(shape);
       
       // Read next value
       Object value = Array.get(dataArray, position);
       if (value instanceof Integer) {
-        point.value = (Integer) value;
+        shape.setValue((Integer) value);
       } else if (value instanceof Short) {
-        point.value = (Short) value;
+        shape.setValue((Short) value);
       } else if (value instanceof Byte) {
-        point.value = (Byte) value;
+        shape.setValue((Byte) value);
       } else {
         throw new RuntimeException("Cannot read a value of type "+value.getClass());
       }
       position++;
-      if (!skipFillValue || point.value != fillValue)
+      if (!skipFillValue || shape.getValue() != fillValue)
         return true;
     }
     return false;
@@ -277,8 +314,8 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAPoint> {
   }
 
   @Override
-  public NASAPoint createValue() {
-    return new NASAPoint();
+  public NASAShape createValue() {
+    return value;
   }
 
   @Override

@@ -52,7 +52,7 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
-import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
+import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 
 /**
  * Finds the minimal bounding rectangle for a file.
@@ -273,7 +273,7 @@ public class FileMBR {
       HDFRecordReader reader = new HDFRecordReader(new Configuration(),
           new FileSplit(file, 0, file_size, new String[] {}), null, true);
       NASADataset key = reader.createKey();
-      NASAPoint point = reader.createValue();
+      NASAShape point = reader.createValue();
       if (reader.next(key, point)) {
         mbr = key.getMBR();
       }

@@ -10,19 +10,18 @@
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and limitations under the License.
  */
+
 package edu.umn.cs.spatialHadoop.nasa;
 
 import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
- * Converts a point from the latitude/longitude space to another projection.
+ * A shape coming from NASA datasets. It contains an extra value corresponding
+ * to the physical reading of the underlying area.
  * @author Ahmed Eldawy
  *
  */
-public interface GeoProjector {
-  /**
-   * Converts the given point (in-place) provided in latitude/longitude space.
-   * @param pt
-   */
-  public void project(Shape shape);
+public interface NASAShape extends Shape {
+  public void setValue(int v);
+  public int getValue();
 }

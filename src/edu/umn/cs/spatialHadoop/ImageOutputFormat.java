@@ -80,8 +80,8 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
     @Override
     public void write(Rectangle cell, ImageWritable value) throws IOException {
       progress.progress();
-      int tile_x = (int) Math.round((cell.x1 - fileMbr.x1) * image_width / fileMbr.getWidth());
-      int tile_y = (int) Math.round(vflip?
+      int tile_x = (int) Math.floor((cell.x1 - fileMbr.x1) * image_width / fileMbr.getWidth());
+      int tile_y = (int) Math.floor(vflip?
           ((-cell.y2 - -fileMbr.y2) * image_height / fileMbr.getHeight()):
           ((cell.y1 - fileMbr.y1) * image_height / fileMbr.getHeight()));
       Graphics2D graphics;

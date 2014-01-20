@@ -26,6 +26,7 @@ import org.apache.hadoop.io.Text;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.OGCShape;
+import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -314,6 +315,8 @@ public class CommandLineArguments {
       stockShape = new Point();
     } else if (shapeType.toString().startsWith("tiger")) {
       stockShape = new TigerShape();
+    } else if (shapeType.toString().startsWith("osm")) {
+      stockShape = new OSMPolygon();
     } else if (shapeType.toString().startsWith("poly")) {
       stockShape = new Polygon();
     } else if (shapeType.toString().startsWith("ogc")) {

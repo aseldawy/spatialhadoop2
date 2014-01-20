@@ -49,6 +49,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
+import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 
 /**
  * Computes a number of aggregate functions for an input file
@@ -221,12 +222,12 @@ public class Aggregate {
     HDFRecordReader reader = new HDFRecordReader(new Configuration(),
         new FileSplit(file, 0, file_size, new String[] {}), null, true);
     NASADataset key = reader.createKey();
-    NASAPoint point = reader.createValue();
+    NASAShape point = reader.createValue();
     while (reader.next(key, point)) {
-      if (point.value < minMax.minValue)
-        minMax.minValue = point.value;
-      if (point.value > minMax.maxValue)
-        minMax.maxValue = point.value;
+      if (point.getValue() < minMax.minValue)
+        minMax.minValue = point.getValue();
+      if (point.getValue() > minMax.maxValue)
+        minMax.maxValue = point.getValue();
     }
     reader.close();
     
