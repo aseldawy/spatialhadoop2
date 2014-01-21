@@ -71,7 +71,7 @@ ways_with_shapes = FOREACH ways_with_nodes {
   ordered = ORDER joined_ways BY pos;
   /* All tags are similar. Just grab the first one*/
   tags = FOREACH joined_ways GENERATE tags;
-  GENERATE group AS way_id, ST_AsText(ST_MakeLinePolygon(ordered.node_id, ordered.location)),
+  GENERATE group AS way_id, ST_AsText(ST_MakeLinePolygon(ordered.node_id, ordered.location)) AS shape,
     FLATTEN(TOP(1, 0, tags)) AS tags;
 };
 
@@ -87,18 +87,34 @@ parsed_relations = FOREACH xml_relations
   GENERATE edu.umn.cs.spatialHadoop.osm.OSMRelation(relation) AS relation;
 
 /* Filter relations according to tags or space */
-filtered_relations = parsed_relations;
+filtered_relations = FILTER parsed_relations BY relation.id == 1795856;
 
 /* Flatten the members so that we have one member per line */
 flattened_relations = FOREACH filtered_relations
   GENERATE relation.id AS relation_id, FLATTEN(relation.members), relation.tags AS tags;
 
-STORE flattened_relations INTO 'flattened_relations.tsv';
-
 /* Limit flattened relations to those associated with ways */
-/* flattened_relations = FILTER flattened_relations BY member.member_type == 'way'; */
+flattened_relations = FILTER flattened_relations BY members::member_type == 'way';
 
 /* Join relations with ways to get the shape of each way */
-/* relations_with_ways = JOIN flattened_relations BY member.member_id, ways_with_shapes BY way_id; */
+relations_with_ways = JOIN flattened_relations BY member_id, joined_ways BY way_id;
 
-/* STORE relations_with_ways INTO 'all_relations.tsv'; */
+/* Project columns of interest and rename for convenience */
+relations_with_ways = FOREACH relations_with_ways
+  GENERATE relation_id AS relation_id, member_pos AS way_pos, member_role AS way_role, flattened_relations::tags AS relation_tags,
+     way_id AS way_id, node_id AS node_id, location AS node_location, pos AS node_pos;
+
+/* Group nodes by relation_id and way_role */
+relations_by_role = GROUP relations_with_ways BY (relation_id, way_role);
+
+relations_with_shapes = FOREACH relations_by_role {
+  /* order points by position */
+  ordered = ORDER relations_with_ways BY way_pos, node_pos;
+  /* All tags are similar. Just grab the first one*/
+  tags = FOREACH relations_with_ways GENERATE relation_tags;
+  GENERATE group AS relation_way_id, ST_AsText(ST_MakeLinePolygon(ordered.node_id, ordered.node_location)) AS shape,
+    FLATTEN(TOP(1, 0, tags)) AS tags;
+};
+
+STORE relations_with_shapes INTO 'all_relations.tsv';
+
