@@ -11,19 +11,20 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 
-REGISTER osmx.jar;
+REGISTER spatialhadoop-2-b3.jar;
 REGISTER pigeon.jar
-REGISTER esri-geometry-api-1.0.jar;
+REGISTER esri-geometry-api-1.1.1.jar;
+REGISTER piggybank-0.12.0.jar;
 
 IMPORT 'pigeon_import.pig';
 
 /* Read and parse nodes */
-xml_nodes = LOAD 'map.osm'
+xml_nodes = LOAD 'mpls-stpaul.osm.bz2'
   USING org.apache.pig.piggybank.storage.XMLLoader('node')
   AS (node:chararray);
 
 parsed_nodes = FOREACH xml_nodes
-  GENERATE edu.umn.cs.spatialHadoop.udf.OSMNode(node) AS node;
+  GENERATE edu.umn.cs.spatialHadoop.osm.OSMNode(node) AS node;
   
 /*filtered_nodes = FILTER parsed_nodes BY node.tags#'highway' == 'traffic_signals';*/
 filtered_nodes = parsed_nodes; /* No filter */
@@ -40,11 +41,11 @@ flattened_nodes_wkt = FOREACH flattened_nodes
 
 /******************************************************/
 /* Read and parse ways */
-xml_ways = LOAD 'map.osm'
+xml_ways = LOAD 'mpls-stpaul.osm.bz2'
   USING org.apache.pig.piggybank.storage.XMLLoader('way') AS (way:chararray);
 
 parsed_ways = FOREACH xml_ways
-  GENERATE edu.umn.cs.spatialHadoop.udf.OSMWay(way) AS way;
+  GENERATE edu.umn.cs.spatialHadoop.osm.OSMWay(way) AS way;
   
 /* Filter ways to keep only ways of interest */
 /*filtered_ways = FILTER parsed_ways BY way.tags#'boundary' == 'administrative';*/
@@ -54,7 +55,7 @@ filtered_ways = parsed_ways;
 flattened_ways = FOREACH filtered_ways
   GENERATE way.id AS way_id, FLATTEN(way.nodes), way.tags AS tags;
 
-/* Project node ID and point location*/
+/* Project node ID and point location from nodes extracted earlier*/
 node_locations = FOREACH parsed_nodes
   GENERATE node.id, ST_MakePoint(node.lon, node.lat) AS location;
 
@@ -70,9 +71,34 @@ ways_with_shapes = FOREACH ways_with_nodes {
   ordered = ORDER joined_ways BY pos;
   /* All tags are similar. Just grab the first one*/
   tags = FOREACH joined_ways GENERATE tags;
-  GENERATE group AS way_id, ST_AsText(ST_MakeLine(ordered.location)),
+  GENERATE group AS way_id, ST_AsText(ST_MakeLinePolygon(ordered.node_id, ordered.location)),
     FLATTEN(TOP(1, 0, tags)) AS tags;
 };
 
-STORE ways_with_shapes into 'all_ways.tsv';
+/* STORE ways_with_shapes into 'all_ways.tsv'; */
 
+
+/******************************************************/
+/* Read and parse relations */
+xml_relations = LOAD 'mpls-stpaul.osm.bz2'
+  USING org.apache.pig.piggybank.storage.XMLLoader('relation') AS (relation:chararray);
+
+parsed_relations = FOREACH xml_relations
+  GENERATE edu.umn.cs.spatialHadoop.osm.OSMRelation(relation) AS relation;
+
+/* Filter relations according to tags or space */
+filtered_relations = parsed_relations;
+
+/* Flatten the members so that we have one member per line */
+flattened_relations = FOREACH filtered_relations
+  GENERATE relation.id AS relation_id, FLATTEN(relation.members), relation.tags AS tags;
+
+STORE flattened_relations INTO 'flattened_relations.tsv';
+
+/* Limit flattened relations to those associated with ways */
+/* flattened_relations = FILTER flattened_relations BY member.member_type == 'way'; */
+
+/* Join relations with ways to get the shape of each way */
+/* relations_with_ways = JOIN flattened_relations BY member.member_id, ways_with_shapes BY way_id; */
+
+/* STORE relations_with_ways INTO 'all_relations.tsv'; */

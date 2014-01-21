@@ -98,12 +98,11 @@ public class OSMRelation extends EvalFunc<Tuple> {
           long member_id = Long.parseLong(((Element)member).getAttribute("ref"));
           String member_type = ((Element)member).getAttribute("type");
           String member_role = ((Element)member).getAttribute("role");
-          Tuple memberTuple = TupleFactory.getInstance().newTuple(member_role.length() == 0? 3 : 4);
+          Tuple memberTuple = TupleFactory.getInstance().newTuple(4);
           memberTuple.set(0, member_pos);
-          memberTuple.set(2, member_type);
-          memberTuple.set(1, member_id);
-          if (member_role.length() > 0)
-            memberTuple.set(3, member_role);
+          memberTuple.set(1, member_type);
+          memberTuple.set(2, member_id);
+          memberTuple.set(3, member_role);
           memberBag.add(memberTuple);
         }
       }
@@ -143,7 +142,6 @@ public class OSMRelation extends EvalFunc<Tuple> {
       FieldSchema temp = new Schema.FieldSchema("members", memberSchema);
       temp.type = DataType.BAG;
       relationSchema.add(temp);
-
       
       Schema tagSchema = new Schema();
       tagSchema.add(new Schema.FieldSchema("value", DataType.CHARARRAY));
