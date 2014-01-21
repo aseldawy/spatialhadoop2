@@ -100,7 +100,8 @@ public class HDFPlot {
     FileSystem outFs = output.getFileSystem(conf);
     while (dateFrom.compareTo(dateTo) <= 0) {
       Path inputPath = new Path(input+"/"+dateFormat.format(dateFrom)+"/*.hdf");
-      Path outputPath = new Path(output+"/"+dateFormat.format(dateFrom));
+      Path outputPath = new Path(output+"/"+dateFormat.format(dateFrom)+
+          (pyramid? "" : ".png"));
       if (overwrite || !outFs.exists(outputPath)) {
         String[] plotArgs = vargs.toArray(new String[vargs.size() + 2]);
         plotArgs[vargs.size()] = inputPath.toString();
