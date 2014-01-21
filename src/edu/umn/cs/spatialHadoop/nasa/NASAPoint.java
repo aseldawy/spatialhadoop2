@@ -71,7 +71,12 @@ public class NASAPoint extends Point implements NASAShape {
   /**Valid range of values. Used for drawing.*/
   public static float minValue, maxValue;
   
-  public static final float MaxHue = 0.78f;
+  public static final float MaxHue;
+  static {
+    float[] hsbvals = new float[3];
+    Color.RGBtoHSB(0, 0, 255, hsbvals);
+    MaxHue = hsbvals[0];
+  }
   
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
