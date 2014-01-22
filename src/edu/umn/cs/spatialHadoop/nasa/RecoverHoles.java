@@ -288,8 +288,10 @@ public class RecoverHoles {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
+    CommandLineArguments cla = new CommandLineArguments(args);
+    Path dir = cla.getPath();
     long t1 = System.currentTimeMillis();
-    recoverInterpolation(new Path("jan_recovery_all"));
+    recoverInterpolation(dir);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time millis "+(t2-t1));
   }
