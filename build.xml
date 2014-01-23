@@ -7,7 +7,7 @@
   <property name="build" location="bin"/>
   <property name="dist"  location="dist"/>
   <property name="dist2"  location="dist2"/>
-  <property name="version" value="2-b3"/>
+  <property name="version" value="2.1"/>
   
   <path id="hdflib.path.ref">
     <fileset dir="lib/hdflib" includes="*.jar"/>
