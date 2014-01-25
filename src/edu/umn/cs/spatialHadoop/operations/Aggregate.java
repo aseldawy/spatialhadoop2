@@ -27,8 +27,6 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.Counters;
-import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -38,7 +36,6 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
-import org.apache.hadoop.mapred.Task;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -57,12 +54,6 @@ import edu.umn.cs.spatialHadoop.nasa.NASAShape;
  *
  */
 public class Aggregate {
-  
-  /**
-   * Keeps track of the size of last processed file. Used to determine the
-   * uncompressed size of a file.
-   */
-  public static long sizeOfLastProcessedFile;
   
   /**
    * A structure to hold some aggregate values used to draw HDF files efficiently
@@ -178,11 +169,7 @@ public class Aggregate {
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job
-    RunningJob lastSubmittedJob = JobClient.runJob(job);
-    
-    Counters counters = lastSubmittedJob.getCounters();
-    Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
-    Aggregate.sizeOfLastProcessedFile = inputBytesCounter.getValue();
+    JobClient.runJob(job);
       
     // Read job result
     FileStatus[] results = outFs.listStatus(outputPath);
@@ -231,7 +218,6 @@ public class Aggregate {
     }
     reader.close();
     
-    Aggregate.sizeOfLastProcessedFile = file_size;
     return minMax;
   }
   
@@ -239,42 +225,29 @@ public class Aggregate {
     MinMax min_max = null;
 
     // Check if we have cached values for the given dataset
-    FileStatus[] matches;
-    if (CommandLineArguments.isWildcard(inFile)) {
-      matches = fs.globStatus(inFile);
-    } else if (fs.getFileStatus(inFile).isDir()) {
-      matches = fs.listStatus(inFile);
-    } else {
-      matches = new FileStatus[] {fs.getFileStatus(inFile)};
-    }
-
-    if (matches.length == 0)
-      return min_max;
-    
-    // Extract the dataset from the filename of the first file
-    String firstFilename = matches[0].getPath().getName();
-    String dataset = firstFilename.split("\\.", 2)[0];
-    if (dataset.equals("MOD11A1") || dataset.equals("MYD11A1")) {
+    String inPathStr = inFile.toString();
+    if (inPathStr.contains("MOD11A1") || inPathStr.contains("MYD11A1")) {
       // Land temperature
       min_max = new MinMax();
       min_max.minValue = 10000; // 200 K, -73 C, -100 F
       min_max.maxValue = 18000; // 360 K,  87 C,  188 F
-    }
-
-    if (min_max != null) {
-      // Compute file size by adding up sizes of all files assuming they are
-      // not compressed. Useful for Plot to be able to partition input file
-      // based on its size
-      long totalLength = 0;
-      for (FileStatus match : matches) {
-        totalLength += match.getLen();
-      }
-      sizeOfLastProcessedFile = totalLength;
     } else {
+      FileStatus[] matches;
+      if (CommandLineArguments.isWildcard(inFile)) {
+        matches = fs.globStatus(inFile);
+      } else if (fs.getFileStatus(inFile).isDir()) {
+        matches = fs.listStatus(inFile);
+      } else {
+        matches = new FileStatus[] {fs.getFileStatus(inFile)};
+      }
+
+      if (matches.length == 0)
+        return null;
+
       // Need to process input files to get stats from it and calculate its size
       FileSystem inFs = inFile.getFileSystem(new Configuration());
       FileStatus inFStatus = inFs.getFileStatus(inFile);
-      
+
       if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 3) {
         // Either a directory of file or a large file
         min_max = aggregateMapReduce(fs, inFile);
