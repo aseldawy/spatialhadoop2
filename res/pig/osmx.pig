@@ -96,7 +96,6 @@ flattened_relations = FOREACH filtered_relations
 /* Limit flattened relations to those associated with ways */
 flattened_relations = FILTER flattened_relations BY members::member_type == 'way';
 
-
 /* For each way, generate a shape out of every list of points. Keep first and last node IDs to be able to connect ways later*/
 ways_with_ordered_shapes = FOREACH ways_with_nodes {
   /* order points by position */
@@ -104,14 +103,20 @@ ways_with_ordered_shapes = FOREACH ways_with_nodes {
   first_node = LIMIT ordered_asc 1;
   ordered_desc = ORDER joined_ways BY pos DESC;
   last_node = LIMIT ordered_desc 1;
+  tags = FOREACh joined_ways GENERATE tags;
 
   GENERATE group AS way_id, FLATTEN(first_node.node_id) AS first_node_id,
      FLATTEN(last_node.node_id) AS last_node_id,
-     ST_MakeLinePolygon(ordered_asc.node_id, ordered_asc.location) AS way_shape;
+     ST_MakeLinePolygon(ordered_asc.node_id, ordered_asc.location) AS way_shape,
+     FLATTEN(TOP(1, 0, tags)) AS way_tags;
 };
 
 /* Join relations with ways to get the shape of each way */
-relations_with_ways = JOIN flattened_relations BY member_id, ways_with_ordered_shapes BY way_id;
+relations_join_ways = JOIN flattened_relations BY member_id RIGHT OUTER, ways_with_ordered_shapes BY way_id;
+
+dangled_ways = FILTER relations_join_ways BY relation_id IS NULL AND way_tags#'admin_level' == '6';
+
+relations_with_ways = FILTER relations_join_ways BY relation_id IS NOT NULL;
 
 /* Group nodes by relation_id and way_role */
 relations_by_role = GROUP relations_with_ways BY (relation_id, member_role);
@@ -125,9 +130,15 @@ relations_with_shapes = FOREACH relations_by_role {
 };
 
 good_relations = FILTER relations_with_shapes BY shape is not null;
-good_relations = FOREACH good_relations
-  GENERATE relation_id, ST_AsText(shape), tags;
 
-STORE good_relations INTO 'good_counties.tsv';
+relation_objects = FOREACH good_relations
+  GENERATE 'relation' AS source, relation_id, ST_AsText(shape) AS shape, tags;
+
+way_objects = FOREACH dangled_ways
+  GENERATE 'way' AS source, way_id, ST_AsText(way_shape) AS shape, way_tags AS tags;
+
+all_objects = UNION ONSCHEMA relation_objects, way_objects;
+
+STORE all_objects INTO 'all_counties.tsv';
 
 
