@@ -150,11 +150,18 @@ public class RecoverHoles {
       instream.close();
       
       // All recovered values are stored in this image
-      BufferedImage recovery = new BufferedImage(img.getWidth(),
+      BufferedImage recoveryInterpolation = new BufferedImage(img.getWidth(),
           img.getHeight(), BufferedImage.TYPE_INT_ARGB);
-      g = recovery.createGraphics();
+      g = recoveryInterpolation.createGraphics();
       g.setBackground(new Color(0, 0, 0, 0));
-      g.clearRect(0, 0, recovery.getWidth(), recovery.getHeight());
+      g.clearRect(0, 0, recoveryInterpolation.getWidth(), recoveryInterpolation.getHeight());
+      g.dispose();
+      
+      BufferedImage recoveryCopy = new BufferedImage(img.getWidth(),
+          img.getHeight(), BufferedImage.TYPE_INT_ARGB);
+      g = recoveryCopy.createGraphics();
+      g.setBackground(new Color(0, 0, 0, 0));
+      g.clearRect(0, 0, recoveryCopy.getWidth(), recoveryCopy.getHeight());
       g.dispose();
       
       // Go over this image row by row
@@ -177,7 +184,7 @@ public class RecoverHoles {
             int color = x1 > 0? img.getRGB(x1-1, y) : img.getRGB(x2, y);
             for (int x = x1; x < x2; x++) {
               if (!isTransparent(mask, x, y)) {
-                mergePoints(recovery, x, y, color);
+                mergePoints(recoveryCopy, x, y, color);
               }
             }
           } else if (x1 > 0 && x2 < img.getWidth()) {
@@ -197,7 +204,7 @@ public class RecoverHoles {
                 // Should be recovered
                 float recoveredHue = (hue1 * (x2 - x) + hue2 * (x - x1)) / (x2 - x1);
                 int recoveredColor = Color.HSBtoRGB(recoveredHue, hsbvals[1], hsbvals[2]);
-                mergePoints(recovery, x, y, recoveredColor);
+                mergePoints(recoveryInterpolation, x, y, recoveredColor);
               }
             }
           }
@@ -224,7 +231,7 @@ public class RecoverHoles {
             int color = y1 > 0? img.getRGB(x, y1-1) : img.getRGB(x, y2);
             for (int y = y1; y < y2; y++) {
               if (!isTransparent(mask, x, y)) {
-                mergePoints(recovery, x, y, color);
+                mergePoints(recoveryCopy, x, y, color);
               }
             }
           } else if (y1 > 0 && y2 < img.getHeight()) {
@@ -244,7 +251,7 @@ public class RecoverHoles {
                 // Should be recovered
                 float recoveredHue = (hue1 * (y2 - y) + hue2 * (y - y1)) / (y2 - y1);
                 int recoveredColor = Color.HSBtoRGB(recoveredHue, hsbvals[1], hsbvals[2]);
-                mergePoints(recovery, x, y, recoveredColor);
+                mergePoints(recoveryInterpolation, x, y, recoveredColor);
               }
             }
           }
@@ -252,8 +259,13 @@ public class RecoverHoles {
       }
       
       // Overlay the layer of recovered points
+      // Overlay recoveryCopy first then recoveryInterpolation to give higher
+      // priority to interpolation as it's smoother.
+      // In other words, points that could be interpolated overwrite points
+      // that could only be copied for the same location.
       g = img.createGraphics();
-      g.drawImage(recovery, 0, 0, null);
+      g.drawImage(recoveryCopy, 0, 0, null);
+      g.drawImage(recoveryInterpolation, 0, 0, null);
       g.dispose();
       
       FSDataOutputStream outstream = fs.create(imageFile.getPath(), true);
@@ -290,6 +302,10 @@ public class RecoverHoles {
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
     Path dir = cla.getPath();
+    if (dir == null) {
+      System.err.println("Please provide an input directory");
+      return;
+    }
     long t1 = System.currentTimeMillis();
     recoverInterpolation(dir);
     long t2 = System.currentTimeMillis();
