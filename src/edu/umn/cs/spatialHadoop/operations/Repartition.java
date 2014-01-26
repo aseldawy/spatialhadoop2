@@ -564,19 +564,15 @@ public class Repartition {
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("shape:<point|rectangle|polygon> - (*) Type of shapes stored in input file");
-    System.out.println("global:<grid|rtree> - (*) Type of global index");
-    System.out.println("local:<grid|rtree> - Type of local index");
-    System.out.println("mbr:<x,y,w,h> - MBR of data in input file");
+    System.out.println("sindex:<index> - (*) Type of spatial index");
     System.out.println("blocksize:<size> - Size of blocks in output file");
     System.out.println("-overwrite - Overwrite output file without noitce");
   }
 
   /**
 	 * Entry point to the file.
-	 * rect:<mbr> mbr of the data in file. Automatically obtained if not set. 
 	 * shape:<s> the shape to use. Automatically inferred from input file if not set.
-	 * gindex<grid:rtree> Type of global index. If not set, no global index is built.
-	 * lindex<grid:rtree> Type of local index. If not set, no local index is built.
+	 * sindex<index> Type of spatial index to build
 	 * cells-of:<filename> Use the cells of the given file for the global index.
 	 * blocksize:<size> Size of each block in indexed file in bytes.
 	 * -local: If set, the index is built on the local machine.

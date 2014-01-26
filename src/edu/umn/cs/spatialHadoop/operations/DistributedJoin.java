@@ -650,19 +650,20 @@ public class DistributedJoin {
     Path[] allFiles = cla.getPaths();
     JobConf conf = new JobConf(DistributedJoin.class);
     Shape stockShape = cla.getShape(true);
-    String repartition = cla.getRepartition();
     if (allFiles.length < 2) {
+      System.err.println("Missing input files");
       printUsage();
-      throw new RuntimeException("Missing input files");
+      return;
     }
     
     Path[] inputFiles = new Path[] {allFiles[0], allFiles[1]};
     FileSystem fs = allFiles[0].getFileSystem(conf);
     if (!fs.exists(inputFiles[0]) || !fs.exists(inputFiles[1])) {
+      System.err.println("Input file does not exist");
       printUsage();
-      throw new RuntimeException("Input file does not exist");
+      return;
     }
-    
+    String repartition = cla.get("repartition");
     
     Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
     boolean overwrite = cla.isOverwrite();
