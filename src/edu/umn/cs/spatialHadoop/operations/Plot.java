@@ -465,18 +465,18 @@ public class Plot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
       int width, int height, boolean vflip, Color color, boolean showBorders,
-      String hdfDataset, Shape range, boolean keepAspectRatio) throws IOException {
+      String hdfDataset, Shape range, boolean keepAspectRatio, boolean background) throws IOException {
     if (CommandLineArguments.isWildcard(inFile)) {
       // plotLocal cannot handle wild cards
       plotMapReduce(inFile, outFile, shape, width, height, vflip, color,
-          showBorders, hdfDataset, range, keepAspectRatio, false);
+          showBorders, hdfDataset, range, keepAspectRatio, background);
     } else {
       FileSystem inFs = inFile.getFileSystem(new Configuration());
       FileStatus inFStatus = inFs.getFileStatus(inFile);
       if (inFStatus.isDir()
           || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
         plotMapReduce(inFile, outFile, shape, width, height, vflip, color,
-            showBorders, hdfDataset, range, keepAspectRatio, false);
+            showBorders, hdfDataset, range, keepAspectRatio, background);
       } else {
         plotLocal(inFile, outFile, shape, width, height, vflip, color,
             showBorders, hdfDataset, range, keepAspectRatio);
@@ -596,6 +596,7 @@ public class Plot {
     Path outFile = files[1];
 
     boolean showBorders = cla.is("borders");
+    boolean background = cla.is("background");
     
     int width = cla.getWidth(1000);
     int height = cla.getHeight(1000);
@@ -611,7 +612,7 @@ public class Plot {
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
     
-    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, rect, keepAspectRatio);
+    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, rect, keepAspectRatio, background);
   }
 
 }
