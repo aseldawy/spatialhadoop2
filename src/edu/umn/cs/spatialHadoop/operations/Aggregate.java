@@ -229,8 +229,10 @@ public class Aggregate {
     if (inPathStr.contains("MOD11A1") || inPathStr.contains("MYD11A1")) {
       // Land temperature
       min_max = new MinMax();
-      min_max.minValue = 10000; // 200 K, -73 C, -100 F
-      min_max.maxValue = 18000; // 360 K,  87 C,  188 F
+      //min_max.minValue = 10000; // 200 K, -73 C, -100 F
+      //min_max.maxValue = 18000; // 360 K,  87 C,  188 F
+      min_max.minValue = 13650; // 273 K,  0 C
+      min_max.maxValue = 17650; // 353 K, 80 C
     } else {
       FileStatus[] matches;
       if (CommandLineArguments.isWildcard(inFile)) {
