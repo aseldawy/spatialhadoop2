@@ -169,14 +169,6 @@ public class CommandLineArguments {
     return is("local");
   }
   
-  /**
-   * Whether the user asked for an explicit repartition step or not
-   * @return
-   */
-  public String getRepartition() {
-    return get("repartition");
-  }
-
   public boolean is(String flag) {
     return is(flag, false);
   }
