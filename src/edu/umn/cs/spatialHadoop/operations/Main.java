@@ -59,7 +59,7 @@ public class Main {
           "Finds the minimal bounding rectangle of an input file");
       
       pgd.addClass("readfile", ReadFile.class,
-          "Retrieve some information about the global index of a file");
+          "Retrieve some information about the index of a file");
 
       pgd.addClass("sample", Sampler.class,
           "Reads a random sample from the input file");

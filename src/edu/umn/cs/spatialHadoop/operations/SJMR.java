@@ -290,7 +290,6 @@ public class SJMR {
     System.out.println("<input file 1> - (*) Path to the first input file");
     System.out.println("<input file 2> - (*) Path to the second input file");
     System.out.println("<output file> - Path to output file");
-    System.out.println("mbr:<x,y,w,h> - MBR of the two files");
     System.out.println("-overwrite - Overwrite output file without notice");
   }
   
