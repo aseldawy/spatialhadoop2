@@ -121,17 +121,19 @@ public class HDFPlot {
     // Retrieve range to plot if provided by user
     Rectangle plotRange = cla.getRectangle();
 
-    // Retrieve the scale and defaults to preset
-    String scale = cla.get("scale", "preset").toLowerCase();
+    // Retrieve the scale
+    String scale = cla.get("scale");
     MinMax valueRange;
-    if (scale.equals("preset") || scale.equals("tight")) {
+    if (scale == null) {
+      valueRange = null;
+    } else if (scale.equals("preset") || scale.equals("tight")) {
       valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, scale.equals("tight"));
     } else if (scale.matches("\\d+,\\d+")) {
       String[] parts = scale.split(",");
       valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     } else {
       LOG.warn("Cannot parse the scale '"+scale+"'. defaulting to preset value");
-      valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, true);
+      valueRange = null;
     }
     
     Vector<String> vargs = new Vector<String>(Arrays.asList(args));
@@ -157,10 +159,12 @@ public class HDFPlot {
       Path outputPath = new Path(output+"/"+inputPath.getParent().getName()+
           (pyramid? "" : ".png"));
       if (overwrite || !outFs.exists(outputPath)) {
-        String[] plotArgs = vargs.toArray(new String[vargs.size() + 3]);
+        String[] plotArgs = vargs.toArray(new String[vargs.size() + (valueRange == null? 2 : 3)]);
         plotArgs[vargs.size()] = inputPath.toString();
         plotArgs[vargs.size() + 1] = outputPath.toString();
-        plotArgs[vargs.size() + 2] = "valuerange:"+valueRange.minValue+","+valueRange.maxValue;
+        if (valueRange != null)
+          plotArgs[vargs.size() + 2] =
+            "valuerange:"+valueRange.minValue+","+valueRange.maxValue;
         if (pyramid)
           PlotPyramid.main(plotArgs);
         else
