@@ -73,12 +73,8 @@ public class HDFPlot {
    */
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    Vector<String> vargs = new Vector<String>(Arrays.asList(args));
     Path input = cla.getPaths()[0];
     Path output = cla.getPaths()[1];
-    // Keep all arguments except input and output which are dynamic
-    vargs.remove(input.toString());
-    vargs.remove(output.toString());
     String timeRange = cla.get("time");
     if (timeRange == null) {
       printUsage();
@@ -120,7 +116,7 @@ public class HDFPlot {
     }
     Path[] matchingPaths = new Path[matchingDirs.length];
     for (int i = 0; i < matchingDirs.length; i++)
-      matchingPaths[i] = matchingDirs[i].getPath();
+      matchingPaths[i] = new Path(matchingDirs[i].getPath(), "*.hdf");
     
     // Retrieve range to plot if provided by user
     Rectangle plotRange = cla.getRectangle();
@@ -138,12 +134,27 @@ public class HDFPlot {
       valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, true);
     }
     
+    Vector<String> vargs = new Vector<String>(Arrays.asList(args));
+    // Keep all arguments except input and output which change for each call
+    // to Plot or PlotPyramid
+    for (int i = 0; i < vargs.size();) {
+      if (vargs.get(i).startsWith("-") && vargs.get(i).length() > 1) {
+        i++; // Skip
+      } else if (vargs.get(i).indexOf(':') != -1 && vargs.get(i).indexOf(":/") == -1) {
+        if (vargs.get(i).toLowerCase().startsWith("scale:"))
+          vargs.remove(i);
+        else
+          i++; // Skip
+      } else {
+        vargs.remove(i);
+      }
+    }
+
     boolean overwrite = cla.isOverwrite();
     boolean pyramid = cla.is("pyramid");
     FileSystem outFs = output.getFileSystem(conf);
-    for (Path inputDir : matchingPaths) {
-      Path inputPath = new Path(inputDir.toString()+"/*.hdf");
-      Path outputPath = new Path(output+"/"+inputDir.getName()+
+    for (Path inputPath : matchingPaths) {
+      Path outputPath = new Path(output+"/"+inputPath.getParent().getName()+
           (pyramid? "" : ".png"));
       if (overwrite || !outFs.exists(outputPath)) {
         String[] plotArgs = vargs.toArray(new String[vargs.size() + 3]);

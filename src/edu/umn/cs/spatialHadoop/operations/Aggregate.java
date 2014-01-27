@@ -154,7 +154,7 @@ public class Aggregate {
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
     do {
-      outputPath = new Path(files[0].toUri().getPath()+".agg_"+(int)(Math.random()*1000000));
+      outputPath = new Path("agg_"+(int)(Math.random()*1000000));
     } while (outFs.exists(outputPath));
     
     job.setJobName("Aggregate");

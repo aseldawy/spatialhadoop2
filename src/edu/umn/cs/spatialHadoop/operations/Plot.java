@@ -638,7 +638,7 @@ public class Plot {
       valueRange = null;
     } else {
       String[] parts = valueRangeStr.split(",");
-      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[2]));
+      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
     
     plot(inFile, outFile, shape, width, height, vflip, color, valueRange, showBorders, hdfDataset, rect, keepAspectRatio, background);
