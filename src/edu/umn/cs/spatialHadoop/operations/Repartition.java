@@ -12,7 +12,6 @@
  */
 package edu.umn.cs.spatialHadoop.operations;
 
-import java.awt.Color;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;

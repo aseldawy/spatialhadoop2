@@ -410,7 +410,7 @@ public class PlotPyramid {
    */
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
       Shape shape, int tileWidth, int tileHeight, boolean vflip, Color color,
-      int numLevels, String hdfDataset, Rectangle rect, boolean keepAspectRatio) throws IOException {
+      int numLevels, String hdfDataset, Rectangle plotRange, boolean keepAspectRatio) throws IOException {
     JobConf job = new JobConf(PlotPyramid.class);
     job.setJobName("PlotPyramid");
     
@@ -433,7 +433,7 @@ public class PlotPyramid {
       job.set(HDFRecordReader.DatasetName, hdfDataset);
       job.setBoolean(HDFRecordReader.SkipFillValue, true);
       // Determine the range of values by opening one of the HDF files
-      Aggregate.MinMax minMax = Aggregate.aggregate(inFs, inFile);
+      Aggregate.MinMax minMax = Aggregate.aggregate(inFs, new Path[] {inFile}, plotRange, false);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
       //fileMBR = new Rectangle(-180, -90, 180, 90);
@@ -465,9 +465,9 @@ public class PlotPyramid {
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
-    if (rect != null) {
+    if (plotRange != null) {
       job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-      RangeFilter.setQueryRange(job, rect); // Set query range for filter
+      RangeFilter.setQueryRange(job, plotRange); // Set query range for filter
     }
     
     job.setOutputFormat(PyramidOutputFormat.class);
@@ -479,9 +479,9 @@ public class PlotPyramid {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
       int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels,
-      String hdfDataset, Rectangle rect, boolean keepAspectRatio)
+      String hdfDataset, Rectangle plotRange, boolean keepAspectRatio)
           throws IOException {
-    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, rect, keepAspectRatio);
+    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, plotRange, keepAspectRatio);
   }
 
   
@@ -524,12 +524,12 @@ public class PlotPyramid {
     
     String hdfDataset = cla.get("dataset");
     Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
-    Rectangle rect = cla.getRectangle();
+    Rectangle plotRange = cla.getRectangle();
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
     
     plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color,
-        numLevels, hdfDataset, rect, keepAspectRatio);
+        numLevels, hdfDataset, plotRange, keepAspectRatio);
   }
 
 }

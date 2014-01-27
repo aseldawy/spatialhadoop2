@@ -245,18 +245,30 @@ public class CommandLineArguments {
   }
   
   /**
-   * Finds any parameters that has with the given key name
+   * Finds any parameters that has with the given key name. If the value does
+   * not exist, return null.
    * @param key
    * @return
    */
   public String get(String key) {
-    key = key +":";
+    return get(key, null);
+  }
+  
+  /**
+   * Return the command with the given key. If the key does not exist,
+   * the default value is returned.
+   * @param key
+   * @param defaultValue
+   * @return
+   */
+  public String get(String key, String defaultValue) {
+    key = key.toLowerCase() +":";
     for (String arg : args) {
-      if (arg.startsWith(key)) {
+      if (arg.toLowerCase().startsWith(key)) {
         return arg.substring(arg.indexOf(':')+1);
       }
     }
-    return null;
+    return defaultValue;
   }
   
   public int getInt(String key, int defaultValue) {

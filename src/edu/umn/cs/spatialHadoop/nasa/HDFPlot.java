@@ -23,10 +23,15 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.operations.Aggregate;
+import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.Plot;
 import edu.umn.cs.spatialHadoop.operations.PlotPyramid;
 
@@ -44,8 +49,6 @@ import edu.umn.cs.spatialHadoop.operations.PlotPyramid;
 public class HDFPlot {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(HDFPlot.class);
-  /**Milliseconds in one day*/
-  private static final long ONE_DAY = 24l * 60 * 60 * 1000;
 
   private static void printUsage() {
     System.out.println("Plots all NASA datasets matching user criteria");
@@ -80,7 +83,7 @@ public class HDFPlot {
     if (timeRange == null) {
       printUsage();
     }
-    Date dateFrom, dateTo;
+    final Date dateFrom, dateTo;
     final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd");
     try {
       dateFrom = dateFormat.parse(timeRange.split("\\.\\.")[0]);
@@ -94,27 +97,65 @@ public class HDFPlot {
       printUsage();
       return;
     }
+    // Retrieve all matching input directories based on date range
+    Configuration conf = new Configuration();
+    FileSystem inFs = input.getFileSystem(conf);
+    FileStatus[] matchingDirs = inFs.listStatus(input, new PathFilter() {
+      @Override
+      public boolean accept(Path p) {
+        String dirName = p.getName();
+        try {
+          Date date = dateFormat.parse(dirName);
+          return date.compareTo(dateFrom) >= 0 &&
+              date.compareTo(dateTo) <= 0;
+        } catch (ParseException e) {
+          LOG.warn("Cannot parse directory name: "+dirName);
+          return false;
+        }
+      }
+    });
+    if (matchingDirs.length == 0) {
+      LOG.warn("No matching directories to given input");
+      return;
+    }
+    Path[] matchingPaths = new Path[matchingDirs.length];
+    for (int i = 0; i < matchingDirs.length; i++)
+      matchingPaths[i] = matchingDirs[i].getPath();
+    
+    // Retrieve range to plot if provided by user
+    Rectangle plotRange = cla.getRectangle();
+
+    // Retrieve the scale and defaults to preset
+    String scale = cla.get("scale", "preset").toLowerCase();
+    MinMax valueRange;
+    if (scale.equals("preset") || scale.equals("tight")) {
+      valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, scale.equals("tight"));
+    } else if (scale.matches("\\d+,\\d+")) {
+      String[] parts = scale.split(",");
+      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+    } else {
+      LOG.warn("Cannot parse the scale '"+scale+"'. defaulting to preset value");
+      valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, true);
+    }
+    
     boolean overwrite = cla.isOverwrite();
     boolean pyramid = cla.is("pyramid");
-    Configuration conf = new Configuration();
     FileSystem outFs = output.getFileSystem(conf);
-    while (dateFrom.compareTo(dateTo) <= 0) {
-      Path inputPath = new Path(input+"/"+dateFormat.format(dateFrom)+"/*.hdf");
-      Path outputPath = new Path(output+"/"+dateFormat.format(dateFrom)+
+    for (Path inputDir : matchingPaths) {
+      Path inputPath = new Path(inputDir.toString()+"/*.hdf");
+      Path outputPath = new Path(output+"/"+inputDir.getName()+
           (pyramid? "" : ".png"));
       if (overwrite || !outFs.exists(outputPath)) {
-        String[] plotArgs = vargs.toArray(new String[vargs.size() + 2]);
+        String[] plotArgs = vargs.toArray(new String[vargs.size() + 3]);
         plotArgs[vargs.size()] = inputPath.toString();
         plotArgs[vargs.size() + 1] = outputPath.toString();
+        plotArgs[vargs.size() + 2] = "valuerange:"+valueRange.minValue+","+valueRange.maxValue;
         if (pyramid)
           PlotPyramid.main(plotArgs);
         else
           Plot.main(plotArgs);
       }
-      // Advance one day
-      dateFrom = new Date(dateFrom.getTime() + ONE_DAY);
     }
-    
   }
 
 }

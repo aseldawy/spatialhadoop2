@@ -271,7 +271,7 @@ public class Plot {
   public static RunningJob lastSubmittedJob;
   
   public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
-      Shape shape, int width, int height, boolean vflip, Color color,
+      Shape shape, int width, int height, boolean vflip, Color color, MinMax valueRange,
       boolean showBorders, String hdfDataset, Shape range,
       boolean keepAspectRatio, boolean background) throws IOException {
     JobConf job = new JobConf(Plot.class);
@@ -294,9 +294,10 @@ public class Plot {
       job.set(HDFRecordReader.DatasetName, hdfDataset);
       job.setBoolean(HDFRecordReader.SkipFillValue, true);
       // Determine the range of values by opening one of the HDF files
-      Aggregate.MinMax minMax = Aggregate.aggregate(inFs, inFile);
-      job.setInt(MinValue, minMax.minValue);
-      job.setInt(MaxValue, minMax.maxValue);
+      if (valueRange == null)
+        valueRange = Aggregate.aggregate(inFs, new Path[] {inFile}, range, false);
+      job.setInt(MinValue, valueRange.minValue);
+      job.setInt(MaxValue, valueRange.maxValue);
       fileMBR = range != null?
           range.getMBR() : new Rectangle(-180, -140, 180, 169);
       job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
@@ -354,18 +355,19 @@ public class Plot {
   }
   
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
-      S shape, int width, int height, boolean vflip, Color color,
-      boolean showBorders, String hdfDataset, Shape range, boolean keepAspectRatio) throws IOException {
+      S shape, int width, int height, boolean vflip, Color color, MinMax valueRange,
+      boolean showBorders, String hdfDataset, Shape plotRange, boolean keepAspectRatio) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
     if (hdfDataset != null) {
       // Collects some stats about the HDF file
-      MinMax hdfStats = Aggregate.aggregateLocal(inFs, inFile);
-      Rectangle fileMbr = range == null ? new Rectangle(-180, -90, 180, 90)
-          : range.getMBR();
-      NASAPoint.minValue = hdfStats.minValue;
-      NASAPoint.maxValue = hdfStats.maxValue;
+      if (valueRange == null)
+        valueRange = Aggregate.aggregateLocal(inFs, new Path[] {inFile}, plotRange);
+      Rectangle fileMbr = plotRange == null ? new Rectangle(-180, -90, 180, 90)
+          : plotRange.getMBR();
+      NASAPoint.minValue = valueRange.minValue;
+      NASAPoint.maxValue = valueRange.maxValue;
       LOG.info("FileMBR: "+fileMbr);
       if (vflip) {
         double temp = fileMbr.y1;
@@ -400,7 +402,7 @@ public class Plot {
       
       NASAPoint point = (NASAPoint) shape;
       while (reader.next(dataset, point)) {
-        if (range == null || point.isIntersected(point)) {
+        if (plotRange == null || point.isIntersected(point)) {
           point.draw(graphics, fileMbr, width, height, vflip, 0.0);
         }
       }
@@ -414,8 +416,8 @@ public class Plot {
       out.close();
     } else {
       // Determine file MBR to be able to scale shapes correctly
-      Rectangle fileMbr = range == null ?
-          FileMBR.fileMBRLocal(inFs, inFile, shape) : range.getMBR();
+      Rectangle fileMbr = plotRange == null ?
+          FileMBR.fileMBRLocal(inFs, inFile, shape) : plotRange.getMBR();
       LOG.info("FileMBR: "+fileMbr);
       if (vflip) {
         double temp = fileMbr.y1;
@@ -449,7 +451,7 @@ public class Plot {
           new FileSplit(inFile, 0, fileLength, new String[0]));
       Rectangle cell = reader.createKey();
       while (reader.next(cell, shape)) {
-        if (range == null || shape.isIntersected(range))
+        if (plotRange == null || shape.isIntersected(plotRange))
           shape.draw(graphics, fileMbr, width, height, vflip, scale2);
       }
       reader.close();
@@ -462,24 +464,42 @@ public class Plot {
     }
     
   }
-  
+
+  /**
+   * Plots the given file to an image
+   * @param inFile - Path to input file
+   * @param outFile - Path to output file
+   * @param shape - Shape or input format of the input file
+   * @param width - maximum width of generated image
+   * @param height - maximum height of generated image
+   * @param vflip - Whether to flip the output image vertically or not
+   * @param color - Default color of drawn shapes
+   * @param valueRange - Range of values in case the input is HDF
+   * @param showBorders - Whether or not to show partition borders for indexed files
+   * @param hdfDataset - The name of the HDF dataset in case the input is HDF
+   * @param plotRange - spatial range to plot
+   * @param keepAspectRatio - Whether or not to keep aspect ratio
+   * @param background - Whether or not to run the MapReduce job in the background
+   * @throws IOException
+   */
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
-      int width, int height, boolean vflip, Color color, boolean showBorders,
-      String hdfDataset, Shape range, boolean keepAspectRatio, boolean background) throws IOException {
+      int width, int height, boolean vflip, Color color, MinMax valueRange,
+      boolean showBorders, String hdfDataset, Shape plotRange,
+      boolean keepAspectRatio, boolean background) throws IOException {
     if (CommandLineArguments.isWildcard(inFile)) {
       // plotLocal cannot handle wild cards
-      plotMapReduce(inFile, outFile, shape, width, height, vflip, color,
-          showBorders, hdfDataset, range, keepAspectRatio, background);
+      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, valueRange,
+          showBorders, hdfDataset, plotRange, keepAspectRatio, background);
     } else {
       FileSystem inFs = inFile.getFileSystem(new Configuration());
       FileStatus inFStatus = inFs.getFileStatus(inFile);
       if (inFStatus.isDir()
           || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
-        plotMapReduce(inFile, outFile, shape, width, height, vflip, color,
-            showBorders, hdfDataset, range, keepAspectRatio, background);
+        plotMapReduce(inFile, outFile, shape, width, height, vflip, color, valueRange,
+            showBorders, hdfDataset, plotRange, keepAspectRatio, background);
       } else {
-        plotLocal(inFile, outFile, shape, width, height, vflip, color,
-            showBorders, hdfDataset, range, keepAspectRatio);
+        plotLocal(inFile, outFile, shape, width, height, vflip, color, valueRange,
+            showBorders, hdfDataset, plotRange, keepAspectRatio);
       }
     }
   }
@@ -607,12 +627,21 @@ public class Plot {
     Color color = cla.getColor();
 
     String hdfDataset = cla.get("dataset");
-    Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+    Shape shape = hdfDataset != null ? new NASARectangle() : cla.getShape(true);
     Rectangle rect = cla.getRectangle();
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
     
-    plot(inFile, outFile, shape, width, height, vflip, color, showBorders, hdfDataset, rect, keepAspectRatio, background);
+    String valueRangeStr = cla.get("valuerange");
+    MinMax valueRange;
+    if (valueRangeStr == null) {
+      valueRange = null;
+    } else {
+      String[] parts = valueRangeStr.split(",");
+      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[2]));
+    }
+    
+    plot(inFile, outFile, shape, width, height, vflip, color, valueRange, showBorders, hdfDataset, rect, keepAspectRatio, background);
   }
 
 }
