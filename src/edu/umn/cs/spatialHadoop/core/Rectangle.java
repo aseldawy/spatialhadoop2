@@ -328,5 +328,9 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
     int s_y2 = (int) Math.round(((vflip? -this.y1 : this.y2) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     g.fillRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
   }
+  
+  public Rectangle buffer(double dw, double dh) {
+    return new Rectangle(this.x1 - dw, this.y1 - dh, this.x2 + dw, this.y2 + dh);
+  }
 
 }

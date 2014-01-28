@@ -513,7 +513,7 @@ public class Plot {
    * @param height - Height of the generated image
    * @throws IOException
    */
-  public static void plotScale(Path output, MinMax valueRange, int width, int height) throws IOException {
+  public static void drawScale(Path output, MinMax valueRange, int width, int height) throws IOException {
     BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
     Graphics2D g = image.createGraphics();
     g.setBackground(Color.BLACK);
