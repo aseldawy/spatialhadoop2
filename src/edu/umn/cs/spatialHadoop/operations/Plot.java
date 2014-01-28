@@ -334,7 +334,7 @@ public class Plot {
     GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
         fileMBR.y2);
     partitionGrid.calculateCellDimensions(
-        (int) Math.max(9, clusterStatus.getMaxReduceTasks()));
+        (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
     SpatialSite.setShape(job, PartitionGrid, partitionGrid);
     
     job.setInputFormat(ShapeInputFormat.class);
@@ -357,7 +357,8 @@ public class Plot {
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
       S shape, int width, int height, boolean vflip, Color color, MinMax valueRange,
       boolean showBorders, String hdfDataset, Shape plotRange, boolean keepAspectRatio) throws IOException {
-    FileSystem inFs = inFile.getFileSystem(new Configuration());
+    Configuration conf = new Configuration();
+    FileSystem inFs = inFile.getFileSystem(conf);
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
     if (hdfDataset != null) {
@@ -386,9 +387,9 @@ public class Plot {
       }
 
       // Read points from the HDF file
-      RecordReader<NASADataset, NASAShape> reader = new HDFRecordReader(
-          new Configuration(), new FileSplit(inFile, 0, fileLength,
-              new String[0]), hdfDataset, true);
+      SpatialSite.setShapeClass(conf, shape.getClass());
+      RecordReader<NASADataset, NASAShape> reader = new HDFRecordReader(conf,
+          new FileSplit(inFile, 0, fileLength, new String[0]), hdfDataset, true);
       NASADataset dataset = reader.createKey();
 
       // Create an image
@@ -400,17 +401,16 @@ public class Plot {
       graphics.clearRect(0, 0, width, height);
       graphics.setColor(color);
       
-      NASAPoint point = (NASAPoint) shape;
-      while (reader.next(dataset, point)) {
-        if (plotRange == null || point.isIntersected(point)) {
-          point.draw(graphics, fileMbr, width, height, vflip, 0.0);
+      while (reader.next(dataset, (NASAShape)shape)) {
+        if (plotRange == null || shape.isIntersected(shape)) {
+          shape.draw(graphics, fileMbr, width, height, vflip, 0.0);
         }
       }
       reader.close();
 
       // Write image to output
       graphics.dispose();
-      FileSystem outFs = outFile.getFileSystem(new Configuration());
+      FileSystem outFs = outFile.getFileSystem(conf);
       OutputStream out = outFs.create(outFile, true);
       ImageIO.write(image, "png", out);
       out.close();
@@ -447,7 +447,7 @@ public class Plot {
       graphics.clearRect(0, 0, width, height);
       graphics.setColor(color);
       
-      ShapeRecordReader<S> reader = new ShapeRecordReader<S>(new Configuration(),
+      ShapeRecordReader<S> reader = new ShapeRecordReader<S>(conf,
           new FileSplit(inFile, 0, fileLength, new String[0]));
       Rectangle cell = reader.createKey();
       while (reader.next(cell, shape)) {
@@ -457,7 +457,7 @@ public class Plot {
       reader.close();
       // Write image to output
       graphics.dispose();
-      FileSystem outFs = outFile.getFileSystem(new Configuration());
+      FileSystem outFs = outFile.getFileSystem(conf);
       OutputStream out = outFs.create(outFile, true);
       ImageIO.write(image, "png", out);
       out.close();

@@ -217,7 +217,9 @@ public class Aggregate {
       long file_size = fs.getFileStatus(file).getLen();
       
       // HDF file
-      HDFRecordReader reader = new HDFRecordReader(new Configuration(),
+      Configuration conf = new Configuration();
+      SpatialSite.setShapeClass(conf, NASAPoint.class);
+      HDFRecordReader reader = new HDFRecordReader(conf,
           new FileSplit(file, 0, file_size, new String[] {}), null, true);
       NASADataset key = reader.createKey();
       NASAShape point = reader.createValue();
