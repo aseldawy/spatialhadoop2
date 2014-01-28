@@ -13,11 +13,15 @@
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.awt.Color;
+import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.Vector;
 
 import javax.imageio.ImageIO;
@@ -294,6 +298,40 @@ public class RecoverHoles {
   private static boolean isTransparent(BufferedImage img, int x, int y) {
     return (img.getRGB(x, y) >> 24) == 0;
   }
+
+  public static void addDate(Path dir) throws IOException {
+    FileSystem fs = dir.getFileSystem(new Configuration());
+    FileStatus[] allImages = CommandLineArguments.isWildcard(dir) ?
+        fs.globStatus(dir) : fs.listStatus(dir);
+
+    final Font font = new Font("Arial", Font.BOLD, 48);
+    final SimpleDateFormat inputDateFormat = new SimpleDateFormat("yyyy.MM.dd");
+    final SimpleDateFormat outputDateFormat = new SimpleDateFormat("dd MMM");
+
+    for (FileStatus imageFile : allImages) {
+      try {
+        FSDataInputStream instream = fs.open(imageFile.getPath());
+        BufferedImage img = ImageIO.read(instream);
+        instream.close();
+        
+        Graphics2D g = img.createGraphics();
+        g.setFont(font);
+        String filename = imageFile.getPath().getName();
+        String dateStr = filename.substring(0, filename.length() - 4);
+        Date date = inputDateFormat.parse(dateStr);
+        String text = outputDateFormat.format(date);
+        g.setColor(Color.BLACK);
+        g.drawString(text, 5, img.getHeight() - 5);
+        g.dispose();
+        
+        FSDataOutputStream outstream = fs.create(imageFile.getPath(), true);
+        ImageIO.write(img, "png", outstream);
+        outstream.close();
+      } catch (ParseException e) {
+        e.printStackTrace();
+      }
+    }
+  }
   
   /**
    * @param args
@@ -306,8 +344,13 @@ public class RecoverHoles {
       System.err.println("Please provide an input directory");
       return;
     }
+    boolean addDate = cla.is("adddate");
     long t1 = System.currentTimeMillis();
-    recoverInterpolation(dir);
+    //recoverInterpolation(dir);
+    if (addDate) {
+      System.out.println("Adding dates");
+      addDate(dir);
+    }
     long t2 = System.currentTimeMillis();
     System.out.println("Total time millis "+(t2-t1));
   }

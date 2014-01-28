@@ -13,6 +13,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -26,6 +27,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -504,6 +506,49 @@ public class Plot {
     }
   }
 
+  /**
+   * Draws an image that can be used as a scale for heatmaps generated using
+   * Plot or PlotPyramid.
+   * @param output - Output path
+   * @param valueRange - Range of values of interest
+   * @param width - Width of the generated image
+   * @param height - Height of the generated image
+   * @throws IOException
+   */
+  public static void plotScale(Path output, MinMax valueRange, int width, int height) throws IOException {
+    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D g = image.createGraphics();
+    g.setBackground(Color.BLACK);
+    g.clearRect(0, 0, width, height);
+    
+    for (int y = 0; y < height; y++) {
+      float hue = y * NASAPoint.MaxHue / height;
+      int color = Color.HSBtoRGB(hue, 0.5f, 1.0f);
+      g.setColor(new Color(color));
+      g.drawRect(width * 3 / 4, y, width / 4, 1);
+    }
+    
+    int fontSize = 24;
+    g.setFont(new Font("Arial", Font.BOLD, fontSize));
+    int step = (valueRange.maxValue - valueRange.minValue) * fontSize * 10 / height;
+    step = (int) Math.pow(10, Math.round(Math.log10(step)));
+    int min_value = valueRange.minValue / step * step;
+    int max_value = valueRange.maxValue / step * step;
+  
+    for (int value = min_value; value <= max_value; value += step) {
+      int y = fontSize + (height - fontSize) - value * (height - fontSize) / (valueRange.maxValue - valueRange.minValue);
+      g.setColor(Color.WHITE);
+      g.drawString(String.valueOf(value), 5, y);
+    }
+    
+    g.dispose();
+    
+    FileSystem fs = output.getFileSystem(new Configuration());
+    FSDataOutputStream outStream = fs.create(output, true);
+    ImageIO.write(image, "png", outStream);
+    outStream.close();
+  }
+  
   /**
    * Combines images of different datasets into one image that is displayed
    * to users.
