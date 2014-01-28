@@ -177,8 +177,6 @@ public class Plot {
         int image_y1 = (int) Math.floor(((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int image_x2 = (int) Math.ceil((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
         int image_y2 = (int) Math.ceil(((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-        System.out.print(cellInfo+"   ");
-        System.out.println("Cell #"+cellNumber+" "+new Rectangle(image_x1, image_y1, image_x2, image_y2));
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
 
