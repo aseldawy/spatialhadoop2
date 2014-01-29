@@ -17,6 +17,8 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Vector;
 
@@ -28,7 +30,9 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.Text;
+import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -91,7 +95,8 @@ public class MakeHDFVideo {
    */
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    if (!cla.checkInputOutput(new Configuration())) {
+    Configuration conf = new Configuration();
+    if (!cla.checkInputOutput(conf)) {
       return;
     }
     
@@ -140,8 +145,42 @@ public class MakeHDFVideo {
       RecoverHoles.addDate(output);
     }
     
-    //Plot.drawScale(output, valueRange, width, height);
+    FileSystem outFs = output.getFileSystem(conf);
+    FileStatus[] generatedImages = outFs.listStatus(output, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.getName().toLowerCase().endsWith(".png");
+      }
+    });
+    if (generatedImages.length == 0) {
+      Log.warn("No generated images");
+      return;
+    }
     
+    InputStream inStream = outFs.open(generatedImages[0].getPath());
+    BufferedImage firstImage = ImageIO.read(inStream);
+    inStream.close();
+    
+    int imageHeight = firstImage.getHeight();
+    
+    Plot.drawScale(new Path(output, "scale.png"), HDFPlot.lastRange, 64, imageHeight);
+    
+    InputStream logoInputStream = MakeHDFVideo.class.getResourceAsStream("/gistic_log.png");
+    OutputStream logoOutputStream = outFs.create(new Path(output, "gistic_logo.png"));
+    byte[] buffer = new byte[4096];
+    int size = 0;
+    while ((size = logoInputStream.read(buffer)) > 0) {
+      logoOutputStream.write(buffer, 0, size);
+    }
+    logoOutputStream.close();
+    
+    String video_command = "ffmpeg -r 4 -i day_%3d.png -vf \"movie=gistic_logo.png "
+        + "[watermark]; movie=scale.png [scale]; [in][watermark] "
+        + "overlay=main_w-overlay_w-10:10 [mid]; [mid] pad=iw+64:ih [mid2]; "
+        + "[mid2][scale] overlay=main_w-overlay_w:0 [out]\" "
+        + "-c:v libx264 -r 4 -pix_fmt yuv420p output.mp4 ";
+    System.out.println("Run the following command to generate the video");
+    System.out.println(video_command);
   }
 
 }

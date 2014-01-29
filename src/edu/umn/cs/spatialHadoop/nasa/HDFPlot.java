@@ -66,6 +66,8 @@ public class HDFPlot {
     System.out.println("rect:<x1,y1,x2,y2> - Limit drawing to the selected area");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
   }
+  
+  public static MinMax lastRange;
 
   /**
    * @param args
@@ -122,19 +124,17 @@ public class HDFPlot {
     Rectangle plotRange = cla.getRectangle();
 
     // Retrieve the scale
-    String scale = cla.get("scale");
+    String scale = cla.get("scale", "preset");
     MinMax valueRange;
-    if (scale == null) {
-      valueRange = null;
-    } else if (scale.equals("preset") || scale.equals("tight")) {
+    if (scale.equals("preset") || scale.equals("tight")) {
       valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, scale.equals("tight"));
     } else if (scale.matches("\\d+,\\d+")) {
       String[] parts = scale.split(",");
       valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     } else {
-      LOG.warn("Cannot parse the scale '"+scale+"'. defaulting to preset value");
-      valueRange = null;
+      valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, false);
     }
+    lastRange = valueRange;
     
     Vector<String> vargs = new Vector<String>(Arrays.asList(args));
     // Keep all arguments except input and output which change for each call
