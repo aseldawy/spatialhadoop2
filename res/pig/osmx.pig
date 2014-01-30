@@ -11,15 +11,15 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 
-REGISTER spatialhadoop-2-b3.jar;
+REGISTER spatialhadoop-2.1.jar;
 REGISTER pigeon.jar
 REGISTER esri-geometry-api-1.1.1.jar;
-REGISTER piggybank-0.12.0.jar;
+REGISTER piggybank.jar;
 
 IMPORT 'pigeon_import.pig';
 
 /* Read and parse nodes */
-xml_nodes = LOAD 'mpls-stpaul.osm.bz2'
+xml_nodes = LOAD 'planet-140115.osm.bz2'
   USING org.apache.pig.piggybank.storage.XMLLoader('node')
   AS (node:chararray);
 
@@ -41,7 +41,7 @@ flattened_nodes_wkt = FOREACH flattened_nodes
 
 /******************************************************/
 /* Read and parse ways */
-xml_ways = LOAD 'mpls-stpaul.osm.bz2'
+xml_ways = LOAD 'planet-140115.osm.bz2'
   USING org.apache.pig.piggybank.storage.XMLLoader('way') AS (way:chararray);
 
 parsed_ways = FOREACH xml_ways
@@ -60,10 +60,10 @@ node_locations = FOREACH parsed_nodes
   GENERATE node.id, ST_MakePoint(node.lon, node.lat) AS location;
 
 /* Join ways with nodes to find the location of each node (lat, lon)*/
-joined_ways = JOIN node_locations BY id, flattened_ways BY node_id;
+joined_ways = JOIN node_locations BY id, flattened_ways BY node_id PARALLEL 15;
 
 /* Group all node locations of each way*/
-ways_with_nodes = GROUP joined_ways BY way_id;
+ways_with_nodes = GROUP joined_ways BY way_id PARALLEL 15;
 
 /* For each way, generate a shape out of every list of points*/
 ways_with_shapes = FOREACH ways_with_nodes {
@@ -80,7 +80,7 @@ ways_with_shapes = FOREACH ways_with_nodes {
 
 /******************************************************/
 /* Read and parse relations */
-xml_relations = LOAD 'mpls-stpaul.osm.bz2'
+xml_relations = LOAD 'planet-140115.osm.bz2'
   USING org.apache.pig.piggybank.storage.XMLLoader('relation') AS (relation:chararray);
 
 parsed_relations = FOREACH xml_relations
@@ -112,14 +112,14 @@ ways_with_ordered_shapes = FOREACH ways_with_nodes {
 };
 
 /* Join relations with ways to get the shape of each way */
-relations_join_ways = JOIN flattened_relations BY member_id RIGHT OUTER, ways_with_ordered_shapes BY way_id;
+relations_join_ways = JOIN flattened_relations BY member_id RIGHT OUTER, ways_with_ordered_shapes BY way_id PARALLEL 15;
 
 dangled_ways = FILTER relations_join_ways BY relation_id IS NULL AND way_tags#'admin_level' == '6';
 
 relations_with_ways = FILTER relations_join_ways BY relation_id IS NOT NULL;
 
 /* Group nodes by relation_id and way_role */
-relations_by_role = GROUP relations_with_ways BY (relation_id, member_role);
+relations_by_role = GROUP relations_with_ways BY (relation_id, member_role) PARALLEL 15;
 
 relations_with_shapes = FOREACH relations_by_role {
   /* All tags are similar. Just grab the first one*/
