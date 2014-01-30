@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Vector;
 
 import javax.imageio.ImageIO;
@@ -173,6 +174,27 @@ public class MakeHDFVideo {
       logoOutputStream.write(buffer, 0, size);
     }
     logoOutputStream.close();
+    
+    // Rename files to be ready to use with ffmpeg
+    FileStatus[] all_images = outFs.listStatus(output, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.getName().matches("\\d+\\.\\d+\\.\\d+\\.png");
+      }
+    });
+    
+    Arrays.sort(all_images, new Comparator<FileStatus>() {
+      @Override
+      public int compare(FileStatus f1, FileStatus f2) {
+        return f1.getPath().getName().compareTo(f2.getPath().getName());
+      }
+    });
+    
+    int day = 1;
+    for (FileStatus image : all_images) {
+      String newFileName = String.format("day_%03d.png", day++);
+      outFs.rename(image.getPath(), new Path(output, newFileName));
+    }
     
     String video_command = "ffmpeg -r 4 -i day_%3d.png -vf \"movie=gistic_logo.png "
         + "[watermark]; movie=scale.png [scale]; [in][watermark] "
