@@ -165,7 +165,7 @@ public class MakeHDFVideo {
     
     Plot.drawScale(new Path(output, "scale.png"), HDFPlot.lastRange, 64, imageHeight);
     
-    InputStream logoInputStream = MakeHDFVideo.class.getResourceAsStream("/gistic_log.png");
+    InputStream logoInputStream = MakeHDFVideo.class.getResourceAsStream("/gistic_logo.png");
     OutputStream logoOutputStream = outFs.create(new Path(output, "gistic_logo.png"));
     byte[] buffer = new byte[4096];
     int size = 0;

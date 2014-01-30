@@ -300,8 +300,8 @@ public class Plot {
       job.setInt(MaxValue, valueRange.maxValue);
       fileMBR = range != null?
           range.getMBR() : new Rectangle(-180, -140, 180, 169);
-      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-          GeoProjector.class);
+//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//          GeoProjector.class);
     } else {
       fileMBR = range != null ? range.getMBR() :
         FileMBR.fileMBR(inFs, inFile, shape);
