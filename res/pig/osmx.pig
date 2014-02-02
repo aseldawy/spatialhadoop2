@@ -132,13 +132,13 @@ relations_with_shapes = FOREACH relations_by_role {
 good_relations = FILTER relations_with_shapes BY shape is not null;
 
 relation_objects = FOREACH good_relations
-  GENERATE 'relation' AS source, relation_id, ST_AsText(shape) AS shape, tags;
+  GENERATE relation_id AS id, ST_AsText(shape) AS shape, 'relation' AS source, tags;
 
 way_objects = FOREACH dangled_ways
-  GENERATE 'way' AS source, way_id, ST_AsText(way_shape) AS shape, way_tags AS tags;
+  GENERATE way_id AS id, ST_AsText(way_shape) AS shape, 'way' AS source,  way_tags AS tags;
 
 all_objects = UNION ONSCHEMA relation_objects, way_objects;
 
-STORE all_objects INTO 'all_counties.tsv';
+STORE all_objects INTO 'gcc_admin_8';
 
 
