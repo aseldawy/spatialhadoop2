@@ -32,6 +32,8 @@ import com.esri.core.geometry.ogc.OGCGeometry;
 import com.esri.core.geometry.ogc.OGCGeometryCollection;
 import com.esri.core.geometry.ogc.OGCPoint;
 
+import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+
 /**
  * A shape class that represents an OGC compliant geometry. The geometry is
  * enclosed inside the class and all calls are delegated to it. The class also
@@ -56,22 +58,10 @@ public class OGCShape implements Shape {
   
   private static final Log LOG = LogFactory.getLog(OGCShape.class);
   
-  private static final byte[][] ShapeNames = { "LINESTRING".getBytes(),
-      "POINT".getBytes(), "POLYGON".getBytes(), "MULTIPOINT".getBytes(),
-      "MULTILINESTRING".getBytes(), "MULTIPOLYGON".getBytes(),
-      "GEOMETRYCOLLECTION".getBytes() };
-  
-  private static final byte[] Separator = {'\t'};
-  
   /**
    * The underlying geometry
    */
   public OGCGeometry geom;
-  
-  /**
-   * Any extra data after the shape information
-   */
-  public String extra;
   
   public OGCShape() {
     this(null);
@@ -86,13 +76,6 @@ public class OGCShape implements Shape {
     byte[] bytes = geom.asBinary().array();
     out.writeInt(bytes.length);
     out.write(bytes);
-    if (extra == null) {
-      out.writeInt(-1);
-    } else {
-      bytes = extra.getBytes();
-      out.writeInt(bytes.length);
-      out.write(bytes);
-    }
   }
 
   @Override
@@ -102,34 +85,8 @@ public class OGCShape implements Shape {
     in.readFully(bytes);
     geom = OGCGeometry.fromBinary(ByteBuffer.wrap(bytes));
     size = in.readInt();
-    if (size == -1) {
-      extra = null;
-    } else {
-      bytes = new byte[size];
-      in.readFully(bytes);
-      extra = new String(bytes);
-    }
   }
 
-  private static final byte[] HexLookupTable = {
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    'A', 'B', 'C', 'D', 'E', 'F'
-  };
-  
-  /**
-   * Convert binary array to a hex string.
-   * @param binary
-   * @return
-   */
-  public static String bytesToHex(byte[] binary) {
-    // Each byte is converted to two hex values
-    byte[] hex = new byte[binary.length * 2];
-    for (int i = 0; i < binary.length; i++) {
-      hex[2*i] = HexLookupTable[(binary[i] & 0xFF) >>> 4];
-      hex[2*i+1] = HexLookupTable[binary[i] & 0xF];
-    }
-    return new String(hex);
-  }
   
   /**
    * Convert a string containing a hex string to a byte array of binary.
@@ -158,75 +115,14 @@ public class OGCShape implements Shape {
   
   @Override
   public Text toText(Text text) {
-    String str = bytesToHex(geom.asBinary().array());
-    byte[] str_b = str.getBytes();
-    text.append(str_b, 0, str_b.length);
-    if (extra != null) {
-      text.append(Separator, 0, Separator.length);
-      byte[] extra_bytes = extra.getBytes();
-      text.append(extra_bytes, 0, extra_bytes.length);
-    }
+    TextSerializerHelper.serializeGeometry(text, geom, '\0');
     return text;
   }
-  
-  public static OGCGeometry parseText(String str) {
-    OGCGeometry geom = null;
-    try {
-      // Parse string as well known text (WKT)
-      geom = OGCGeometry.fromText(str);
-    } catch (IllegalArgumentException e) {
-      try {
-        // Error parsing from WKT, try hex string instead
-        byte[] binary = hexToBytes(str);
-        geom = OGCGeometry.fromBinary(ByteBuffer.wrap(binary));
-      } catch (RuntimeException e1) {
-        throw new RuntimeException("Cannot parse the shape: "+str, e1);
-      }
-    }
-    return geom;
-  }
-
 
   @Override
   public void fromText(Text text) {
     try {
-      // Check whether this text is a Well Known Text (WKT) or a hexed string
-      boolean wkt = false;
-      byte[] bytes = text.getBytes();
-      int length = text.getLength();
-      int i_shape = 0;
-      while (!wkt && i_shape < ShapeNames.length) {
-        byte[] shapeName = ShapeNames[i_shape];
-        if (length > shapeName.length) {
-          int i = 0;
-          while (i < shapeName.length && shapeName[i] == bytes[i])
-            i++;
-          if (i == shapeName.length) {
-            wkt = true;
-            break;
-          }
-        }
-        i_shape++;
-      }
-      
-      // Look for the terminator of the shape text
-      byte terminator = Separator[0];
-      int i1 = 0;
-      if (bytes[i1] == '\'' || bytes[i1] == '\"') {
-        terminator = bytes[i1++];
-      }
-      int i2 = i1;
-      while (i2 < length && bytes[i2] != terminator)
-        i2++;
-      
-      String str = new String(bytes, i1, i2-i1);
-      geom = parseText(str);
-      
-      if (++i2 < length) {
-        extra = new String(bytes, i2, length - i2);
-      } else {
-        extra = null;
-      }
+      geom = TextSerializerHelper.consumeGeometryESRI(text, '\0');
     } catch (RuntimeException e) {
       LOG.error("Error parsing: "+text);
       throw e;
@@ -278,13 +174,12 @@ public class OGCShape implements Shape {
   @Override
   public Shape clone() {
     OGCShape copy = new OGCShape(this.geom);
-    copy.extra = this.extra;
     return copy;
   }
   
   @Override
   public String toString() {
-    return geom.asText()+","+extra;
+    return geom.asText();
   }
   
   @Override

@@ -12,10 +12,13 @@
  */
 package edu.umn.cs.spatialHadoop.io;
 
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
 
 import org.apache.hadoop.io.Text;
+
+import com.esri.core.geometry.ogc.OGCGeometry;
 
 public final class TextSerializerHelper {
   /**
@@ -461,5 +464,117 @@ public final class TextSerializerHelper {
     }
     return text;
   }
+  
+  private static final byte[][] ShapeNames = { "LINESTRING".getBytes(),
+    "POINT".getBytes(), "POLYGON".getBytes(), "MULTIPOINT".getBytes(),
+    "MULTILINESTRING".getBytes(), "MULTIPOLYGON".getBytes(),
+    "GEOMETRYCOLLECTION".getBytes() };
 
+  public static OGCGeometry consumeGeometryESRI(Text text, char separator) {
+ // Check whether this text is a Well Known Text (WKT) or a hexed string
+    boolean wkt = false;
+    byte[] bytes = text.getBytes();
+    int length = text.getLength();
+    int i_shape = 0;
+    while (!wkt && i_shape < ShapeNames.length) {
+      byte[] shapeName = ShapeNames[i_shape];
+      if (length > shapeName.length) {
+        int i = 0;
+        while (i < shapeName.length && shapeName[i] == bytes[i])
+          i++;
+        if (i == shapeName.length) {
+          wkt = true;
+          break;
+        }
+      }
+      i_shape++;
+    }
+    
+    // Look for the terminator of the shape text
+    int i1 = 0;
+    if (bytes[i1] == '\'' || bytes[i1] == '\"') {
+      separator = (char) bytes[i1++];
+    }
+    int i2 = i1;
+    while (i2 < length && bytes[i2] != separator)
+      i2++;
+    
+    String str = new String(bytes, i1, i2-i1);
+    
+    // Remove consumed bytes from the text
+    text.set(bytes, i2, text.getLength() - i2);
+    
+    OGCGeometry geom = parseText(str);
+    
+    return geom;
+  }
+  
+  public static OGCGeometry parseText(String str) {
+    OGCGeometry geom = null;
+    try {
+      // Parse string as well known text (WKT)
+      geom = OGCGeometry.fromText(str);
+    } catch (IllegalArgumentException e) {
+      try {
+        // Error parsing from WKT, try hex string instead
+        byte[] binary = hexToBytes(str);
+        geom = OGCGeometry.fromBinary(ByteBuffer.wrap(binary));
+      } catch (RuntimeException e1) {
+        throw new RuntimeException("Cannot parse the shape: "+str, e1);
+      }
+    }
+    return geom;
+  }
+  
+  /**
+   * Convert a string containing a hex string to a byte array of binary.
+   * For example, the string "AABB" is converted to the byte array {0xAA, 0XBB}
+   * @param hex
+   * @return
+   */
+  public static byte[] hexToBytes(String hex) {
+    byte[] bytes = new byte[(hex.length() + 1) / 2];
+    for (int i = 0; i < hex.length(); i++) {
+      byte x = (byte) hex.charAt(i);
+      if (x >= '0' && x <= '9')
+        x -= '0';
+      else if (x >= 'a' && x <= 'f')
+        x = (byte) ((x - 'a') + 0xa);
+      else if (x >= 'A' && x <= 'F')
+        x = (byte) ((x - 'A') + 0xA);
+      else
+        throw new RuntimeException("Invalid hex char "+x);
+      if (i % 2 == 0)
+        x <<= 4;
+      bytes[i / 2] |= x;
+    }
+    return bytes;
+  }
+  
+  public static void serializeGeometry(Text text, OGCGeometry geom, char toAppend) {
+    String str = bytesToHex(geom.asBinary().array());
+    byte[] str_b = str.getBytes();
+    text.append(str_b, 0, str_b.length);
+    text.append(new byte[] {(byte) toAppend}, 0, 1);
+  }
+  
+  private static final byte[] HexLookupTable = {
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+    'A', 'B', 'C', 'D', 'E', 'F'
+  };
+  
+  /**
+   * Convert binary array to a hex string.
+   * @param binary
+   * @return
+   */
+  public static String bytesToHex(byte[] binary) {
+    // Each byte is converted to two hex values
+    byte[] hex = new byte[binary.length * 2];
+    for (int i = 0; i < binary.length; i++) {
+      hex[2*i] = HexLookupTable[(binary[i] & 0xFF) >>> 4];
+      hex[2*i+1] = HexLookupTable[binary[i] & 0xF];
+    }
+    return new String(hex);
+  }
 }

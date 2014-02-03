@@ -62,6 +62,7 @@ public class OSMPoint extends Point {
     c.id = id;
     c.x = x;
     c.y = y;
+    c.tags = new HashMap<String, String>(tags);
     return c;
   }
 }

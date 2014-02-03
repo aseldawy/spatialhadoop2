@@ -257,8 +257,9 @@ public class CatUnion {
     OGCShape shape = new OGCShape();
 
     while (shapeReader.next(cellInfo, shape)) {
-      int shape_zip = Integer.parseInt(shape.extra.split(",", 7)[5]);
-      Integer category = idToCategory.get(shape_zip);
+      //int shape_zip = Integer.parseInt(shape.extra.split(",", 7)[5]);
+      //Integer category = idToCategory.get(shape_zip);
+      Integer category = null;
       if (category != null) {
         Vector<OGCGeometry> geometries = categoryShapes.get(category);
         if (geometries == null) {

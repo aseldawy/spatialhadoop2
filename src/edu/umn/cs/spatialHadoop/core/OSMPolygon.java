@@ -15,6 +15,8 @@ package edu.umn.cs.spatialHadoop.core;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.hadoop.io.Text;
 
@@ -24,11 +26,15 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 public class OSMPolygon extends OGCShape {
   public long id;
+  public Map<String, String> tags;
   
-  public OSMPolygon() {}
+  public OSMPolygon() {
+    tags = new HashMap<String, String>();
+  }
   
   public OSMPolygon(OGCGeometry geom) {
     super(geom);
+    tags = new HashMap<String, String>();
   }
   
   @Override
@@ -40,19 +46,36 @@ public class OSMPolygon extends OGCShape {
   @Override
   public void fromText(Text text) {
     id = TextSerializerHelper.consumeLong(text, '\t');
-    super.fromText(text);
+    this.geom = TextSerializerHelper.consumeGeometryESRI(text, '\t');
+    // Remove the separator
+    text.set(text.getBytes(), 1, text.getLength() - 1);
+    // Read the tags
+    tags.clear();
+    TextSerializerHelper.consumeMap(text, tags);
   }
   
   @Override
   public void write(DataOutput out) throws IOException {
     out.writeLong(id);
     super.write(out);
+    out.writeInt(tags.size());
+    for (Map.Entry<String, String> tag : tags.entrySet()) {
+      out.writeUTF(tag.getKey());
+      out.writeUTF(tag.getValue());
+    }
   }
   
   @Override
   public void readFields(DataInput in) throws IOException {
     id = in.readLong();
     super.readFields(in);
+    tags.clear();
+    int size = in.readInt();
+    while (size-- > 0) {
+      String key = in.readUTF();
+      String value = in.readUTF();
+      tags.put(key, value);
+    }
   }
   
   @Override
@@ -60,6 +83,7 @@ public class OSMPolygon extends OGCShape {
     OSMPolygon c = new OSMPolygon();
     c.id = this.id;
     c.geom = this.geom;
+    c.tags = new HashMap<String, String>(tags);
     return c;
   }
   
