@@ -36,6 +36,7 @@ import org.apache.hadoop.io.Text;
 import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.operations.Plot;
 
@@ -195,12 +196,53 @@ public class MakeHDFVideo {
       String newFileName = String.format("day_%03d.png", day++);
       outFs.rename(image.getPath(), new Path(output, newFileName));
     }
-    
-    String video_command = "ffmpeg -r 4 -i day_%3d.png -vf \"movie=gistic_logo.png "
-        + "[watermark]; movie=scale.png [scale]; [in][watermark] "
-        + "overlay=main_w-overlay_w-10:10 [mid]; [mid] pad=iw+64:ih [mid2]; "
-        + "[mid2][scale] overlay=main_w-overlay_w:0 [out]\" "
-        + "-c:v libx264 -r 4 -pix_fmt yuv420p output.mp4 ";
+
+    // Plot the overlay image
+    String overlay = cla.get("overlay");
+    if (overlay != null) {
+      vargs = new Vector<String>(Arrays.asList(args));
+      // Keep all arguments except input and output which change for each call
+      // to Plot or PlotPyramid
+      for (int i = 0; i < vargs.size();) {
+        if (vargs.get(i).startsWith("-") && vargs.get(i).length() > 1) {
+          i++; // Skip
+        } else if (vargs.get(i).indexOf(':') != -1 && vargs.get(i).indexOf(":/") == -1) {
+          if (vargs.get(i).toLowerCase().startsWith("scale:")
+              || vargs.get(i).startsWith("shape:")
+              || vargs.get(i).startsWith("dataset:"))
+            vargs.remove(i);
+          else
+            i++; // Skip
+        } else {
+          vargs.remove(i);
+        }
+      }
+      vargs.add(overlay);
+      vargs.add(new Path(output, "overlay.png").toString());
+      vargs.add("shape:"+OSMPolygon.class.getName());
+      Plot.main(vargs.toArray(new String[vargs.size()]));
+    }
+
+    String video_command;
+    if (overlay != null) {
+      video_command = "ffmpeg -r 4 -i day_%3d.png -vf"
+          + "\"movie=gistic_logo.png [watermark]; "
+          + "movie=overlay.png [ways]; " 
+          + "movie=scale.png [scale]; "
+          + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
+          + "[mid][ways] overlay=0:0 [mid2]; "
+          + "[mid2] pad=iw+64:ih [mid3]; "
+          + "[mid3][scale] overlay=main_w-overlay_w:0 [out]\" "
+          + "-c:v libx264 -r 4 -pix_fmt yuv420p output.mp4 ";
+    } else {
+      video_command = "ffmpeg -r 4 -i day_%3d.png -vf"
+          + "\"movie=gistic_logo.png [watermark]; "
+          + "movie=scale.png [scale]; "
+          + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
+          + "[mid] pad=iw+64:ih [mid2]; "
+          + "[mid2][scale] overlay=main_w-overlay_w:0 [out]\" "
+          + "-c:v libx264 -r 4 -pix_fmt yuv420p output.mp4 ";
+    }
     System.out.println("Run the following command to generate the video");
     System.out.println(video_command);
   }
