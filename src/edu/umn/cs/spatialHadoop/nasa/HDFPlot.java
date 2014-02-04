@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.mapred.RunningJob;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -155,6 +156,7 @@ public class HDFPlot {
     boolean overwrite = cla.isOverwrite();
     boolean pyramid = cla.is("pyramid");
     FileSystem outFs = output.getFileSystem(conf);
+    Vector<RunningJob> jobs = new Vector<RunningJob>();
     for (Path inputPath : matchingPaths) {
       Path outputPath = new Path(output+"/"+inputPath.getParent().getName()+
           (pyramid? "" : ".png"));
@@ -167,8 +169,29 @@ public class HDFPlot {
             "valuerange:"+valueRange.minValue+","+valueRange.maxValue;
         if (pyramid)
           PlotPyramid.main(plotArgs);
-        else
+        else {
           Plot.main(plotArgs);
+          if (cla.is("background"))
+            jobs.add(Plot.lastSubmittedJob);
+        }
+      }
+    }
+    while (!jobs.isEmpty()) {
+      int i_job = 0;
+      int size_before = jobs.size();
+      while (i_job < jobs.size()) {
+        if (jobs.get(i_job).isComplete())
+          jobs.remove(i_job);
+        else
+          i_job++;
+      }
+      if (jobs.size() != size_before) {
+        LOG.info(jobs.size()+" plot jobs remaining");
+      }
+      try {
+        Thread.sleep(5000);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
       }
     }
   }
