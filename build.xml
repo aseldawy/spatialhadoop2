@@ -38,7 +38,8 @@
     	<fileset dir="${res}">
     		<include name="spatial-default.xml"/>
     		<include name="zoom_view.html"/>
-    		<include name="gistic_logo.png"/>
+        <include name="gistic_logo.png"/>
+        <include name="gistic_logo_license.txt"/>
     	</fileset>
   	</copy>
   </target>
