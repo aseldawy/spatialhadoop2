@@ -184,7 +184,9 @@ public class FileMBR {
    * @throws IOException 
    */
   public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
-      Path file, S stockShape, boolean background) throws IOException {
+      Path file, CommandLineArguments args) throws IOException {
+    Shape shape = args.getShape("shape");
+    boolean background = args.is("background");
     // Quickly get file MBR if it is globally indexed
     GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(fs, file);
     if (globalIndex != null) {
@@ -205,7 +207,7 @@ public class FileMBR {
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
     do {
-      outputPath = new Path(file.toUri().getPath()+".mbr_"+(int)(Math.random()*1000000));
+      outputPath = new Path(file.getName()+".mbr_"+(int)(Math.random()*1000000));
     } while (outFs.exists(outputPath));
     
     job.setJobName("FileMBR");
@@ -219,7 +221,7 @@ public class FileMBR {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, stockShape.getClass());
+    SpatialSite.setShapeClass(job, shape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
     ShapeInputFormat.setInputPaths(job, file);
@@ -243,7 +245,8 @@ public class FileMBR {
           -Double.MAX_VALUE, -Double.MAX_VALUE);
       for (FileStatus fileStatus : results) {
         if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-          mbr.expand(fileMBRLocal(outFs, fileStatus.getPath(), new Partition()));
+          mbr.expand(fileMBRLocal(outFs, fileStatus.getPath(),
+              new CommandLineArguments("shape:"+Partition.class.getName())));
         }
       }
       
@@ -262,7 +265,8 @@ public class FileMBR {
    * @throws IOException
    */
   public static <S extends Shape> Rectangle fileMBRLocal(FileSystem fs,
-      Path file, S shape) throws IOException {
+      Path file, CommandLineArguments args) throws IOException {
+    Shape shape = args.getShape("shape");
     // Try to get file MBR from the global index (if possible)
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, file);
     if (gindex != null) {
@@ -305,19 +309,16 @@ public class FileMBR {
   public static Rectangle fileMBR(FileSystem fs, Path inFile, CommandLineArguments params) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    Shape stockShape = (Shape) params.get(CommandLineArguments.INPUT_SHAPE);
-    Boolean isLocal = (Boolean) params.get("local");
-    if (isLocal == null) {
-      isLocal = !(inFStatus.isDir() ||
-          inFStatus.getLen() / inFStatus.getBlockSize() > 3);
-    }
+    boolean autoLocal = !(inFStatus.isDir() ||
+        inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    Boolean isLocal = params.is("local", autoLocal);
     
     if (!isLocal) {
       // Either a directory of file or a large file
-      return fileMBRMapReduce(fs, inFile, stockShape, false);
+      return fileMBRMapReduce(fs, inFile, params);
     } else {
       // A single small file, process it without MapReduce
-      return fileMBRLocal(fs, inFile, stockShape);
+      return fileMBRLocal(fs, inFile, params);
     }
   }
 
@@ -334,7 +335,7 @@ public class FileMBR {
   public static void main(String[] args) throws IOException {
     CommandLineArguments params = new CommandLineArguments(args);
     Configuration conf = new Configuration();
-    Path inputFile = (Path) params.get(CommandLineArguments.INPUT_PATH);
+    Path inputFile = params.getInputPath();
     if (inputFile == null) {
       System.err.println("Please provide the input file");
       printUsage();
@@ -348,8 +349,8 @@ public class FileMBR {
       return;
     }
 
-    Shape stockShape = (Shape) params.get(CommandLineArguments.INPUT_SHAPE);
-    if (stockShape == null) {
+    Shape shape = params.getShape("shape");
+    if (shape == null) {
       LOG.error("Input file format not specified");
       printUsage();
       return;

@@ -396,7 +396,8 @@ public class PlotPyramid {
     }
   }
 
-  private static RunningJob lastSubmittedJob;
+  /**Last submitted job of type PlotPyramid*/
+  public static RunningJob lastSubmittedJob;
 
   /**
    * Plot a file to a set of images in different zoom levels using a MapReduce
@@ -421,8 +422,8 @@ public class PlotPyramid {
     Color color = cla.getColor("color", Color.BLACK);
     
     String hdfDataset = (String) cla.get("dataset");
-    Shape shape = hdfDataset != null ? new NASARectangle() : (Shape)cla.get(CommandLineArguments.INPUT_SHAPE);
-    Rectangle plotRange = cla.getRectangle();
+    Shape shape = hdfDataset != null ? new NASARectangle() : cla.getShape("shape");
+    Shape plotRange = cla.getShape("rect");
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
     boolean background = cla.is("background");
