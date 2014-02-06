@@ -62,6 +62,7 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
+import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
@@ -533,7 +534,7 @@ public class PlotPyramid {
     Color color = cla.getColor();
     
     String hdfDataset = cla.get("dataset");
-    Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+    Shape shape = hdfDataset != null ? new NASARectangle() : cla.getShape(true);
     Rectangle plotRange = cla.getRectangle();
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
