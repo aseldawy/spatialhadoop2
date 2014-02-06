@@ -279,7 +279,7 @@ public class Plot {
     // Flip image vertically to correct Y axis +ve direction
     boolean vflip = cla.is("vflip");
     
-    Color color = cla.getColor();
+    Color color = cla.getColor("color", Color.BLACK);
 
     String hdfDataset = (String) cla.get("dataset");
     Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) cla.get(CommandLineArguments.INPUT_SHAPE);
@@ -590,7 +590,7 @@ public class Plot {
     // Flip image vertically to correct Y axis +ve direction
     boolean vflip = cla.is("vflip");
     
-    Color color = cla.getColor();
+    Color color = cla.getColor("color", Color.BLACK);
 
     String hdfDataset = (String) cla.get("dataset");
     Shape shape = hdfDataset != null ? new NASARectangle() : (Shape)cla.get(CommandLineArguments.INPUT_SHAPE);

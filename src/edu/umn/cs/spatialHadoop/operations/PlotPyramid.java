@@ -413,9 +413,20 @@ public class PlotPyramid {
    * @throws IOException
    */
   public static <S extends Shape> RunningJob plotMapReduce(Path inFile,
-      Path outFile, Shape shape, int tileWidth, int tileHeight, boolean vflip,
-      Color color, int numLevels, String hdfDataset, Rectangle plotRange,
-      boolean keepAspectRatio, boolean background) throws IOException {
+      Path outFile, CommandLineArguments cla) throws IOException {
+    int tileWidth = cla.getInt("tilewidth", 256);
+    int tileHeight = cla.getInt("tileheight", 256);
+    int numLevels = cla.getInt("numlevels", 8);
+    boolean vflip = cla.is("vflip");
+    Color color = cla.getColor("color", Color.BLACK);
+    
+    String hdfDataset = (String) cla.get("dataset");
+    Shape shape = hdfDataset != null ? new NASARectangle() : (Shape)cla.get(CommandLineArguments.INPUT_SHAPE);
+    Rectangle plotRange = cla.getRectangle();
+
+    boolean keepAspectRatio = cla.is("keep-ratio", true);
+    boolean background = cla.is("background");
+    
     JobConf job = new JobConf(PlotPyramid.class);
     job.setJobName("PlotPyramid");
     
@@ -446,7 +457,7 @@ public class PlotPyramid {
       job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
           GeoProjector.class);
     } else {
-      fileMBR = FileMBR.fileMBR(inFs, inFile, shape);
+      fileMBR = FileMBR.fileMBR(inFs, inFile, cla);
     }
     
     if (keepAspectRatio) {
@@ -488,11 +499,9 @@ public class PlotPyramid {
 
   }
   
-  public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
-      int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels,
-      String hdfDataset, Rectangle plotRange, boolean keepAspectRatio, boolean background)
+  public static <S extends Shape> void plot(Path inFile, Path outFile, CommandLineArguments cla)
           throws IOException {
-    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, plotRange, keepAspectRatio, background);
+    plotMapReduce(inFile, outFile, cla);
   }
 
   
@@ -523,25 +532,9 @@ public class PlotPyramid {
       printUsage();
       return;
     }
-    Path[] files = cla.getPaths();
-    Path inFile = files[0];
-    Path outFile = files[1];
-
-    int tileWidth = cla.getInt("tilewidth", 256);
-    int tileHeight = cla.getInt("tileheight", 256);
-    int numLevels = cla.getInt("numlevels", 8);
-    boolean vflip = cla.is("vflip");
-    Color color = cla.getColor();
-    
-    String hdfDataset = cla.get("dataset");
-    Shape shape = hdfDataset != null ? new NASARectangle() : cla.getShape(true);
-    Rectangle plotRange = cla.getRectangle();
-
-    boolean keepAspectRatio = cla.is("keep-ratio", true);
-    boolean background = cla.is("background");
-    
-    plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color,
-        numLevels, hdfDataset, plotRange, keepAspectRatio, background);
+    Path inFile = cla.getInputPath();
+    Path outFile = cla.getOutputPath();
+    plot(inFile, outFile, cla);
   }
 
 }

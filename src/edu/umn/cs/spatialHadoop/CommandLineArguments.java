@@ -115,6 +115,28 @@ public class CommandLineArguments extends HashMap<String, Object> {
           LOG.warn("unknown shape type: '"+arg.substring(arg.indexOf(':'))+"'");
 
         this.put(INPUT_SHAPE, inputShape);
+      } else if (argl.startsWith("color:")) {
+        String colorName = (String) argl.substring(argl.indexOf(':') + 1);
+        Color color = Color.BLACK;
+        colorName = colorName.toLowerCase();
+        if (colorName.equals("red")) {
+          color = Color.RED;
+        } else if (colorName.equals("pink")){
+          color = Color.PINK;
+        } else if (colorName.equals("blue")){
+          color = Color.BLUE;
+        } else if (colorName.equals("cyan")){
+          color = Color.CYAN;
+        } else if (colorName.equals("green")) {
+          color = Color.GREEN;
+        } else if (colorName.equals("black")) {
+          color = Color.BLACK;
+        } else if (colorName.equals("gray")) {
+          color = Color.GRAY;
+        } else if (colorName.equals("orange")) {
+          color = Color.ORANGE;
+        }
+        put("color", color);
       } else if (argl.contains(":") && !argl.contains(":/")) {
         String[] parts = arg.split(":", 2);
         this.put(parts[0].toLowerCase(), parts[1]);
@@ -163,17 +185,7 @@ public class CommandLineArguments extends HashMap<String, Object> {
   }
   
   public Path[] getPaths() {
-    Vector<Path> inputPaths = new Vector<Path>();
-    for (String arg : args) {
-      if (arg.startsWith("-") && arg.length() > 1) {
-        // Skip
-      } else if (arg.indexOf(':') != -1 && arg.indexOf(":/") == -1) {
-        // Skip
-      } else {
-        inputPaths.add(new Path(arg));
-      }
-    }
-    return inputPaths.toArray(new Path[inputPaths.size()]);
+    return (Path[]) get(ALL_PATHS);
   }
   
   public Path getPath() {
@@ -419,32 +431,6 @@ public class CommandLineArguments extends HashMap<String, Object> {
     return stockShape;
   }
 
-  public Color getColor() {
-    Color color = Color.BLACK;
-    String colorName = (String) get("color");
-    if (colorName == null)
-      return color;
-    colorName = colorName.toLowerCase();
-    if (colorName.equals("red")) {
-      color = Color.RED;
-    } else if (colorName.equals("pink")){
-      color = Color.PINK;
-    } else if (colorName.equals("blue")){
-      color = Color.BLUE;
-    } else if (colorName.equals("cyan")){
-      color = Color.CYAN;
-    } else if (colorName.equals("green")) {
-      color = Color.GREEN;
-    } else if (colorName.equals("black")) {
-      color = Color.BLACK;
-    } else if (colorName.equals("gray")) {
-      color = Color.GRAY;
-    } else if (colorName.equals("orange")) {
-      color = Color.ORANGE;
-    }
-    return color;
-  }
-  
   /**
    * Makes standard checks for input and output files. It is assumed that all
    * files are input files while the last one is the output file. First,
@@ -483,5 +469,19 @@ public class CommandLineArguments extends HashMap<String, Object> {
   public static boolean isWildcard(Path path) {
     return path.toString().indexOf('*') != -1 ||
         path.toString().indexOf('?') != -1;
+  }
+
+  public Path getOutputPath() {
+    return (Path) get(OUTPUT_PATH);
+  }
+
+  public Path getInputPath() {
+    return getPath();
+  }
+
+  public Color getColor(String key, Color defaultValue) {
+    if (containsKey(key))
+      return (Color) get(key);
+    return defaultValue;
   }
 }
