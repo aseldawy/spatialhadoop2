@@ -14,6 +14,8 @@ package edu.umn.cs.spatialHadoop;
 
 import java.awt.Color;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -44,6 +46,19 @@ import edu.umn.cs.spatialHadoop.operations.Sampler;
  *
  */
 public class CommandLineArguments {
+  /**All paths in the input parameter list*/
+  public static final String ALL_PATHS = "all-paths";
+  /**The output (last) path in the parameter list*/
+  public static final String OUTPUT_PATH = "output-path";
+  /**The first input path in the parameter list*/
+  public static final String INPUT_PATH = "input-path";
+  /**The input (all but last) paths in the parameter list*/
+  public static final String INPUT_PATHS = "input-paths";
+  /**Input rectangle. Either for range query or MBR for generation.*/
+  public static final String INPUT_RECTANGLE = "rect";
+  /**Input shape or input file format*/
+  public static final String INPUT_SHAPE = "input-shape";
+
   private static final Log LOG = LogFactory.getLog(CommandLineArguments.class);
   
   private String[] args;
@@ -58,42 +73,72 @@ public class CommandLineArguments {
     this.args = args;
   }
   
-  public Configuration getConfiguration() {
-    Configuration conf = new Configuration();
-    Vector<String> paths = new Vector<String>();
+  public Map<String, Object> getParams() {
+    Map<String, Object> params = new HashMap<String, Object>();
+    Vector<Path> paths = new Vector<Path>();
     for (String arg : args) {
+      String argl = arg.toLowerCase();
       if (arg.startsWith("-no-")) {
-        conf.setBoolean(arg.substring(4).toLowerCase(), false);
-      } else if (arg.startsWith("-")) {
-        conf.setBoolean(arg.substring(1).toLowerCase(), true);
-      } else if (arg.contains(":") && !arg.contains(":/")) {
+        params.put(argl.substring(4), false);
+      } else if (argl.startsWith("-")) {
+        params.put(argl.substring(1), true);
+      } else if (argl.startsWith("rect:") || argl.startsWith("mbr:")) {
+        Rectangle rect = new Rectangle();
+        rect.fromText(new Text(argl.substring(argl.indexOf(':') + 1)));
+        params.put(INPUT_RECTANGLE, rect);
+      } else if (argl.startsWith("shape:")) {
+        String shapeType = argl.substring(argl.indexOf(':') + 1);
+        Shape inputShape = null;
+        
+        if (shapeType.startsWith("rect")) {
+          inputShape = new Rectangle();
+        } else if (shapeType.startsWith("point")) {
+          inputShape = new Point();
+        } else if (shapeType.startsWith("tiger")) {
+          inputShape = new TigerShape();
+        } else if (shapeType.startsWith("osm")) {
+          inputShape = new OSMPolygon();
+        } else if (shapeType.startsWith("poly")) {
+          inputShape = new Polygon();
+        } else if (shapeType.startsWith("ogc")) {
+          inputShape = new OGCShape();
+        } else if (shapeType.startsWith("nasa")) {
+          inputShape = new NASAPoint();
+        } else {
+          // Use the shapeType as a class name and try to instantiate it dynamically
+          try {
+            Class<? extends Shape> shapeClass =
+                Class.forName(arg.substring(arg.indexOf(':'))).asSubclass(Shape.class);
+            inputShape = shapeClass.newInstance();
+          } catch (ClassNotFoundException e) {
+          } catch (InstantiationException e) {
+          } catch (IllegalAccessException e) {
+          }
+        }
+        if (inputShape == null)
+          LOG.warn("unknown shape type: '"+arg.substring(arg.indexOf(':'))+"'");
+
+        params.put(INPUT_SHAPE, inputShape);
+      } else if (argl.contains(":") && !argl.contains(":/")) {
         String[] parts = arg.split(":", 2);
-        conf.set(parts[0].toLowerCase(), parts[1]);
+        params.put(parts[0].toLowerCase(), parts[1]);
       } else {
-        paths.add(arg);
+        paths.add(new Path(arg));
       }
     }
 
-    String allPaths = "";
-    String inputPaths = "";
-    String outputPath = "";
-    for (int i = 0; i < paths.size(); i++) {
-      String path = ',' + paths.get(i);
-      allPaths += path;
-      if (i == paths.size() - 1) {
-        outputPath = path;
-      } else {
-        inputPaths += path;
-      }
-    }
-    allPaths = allPaths.substring(1);
-    inputPaths = inputPaths.substring(1);
-    outputPath = outputPath.substring(1);
-    conf.set("all-paths", allPaths);
-    conf.set("input-paths", inputPaths);
-    conf.set("output-path", outputPath);
+    Path[] allPaths = paths.toArray(new Path[paths.size()]);
+    Path outputPath = paths.size() > 1? paths.remove(paths.size() - 1) : null;
+    Path[] inputPaths = paths.toArray(new Path[paths.size()]);
+    Path inputPath = inputPaths[0];
     
-    return conf;
+    params.put(ALL_PATHS, allPaths);
+    params.put(INPUT_PATH, inputPath);
+    params.put(INPUT_PATHS, inputPaths);
+    if (outputPath != null)
+      params.put(OUTPUT_PATH, outputPath);
+    
+    return params;
   }
   
   public Rectangle getRectangle() {
