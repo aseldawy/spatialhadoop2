@@ -32,12 +32,9 @@ import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
 
 
 /**
@@ -45,7 +42,9 @@ import edu.umn.cs.spatialHadoop.operations.Sampler;
  * @author Ahmed Eldawy
  *
  */
-public class CommandLineArguments {
+public class CommandLineArguments extends HashMap<String, Object> {
+  private static final long serialVersionUID = 3470426865034003975L;
+
   /**All paths in the input parameter list*/
   public static final String ALL_PATHS = "all-paths";
   /**The output (last) path in the parameter list*/
@@ -71,21 +70,18 @@ public class CommandLineArguments {
   
   public CommandLineArguments(String[] args) {
     this.args = args;
-  }
-  
-  public Map<String, Object> getParams() {
-    Map<String, Object> params = new HashMap<String, Object>();
+    
     Vector<Path> paths = new Vector<Path>();
     for (String arg : args) {
       String argl = arg.toLowerCase();
       if (arg.startsWith("-no-")) {
-        params.put(argl.substring(4), false);
+        this.put(argl.substring(4), false);
       } else if (argl.startsWith("-")) {
-        params.put(argl.substring(1), true);
+        this.put(argl.substring(1), true);
       } else if (argl.startsWith("rect:") || argl.startsWith("mbr:")) {
         Rectangle rect = new Rectangle();
         rect.fromText(new Text(argl.substring(argl.indexOf(':') + 1)));
-        params.put(INPUT_RECTANGLE, rect);
+        this.put(INPUT_RECTANGLE, rect);
       } else if (argl.startsWith("shape:")) {
         String shapeType = argl.substring(argl.indexOf(':') + 1);
         Shape inputShape = null;
@@ -118,10 +114,10 @@ public class CommandLineArguments {
         if (inputShape == null)
           LOG.warn("unknown shape type: '"+arg.substring(arg.indexOf(':'))+"'");
 
-        params.put(INPUT_SHAPE, inputShape);
+        this.put(INPUT_SHAPE, inputShape);
       } else if (argl.contains(":") && !argl.contains(":/")) {
         String[] parts = arg.split(":", 2);
-        params.put(parts[0].toLowerCase(), parts[1]);
+        this.put(parts[0].toLowerCase(), parts[1]);
       } else {
         paths.add(new Path(arg));
       }
@@ -132,13 +128,15 @@ public class CommandLineArguments {
     Path[] inputPaths = paths.toArray(new Path[paths.size()]);
     Path inputPath = inputPaths[0];
     
-    params.put(ALL_PATHS, allPaths);
-    params.put(INPUT_PATH, inputPath);
-    params.put(INPUT_PATHS, inputPaths);
+    this.put(ALL_PATHS, allPaths);
+    this.put(INPUT_PATH, inputPath);
+    this.put(INPUT_PATHS, inputPaths);
     if (outputPath != null)
-      params.put(OUTPUT_PATH, outputPath);
-    
-    return params;
+      this.put(OUTPUT_PATH, outputPath);
+  }
+  
+  public Map<String, Object> getParams() {
+    return this;
   }
   
   public Rectangle getRectangle() {
@@ -257,14 +255,8 @@ public class CommandLineArguments {
   }
   
   public boolean is(String flag, boolean defaultValue) {
-    String expected_true = "-"+flag;
-    String expected_false = "-no-"+flag;
-    for (String arg : args) {
-      if (arg.equals(expected_true))
-        return true;
-      if (arg.equals(expected_false))
-        return false;
-    }
+    if (containsKey(flag))
+      return (Boolean) get(flag);
     return defaultValue;
   }
 
@@ -328,16 +320,6 @@ public class CommandLineArguments {
   }
   
   /**
-   * Finds any parameters that has with the given key name. If the value does
-   * not exist, return null.
-   * @param key
-   * @return
-   */
-  public String get(String key) {
-    return get(key, null);
-  }
-  
-  /**
    * Return the command with the given key. If the key does not exist,
    * the default value is returned.
    * @param key
@@ -355,80 +337,12 @@ public class CommandLineArguments {
   }
   
   public int getInt(String key, int defaultValue) {
-    String valstr = get(key);
+    String valstr = (String) get(key);
     return valstr == null ? defaultValue : Integer.parseInt(valstr);
   }
   
-  /**
-   * 
-   * @param autodetect - Automatically detect shape type from input file
-   *   if shape is not explicitly set by user
-   * @return
-   */
-  public Shape getShape(boolean autodetect) {
-    String shapeTypeStr = get("shape");
-    final Text shapeType = new Text();
-    if (shapeTypeStr != null)
-      shapeType.set(shapeTypeStr.toLowerCase().getBytes());
-    
-    if (autodetect && shapeType.getLength() == 0 && getPath() != null) {
-      // Shape type not found in parameters. Try to infer from a line in input
-      // file
-      Path in_file = getPath();
-      try {
-        Sampler.sampleLocal(in_file.getFileSystem(new Configuration()), in_file, 1, 0, new ResultCollector<Text2>() {
-          @Override
-          public void collect(Text2 value) {
-            String val = value.toString();
-            String[] parts = val.split(",");
-            if (parts.length == 2) {
-              shapeType.set("point".getBytes());
-            } else if (parts.length == 4) {
-              shapeType.set("rect".getBytes());
-            } else if (parts.length > 4) {
-              shapeType.set("tiger".getBytes());
-            }
-          }
-        }, new Text2(), new Text2());
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-    }
-
-    Shape stockShape = null;
-    if (shapeType.toString().startsWith("rect")) {
-      stockShape = new Rectangle();
-    } else if (shapeType.toString().startsWith("point")) {
-      stockShape = new Point();
-    } else if (shapeType.toString().startsWith("tiger")) {
-      stockShape = new TigerShape();
-    } else if (shapeType.toString().startsWith("osm")) {
-      stockShape = new OSMPolygon();
-    } else if (shapeType.toString().startsWith("poly")) {
-      stockShape = new Polygon();
-    } else if (shapeType.toString().startsWith("ogc")) {
-      stockShape = new OGCShape();
-    } else if (shapeType.toString().startsWith("nasa")) {
-      stockShape = new NASAPoint();
-    } else if (shapeTypeStr != null) {
-      // Use the shapeType as a class name and try to instantiate it dynamically
-      try {
-        Class<? extends Shape> shapeClass =
-            Class.forName(shapeTypeStr).asSubclass(Shape.class);
-        stockShape = shapeClass.newInstance();
-      } catch (ClassNotFoundException e) {
-      } catch (InstantiationException e) {
-      } catch (IllegalAccessException e) {
-      }
-    }
-    if (stockShape == null)
-      LOG.warn("unknown shape type: "+shapeTypeStr);
-    
-    return stockShape;
-  }
-  
   public CellInfo[] getCells() {
-    String cell_of = get("cells-of");
+    String cell_of = (String) get("cells-of");
     if (cell_of == null)
       return null;
     Path path = new Path(cell_of);
@@ -444,22 +358,22 @@ public class CommandLineArguments {
   
 
   public long getSeed() {
-    String seed = get("seed");
+    String seed = (String) get("seed");
     return seed == null? System.currentTimeMillis() : Long.parseLong(seed);
   }
 
   public int getRectSize() {
-    String rectSize = get("rectsize");
+    String rectSize = (String) get("rectsize");
     return rectSize == null? 0 : Integer.parseInt(rectSize);
   }
 
   public double getClosenessFactor() {
-    String factor = get("closeness");
+    String factor = (String) get("closeness");
     return factor == null? -1.0 : Double.parseDouble(factor);
   }
   
   public long getOffset() {
-    String offset = get("offset");
+    String offset = (String) get("offset");
     return offset == null? -1 : Long.parseLong(offset);
   }
 
@@ -467,22 +381,12 @@ public class CommandLineArguments {
     return is("borders");
   }
 
-  public int getWidth(int default_width) {
-    String width = get("width");
-    return width == null ? default_width : Integer.parseInt(width);
-  }
-
-  public int getHeight(int default_height) {
-    String height = get("height");
-    return height == null ? default_height : Integer.parseInt(height);
-  }
-
   public Shape getOutputShape() {
-    String shapeTypeStr = get("outshape");
+    String shapeTypeStr = (String) get("outshape");
     if (shapeTypeStr == null)
-      shapeTypeStr = get("outputshape");
+      shapeTypeStr = (String) get("outputshape");
     if (shapeTypeStr == null)
-      shapeTypeStr = get("output_shape");
+      shapeTypeStr = (String) get("output_shape");
     final Text shapeType = new Text();
     if (shapeTypeStr != null)
       shapeType.set(shapeTypeStr.toLowerCase().getBytes());
@@ -517,7 +421,7 @@ public class CommandLineArguments {
 
   public Color getColor() {
     Color color = Color.BLACK;
-    String colorName = get("color");
+    String colorName = (String) get("color");
     if (colorName == null)
       return color;
     colorName = colorName.toLowerCase();
@@ -551,33 +455,25 @@ public class CommandLineArguments {
    * @throws IOException 
    */
   public boolean checkInputOutput(Configuration conf) throws IOException {
-    Path[] paths = getPaths();
-    if (paths.length == 0) {
-      LOG.error("Input file missing");
-      return false;
-    }
-    for (int i = 0; i < paths.length; i++) {
-      Path path = paths[i];
-      // Skip wild cards
+    Path[] inputPaths = (Path[]) get(INPUT_PATHS);
+    for (Path path : inputPaths) {
       if (isWildcard(path))
         continue;
-      if (i == 0 || i < paths.length - 1) {
-        // Check input path
-        FileSystem fs = path.getFileSystem(conf);
-        if (!fs.exists(path)) {
-          LOG.error("Input file '"+path+"' does not exist");
+      FileSystem fs = path.getFileSystem(conf);
+      if (!fs.exists(path)) {
+        LOG.error("Input file '"+path+"' does not exist");
+        return false;
+      }
+    }
+    Path outputPath = (Path) get(OUTPUT_PATH);
+    if (outputPath != null) {
+      FileSystem fs = outputPath.getFileSystem(conf);
+      if (fs.exists(outputPath)) {
+        if (this.is("overwrite")) {
+          fs.delete(outputPath, true);
+        } else {
+          LOG.error("Output file '"+outputPath+"' exists and overwrite flag is not set");
           return false;
-        }
-      } else {
-        // Check output path
-        FileSystem fs = path.getFileSystem(conf);
-        if (fs.exists(path)) {
-          if (this.isOverwrite()) {
-            fs.delete(path, true);
-          } else {
-            LOG.error("Output file '"+path+"' exists and overwrite flag is not set");
-            return false;
-          }
         }
       }
     }

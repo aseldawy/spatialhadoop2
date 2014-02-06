@@ -60,9 +60,7 @@ import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.nasa.GeoProjector;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
-import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
@@ -270,95 +268,34 @@ public class Plot {
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
   
-  public static <S extends Shape> RunningJob plotMapReduce(Path inFile, Path outFile,
-      Shape shape, int width, int height, boolean vflip, Color color, MinMax valueRange,
-      boolean showBorders, String hdfDataset, Shape range,
-      boolean keepAspectRatio, boolean background) throws IOException {
-    JobConf job = new JobConf(Plot.class);
-    job.setJobName("Plot");
-    
-    job.setMapperClass(PlotMap.class);
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setReducerClass(PlotReduce.class);
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setMapOutputKeyClass(IntWritable.class);
-    SpatialSite.setShapeClass(job, shape.getClass());
-    job.setMapOutputValueClass(shape.getClass());
-
-    FileSystem inFs = inFile.getFileSystem(job);
-    Rectangle fileMBR;
-    // Collects some stats about the file to plot it correctly
-    if (hdfDataset != null) {
-      // Input is HDF
-      job.set(HDFRecordReader.DatasetName, hdfDataset);
-      job.setBoolean(HDFRecordReader.SkipFillValue, true);
-      // Determine the range of values by opening one of the HDF files
-      if (valueRange == null)
-        valueRange = Aggregate.aggregate(inFs, new Path[] {inFile}, range, false);
-      job.setInt(MinValue, valueRange.minValue);
-      job.setInt(MaxValue, valueRange.maxValue);
-      fileMBR = range != null?
-          range.getMBR() : new Rectangle(-180, -140, 180, 169);
-//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-//          GeoProjector.class);
-    } else {
-      fileMBR = range != null ? range.getMBR() :
-        FileMBR.fileMBR(inFs, inFile, shape);
-    }
-    LOG.info("File MBR: "+fileMBR);
-    
-    if (keepAspectRatio) {
-      // Adjust width and height to maintain aspect ratio
-      if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
-        // Fix width and change height
-        height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
-        // Make divisible by two for compatability with ffmpeg
-        height &= 0xfffffffe;
-      } else {
-        width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
-      }
-    }
-    
-    LOG.info("Creating an image of size "+width+"x"+height);
-    ImageOutputFormat.setFileMBR(job, fileMBR);
-    ImageOutputFormat.setImageWidth(job, width);
-    ImageOutputFormat.setImageHeight(job, height);
-    job.setBoolean(ShowBorders, showBorders);
-    job.setInt(StrokeColor, color.getRGB());
-    job.setBoolean(ImageOutputFormat.VFlip, vflip);
-    if (range != null) {
-      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-      RangeFilter.setQueryRange(job, range); // Set query range for filter
-    }
-    
-    // A heap file. The map function should partition the file
-    GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
-        fileMBR.y2);
-    partitionGrid.calculateCellDimensions(
-        (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-    SpatialSite.setShape(job, PartitionGrid, partitionGrid);
-    
-    job.setInputFormat(ShapeInputFormat.class);
-    ShapeInputFormat.addInputPath(job, inFile);
-    // Set output committer which will stitch images together after all reducers
-    // finish
-    job.setOutputCommitter(PlotOutputCommitter.class);
-    
-    job.setOutputFormat(ImageOutputFormat.class);
-    TextOutputFormat.setOutputPath(job, outFile);
-    
-    if (background) {
-      JobClient jc = new JobClient(job);
-      return lastSubmittedJob = jc.submitJob(job);
-    } else {
-      return lastSubmittedJob = JobClient.runJob(job);
-    }
-  }
-  
   public static <S extends Shape> void plotLocal(Path inFile, Path outFile,
-      S shape, int width, int height, boolean vflip, Color color, MinMax valueRange,
-      boolean showBorders, String hdfDataset, Shape plotRange, boolean keepAspectRatio) throws IOException {
+      CommandLineArguments cla) throws IOException {
+    // TODO: Draw borders
+    boolean showBorders = cla.is("borders");
+    
+    int width = cla.getInt("width", 1000);
+    int height = cla.getInt("height", 1000);
+    
+    // Flip image vertically to correct Y axis +ve direction
+    boolean vflip = cla.is("vflip");
+    
+    Color color = cla.getColor();
+
+    String hdfDataset = (String) cla.get("dataset");
+    Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) cla.get(CommandLineArguments.INPUT_SHAPE);
+    Rectangle plotRange = cla.getRectangle();
+
+    boolean keepAspectRatio = cla.is("keep-ratio", true);
+    
+    String valueRangeStr = (String) cla.get("valuerange");
+    MinMax valueRange;
+    if (valueRangeStr == null) {
+      valueRange = null;
+    } else {
+      String[] parts = valueRangeStr.split(",");
+      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+    }
+
     Configuration conf = new Configuration();
     FileSystem inFs = inFile.getFileSystem(conf);
 
@@ -398,7 +335,7 @@ public class Plot {
       BufferedImage image = new BufferedImage(width, height,
           BufferedImage.TYPE_INT_ARGB);
       Graphics2D graphics = image.createGraphics();
-      Color bg_color = new Color(0,0,0,0);
+      Color bg_color = new Color(0, 0, 0, 0);
       graphics.setBackground(bg_color);
       graphics.clearRect(0, 0, width, height);
       graphics.setColor(color);
@@ -449,7 +386,7 @@ public class Plot {
       graphics.clearRect(0, 0, width, height);
       graphics.setColor(color);
       
-      ShapeRecordReader<S> reader = new ShapeRecordReader<S>(conf,
+      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(conf,
           new FileSplit(inFile, 0, fileLength, new String[0]));
       Rectangle cell = reader.createKey();
       while (reader.next(cell, shape)) {
@@ -466,46 +403,6 @@ public class Plot {
       OutputStream out = outFs.create(outFile, true);
       ImageIO.write(image, "png", out);
       out.close();
-    }
-    
-  }
-
-  /**
-   * Plots the given file to an image
-   * @param inFile - Path to input file
-   * @param outFile - Path to output file
-   * @param shape - Shape or input format of the input file
-   * @param width - maximum width of generated image
-   * @param height - maximum height of generated image
-   * @param vflip - Whether to flip the output image vertically or not
-   * @param color - Default color of drawn shapes
-   * @param valueRange - Range of values in case the input is HDF
-   * @param showBorders - Whether or not to show partition borders for indexed files
-   * @param hdfDataset - The name of the HDF dataset in case the input is HDF
-   * @param plotRange - spatial range to plot
-   * @param keepAspectRatio - Whether or not to keep aspect ratio
-   * @param background - Whether or not to run the MapReduce job in the background
-   * @throws IOException
-   */
-  public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
-      int width, int height, boolean vflip, Color color, MinMax valueRange,
-      boolean showBorders, String hdfDataset, Shape plotRange,
-      boolean keepAspectRatio, boolean background) throws IOException {
-    if (CommandLineArguments.isWildcard(inFile)) {
-      // plotLocal cannot handle wild cards
-      plotMapReduce(inFile, outFile, shape, width, height, vflip, color, valueRange,
-          showBorders, hdfDataset, plotRange, keepAspectRatio, background);
-    } else {
-      FileSystem inFs = inFile.getFileSystem(new Configuration());
-      FileStatus inFStatus = inFs.getFileStatus(inFile);
-      if (inFStatus.isDir()
-          || inFStatus.getLen() > 3 * inFStatus.getBlockSize()) {
-        plotMapReduce(inFile, outFile, shape, width, height, vflip, color, valueRange,
-            showBorders, hdfDataset, plotRange, keepAspectRatio, background);
-      } else {
-        plotLocal(inFile, outFile, shape, width, height, vflip, color, valueRange,
-            showBorders, hdfDataset, plotRange, keepAspectRatio);
-      }
     }
   }
 
@@ -659,28 +556,49 @@ public class Plot {
       return;
     }
     
-    Path[] files = cla.getPaths();
-    Path inFile = files[0];
-    Path outFile = files[1];
+    Path inFile = (Path) cla.get(CommandLineArguments.INPUT_PATH);
+    Path outFile = (Path) cla.get(CommandLineArguments.OUTPUT_PATH);
 
+    plot(inFile, outFile, cla);
+  }
+  
+  private static RunningJob plot(Path inFile, Path outFile, CommandLineArguments cla) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(new Configuration());
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    Boolean isLocal = (Boolean) cla.get("local");
+    if (isLocal == null) {
+      // Auto choose isLocal
+      isLocal = !(CommandLineArguments.isWildcard(inFile) || inFStatus.isDir()
+          || inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    }
+    
+    if (isLocal) {
+      plotLocal(inFile, outFile, cla);
+      return null;
+    } else {
+      return plotMapReduce(inFile, outFile, cla);
+    }
+  }
+
+  private static RunningJob plotMapReduce(Path inFile, Path outFile, CommandLineArguments cla) throws IOException {
     boolean showBorders = cla.is("borders");
     boolean background = cla.is("background");
     
-    int width = cla.getWidth(1000);
-    int height = cla.getHeight(1000);
+    int width = cla.getInt("width", 1000);
+    int height = cla.getInt("height", 1000);
     
     // Flip image vertically to correct Y axis +ve direction
     boolean vflip = cla.is("vflip");
     
     Color color = cla.getColor();
 
-    String hdfDataset = cla.get("dataset");
-    Shape shape = hdfDataset != null ? new NASARectangle() : cla.getShape(true);
-    Rectangle rect = cla.getRectangle();
+    String hdfDataset = (String) cla.get("dataset");
+    Shape shape = hdfDataset != null ? new NASARectangle() : (Shape)cla.get(CommandLineArguments.INPUT_SHAPE);
+    Rectangle plotRange = cla.getRectangle();
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
     
-    String valueRangeStr = cla.get("valuerange");
+    String valueRangeStr = (String) cla.get("valuerange");
     MinMax valueRange;
     if (valueRangeStr == null) {
       valueRange = null;
@@ -689,7 +607,86 @@ public class Plot {
       valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
     
-    plot(inFile, outFile, shape, width, height, vflip, color, valueRange, showBorders, hdfDataset, rect, keepAspectRatio, background);
+    JobConf job = new JobConf(Plot.class);
+    job.setJobName("Plot");
+    
+    job.setMapperClass(PlotMap.class);
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
+    job.setReducerClass(PlotReduce.class);
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+    job.setMapOutputKeyClass(IntWritable.class);
+    SpatialSite.setShapeClass(job, shape.getClass());
+    job.setMapOutputValueClass(shape.getClass());
+
+    FileSystem inFs = inFile.getFileSystem(job);
+    Rectangle fileMBR;
+    // Collects some stats about the file to plot it correctly
+    if (hdfDataset != null) {
+      // Input is HDF
+      job.set(HDFRecordReader.DatasetName, hdfDataset);
+      job.setBoolean(HDFRecordReader.SkipFillValue, true);
+      // Determine the range of values by opening one of the HDF files
+      if (valueRange == null)
+        valueRange = Aggregate.aggregate(inFs, new Path[] {inFile}, plotRange, false);
+      job.setInt(MinValue, valueRange.minValue);
+      job.setInt(MaxValue, valueRange.maxValue);
+      fileMBR = plotRange != null?
+          plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
+//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//          GeoProjector.class);
+    } else {
+      fileMBR = plotRange != null ? plotRange.getMBR() :
+        FileMBR.fileMBR(inFs, inFile, cla);
+    }
+    LOG.info("File MBR: "+fileMBR);
+    
+    if (keepAspectRatio) {
+      // Adjust width and height to maintain aspect ratio
+      if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
+        // Fix width and change height
+        height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
+        // Make divisible by two for compatability with ffmpeg
+        height &= 0xfffffffe;
+      } else {
+        width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
+      }
+    }
+    
+    LOG.info("Creating an image of size "+width+"x"+height);
+    ImageOutputFormat.setFileMBR(job, fileMBR);
+    ImageOutputFormat.setImageWidth(job, width);
+    ImageOutputFormat.setImageHeight(job, height);
+    job.setBoolean(ShowBorders, showBorders);
+    job.setInt(StrokeColor, color.getRGB());
+    job.setBoolean(ImageOutputFormat.VFlip, vflip);
+    if (plotRange != null) {
+      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+      RangeFilter.setQueryRange(job, plotRange); // Set query range for filter
+    }
+    
+    // A heap file. The map function should partition the file
+    GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+        fileMBR.y2);
+    partitionGrid.calculateCellDimensions(
+        (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+    SpatialSite.setShape(job, PartitionGrid, partitionGrid);
+    
+    job.setInputFormat(ShapeInputFormat.class);
+    ShapeInputFormat.addInputPath(job, inFile);
+    // Set output committer which will stitch images together after all reducers
+    // finish
+    job.setOutputCommitter(PlotOutputCommitter.class);
+    
+    job.setOutputFormat(ImageOutputFormat.class);
+    TextOutputFormat.setOutputPath(job, outFile);
+    
+    if (background) {
+      JobClient jc = new JobClient(job);
+      return lastSubmittedJob = jc.submitJob(job);
+    } else {
+      return lastSubmittedJob = JobClient.runJob(job);
+    }
   }
 
 }

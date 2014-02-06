@@ -15,7 +15,6 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Iterator;
-import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -303,11 +302,17 @@ public class FileMBR {
     return mbr;
   }
   
-  public static Rectangle fileMBR(FileSystem fs, Path inFile, Map<String, Object> params) throws IOException {
+  public static Rectangle fileMBR(FileSystem fs, Path inFile, CommandLineArguments params) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     Shape stockShape = (Shape) params.get(CommandLineArguments.INPUT_SHAPE);
-    if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 3) {
+    Boolean isLocal = (Boolean) params.get("local");
+    if (isLocal == null) {
+      isLocal = !(inFStatus.isDir() ||
+          inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    }
+    
+    if (!isLocal) {
       // Either a directory of file or a large file
       return fileMBRMapReduce(fs, inFile, stockShape, false);
     } else {
@@ -327,7 +332,7 @@ public class FileMBR {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    Map<String, Object> params = new CommandLineArguments(args).getParams();
+    CommandLineArguments params = new CommandLineArguments(args);
     Configuration conf = new Configuration();
     Path inputFile = (Path) params.get(CommandLineArguments.INPUT_PATH);
     if (inputFile == null) {
