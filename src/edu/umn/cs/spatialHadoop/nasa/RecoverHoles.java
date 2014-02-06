@@ -117,7 +117,7 @@ public class RecoverHoles {
    * @param dir
    * @throws IOException
    */
-  public static void recoverInterpolation(Path dir) throws IOException {
+  public static void recoverInterpolationDir(Path dir) throws IOException {
     FileSystem fs = dir.getFileSystem(new Configuration());
     FileStatus[] allImages = CommandLineArguments.isWildcard(dir)?
         fs.globStatus(dir) : fs.listStatus(dir);
@@ -148,134 +148,147 @@ public class RecoverHoles {
     
     // Recover missing points on each image
     for (FileStatus imageFile : allImages) {
-      System.out.println("Working on "+imageFile.getPath().getName());
-      FSDataInputStream instream = fs.open(imageFile.getPath());
-      BufferedImage img = ImageIO.read(instream);
-      instream.close();
-      
-      // All recovered values are stored in this image
-      BufferedImage recoveryInterpolation = new BufferedImage(img.getWidth(),
-          img.getHeight(), BufferedImage.TYPE_INT_ARGB);
-      g = recoveryInterpolation.createGraphics();
-      g.setBackground(new Color(0, 0, 0, 0));
-      g.clearRect(0, 0, recoveryInterpolation.getWidth(), recoveryInterpolation.getHeight());
-      g.dispose();
-      
-      BufferedImage recoveryCopy = new BufferedImage(img.getWidth(),
-          img.getHeight(), BufferedImage.TYPE_INT_ARGB);
-      g = recoveryCopy.createGraphics();
-      g.setBackground(new Color(0, 0, 0, 0));
-      g.clearRect(0, 0, recoveryCopy.getWidth(), recoveryCopy.getHeight());
-      g.dispose();
-      
-      // Go over this image row by row
-      for (int y = 0; y < img.getHeight(); y++) {
-        // First empty point in current run
-        int x1 = 0;
-        // Last non-empty point in current run
-        int x2 = 0;
-        while (x2 < img.getWidth()) {
-          // Detect next run of empty points
-          x1 = x2;
-          while (x1 < img.getWidth() && !isTransparent(img, x1, y))
-            x1++;
-          x2 = x1;
-          while (x2 < img.getWidth() && isTransparent(img, x2, y))
-            x2++;
-          if (x1 == 0 && x2 < img.getWidth() || x1 > 0 && x2 == img.getWidth()) {
-            // Only one point at one end is inside image boundaries.
-            // Use the available point to paint all missing points
-            int color = x1 > 0? img.getRGB(x1-1, y) : img.getRGB(x2, y);
-            for (int x = x1; x < x2; x++) {
-              if (!isTransparent(mask, x, y)) {
-                mergePoints(recoveryCopy, x, y, color);
-              }
-            }
-          } else if (x1 > 0 && x2 < img.getWidth()) {
-            // Two ends are available, interpolate to recover points
-            float[] hsbvals = new float[3];
-            int color1 = img.getRGB(x1-1, y);
-            Color.RGBtoHSB((color1 >> 16) & 0xff, (color1 >> 8) & 0xff, color1 & 0xff, hsbvals);
-            float hue1 = hsbvals[0];
-
-            int color2 = img.getRGB(x2, y);
-            Color.RGBtoHSB((color2 >> 16) & 0xff, (color2 >> 8) & 0xff, color2 & 0xff, hsbvals);
-            float hue2 = hsbvals[0];
-            
-            // Recover all missing points that should be recovered in this run
-            for (int x = x1; x < x2; x++) {
-              if (!isTransparent(mask, x, y)) {
-                // Should be recovered
-                float recoveredHue = (hue1 * (x2 - x) + hue2 * (x - x1)) / (x2 - x1);
-                int recoveredColor = Color.HSBtoRGB(recoveredHue, hsbvals[1], hsbvals[2]);
-                mergePoints(recoveryInterpolation, x, y, recoveredColor);
-              }
-            }
-          }
-        }
-      }
-      
-      // Go over image column by column
-      for (int x = 0; x < img.getWidth(); x++) {
-        // First empty point in current run
-        int y1 = 0;
-        // Last non-empty point in current run
-        int y2 = 0;
-        while (y2 < img.getHeight()) {
-          // Detect next run of empty points
-          y1 = y2;
-          while (y1 < img.getHeight() && !isTransparent(img, x, y1))
-            y1++;
-          y2 = y1;
-          while (y2 < img.getHeight() && isTransparent(img, x, y2))
-            y2++;
-          if (y1 == 0 && y2 < img.getHeight() || y1 > 0 && y2 == img.getHeight()) {
-            // Only one point at one end is inside image boundaries.
-            // Use the available point to paint all missing points
-            int color = y1 > 0? img.getRGB(x, y1-1) : img.getRGB(x, y2);
-            for (int y = y1; y < y2; y++) {
-              if (!isTransparent(mask, x, y)) {
-                mergePoints(recoveryCopy, x, y, color);
-              }
-            }
-          } else if (y1 > 0 && y2 < img.getHeight()) {
-            // Two ends are available, interpolate to recover points
-            float[] hsbvals = new float[3];
-            int color1 = img.getRGB(x, y1-1);
-            Color.RGBtoHSB((color1 >> 16) & 0xff, (color1 >> 8) & 0xff, color1 & 0xff, hsbvals);
-            float hue1 = hsbvals[0];
-
-            int color2 = img.getRGB(x, y2);
-            Color.RGBtoHSB((color2 >> 16) & 0xff, (color2 >> 8) & 0xff, color2 & 0xff, hsbvals);
-            float hue2 = hsbvals[0];
-            
-            // Recover all missing points that should be recovered in this run
-            for (int y = y1; y < y2; y++) {
-              if (!isTransparent(mask, x, y)) {
-                // Should be recovered
-                float recoveredHue = (hue1 * (y2 - y) + hue2 * (y - y1)) / (y2 - y1);
-                int recoveredColor = Color.HSBtoRGB(recoveredHue, hsbvals[1], hsbvals[2]);
-                mergePoints(recoveryInterpolation, x, y, recoveredColor);
-              }
-            }
-          }
-        }
-      }
-      
-      // Overlay the layer of recovered points
-      // Overlay recoveryCopy first then recoveryInterpolation to give higher
-      // priority to interpolation as it's smoother.
-      // In other words, points that could be interpolated overwrite points
-      // that could only be copied for the same location.
-      g = img.createGraphics();
-      g.drawImage(recoveryCopy, 0, 0, null);
-      g.drawImage(recoveryInterpolation, 0, 0, null);
-      g.dispose();
-      
-      FSDataOutputStream outstream = fs.create(imageFile.getPath(), true);
-      ImageIO.write(img, "png", outstream);
-      outstream.close();
+      recoverImageInterpolation(fs, mask, imageFile);
     }
+  }
+
+  /**
+   * Recover holes in one image using the interpolation technique.
+   * @param fs
+   * @param mask
+   * @param imageFile
+   * @throws IOException
+   */
+  private static void recoverImageInterpolation(FileSystem fs,
+      BufferedImage mask, FileStatus imageFile) throws IOException {
+    Graphics2D g;
+    System.out.println("Working on "+imageFile.getPath().getName());
+    FSDataInputStream instream = fs.open(imageFile.getPath());
+    BufferedImage img = ImageIO.read(instream);
+    instream.close();
+    
+    // All recovered values are stored in this image
+    BufferedImage recoveryInterpolation = new BufferedImage(img.getWidth(),
+        img.getHeight(), BufferedImage.TYPE_INT_ARGB);
+    g = recoveryInterpolation.createGraphics();
+    g.setBackground(new Color(0, 0, 0, 0));
+    g.clearRect(0, 0, recoveryInterpolation.getWidth(), recoveryInterpolation.getHeight());
+    g.dispose();
+    
+    BufferedImage recoveryCopy = new BufferedImage(img.getWidth(),
+        img.getHeight(), BufferedImage.TYPE_INT_ARGB);
+    g = recoveryCopy.createGraphics();
+    g.setBackground(new Color(0, 0, 0, 0));
+    g.clearRect(0, 0, recoveryCopy.getWidth(), recoveryCopy.getHeight());
+    g.dispose();
+    
+    // Go over this image row by row
+    for (int y = 0; y < img.getHeight(); y++) {
+      // First empty point in current run
+      int x1 = 0;
+      // Last non-empty point in current run
+      int x2 = 0;
+      while (x2 < img.getWidth()) {
+        // Detect next run of empty points
+        x1 = x2;
+        while (x1 < img.getWidth() && !isTransparent(img, x1, y))
+          x1++;
+        x2 = x1;
+        while (x2 < img.getWidth() && isTransparent(img, x2, y))
+          x2++;
+        if (x1 == 0 && x2 < img.getWidth() || x1 > 0 && x2 == img.getWidth()) {
+          // Only one point at one end is inside image boundaries.
+          // Use the available point to paint all missing points
+          int color = x1 > 0? img.getRGB(x1-1, y) : img.getRGB(x2, y);
+          for (int x = x1; x < x2; x++) {
+            if (!isTransparent(mask, x, y)) {
+              mergePoints(recoveryCopy, x, y, color);
+            }
+          }
+        } else if (x1 > 0 && x2 < img.getWidth()) {
+          // Two ends are available, interpolate to recover points
+          float[] hsbvals = new float[3];
+          int color1 = img.getRGB(x1-1, y);
+          Color.RGBtoHSB((color1 >> 16) & 0xff, (color1 >> 8) & 0xff, color1 & 0xff, hsbvals);
+          float hue1 = hsbvals[0];
+
+          int color2 = img.getRGB(x2, y);
+          Color.RGBtoHSB((color2 >> 16) & 0xff, (color2 >> 8) & 0xff, color2 & 0xff, hsbvals);
+          float hue2 = hsbvals[0];
+          
+          // Recover all missing points that should be recovered in this run
+          for (int x = x1; x < x2; x++) {
+            if (!isTransparent(mask, x, y)) {
+              // Should be recovered
+              float recoveredHue = (hue1 * (x2 - x) + hue2 * (x - x1)) / (x2 - x1);
+              int recoveredColor = Color.HSBtoRGB(recoveredHue, hsbvals[1], hsbvals[2]);
+              mergePoints(recoveryInterpolation, x, y, recoveredColor);
+            }
+          }
+        }
+      }
+    }
+    
+    // Go over image column by column
+    for (int x = 0; x < img.getWidth(); x++) {
+      // First empty point in current run
+      int y1 = 0;
+      // Last non-empty point in current run
+      int y2 = 0;
+      while (y2 < img.getHeight()) {
+        // Detect next run of empty points
+        y1 = y2;
+        while (y1 < img.getHeight() && !isTransparent(img, x, y1))
+          y1++;
+        y2 = y1;
+        while (y2 < img.getHeight() && isTransparent(img, x, y2))
+          y2++;
+        if (y1 == 0 && y2 < img.getHeight() || y1 > 0 && y2 == img.getHeight()) {
+          // Only one point at one end is inside image boundaries.
+          // Use the available point to paint all missing points
+          int color = y1 > 0? img.getRGB(x, y1-1) : img.getRGB(x, y2);
+          for (int y = y1; y < y2; y++) {
+            if (!isTransparent(mask, x, y)) {
+              mergePoints(recoveryCopy, x, y, color);
+            }
+          }
+        } else if (y1 > 0 && y2 < img.getHeight()) {
+          // Two ends are available, interpolate to recover points
+          float[] hsbvals = new float[3];
+          int color1 = img.getRGB(x, y1-1);
+          Color.RGBtoHSB((color1 >> 16) & 0xff, (color1 >> 8) & 0xff, color1 & 0xff, hsbvals);
+          float hue1 = hsbvals[0];
+
+          int color2 = img.getRGB(x, y2);
+          Color.RGBtoHSB((color2 >> 16) & 0xff, (color2 >> 8) & 0xff, color2 & 0xff, hsbvals);
+          float hue2 = hsbvals[0];
+          
+          // Recover all missing points that should be recovered in this run
+          for (int y = y1; y < y2; y++) {
+            if (!isTransparent(mask, x, y)) {
+              // Should be recovered
+              float recoveredHue = (hue1 * (y2 - y) + hue2 * (y - y1)) / (y2 - y1);
+              int recoveredColor = Color.HSBtoRGB(recoveredHue, hsbvals[1], hsbvals[2]);
+              mergePoints(recoveryInterpolation, x, y, recoveredColor);
+            }
+          }
+        }
+      }
+    }
+    
+    // Overlay the layer of recovered points
+    // Overlay recoveryCopy first then recoveryInterpolation to give higher
+    // priority to interpolation as it's smoother.
+    // In other words, points that could be interpolated overwrite points
+    // that could only be copied for the same location.
+    g = img.createGraphics();
+    g.drawImage(recoveryCopy, 0, 0, null);
+    g.drawImage(recoveryInterpolation, 0, 0, null);
+    g.dispose();
+    
+    FSDataOutputStream outstream = fs.create(imageFile.getPath(), true);
+    ImageIO.write(img, "png", outstream);
+    outstream.close();
   }
   
   private static void mergePoints(BufferedImage img, int x, int y, int newClr) {

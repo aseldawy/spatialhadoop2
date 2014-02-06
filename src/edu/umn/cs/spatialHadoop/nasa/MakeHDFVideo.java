@@ -136,7 +136,7 @@ public class MakeHDFVideo {
     
     // 2- Call RecoverHoles to recover holes (surprise)
     if (recoverHoles) {
-      RecoverHoles.recoverInterpolation(output);
+      RecoverHoles.recoverInterpolationDir(output);
       if (plotRange != null) {
         // Need to crop all images to restore original selection
         cropImages(output, cla.getRectangle(), plotRange);
@@ -225,8 +225,8 @@ public class MakeHDFVideo {
 
     String video_command;
     if (overlay != null) {
-      video_command = "ffmpeg -r 4 -i day_%3d.png -vf"
-          + "\"movie=gistic_logo.png [watermark]; "
+      video_command = "ffmpeg -r 4 -i day_%3d.png "
+          + "-vf \"movie=gistic_logo.png [watermark]; "
           + "movie=overlay.png [ways]; " 
           + "movie=scale.png [scale]; "
           + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
