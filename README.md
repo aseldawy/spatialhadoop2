@@ -41,17 +41,17 @@ Here are a few examples of how to use SpatialHadoop.
 
 Generate a non-indexed spatial file with rectangles in a rectangular area of 1M x 1M
 
-    hadoop spatialhadoop*.jar generate test.rects size:1.gb shape:rect mbr:0,0,1000000,1000000 
+    shadoop generate test.rects size:1.gb shape:rect mbr:0,0,1000000,1000000 
 
 Build a grid index over the generated file
 
-    hadoop spatialhadoop*.jar index test.rects sindex:grid test.grid
+    shadoop index test.rects sindex:grid test.grid
 
 Run a range query that selects rectangles overlapping the query area defined
 by the box with the two corners (10, 20) and (2000, 3000). Results are stored
 in the output file *rangequery.out*
 
-    hadoop spatialhadoop*.jar rangequery test.grid rect:10,10,2000,3000 rangequery.out
+    shadoop rangequery test.grid rect:10,10,2000,3000 rangequery.out
     
 Compile
 =======

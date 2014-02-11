@@ -453,8 +453,11 @@ public class Plot {
           new FileSplit(inFile, 0, fileLength, new String[0]));
       Rectangle cell = reader.createKey();
       while (reader.next(cell, shape)) {
-        if (plotRange == null || shape.isIntersected(plotRange))
-          shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+        Rectangle shapeMBR = shape.getMBR();
+        if (shapeMBR != null) {
+          if (plotRange == null || shapeMBR.isIntersected(plotRange))
+            shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+        }
       }
       reader.close();
       // Write image to output

@@ -157,6 +157,7 @@ public class HDFPlot {
     boolean pyramid = cla.is("pyramid");
     FileSystem outFs = output.getFileSystem(conf);
     Vector<RunningJob> jobs = new Vector<RunningJob>();
+    boolean background = cla.is("background");
     for (Path inputPath : matchingPaths) {
       Path outputPath = new Path(output+"/"+inputPath.getParent().getName()+
           (pyramid? "" : ".png"));
@@ -167,11 +168,13 @@ public class HDFPlot {
         if (valueRange != null)
           plotArgs[vargs.size() + 2] =
             "valuerange:"+valueRange.minValue+","+valueRange.maxValue;
-        if (pyramid)
+        if (pyramid) {
           PlotPyramid.main(plotArgs);
-        else {
+          if (background)
+            jobs.add(Plot.lastSubmittedJob);
+        } else {
           Plot.main(plotArgs);
-          if (cla.is("background"))
+          if (background)
             jobs.add(Plot.lastSubmittedJob);
         }
       }
