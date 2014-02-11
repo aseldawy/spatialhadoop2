@@ -58,6 +58,44 @@ public class CommandLineArguments {
     this.args = args;
   }
   
+  public Configuration getConfiguration() {
+    Configuration conf = new Configuration();
+    Vector<String> paths = new Vector<String>();
+    for (String arg : args) {
+      if (arg.startsWith("-no-")) {
+        conf.setBoolean(arg.substring(4).toLowerCase(), false);
+      } else if (arg.startsWith("-")) {
+        conf.setBoolean(arg.substring(1).toLowerCase(), true);
+      } else if (arg.contains(":") && !arg.contains(":/")) {
+        String[] parts = arg.split(":", 2);
+        conf.set(parts[0].toLowerCase(), parts[1]);
+      } else {
+        paths.add(arg);
+      }
+    }
+
+    String allPaths = "";
+    String inputPaths = "";
+    String outputPath = "";
+    for (int i = 0; i < paths.size(); i++) {
+      String path = ',' + paths.get(i);
+      allPaths += path;
+      if (i == paths.size() - 1) {
+        outputPath = path;
+      } else {
+        inputPaths += path;
+      }
+    }
+    allPaths = allPaths.substring(1);
+    inputPaths = inputPaths.substring(1);
+    outputPath = outputPath.substring(1);
+    conf.set("all-paths", allPaths);
+    conf.set("input-paths", inputPaths);
+    conf.set("output-path", outputPath);
+    
+    return conf;
+  }
+  
   public Rectangle getRectangle() {
     Rectangle rect = null;
     for (String arg : args) {
