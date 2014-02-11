@@ -130,15 +130,15 @@ relations_with_shapes = FOREACH relations_by_role {
 };
 
 good_relations = FILTER relations_with_shapes BY shape is not null;
+bad_relations = FILTER relations_with_shapes BY shape is null;
 
 relation_objects = FOREACH good_relations
-  GENERATE relation_id AS id, ST_AsText(shape) AS shape, 'relation' AS source, tags;
+  GENERATE relation_id AS id, ST_AsText(shape) AS shape, tags;
 
 way_objects = FOREACH dangled_ways
-  GENERATE way_id AS id, ST_AsText(way_shape) AS shape, 'way' AS source,  way_tags AS tags;
+  GENERATE way_id AS id, ST_AsText(way_shape) AS shape,  way_tags AS tags;
 
 all_objects = UNION ONSCHEMA relation_objects, way_objects;
 
-STORE all_objects INTO 'gcc_admin_8';
-
-
+STORE all_objects INTO 'gcc_relations_dangled_ways';
+STORE bad_relations INTO 'gcc_bad_relations';

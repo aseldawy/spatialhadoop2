@@ -42,6 +42,7 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
@@ -61,6 +62,7 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
+import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
@@ -349,19 +351,6 @@ public class PlotPyramid {
       if (reducesOut.length == 0) {
         LOG.warn("No output files were written by reducers");
       } else {
-        for (FileStatus reduceOut : reducesOut) {
-          if (outFs.isFile(reduceOut.getPath()))
-            LOG.error("Output of each reducer should be a folder");
-          FileStatus[] imageFiles = outFs.listStatus(reduceOut.getPath(),
-              SpatialSite.NonHiddenFileFilter);
-          // Move all images to one folder
-          for (FileStatus imageFile : imageFiles) {
-            outFs.rename(imageFile.getPath(), outPath);
-          }
-          // Remove the, now empty, reduce output folder
-          outFs.delete(reduceOut.getPath(), false);
-        }
-        
         // Write a default empty image to be displayed for non-generated tiles
         int tileWidth = job.getInt(TileWidth, 256);
         int tileHeight = job.getInt(TileHeight, 256);
@@ -394,6 +383,8 @@ public class PlotPyramid {
     }
   }
 
+  private static RunningJob lastSubmittedJob;
+
   /**
    * Plot a file to a set of images in different zoom levels using a MapReduce
    * program.
@@ -408,9 +399,10 @@ public class PlotPyramid {
    * @param numLevels - Number of zoom levels to plot
    * @throws IOException
    */
-  public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
-      Shape shape, int tileWidth, int tileHeight, boolean vflip, Color color,
-      int numLevels, String hdfDataset, Rectangle plotRange, boolean keepAspectRatio) throws IOException {
+  public static <S extends Shape> RunningJob plotMapReduce(Path inFile,
+      Path outFile, Shape shape, int tileWidth, int tileHeight, boolean vflip,
+      Color color, int numLevels, String hdfDataset, Rectangle plotRange,
+      boolean keepAspectRatio, boolean background) throws IOException {
     JobConf job = new JobConf(PlotPyramid.class);
     job.setJobName("PlotPyramid");
     
@@ -474,14 +466,20 @@ public class PlotPyramid {
     TextOutputFormat.setOutputPath(job, outFile);
     job.setOutputCommitter(PlotPyramidOutputCommitter.class);
     
-    JobClient.runJob(job);
+    if (background) {
+      JobClient jc = new JobClient(job);
+      return lastSubmittedJob = jc.submitJob(job);
+    } else {
+      return lastSubmittedJob = JobClient.runJob(job);
+    }
+
   }
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, S shape,
       int tileWidth, int tileHeight, boolean vflip, Color color, int numLevels,
-      String hdfDataset, Rectangle plotRange, boolean keepAspectRatio)
+      String hdfDataset, Rectangle plotRange, boolean keepAspectRatio, boolean background)
           throws IOException {
-    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, plotRange, keepAspectRatio);
+    plotMapReduce(inFile, outFile, shape, tileWidth, tileHeight, vflip, color, numLevels, hdfDataset, plotRange, keepAspectRatio, background);
   }
 
   
@@ -523,13 +521,14 @@ public class PlotPyramid {
     Color color = cla.getColor();
     
     String hdfDataset = cla.get("dataset");
-    Shape shape = hdfDataset != null ? new NASAPoint() : cla.getShape(true);
+    Shape shape = hdfDataset != null ? new NASARectangle() : cla.getShape(true);
     Rectangle plotRange = cla.getRectangle();
 
     boolean keepAspectRatio = cla.is("keep-ratio", true);
+    boolean background = cla.is("background");
     
     plot(inFile, outFile, shape, tileWidth, tileHeight, vflip, color,
-        numLevels, hdfDataset, plotRange, keepAspectRatio);
+        numLevels, hdfDataset, plotRange, keepAspectRatio, background);
   }
 
 }

@@ -74,7 +74,7 @@ public class PyramidOutputFormat extends FileOutputFormat<TileIndex, ImageWritab
       FileSystem ignored, JobConf job, String name, Progressable progress)
       throws IOException {
     this.progress = progress;
-    Path file = FileOutputFormat.getTaskOutputPath(job, name);
+    Path file = FileOutputFormat.getTaskOutputPath(job, name).getParent();
     FileSystem fs = file.getFileSystem(job);
 
     return new ImageRecordWriter(file, fs);

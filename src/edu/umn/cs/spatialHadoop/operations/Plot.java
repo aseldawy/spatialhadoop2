@@ -270,7 +270,7 @@ public class Plot {
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
   
-  public static <S extends Shape> void plotMapReduce(Path inFile, Path outFile,
+  public static <S extends Shape> RunningJob plotMapReduce(Path inFile, Path outFile,
       Shape shape, int width, int height, boolean vflip, Color color, MinMax valueRange,
       boolean showBorders, String hdfDataset, Shape range,
       boolean keepAspectRatio, boolean background) throws IOException {
@@ -313,6 +313,8 @@ public class Plot {
       if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
         // Fix width and change height
         height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
+        // Make divisible by two for compatability with ffmpeg
+        height &= 0xfffffffe;
       } else {
         width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
       }
@@ -348,9 +350,9 @@ public class Plot {
     
     if (background) {
       JobClient jc = new JobClient(job);
-      lastSubmittedJob = jc.submitJob(job);
+      return lastSubmittedJob = jc.submitJob(job);
     } else {
-      lastSubmittedJob = JobClient.runJob(job);
+      return lastSubmittedJob = JobClient.runJob(job);
     }
   }
   
@@ -451,8 +453,11 @@ public class Plot {
           new FileSplit(inFile, 0, fileLength, new String[0]));
       Rectangle cell = reader.createKey();
       while (reader.next(cell, shape)) {
-        if (plotRange == null || shape.isIntersected(plotRange))
-          shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+        Rectangle shapeMBR = shape.getMBR();
+        if (shapeMBR != null) {
+          if (plotRange == null || shapeMBR.isIntersected(plotRange))
+            shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+        }
       }
       reader.close();
       // Write image to output
