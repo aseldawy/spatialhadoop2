@@ -346,7 +346,7 @@ public class RecoverHoles {
     }
     boolean addDate = cla.is("adddate");
     long t1 = System.currentTimeMillis();
-    //recoverInterpolation(dir);
+    recoverInterpolation(dir);
     if (addDate) {
       System.out.println("Adding dates");
       addDate(dir);
