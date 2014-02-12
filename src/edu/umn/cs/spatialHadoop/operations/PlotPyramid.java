@@ -351,19 +351,6 @@ public class PlotPyramid {
       if (reducesOut.length == 0) {
         LOG.warn("No output files were written by reducers");
       } else {
-        for (FileStatus reduceOut : reducesOut) {
-          if (outFs.isFile(reduceOut.getPath()))
-            LOG.error("Output of each reducer should be a folder");
-          FileStatus[] imageFiles = outFs.listStatus(reduceOut.getPath(),
-              SpatialSite.NonHiddenFileFilter);
-          // Move all images to one folder
-          for (FileStatus imageFile : imageFiles) {
-            outFs.rename(imageFile.getPath(), outPath);
-          }
-          // Remove the, now empty, reduce output folder
-          outFs.delete(reduceOut.getPath(), false);
-        }
-        
         // Write a default empty image to be displayed for non-generated tiles
         int tileWidth = job.getInt(TileWidth, 256);
         int tileHeight = job.getInt(TileHeight, 256);
