@@ -438,7 +438,7 @@ public class RangeQuery {
       throw new RuntimeException("Input file does not exist");
     }
     final Path outputPath = paths.length > 1 ? paths[1] : null;
-    final Rectangle[] queryRanges = cla.getRectangles();
+    final Rectangle[] queryRanges = cla.getShapes("rect", new Rectangle());
     int concurrency = cla.getInt("concurrency", 1);
     final Shape stockShape = cla.getShape("shape");
     final boolean overwrite = cla.is("overwrite");

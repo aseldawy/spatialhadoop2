@@ -14,6 +14,7 @@ package edu.umn.cs.spatialHadoop;
 
 import java.awt.Color;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -59,7 +60,13 @@ public class CommandLineArguments extends Configuration {
         this.setBoolean(argl.substring(1), true);
       } else if (argl.contains(":") && !argl.contains(":/")) {
         String[] parts = arg.split(":", 2);
-        this.set(parts[0].toLowerCase(), parts[1]);
+        String key = parts[0].toLowerCase();
+        String value = parts[1];
+        String previousValue = this.get(key);
+        if (previousValue == null)
+          this.set(key, value);
+        else
+          this.set(key, previousValue+"\n"+value);
       } else {
         paths.add(new Path(arg));
       }
@@ -172,12 +179,12 @@ public class CommandLineArguments extends Configuration {
    * @return <code>true</code> if all checks pass. <code>false</code> otherwise.
    * @throws IOException 
    */
-  public boolean checkInputOutput(Configuration conf) throws IOException {
+  public boolean checkInputOutput() throws IOException {
     Path[] inputPaths = getInputPaths();
     for (Path path : inputPaths) {
       if (isWildcard(path))
         continue;
-      FileSystem fs = path.getFileSystem(conf);
+      FileSystem fs = path.getFileSystem(this);
       if (!fs.exists(path)) {
         LOG.error("Input file '"+path+"' does not exist");
         return false;
@@ -185,7 +192,7 @@ public class CommandLineArguments extends Configuration {
     }
     Path outputPath = getOutputPath();
     if (outputPath != null) {
-      FileSystem fs = outputPath.getFileSystem(conf);
+      FileSystem fs = outputPath.getFileSystem(this);
       if (fs.exists(outputPath)) {
         if (this.is("overwrite")) {
           fs.delete(outputPath, true);
@@ -285,6 +292,39 @@ public class CommandLineArguments extends Configuration {
   
   public Shape getShape(String key) {
     return getShape(key, null);
+  }
+
+  public <S extends Shape> S[] getShapes(String key, S stock) {
+    String[] values = getArray(key);
+    S[] shapes = (S[]) Array.newInstance(stock.getClass(), values.length);
+    for (int i = 0; i < values.length; i++) {
+      shapes[i] = (S) stock.clone();
+      shapes[i].fromText(new Text(values[i]));
+    }
+    return shapes;
+  }
+  
+  private String[] getArray(String key) {
+    String val = get(key);
+    return val == null ? null : val.split("\n");
+  }
+
+  public long getSize(String key) {
+    String size_str = get(key);
+    if (size_str.indexOf('.') == -1)
+      return Long.parseLong(size_str);
+    String[] size_parts = size_str.split("\\.", 2);
+    long size = Long.parseLong(size_parts[0]);
+    size_parts[1] = size_parts[1].toLowerCase();
+    if (size_parts[1].startsWith("k"))
+      size *= 1024;
+    else if (size_parts[1].startsWith("m"))
+      size *= 1024 * 1024;
+    else if (size_parts[1].startsWith("g"))
+      size *= 1024 * 1024 * 1024;
+    else if (size_parts[1].startsWith("t"))
+      size *= 1024 * 1024 * 1024 * 1024;
+    return size;
   }
 
 }

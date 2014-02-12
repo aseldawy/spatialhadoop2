@@ -150,7 +150,7 @@ public class LineRandomizer {
     CommandLineArguments cla = new CommandLineArguments(args);
     Path inputFile = cla.getPaths()[0];
     Path outputFile = cla.getPaths()[1];
-    boolean overwrite = cla.isOverwrite();
+    boolean overwrite = cla.is("overwrite");
     randomizerMapReduce(inputFile, outputFile, overwrite);
   }
 

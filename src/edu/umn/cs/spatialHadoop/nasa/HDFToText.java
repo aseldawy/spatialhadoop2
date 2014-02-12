@@ -126,7 +126,7 @@ public class HDFToText {
       return;
     }
     
-    boolean overwrite = cla.isOverwrite();
+    boolean overwrite = cla.is("overwrite");
     FileSystem outFs = outPath.getFileSystem(conf);
     if (outFs.exists(outPath)) {
       if (overwrite)

@@ -515,8 +515,7 @@ public class PlotPyramid {
   public static void main(String[] args) throws IOException {
     System.setProperty("java.awt.headless", "true");
     CommandLineArguments cla = new CommandLineArguments(args);
-    JobConf conf = new JobConf(PlotPyramid.class);
-    if (!cla.checkInputOutput(conf)) {
+    if (!cla.checkInputOutput()) {
       printUsage();
       return;
     }

@@ -314,8 +314,8 @@ public class SJMR {
     }
 
     Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
-    boolean overwrite = cla.isOverwrite();
-    Shape stockShape = cla.getShape(true);
+    boolean overwrite = cla.is("overwrite");
+    Shape stockShape = cla.getShape("shape");
     long t1 = System.currentTimeMillis();
     long resultSize = sjmr(fs, inputFiles, outputPath, stockShape, overwrite);
     long t2 = System.currentTimeMillis();

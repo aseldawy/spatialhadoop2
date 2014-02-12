@@ -323,12 +323,12 @@ public class Union {
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(Union.class);
     Path[] allFiles = cla.getPaths();
-    boolean local = cla.isLocal();
-    boolean overwrite = cla.isOverwrite();
+    boolean local = cla.is("local");
+    boolean overwrite = cla.is("overwrite");
     if (allFiles.length == 0) {
       if (local) {
         long t1 = System.currentTimeMillis();
-        unionStream((JTSShape)cla.getShape(true));
+        unionStream((JTSShape)cla.getShape("shape"));
         long t2 = System.currentTimeMillis();
         System.err.println("Total time for union: "+(t2-t1)+" millis");
         return;
@@ -346,7 +346,7 @@ public class Union {
       }
     }
     
-    JTSShape shape = (JTSShape) cla.getShape(true);
+    JTSShape shape = (JTSShape) cla.getShape("shape");
 
     long t1 = System.currentTimeMillis();
     if (local) {
