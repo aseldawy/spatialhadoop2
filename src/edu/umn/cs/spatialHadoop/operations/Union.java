@@ -22,6 +22,7 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -43,6 +44,7 @@ import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.JTSShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
@@ -110,16 +112,19 @@ public class Union {
   
   /**
    * Calculates the union of a set of shapes.
-   * @param shapeFile - Input file that contains shapes
+   * @param inFile - Input file that contains shapes
    * @param output - An output file that contains each category and the union
    *  of all shapes in it. Each line contains the category, then a comma,
    *   then the union represented as text.
    * @throws IOException
    */
-  public static void unionMapReduce(Path shapeFile,
-      Path output, JTSShape shape, boolean overwrite) throws IOException {
+  public static void unionMapReduce(Path inFile, Path output,
+      CommandLineArguments params) throws IOException {
     JobConf job = new JobConf(Union.class);
     job.setJobName("Union");
+    boolean overwrite = params.is("overwrite");
+    Shape shape = new JTSShape();
+    params.setClass("shape", shape.getClass(), Shape.class);
 
     // Check output file existence
     FileSystem outFs = output.getFileSystem(job);
@@ -131,7 +136,7 @@ public class Union {
       }
     }
     
-    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(shapeFile.getFileSystem(job), shapeFile);
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFile.getFileSystem(job), inFile);
     int reduceBuckets = 1;
     if (gindex != null) {
       int groups = Math.max(1, (int) Math.sqrt(gindex.size() / 4));
@@ -187,7 +192,7 @@ public class Union {
       SpatialSite.setCells(job, unionGroups);
       reduceBuckets = unionGroups.length;
     } else {
-      Rectangle mbr = FileMBR.fileMBR(shapeFile.getFileSystem(job), shapeFile, shape);
+      Rectangle mbr = FileMBR.fileMBR(inFile.getFileSystem(job), inFile, params);
       CellInfo[] unionGroups = new CellInfo[1];
       unionGroups[0] = new CellInfo(1, mbr);
       SpatialSite.setCells(job, unionGroups);
@@ -209,7 +214,7 @@ public class Union {
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
     SpatialSite.setShapeClass(job, shape.getClass());
-    TextInputFormat.addInputPath(job, shapeFile);
+    TextInputFormat.addInputPath(job, inFile);
     
     job.setOutputFormat(GridOutputFormat.class);
     GridOutputFormat.setOutputPath(job, output);
@@ -280,18 +285,19 @@ public class Union {
    * @return
    * @throws IOException
    */
-  public static Geometry unionLocal(Path shapeFile, JTSShape shape)
+  public static Geometry unionLocal(Path inFile, CommandLineArguments params)
       throws IOException {
+    JTSShape shape = new JTSShape();
     // Read shapes from the shape file and relate each one to a category
     
     // Prepare a hash that stores all shapes
     Vector<Geometry> shapes = new Vector<Geometry>();
     
-    FileSystem fs1 = shapeFile.getFileSystem(new Configuration());
-    long file_size1 = fs1.getFileStatus(shapeFile).getLen();
+    FileSystem fs1 = inFile.getFileSystem(new Configuration());
+    long file_size1 = fs1.getFileStatus(inFile).getLen();
     
     ShapeRecordReader<JTSShape> shapeReader =
-        new ShapeRecordReader<JTSShape>(fs1.open(shapeFile), 0, file_size1);
+        new ShapeRecordReader<JTSShape>(fs1.open(inFile), 0, file_size1);
     CellInfo cellInfo = new CellInfo();
 
     while (shapeReader.next(cellInfo, shape)) {
@@ -315,20 +321,32 @@ public class Union {
     System.out.println("<output file>: (*) Path to output file.");
   }
 
+  public static void union(Path inFile, Path outFile,
+      CommandLineArguments params) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(params);
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    boolean autoLocal = !(inFStatus.isDir() ||
+        inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    Boolean isLocal = params.is("local", autoLocal);
+    
+    if (isLocal) {
+      unionLocal(inFile, params);
+    } else {
+      unionMapReduce(inFile, outFile, params);
+    }
+  }
+
+
   /**
    * @param args
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    JobConf conf = new JobConf(Union.class);
-    Path[] allFiles = cla.getPaths();
-    boolean local = cla.is("local");
-    boolean overwrite = cla.is("overwrite");
-    if (allFiles.length == 0) {
-      if (local) {
+    CommandLineArguments params = new CommandLineArguments(args);
+    if (params.getPaths().length == 0) {
+      if (params.is("local")) {
         long t1 = System.currentTimeMillis();
-        unionStream((JTSShape)cla.getShape("shape"));
+        unionStream((JTSShape)params.getShape("shape"));
         long t2 = System.currentTimeMillis();
         System.err.println("Total time for union: "+(t2-t1)+" millis");
         return;
@@ -337,23 +355,16 @@ public class Union {
       throw new RuntimeException("Illegal arguments. Input file missing");
     }
     
-    for (int i = 0; i < allFiles.length - 1; i++) {
-      Path inputFile = allFiles[i];
-      FileSystem fs = inputFile.getFileSystem(conf);
-      if (!fs.exists(inputFile)) {
-        printUsage();
-        throw new RuntimeException("Input file '"+inputFile+"' does not exist");
-      }
+    if (!params.checkInputOutput()) {
+      printUsage();
+      return;
     }
-    
-    JTSShape shape = (JTSShape) cla.getShape("shape");
 
+    Path inputPath = params.getInputPath();
+    Path outputPath = params.getOutputPath();
+    
     long t1 = System.currentTimeMillis();
-    if (local) {
-      unionLocal(allFiles[0], shape);
-    } else {
-      unionMapReduce(allFiles[0], allFiles[1], shape, overwrite);
-    }
+    union(inputPath, outputPath, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }
