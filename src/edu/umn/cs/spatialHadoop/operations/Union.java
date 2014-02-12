@@ -35,13 +35,18 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextInputFormat;
 
+import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
+import com.esri.core.geometry.ogc.OGCGeometry;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
+import com.vividsolutions.jts.io.ParseException;
+import com.vividsolutions.jts.io.WKTReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.JTSShape;
+import edu.umn.cs.spatialHadoop.core.OGCShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -287,30 +292,49 @@ public class Union {
    */
   public static Geometry unionLocal(Path inFile, CommandLineArguments params)
       throws IOException {
-    JTSShape shape = new JTSShape();
+    Shape shape = params.getShape("shape");
     // Read shapes from the shape file and relate each one to a category
     
     // Prepare a hash that stores all shapes
-    Vector<Geometry> shapes = new Vector<Geometry>();
+    Vector shapes;
+    if (shape instanceof JTSShape) {
+      shapes = new Vector<Geometry>();
+    } else if (shape instanceof OGCShape) {
+      shapes = new Vector<OGCGeometry>();
+    } else {
+      throw new RuntimeException("Cannot union shapes of type '"+shape.getClass()+"'");
+    }
     
-    FileSystem fs1 = inFile.getFileSystem(new Configuration());
-    long file_size1 = fs1.getFileStatus(inFile).getLen();
+    FileSystem fs = inFile.getFileSystem(new Configuration());
+    long file_size = fs.getFileStatus(inFile).getLen();
     
-    ShapeRecordReader<JTSShape> shapeReader =
-        new ShapeRecordReader<JTSShape>(fs1.open(inFile), 0, file_size1);
-    CellInfo cellInfo = new CellInfo();
+    ShapeRecordReader<Shape> shapeReader =
+        new ShapeRecordReader<Shape>(fs.open(inFile), 0, file_size);
+    Rectangle partition = new Rectangle();
 
-    while (shapeReader.next(cellInfo, shape)) {
-      shapes.add(shape.geom);
+    while (shapeReader.next(partition, shape)) {
+      if (shape instanceof JTSShape)
+        shapes.add(((JTSShape)shape).geom);
+      else if (shape instanceof OGCShape)
+        shapes.add(((OGCShape)shape).geom);
     }
     shapeReader.close();
 
     // Find the union of all shapes
-    GeometryCollection all_geoms = new GeometryCollection(shapes.toArray(new Geometry[shapes.size()]), shapes.firstElement().getFactory());
-
-    Geometry union = all_geoms.buffer(0);
-    
-    return union;
+    if (shape instanceof JTSShape) {
+      GeometryCollection all_geoms = new GeometryCollection((Geometry[])shapes.toArray(new Geometry[shapes.size()]), ((Geometry)shapes.firstElement()).getFactory());
+      
+      Geometry union = all_geoms.buffer(0);
+      return union;
+    } else {
+      OGCConcreteGeometryCollection all_geoms = new OGCConcreteGeometryCollection(shapes, ((OGCGeometry)shapes.firstElement()).getEsriSpatialReference());
+      OGCGeometry union = all_geoms.union((OGCGeometry)shapes.firstElement());
+      try {
+        return new WKTReader().read(union.asText());
+      } catch (ParseException e) {
+        throw new RuntimeException("Error converting result", e);
+      }
+    }
   }
 
   private static void printUsage() {
