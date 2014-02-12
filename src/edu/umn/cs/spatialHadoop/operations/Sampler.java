@@ -591,15 +591,15 @@ public class Sampler {
       throw new RuntimeException("Input file does not exist");
     }
     
-    int count = cla.getCount();
-    long size = cla.getSize();
-    double ratio = cla.getSelectionRatio();
-    long seed = cla.getSeed();
-    TextSerializable stockObject = cla.getShape(true);
+    int count = cla.getInt("count", 1);
+    long size = cla.getSize("size");
+    double ratio = cla.getFloat("ratio", -1.0f);
+    long seed = cla.getLong("seed", System.currentTimeMillis());
+    TextSerializable stockObject = cla.getShape("shape");
     if (stockObject == null)
       stockObject = new Text2();
 
-    TextSerializable outputShape = cla.getOutputShape();
+    TextSerializable outputShape = cla.getShape("outshape");
     if (outputShape == null)
       outputShape = new Text2();
     

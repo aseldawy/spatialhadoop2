@@ -167,8 +167,8 @@ public class Tail {
     if (!fs.exists(inputFile)) {
       throw new RuntimeException("Input file does not exist");
     }
-    int count = cla.getCount();
-    TextSerializable stockObject = cla.getShape(true);
+    int count = cla.getInt("count", 10);
+    TextSerializable stockObject = cla.getShape("shape");
     if (stockObject == null)
       stockObject = new Text2();
 

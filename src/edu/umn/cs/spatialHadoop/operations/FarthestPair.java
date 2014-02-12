@@ -480,9 +480,9 @@ public class FarthestPair {
     CommandLineArguments cla = new CommandLineArguments(args);
     Path[] paths = cla.getPaths();
     if (paths.length == 0) {
-      if (cla.isLocal()) {
+      if (cla.is("local")) {
         long t1 = System.currentTimeMillis();
-        farthestPairStream((Point)cla.getShape(true));
+        farthestPairStream((Point)cla.getShape("shape"));
         long t2 = System.currentTimeMillis();
         System.out.println("Total time: "+(t2-t1)+" millis");
       } else {
@@ -492,14 +492,14 @@ public class FarthestPair {
     }
     Path inFile = paths[0];
     Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = cla.isOverwrite();
+    boolean overwrite = cla.is("overwrite");
     if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
       System.err.println("Output path already exists and overwrite flag is not set");
       return;
     }
     
     long t1 = System.currentTimeMillis();
-    farthestPairMapReduce(inFile, outFile, cla.isOverwrite());
+    farthestPairMapReduce(inFile, outFile, cla.is("overwrite"));
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }

@@ -227,8 +227,8 @@ public class RecordCount {
     if (!fs.exists(inputFile)) {
       throw new RuntimeException("Input file does not exist");
     }
-    boolean local = cla.isLocal();
-    boolean random = cla.isRandom();
+    boolean local = cla.is("local");
+    boolean random = cla.is("random");
     long lineCount;
     if (local) {
       if (random) {

@@ -14,6 +14,7 @@ package edu.umn.cs.spatialHadoop;
 
 import java.awt.Color;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -23,19 +24,13 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 
-import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.OGCShape;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
 
 
 /**
@@ -43,10 +38,11 @@ import edu.umn.cs.spatialHadoop.operations.Sampler;
  * @author Ahmed Eldawy
  *
  */
-public class CommandLineArguments {
+public class CommandLineArguments extends Configuration {
   private static final Log LOG = LogFactory.getLog(CommandLineArguments.class);
-  
-  private String[] args;
+
+  /**All detected input paths*/
+  private Path[] allPaths;
 
   static {
     // Load configuration from files
@@ -54,129 +50,56 @@ public class CommandLineArguments {
     Configuration.addDefaultResource("spatial-site.xml");
   }
   
-  public CommandLineArguments(String[] args) {
-    this.args = args;
-  }
-  
-  public Configuration getConfiguration() {
-    Configuration conf = new Configuration();
-    Vector<String> paths = new Vector<String>();
+  public CommandLineArguments(String... args) {
+    Vector<Path> paths = new Vector<Path>();
     for (String arg : args) {
+      String argl = arg.toLowerCase();
       if (arg.startsWith("-no-")) {
-        conf.setBoolean(arg.substring(4).toLowerCase(), false);
-      } else if (arg.startsWith("-")) {
-        conf.setBoolean(arg.substring(1).toLowerCase(), true);
-      } else if (arg.contains(":") && !arg.contains(":/")) {
+        this.setBoolean(argl.substring(4), false);
+      } else if (argl.startsWith("-")) {
+        this.setBoolean(argl.substring(1), true);
+      } else if (argl.contains(":") && !argl.contains(":/")) {
         String[] parts = arg.split(":", 2);
-        conf.set(parts[0].toLowerCase(), parts[1]);
+        String key = parts[0].toLowerCase();
+        String value = parts[1];
+        String previousValue = this.get(key);
+        if (previousValue == null)
+          this.set(key, value);
+        else
+          this.set(key, previousValue+"\n"+value);
       } else {
-        paths.add(arg);
+        paths.add(new Path(arg));
       }
     }
-
-    String allPaths = "";
-    String inputPaths = "";
-    String outputPath = "";
-    for (int i = 0; i < paths.size(); i++) {
-      String path = ',' + paths.get(i);
-      allPaths += path;
-      if (i == paths.size() - 1) {
-        outputPath = path;
-      } else {
-        inputPaths += path;
-      }
-    }
-    allPaths = allPaths.substring(1);
-    inputPaths = inputPaths.substring(1);
-    outputPath = outputPath.substring(1);
-    conf.set("all-paths", allPaths);
-    conf.set("input-paths", inputPaths);
-    conf.set("output-path", outputPath);
-    
-    return conf;
-  }
-  
-  public Rectangle getRectangle() {
-    Rectangle rect = null;
-    for (String arg : args) {
-      if (arg.startsWith("rect:") || arg.startsWith("rectangle:") || arg.startsWith("mbr:")) {
-        rect = new Rectangle();
-        rect.fromText(new Text(arg.substring(arg.indexOf(':')+1)));
-      }
-    }
-    return rect;
-  }
-  
-  public Rectangle[] getRectangles() {
-    Vector<Rectangle> rectangles = new Vector<Rectangle>();
-    for (String arg : args) {
-      if (arg.startsWith("rect:") || arg.startsWith("rectangle:") || arg.startsWith("mbr:")) {
-        Rectangle rect = new Rectangle();
-        rect.fromText(new Text(arg.substring(arg.indexOf(':')+1)));
-        rectangles.add(rect);
-      }
-    }
-    return rectangles.toArray(new Rectangle[rectangles.size()]);
+    this.allPaths = paths.toArray(new Path[paths.size()]);
   }
   
   public Path[] getPaths() {
-    Vector<Path> inputPaths = new Vector<Path>();
-    for (String arg : args) {
-      if (arg.startsWith("-") && arg.length() > 1) {
-        // Skip
-      } else if (arg.indexOf(':') != -1 && arg.indexOf(":/") == -1) {
-        // Skip
-      } else {
-        inputPaths.add(new Path(arg));
-      }
-    }
-    return inputPaths.toArray(new Path[inputPaths.size()]);
+    return allPaths;
   }
   
   public Path getPath() {
-    Path[] paths = getPaths();
-    return paths.length > 0? paths[0] : null;
+    return allPaths.length > 0 ? allPaths[0] : null;
   }
   
-  public GridInfo getGridInfo() {
-    GridInfo grid = null;
-    for (String arg : args) {
-      if (arg.startsWith("grid:")) {
-        grid = new GridInfo();
-        grid.fromText(new Text(arg.substring(arg.indexOf(':')+1)));
-      }
-    }
-    return grid;
+  public Path getOutputPath() {
+    return allPaths.length > 1 ? allPaths[allPaths.length - 1] : null;
   }
 
-  public Point getPoint() {
-    Point point = null;
-    for (String arg : args) {
-      if (arg.startsWith("point:")) {
-        point = new Point();
-        point.fromText(new Text(arg.substring(arg.indexOf(':')+1)));
-      }
-    }
-    return point;
+  public Path getInputPath() {
+    return getPath();
   }
 
-  public Point[] getPoints() {
-    Vector<Point> points = new Vector<Point>();
-    for (String arg : args) {
-      if (arg.startsWith("point:")) {
-        Point point = new Point();
-        point.fromText(new Text(arg.substring(arg.indexOf(':')+1)));
-        points.add(point);
-      }
+  public Path[] getInputPaths() {
+    if (allPaths.length < 2) {
+      return allPaths;
     }
-    return points.toArray(new Point[points.size()]);
+    Path[] inputPaths = new Path[allPaths.length - 1];
+    System.arraycopy(allPaths, 0, inputPaths, 0, inputPaths.length);
+    return inputPaths;
   }
 
-  public boolean isOverwrite() {
-    return is("overwrite");
-  }
-  
-  public long getSize() {
+/*  public long getSize() {
     for (String arg : args) {
       if (arg.startsWith("size:")) {
         String size_str = arg.split(":")[1];
@@ -198,68 +121,16 @@ public class CommandLineArguments {
     }
     return 0;
   }
+*/
+  public boolean is(String flag, boolean defaultValue) {
+    return getBoolean(flag, defaultValue);
+  }
 
-  public boolean isRandom() {
-    return is("random");
-  }
-  
-  public boolean isLocal() {
-    return is("local");
-  }
-  
   public boolean is(String flag) {
     return is(flag, false);
   }
-  
-  public boolean is(String flag, boolean defaultValue) {
-    String expected_true = "-"+flag;
-    String expected_false = "-no-"+flag;
-    for (String arg : args) {
-      if (arg.equals(expected_true))
-        return true;
-      if (arg.equals(expected_false))
-        return false;
-    }
-    return defaultValue;
-  }
 
-  public int getCount() {
-    for (String arg : args) {
-      if (arg.startsWith("count:")) {
-        return Integer.parseInt(arg.substring(arg.indexOf(':')+1));
-      }
-    }
-    return 1;
-  }
-  
-  public int getK() {
-    for (String arg : args) {
-      if (arg.startsWith("k:")) {
-        return Integer.parseInt(arg.substring(arg.indexOf(':')+1));
-      }
-    }
-    return 0;
-  }
-
-  public float getSelectionRatio() {
-    for (String arg : args) {
-      if (arg.startsWith("ratio:")) {
-        return Float.parseFloat(arg.substring(arg.indexOf(':')+1));
-      }
-    }
-    return -1.0f;
-  }
-
-  public int getConcurrency() {
-    for (String arg : args) {
-      if (arg.startsWith("concurrency:")) {
-        return Integer.parseInt(arg.substring(arg.indexOf(':')+1));
-      }
-    }
-    return Integer.MAX_VALUE;
-  }
-
-  public long getBlockSize() {
+/*  public long getBlockSize() {
     for (String arg : args) {
       if (arg.startsWith("blocksize:") || arg.startsWith("block_size:")) {
         String size_str = arg.split(":")[1];
@@ -281,109 +152,10 @@ public class CommandLineArguments {
     }
     return 0;
   }
+*/  
   
-  /**
-   * Finds any parameters that has with the given key name. If the value does
-   * not exist, return null.
-   * @param key
-   * @return
-   */
-  public String get(String key) {
-    return get(key, null);
-  }
-  
-  /**
-   * Return the command with the given key. If the key does not exist,
-   * the default value is returned.
-   * @param key
-   * @param defaultValue
-   * @return
-   */
-  public String get(String key, String defaultValue) {
-    key = key.toLowerCase() +":";
-    for (String arg : args) {
-      if (arg.toLowerCase().startsWith(key)) {
-        return arg.substring(arg.indexOf(':')+1);
-      }
-    }
-    return defaultValue;
-  }
-  
-  public int getInt(String key, int defaultValue) {
-    String valstr = get(key);
-    return valstr == null ? defaultValue : Integer.parseInt(valstr);
-  }
-  
-  /**
-   * 
-   * @param autodetect - Automatically detect shape type from input file
-   *   if shape is not explicitly set by user
-   * @return
-   */
-  public Shape getShape(boolean autodetect) {
-    String shapeTypeStr = get("shape");
-    final Text shapeType = new Text();
-    if (shapeTypeStr != null)
-      shapeType.set(shapeTypeStr.toLowerCase().getBytes());
-    
-    if (autodetect && shapeType.getLength() == 0 && getPath() != null) {
-      // Shape type not found in parameters. Try to infer from a line in input
-      // file
-      Path in_file = getPath();
-      try {
-        Sampler.sampleLocal(in_file.getFileSystem(new Configuration()), in_file, 1, 0, new ResultCollector<Text2>() {
-          @Override
-          public void collect(Text2 value) {
-            String val = value.toString();
-            String[] parts = val.split(",");
-            if (parts.length == 2) {
-              shapeType.set("point".getBytes());
-            } else if (parts.length == 4) {
-              shapeType.set("rect".getBytes());
-            } else if (parts.length > 4) {
-              shapeType.set("tiger".getBytes());
-            }
-          }
-        }, new Text2(), new Text2());
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-    }
-
-    Shape stockShape = null;
-    if (shapeType.toString().startsWith("rect")) {
-      stockShape = new Rectangle();
-    } else if (shapeType.toString().startsWith("point")) {
-      stockShape = new Point();
-    } else if (shapeType.toString().startsWith("tiger")) {
-      stockShape = new TigerShape();
-    } else if (shapeType.toString().startsWith("osm")) {
-      stockShape = new OSMPolygon();
-    } else if (shapeType.toString().startsWith("poly")) {
-      stockShape = new Polygon();
-    } else if (shapeType.toString().startsWith("ogc")) {
-      stockShape = new OGCShape();
-    } else if (shapeType.toString().startsWith("nasa")) {
-      stockShape = new NASAPoint();
-    } else if (shapeTypeStr != null) {
-      // Use the shapeType as a class name and try to instantiate it dynamically
-      try {
-        Class<? extends Shape> shapeClass =
-            Class.forName(shapeTypeStr).asSubclass(Shape.class);
-        stockShape = shapeClass.newInstance();
-      } catch (ClassNotFoundException e) {
-      } catch (InstantiationException e) {
-      } catch (IllegalAccessException e) {
-      }
-    }
-    if (stockShape == null)
-      LOG.warn("unknown shape type: "+shapeTypeStr);
-    
-    return stockShape;
-  }
-  
-  public CellInfo[] getCells() {
-    String cell_of = get("cells-of");
+/*  public CellInfo[] getCells() {
+    String cell_of = (String) get("cells-of");
     if (cell_of == null)
       return null;
     Path path = new Path(cell_of);
@@ -396,86 +168,55 @@ public class CommandLineArguments {
     }
     return null;
   }
-  
+ */ 
 
-  public long getSeed() {
-    String seed = get("seed");
-    return seed == null? System.currentTimeMillis() : Long.parseLong(seed);
-  }
-
-  public int getRectSize() {
-    String rectSize = get("rectsize");
-    return rectSize == null? 0 : Integer.parseInt(rectSize);
-  }
-
-  public double getClosenessFactor() {
-    String factor = get("closeness");
-    return factor == null? -1.0 : Double.parseDouble(factor);
-  }
-  
-  public long getOffset() {
-    String offset = get("offset");
-    return offset == null? -1 : Long.parseLong(offset);
-  }
-
-  public boolean isBorders() {
-    return is("borders");
-  }
-
-  public int getWidth(int default_width) {
-    String width = get("width");
-    return width == null ? default_width : Integer.parseInt(width);
-  }
-
-  public int getHeight(int default_height) {
-    String height = get("height");
-    return height == null ? default_height : Integer.parseInt(height);
-  }
-
-  public Shape getOutputShape() {
-    String shapeTypeStr = get("outshape");
-    if (shapeTypeStr == null)
-      shapeTypeStr = get("outputshape");
-    if (shapeTypeStr == null)
-      shapeTypeStr = get("output_shape");
-    final Text shapeType = new Text();
-    if (shapeTypeStr != null)
-      shapeType.set(shapeTypeStr.toLowerCase().getBytes());
-    
-    Shape stockShape = null;
-    if (shapeType.toString().startsWith("rect")) {
-      stockShape = new Rectangle();
-    } else if (shapeType.toString().startsWith("point")) {
-      stockShape = new Point();
-    } else if (shapeType.toString().startsWith("tiger")) {
-      stockShape = new TigerShape();
-    } else if (shapeType.toString().startsWith("poly")) {
-      stockShape = new Polygon();
-    } else if (shapeType.toString().startsWith("ogc")) {
-      stockShape = new OGCShape();
-    } else if (shapeTypeStr != null) {
-      // Use the shapeType as a class name and try to instantiate it dynamically
-      try {
-        Class<? extends Shape> shapeClass =
-            Class.forName(shapeTypeStr).asSubclass(Shape.class);
-        stockShape = shapeClass.newInstance();
-      } catch (ClassNotFoundException e) {
-      } catch (InstantiationException e) {
-      } catch (IllegalAccessException e) {
+  /**
+   * Makes standard checks for input and output files. It is assumed that all
+   * files are input files while the last one is the output file. First,
+   * it checks that there is at least one input file. Then, it checks that every
+   * input file exists. After that, it checks for output file, if it exists and
+   * the overwrite flag is not present, it fails.
+   * @return <code>true</code> if all checks pass. <code>false</code> otherwise.
+   * @throws IOException 
+   */
+  public boolean checkInputOutput() throws IOException {
+    Path[] inputPaths = getInputPaths();
+    for (Path path : inputPaths) {
+      if (isWildcard(path))
+        continue;
+      FileSystem fs = path.getFileSystem(this);
+      if (!fs.exists(path)) {
+        LOG.error("Input file '"+path+"' does not exist");
+        return false;
       }
     }
-    if (stockShape == null)
-      LOG.warn("unknown shape type: "+shapeTypeStr);
-    
-    return stockShape;
+    Path outputPath = getOutputPath();
+    if (outputPath != null) {
+      FileSystem fs = outputPath.getFileSystem(this);
+      if (fs.exists(outputPath)) {
+        if (this.is("overwrite")) {
+          fs.delete(outputPath, true);
+        } else {
+          LOG.error("Output file '"+outputPath+"' exists and overwrite flag is not set");
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
-  public Color getColor() {
-    Color color = Color.BLACK;
-    String colorName = get("color");
+  public static boolean isWildcard(Path path) {
+    return path.toString().indexOf('*') != -1 ||
+        path.toString().indexOf('?') != -1;
+  }
+
+  public Color getColor(String key, Color defaultValue) {
+    String colorName = get(key);
     if (colorName == null)
-      return color;
+      return defaultValue;
+    
     colorName = colorName.toLowerCase();
+    Color color = defaultValue;
     if (colorName.equals("red")) {
       color = Color.RED;
     } else if (colorName.equals("pink")){
@@ -493,54 +234,97 @@ public class CommandLineArguments {
     } else if (colorName.equals("orange")) {
       color = Color.ORANGE;
     }
+    
     return color;
   }
   
-  /**
-   * Makes standard checks for input and output files. It is assumed that all
-   * files are input files while the last one is the output file. First,
-   * it checks that there is at least one input file. Then, it checks that every
-   * input file exists. After that, it checks for output file, if it exists and
-   * the overwrite flag is not present, it fails.
-   * @return <code>true</code> if all checks pass. <code>false</code> otherwise.
-   * @throws IOException 
-   */
-  public boolean checkInputOutput(Configuration conf) throws IOException {
-    Path[] paths = getPaths();
-    if (paths.length == 0) {
-      LOG.error("Input file missing");
-      return false;
-    }
-    for (int i = 0; i < paths.length; i++) {
-      Path path = paths[i];
-      // Skip wild cards
-      if (isWildcard(path))
-        continue;
-      if (i == 0 || i < paths.length - 1) {
-        // Check input path
-        FileSystem fs = path.getFileSystem(conf);
-        if (!fs.exists(path)) {
-          LOG.error("Input file '"+path+"' does not exist");
-          return false;
+  public Shape getShape(String key, Shape defaultValue) {
+    String shapeType = get(key);
+    if (shapeType == null)
+      return defaultValue;
+    
+    shapeType = shapeType.toLowerCase();
+    Shape shape = null;
+    
+    if (shapeType.startsWith("rect")) {
+      shape = new Rectangle();
+    } else if (shapeType.startsWith("point")) {
+      shape = new Point();
+    } else if (shapeType.startsWith("tiger")) {
+      shape = new TigerShape();
+    } else if (shapeType.startsWith("osm")) {
+      shape = new OSMPolygon();
+    } else if (shapeType.startsWith("poly")) {
+      shape = new Polygon();
+    } else if (shapeType.startsWith("ogc")) {
+      shape = new OGCShape();
+    } else if (shapeType.startsWith("nasa")) {
+      shape = new NASAPoint();
+    } else {
+      // Use the shapeType as a class name and try to instantiate it dynamically
+      try {
+        Class<? extends Shape> shapeClass =
+            Class.forName(get(key)).asSubclass(Shape.class);
+        shape = shapeClass.newInstance();
+      } catch (ClassNotFoundException e) {
+      } catch (InstantiationException e) {
+      } catch (IllegalAccessException e) {
+      }
+      if (shape == null) {
+        // Couldn't detect shape from short name or full class name
+        // May be it's an actual value that we can parse
+        if (shapeType.split(",").length == 2) {
+          // A point
+          shape = new Point();
+          shape.fromText(new Text((String)get(key)));
+        } else if (shapeType.split(",").length == 4) {
+          // A rectangle
+          shape = new Rectangle();
+          shape.fromText(new Text((String)get(key)));
         }
-      } else {
-        // Check output path
-        FileSystem fs = path.getFileSystem(conf);
-        if (fs.exists(path)) {
-          if (this.isOverwrite()) {
-            fs.delete(path, true);
-          } else {
-            LOG.error("Output file '"+path+"' exists and overwrite flag is not set");
-            return false;
-          }
-        }
+        // TODO parse from WKT
       }
     }
-    return true;
+    if (shape == null)
+      LOG.warn("unknown shape type: '"+get(key)+"'");
+    return shape;
+  }
+  
+  public Shape getShape(String key) {
+    return getShape(key, null);
   }
 
-  public static boolean isWildcard(Path path) {
-    return path.toString().indexOf('*') != -1 ||
-        path.toString().indexOf('?') != -1;
+  public <S extends Shape> S[] getShapes(String key, S stock) {
+    String[] values = getArray(key);
+    S[] shapes = (S[]) Array.newInstance(stock.getClass(), values.length);
+    for (int i = 0; i < values.length; i++) {
+      shapes[i] = (S) stock.clone();
+      shapes[i].fromText(new Text(values[i]));
+    }
+    return shapes;
   }
+  
+  private String[] getArray(String key) {
+    String val = get(key);
+    return val == null ? null : val.split("\n");
+  }
+
+  public long getSize(String key) {
+    String size_str = get(key);
+    if (size_str.indexOf('.') == -1)
+      return Long.parseLong(size_str);
+    String[] size_parts = size_str.split("\\.", 2);
+    long size = Long.parseLong(size_parts[0]);
+    size_parts[1] = size_parts[1].toLowerCase();
+    if (size_parts[1].startsWith("k"))
+      size *= 1024;
+    else if (size_parts[1].startsWith("m"))
+      size *= 1024 * 1024;
+    else if (size_parts[1].startsWith("g"))
+      size *= 1024 * 1024 * 1024;
+    else if (size_parts[1].startsWith("t"))
+      size *= 1024 * 1024 * 1024 * 1024;
+    return size;
+  }
+
 }

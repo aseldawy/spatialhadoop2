@@ -122,7 +122,7 @@ public class HDFPlot {
       matchingPaths[i] = new Path(matchingDirs[i].getPath(), "*.hdf");
     
     // Retrieve range to plot if provided by user
-    Rectangle plotRange = cla.getRectangle();
+    Rectangle plotRange = (Rectangle) cla.getShape("rect");
 
     // Retrieve the scale
     String scale = cla.get("scale", "preset");
@@ -153,7 +153,7 @@ public class HDFPlot {
       }
     }
 
-    boolean overwrite = cla.isOverwrite();
+    boolean overwrite = cla.is("overwrite");
     boolean pyramid = cla.is("pyramid");
     FileSystem outFs = output.getFileSystem(conf);
     Vector<RunningJob> jobs = new Vector<RunningJob>();

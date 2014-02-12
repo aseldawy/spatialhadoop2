@@ -16,6 +16,8 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Iterator;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -60,6 +62,9 @@ import edu.umn.cs.spatialHadoop.nasa.NASAShape;
  *
  */
 public class FileMBR {
+  /**Logger for FileMBR*/
+  private static final Log LOG = LogFactory.getLog(FileMBR.class);
+
   /**
    * Keeps track of the size of last processed file. Used to determine the
    * uncompressed size of a file.
@@ -69,7 +74,7 @@ public class FileMBR {
   /**Last submitted MBR MapReduce job*/
   public static RunningJob lastSubmittedJob;
 
-  public static class Map extends MapReduceBase implements
+  public static class FileMBRMapper extends MapReduceBase implements
       Mapper<Rectangle, Shape, Text, Rectangle> {
     
     /**Last input split processed (initially null)*/
@@ -179,7 +184,9 @@ public class FileMBR {
    * @throws IOException 
    */
   public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
-      Path file, S stockShape, boolean background) throws IOException {
+      Path file, CommandLineArguments args) throws IOException {
+    Shape shape = args.getShape("shape");
+    boolean background = args.is("background");
     // Quickly get file MBR if it is globally indexed
     GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(fs, file);
     if (globalIndex != null) {
@@ -200,21 +207,21 @@ public class FileMBR {
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
     do {
-      outputPath = new Path(file.toUri().getPath()+".mbr_"+(int)(Math.random()*1000000));
+      outputPath = new Path(file.getName()+".mbr_"+(int)(Math.random()*1000000));
     } while (outFs.exists(outputPath));
     
     job.setJobName("FileMBR");
     job.setMapOutputKeyClass(Text.class);
     job.setMapOutputValueClass(Rectangle.class);
 
-    job.setMapperClass(Map.class);
+    job.setMapperClass(FileMBRMapper.class);
     job.setReducerClass(Reduce.class);
     job.setCombinerClass(Combine.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, stockShape.getClass());
+    SpatialSite.setShapeClass(job, shape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
     ShapeInputFormat.setInputPaths(job, file);
@@ -238,7 +245,8 @@ public class FileMBR {
           -Double.MAX_VALUE, -Double.MAX_VALUE);
       for (FileStatus fileStatus : results) {
         if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-          mbr.expand(fileMBRLocal(outFs, fileStatus.getPath(), new Partition()));
+          mbr.expand(fileMBRLocal(outFs, fileStatus.getPath(),
+              new CommandLineArguments("shape:"+Partition.class.getName())));
         }
       }
       
@@ -257,7 +265,8 @@ public class FileMBR {
    * @throws IOException
    */
   public static <S extends Shape> Rectangle fileMBRLocal(FileSystem fs,
-      Path file, S shape) throws IOException {
+      Path file, CommandLineArguments args) throws IOException {
+    Shape shape = args.getShape("shape");
     // Try to get file MBR from the global index (if possible)
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, file);
     if (gindex != null) {
@@ -297,15 +306,19 @@ public class FileMBR {
     return mbr;
   }
   
-  public static Rectangle fileMBR(FileSystem fs, Path inFile, Shape stockShape) throws IOException {
+  public static Rectangle fileMBR(FileSystem fs, Path inFile, CommandLineArguments params) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 3) {
+    boolean autoLocal = !(inFStatus.isDir() ||
+        inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    Boolean isLocal = params.is("local", autoLocal);
+    
+    if (!isLocal) {
       // Either a directory of file or a large file
-      return fileMBRMapReduce(fs, inFile, stockShape, false);
+      return fileMBRMapReduce(fs, inFile, params);
     } else {
       // A single small file, process it without MapReduce
-      return fileMBRLocal(fs, inFile, stockShape);
+      return fileMBRLocal(fs, inFile, params);
     }
   }
 
@@ -313,15 +326,16 @@ public class FileMBR {
     System.out.println("Finds the MBR of an input file");
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<input file>: (*) Path to input file");
+    System.out.println("shape:<input shape>: (*) Input file format");
   }
   /**
    * @param args
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    JobConf conf = new JobConf(FileMBR.class);
-    Path inputFile = cla.getPath();
+    CommandLineArguments params = new CommandLineArguments(args);
+    Configuration conf = new Configuration();
+    Path inputFile = params.getInputPath();
     if (inputFile == null) {
       System.err.println("Please provide the input file");
       printUsage();
@@ -330,17 +344,22 @@ public class FileMBR {
     
     FileSystem fs = inputFile.getFileSystem(conf);
     if (!fs.exists(inputFile)) {
-      System.err.println("Input file '"+inputFile+"' does not exist");
+      LOG.error("Input file '"+inputFile+"' does not exist");
       printUsage();
       return;
     }
 
-    Shape stockShape = cla.getShape(true);
+    Shape shape = params.getShape("shape");
+    if (shape == null) {
+      LOG.error("Input file format not specified");
+      printUsage();
+      return;
+    }
     long t1 = System.currentTimeMillis();
-    Rectangle mbr = fileMBR(fs, inputFile, stockShape);
+    Rectangle mbr = fileMBR(fs, inputFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total processing time: "+(t2-t1)+" millis");
-    System.out.println("MBR of records in file "+inputFile+" is "+mbr);
+    System.out.println("MBR of records in file '"+inputFile+"' is "+mbr);
   }
 
 }

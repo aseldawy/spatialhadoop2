@@ -309,9 +309,9 @@ public class ConvexHull {
   
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    if (cla.isLocal() && cla.getPaths().length == 0) {
+    if (cla.is("local") && cla.getPaths().length == 0) {
       long t1 = System.currentTimeMillis();
-      convexHullStream((Point)cla.getShape(true));
+      convexHullStream((Point)cla.getShape("shape"));
       long t2 = System.currentTimeMillis();
       System.err.println("Total time for convex hull: "+(t2-t1)+" millis");
       return;
@@ -323,14 +323,14 @@ public class ConvexHull {
     }
     Path inFile = paths[0];
     Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = cla.isOverwrite();
+    boolean overwrite = cla.is("overwrite");
     if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
       System.err.println("Output path already exists and overwrite flag is not set");
       return;
     }
     
     long t1 = System.currentTimeMillis();
-    convexHullMapReduce(inFile, outFile, cla.isOverwrite());
+    convexHullMapReduce(inFile, outFile, cla.is("overwrite"));
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }

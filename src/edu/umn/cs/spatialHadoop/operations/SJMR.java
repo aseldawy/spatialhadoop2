@@ -54,7 +54,7 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
- * An implementation of Spatial Join MapReduce as it appears in
+ * An implementation of Spatial Join MapReduce as described in
  * S. Zhang, J. Han, Z. Liu, K. Wang, and Z. Xu. SJMR:
  * Parallelizing spatial join with MapReduce on clusters. In
  * CLUSTER, pages 1–8, New Orleans, LA, Aug. 2009.
@@ -209,19 +209,22 @@ public class SJMR {
     }
   }
 
-  public static <S extends Shape> long sjmr(FileSystem fs, Path[] inputFiles,
-      Path userOutputPath, S stockShape, boolean overwrite)
-      throws IOException {
+  public static <S extends Shape> long sjmr(Path[] inputFiles,
+      Path userOutputPath, CommandLineArguments params) throws IOException {
     JobConf job = new JobConf(SJMR.class);
+    boolean overwrite = params.is("overwrite");
+    Shape stockShape = params.getShape("shape");
     
-    FileSystem outFs = inputFiles[0].getFileSystem(job);
+    FileSystem inFs = inputFiles[0].getFileSystem(job);
     Path outputPath = userOutputPath;
     if (outputPath == null) {
+      FileSystem outFs = FileSystem.get(job);
       do {
         outputPath = new Path(inputFiles[0].getName() + ".sjmr_"
             + (int) (Math.random() * 1000000));
       } while (outFs.exists(outputPath));
     } else {
+      FileSystem outFs = outputPath.getFileSystem(job);
       if (outFs.exists(outputPath)) {
         if (overwrite) {
           outFs.delete(outputPath, true);
@@ -230,6 +233,7 @@ public class SJMR {
         }
       }
     }
+    FileSystem outFs = outputPath.getFileSystem(job);
     
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setJobName("SJMR");
@@ -238,8 +242,8 @@ public class SJMR {
     job.setMapOutputValueClass(IndexedText.class);
     job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
     job.setLong("mapred.min.split.size",
-        Math.max(fs.getFileStatus(inputFiles[0]).getBlockSize(),
-            fs.getFileStatus(inputFiles[1]).getBlockSize()));
+        Math.max(inFs.getFileStatus(inputFiles[0]).getBlockSize(),
+            inFs.getFileStatus(inputFiles[1]).getBlockSize()));
 
 
     job.setReducerClass(SJMRReduce.class);
@@ -262,7 +266,7 @@ public class SJMR {
     Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Path file : inputFiles) {
-      Rectangle file_mbr = FileMBR.fileMBR(fs, file, stockShape);
+      Rectangle file_mbr = FileMBR.fileMBR(inFs, file, params);
       mbr.expand(file_mbr);
       total_size += FileMBR.sizeOfLastProcessedFile;
     }
@@ -298,8 +302,8 @@ public class SJMR {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    Path[] allFiles = cla.getPaths();
+    CommandLineArguments params = new CommandLineArguments(args);
+    Path[] allFiles = params.getPaths();
     if (allFiles.length < 2) {
       printUsage();
       throw new RuntimeException("Input files missing");
@@ -314,10 +318,8 @@ public class SJMR {
     }
 
     Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
-    boolean overwrite = cla.isOverwrite();
-    Shape stockShape = cla.getShape(true);
     long t1 = System.currentTimeMillis();
-    long resultSize = sjmr(fs, inputFiles, outputPath, stockShape, overwrite);
+    long resultSize = sjmr(inputFiles, outputPath, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
     System.out.println("Result size: "+resultSize);
