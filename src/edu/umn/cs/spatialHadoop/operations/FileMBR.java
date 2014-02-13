@@ -173,15 +173,34 @@ public class FileMBR {
       }
     }
   }
-  
+
   /**
-   * Counts the exact number of lines in a file by issuing a MapReduce job
-   * that does the thing
-   * @param conf
+   * 
    * @param fs
    * @param file
+   * @param stockShape
+   * @param background
    * @return
-   * @throws IOException 
+   * @throws IOException
+   * @deprecated this method is replaced by
+   *   #{fileMBRMapReduce(FileSystem, Path, CommandLineArguments)}
+   */
+  @Deprecated
+  public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
+      Path file, S stockShape, boolean background) throws IOException {
+    CommandLineArguments params = new CommandLineArguments();
+    params.setClass("shape", stockShape.getClass(), Shape.class);
+    params.setBoolean("background", background);
+    return fileMBRMapReduce(fs, file, params);
+  }
+  
+  /**
+   * 
+   * @param fs
+   * @param file
+   * @param args
+   * @return
+   * @throws IOException
    */
   public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
       Path file, CommandLineArguments args) throws IOException {
@@ -249,22 +268,29 @@ public class FileMBR {
               new CommandLineArguments("shape:"+Partition.class.getName())));
         }
       }
-      
       outFs.delete(outputPath, true);
       
       return mbr;
     }
   }
-  
+
   /**
-   * Counts the exact number of lines in a file by opening the file and
-   * reading it line by line
+   * 
    * @param fs
    * @param file
+   * @param shape
    * @return
    * @throws IOException
    */
-  public static <S extends Shape> Rectangle fileMBRLocal(FileSystem fs,
+  @Deprecated
+  public static Rectangle fileMBRLocal(FileSystem fs, Path file, Shape shape)
+      throws IOException {
+    CommandLineArguments params = new CommandLineArguments();
+    params.setClass("shape", shape.getClass(), Shape.class);
+    return fileMBRLocal(fs, file, params);
+  }
+  
+  public static Rectangle fileMBRLocal(FileSystem fs,
       Path file, CommandLineArguments args) throws IOException {
     Shape shape = args.getShape("shape");
     // Try to get file MBR from the global index (if possible)

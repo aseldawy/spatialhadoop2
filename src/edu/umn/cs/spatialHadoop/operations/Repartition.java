@@ -229,7 +229,22 @@ public class Repartition {
    * @param rtree
    * @param overwrite
    * @throws IOException
+   * @deprecated this method is replaced with
+   *   {@link #repartitionMapReduce(Path, Path, CommandLineArguments)}
    */
+  @Deprecated
+  public static void repartitionMapReduce(Path inFile, Path outPath,
+      Shape stockShape, long blockSize, String sindex,
+      boolean overwrite) throws IOException {
+    CommandLineArguments params = new CommandLineArguments();
+    if (stockShape != null)
+      params.setClass("shape", stockShape.getClass(), Shape.class);
+    params.setLong("blocksize", blockSize);
+    params.set("sindex", sindex);
+    params.setBoolean("overwrite", overwrite);
+    repartitionMapReduce(inFile, outPath, params);
+  }
+  
   public static void repartitionMapReduce(Path inFile, Path outPath,
       CommandLineArguments params) throws IOException {
     String sindex = params.get("sindex");
@@ -457,6 +472,31 @@ public class Repartition {
       cellsInfo[i] = new CellInfo(i + 1, rectangles[i]);
     
     return cellsInfo;
+  }
+  
+  /**
+   * @param inFile
+   * @param outFile
+   * @param stockShape
+   * @param blockSize
+   * @param sindex
+   * @param overwrite
+   * @throws IOException
+   * @deprecated this method is replaced with
+   *   {@link #repartitionLocal(Path, Path, CommandLineArguments)}
+   */
+  @Deprecated
+  public static <S extends Shape> void repartitionLocal(Path inFile,
+      Path outFile, S stockShape, long blockSize, String sindex,
+      boolean overwrite)
+          throws IOException {
+    CommandLineArguments params = new CommandLineArguments();
+    if (stockShape != null)
+      params.setClass("shape", stockShape.getClass(), Shape.class);
+    params.setLong("blocksize", blockSize);
+    params.set("sindex", sindex);
+    params.setBoolean("overwrite", overwrite);
+    repartitionLocal(inFile, outFile, params);
   }
   
   public static <S extends Shape> void repartitionLocal(Path inFile,
