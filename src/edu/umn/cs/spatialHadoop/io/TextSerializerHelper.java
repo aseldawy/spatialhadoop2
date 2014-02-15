@@ -555,7 +555,8 @@ public final class TextSerializerHelper {
     String str = bytesToHex(geom.asBinary().array());
     byte[] str_b = str.getBytes();
     text.append(str_b, 0, str_b.length);
-    text.append(new byte[] {(byte) toAppend}, 0, 1);
+    if (toAppend != '\0')
+      text.append(new byte[] {(byte) toAppend}, 0, 1);
   }
   
   private static final byte[] HexLookupTable = {
