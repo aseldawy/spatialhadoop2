@@ -543,7 +543,7 @@ public final class TextSerializerHelper {
       else if (x >= 'A' && x <= 'F')
         x = (byte) ((x - 'A') + 0xA);
       else
-        throw new RuntimeException("Invalid hex char "+x);
+        throw new RuntimeException("Invalid hex char "+x+" at position "+i);
       if (i % 2 == 0)
         x <<= 4;
       bytes[i / 2] |= x;

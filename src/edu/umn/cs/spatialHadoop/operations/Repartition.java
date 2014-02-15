@@ -465,11 +465,14 @@ public class Repartition {
     FileSystem outFs = outFile.getFileSystem(new Configuration());
     
     // Calculate number of partitions in output file
-    // Copy blocksize from source file if it's globally indexed
     if (blockSize == 0) {
       GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
       if (globalIndex != null) {
+        // Copy blocksize from source file if it's globally indexed
         blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
+      } else {
+        // Use default block size for output file system
+        blockSize = outFs.getDefaultBlockSize(outFile);
       }
     }
 
@@ -552,7 +555,8 @@ public class Repartition {
     NullWritable dummy = NullWritable.get();
     
     while (reader.next(c, stockShape)) {
-      writer.write(dummy, stockShape);
+      if (stockShape.getMBR() != null)
+        writer.write(dummy, stockShape);
     }
     writer.close(null);
   }
@@ -563,7 +567,7 @@ public class Repartition {
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("shape:<point|rectangle|polygon> - (*) Type of shapes stored in input file");
-    System.out.println("sindex:<index> - (*) Type of spatial index");
+    System.out.println("sindex:<index> - (*) Type of spatial index (grid|rtree|r+tree|str|str+)");
     System.out.println("blocksize:<size> - Size of blocks in output file");
     System.out.println("-overwrite - Overwrite output file without noitce");
   }
