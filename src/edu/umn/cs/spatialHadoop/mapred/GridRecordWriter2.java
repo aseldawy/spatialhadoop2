@@ -22,6 +22,14 @@ import org.apache.hadoop.mapred.Reporter;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
+/**
+ * A record writer that can be used in MapReduce programs. It writes pairs
+ * where the key is {@link NullWritable}(i.e., not provided) and the value
+ * is a shape. The given shape is replicated to every cell it overlaps with.
+ * @author Ahmed Eldawy
+ *
+ * @param <S>
+ */
 public class GridRecordWriter2<S extends Shape>
 extends edu.umn.cs.spatialHadoop.core.GridRecordWriter<S> implements RecordWriter<NullWritable, S> {
 
