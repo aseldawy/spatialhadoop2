@@ -635,7 +635,7 @@ public class Repartition {
   }
 
   /**
-	 * Entry point to the file.
+	 * Entry point to the operation.
 	 * shape:<s> the shape to use. Automatically inferred from input file if not set.
 	 * sindex<index> Type of spatial index to build
 	 * cells-of:<filename> Use the cells of the given file for the global index.
@@ -649,7 +649,12 @@ public class Repartition {
 	public static void main(String[] args) throws Exception {
     CommandLineArguments params = new CommandLineArguments(args);
     
-    if (params.checkInputOutput() || params.get("sindex") == null) {
+    if (!params.checkInputOutput()) {
+      printUsage();
+      return;
+    }
+    if (params.get("sindex") == null) {
+      System.err.println("Please specify type of index to build");
       printUsage();
       return;
     }
