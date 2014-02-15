@@ -19,12 +19,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableComparable;
 
 import com.esri.core.geometry.ogc.OGCGeometry;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
-public class OSMPolygon extends OGCShape {
+public class OSMPolygon extends OGCShape implements WritableComparable<OSMPolygon> {
   public long id;
   public Map<String, String> tags;
   
@@ -90,5 +91,14 @@ public class OSMPolygon extends OGCShape {
   @Override
   public boolean equals(Object obj) {
     return ((OSMPolygon)obj).id == this.id;
+  }
+
+  @Override
+  public int compareTo(OSMPolygon poly) {
+    if (this.id < poly.id)
+      return -1;
+    if (this.id > poly.id)
+      return 1;
+    return 0;
   }
 }

@@ -84,7 +84,6 @@ public class OGCShape implements Shape {
     byte[] bytes = new byte[size];
     in.readFully(bytes);
     geom = OGCGeometry.fromBinary(ByteBuffer.wrap(bytes));
-    size = in.readInt();
   }
 
   
