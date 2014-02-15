@@ -29,14 +29,29 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
 
+import edu.umn.cs.spatialHadoop.mapred.GridRecordWriter2;
+import edu.umn.cs.spatialHadoop.mapred.GridRecordWriter3;
+
 /**
- * Writes a spatial file where objects are of type S.
+ * Writes a spatial file where objects are of type S. This class is used as a
+ * base class for all spatial record writers. Since a record writer must
+ * implement a {@link RecordWriter} with specific keys and values, we do all
+ * the implementation in this class and extend it with an implementation of
+ * RecordWriter with specific key and value.
+ * 
+ * This class is not made abstract because it is still used outside of MapReduce
+ * programs.
  * @author Ahmed Eldawy
+ * 
+ * @see edu.umn.cs.spatialHadoop.mapred.GridRecordWriter
+ * @see GridRecordWriter2
+ * @see GridRecordWriter3
  *
- * @param <S>
+ * @param <S> - type of shape written as value.
  */
 public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   public static final Log LOG = LogFactory.getLog(GridRecordWriter.class);
