@@ -31,6 +31,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileOutputFormat;
+import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -594,8 +595,8 @@ public class Repartition {
       ((GridRecordWriter<Shape>)writer).setBlockSize(blockSize);
     
     long length = inFileStatus.getLen();
-    FSDataInputStream datain = inFs.open(in);
-    ShapeRecordReader<S> reader = new ShapeRecordReader<S>(datain, 0, length);
+    ShapeRecordReader<S> reader = new ShapeRecordReader<S>(new Configuration(),
+        new FileSplit(in, 0, length, new String[] {}));
     Rectangle c = reader.createKey();
     
     NullWritable dummy = NullWritable.get();
@@ -604,6 +605,7 @@ public class Repartition {
       if (stockShape.getMBR() != null)
         writer.write(dummy, stockShape);
     }
+    reader.close();
     writer.close(null);
   }
   
