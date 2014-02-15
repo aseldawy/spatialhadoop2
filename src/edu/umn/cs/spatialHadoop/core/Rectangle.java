@@ -251,7 +251,7 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   }
   
   public boolean contains(double rx1, double ry1, double rx2, double ry2) {
-    return rx1 >= x1 && rx2 <= x2 && ry2 >= y1 && ry2 <= y2;
+    return rx1 >= x1 && rx2 <= x2 && ry1 >= y1 && ry2 <= y2;
   }
   
   public Point getCenterPoint() {

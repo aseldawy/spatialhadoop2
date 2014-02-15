@@ -96,19 +96,18 @@ public class MakeHDFVideo {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    Configuration conf = new Configuration();
-    if (!cla.checkInputOutput(conf)) {
+    CommandLineArguments params = new CommandLineArguments(args);
+    if (!params.checkInputOutput()) {
       return;
     }
     
-    Path input = cla.getPaths()[0];
-    Path output = cla.getPaths()[1];
-    boolean recoverHoles = cla.is("recoverholes");
-    boolean addDate = cla.is("adddate");
+    //Path input = params.getPaths()[0];
+    Path output = params.getPaths()[1];
+    boolean recoverHoles = params.is("recoverholes");
+    boolean addDate = params.is("adddate");
 
     Vector<String> vargs = new Vector<String>(Arrays.asList(args));
-    Rectangle plotRange = cla.getRectangle();
+    Rectangle plotRange = (Rectangle) params.getShape("rect");
     if (plotRange != null && recoverHoles) {
       // Extend the plot range to improve the quality of RecoverHoles
       for (int i = 0; i < vargs.size();) {
@@ -123,8 +122,8 @@ public class MakeHDFVideo {
       double h = plotRange.getHeight();
       plotRange = plotRange.buffer(w / 2, h / 2);
       
-      int new_width = cla.getWidth(1000) * 2;
-      int new_height = cla.getHeight(1000) * 2;
+      int new_width = params.getInt("width", 1000) * 2;
+      int new_height = params.getInt("height", 1000) * 2;
       
       vargs.add(plotRange.toText(new Text("rect:")).toString());
       vargs.add("width:"+new_width);
@@ -139,7 +138,7 @@ public class MakeHDFVideo {
       RecoverHoles.recoverInterpolationDir(output);
       if (plotRange != null) {
         // Need to crop all images to restore original selection
-        cropImages(output, cla.getRectangle(), plotRange);
+        cropImages(output, (Rectangle)params.getShape("rect"), plotRange);
       }
     }
     
@@ -147,7 +146,7 @@ public class MakeHDFVideo {
       RecoverHoles.addDate(output);
     }
     
-    FileSystem outFs = output.getFileSystem(conf);
+    FileSystem outFs = output.getFileSystem(params);
     FileStatus[] generatedImages = outFs.listStatus(output, new PathFilter() {
       @Override
       public boolean accept(Path path) {
@@ -198,7 +197,7 @@ public class MakeHDFVideo {
     }
 
     // Plot the overlay image
-    String overlay = cla.get("overlay");
+    String overlay = params.get("overlay");
     if (overlay != null) {
       vargs = new Vector<String>(Arrays.asList(args));
       // Keep all arguments except input and output which change for each call

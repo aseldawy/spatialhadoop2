@@ -649,7 +649,7 @@ public class DistributedJoin {
     CommandLineArguments cla = new CommandLineArguments(args);
     Path[] allFiles = cla.getPaths();
     JobConf conf = new JobConf(DistributedJoin.class);
-    Shape stockShape = cla.getShape(true);
+    Shape stockShape = cla.getShape("shape");
     if (allFiles.length < 2) {
       System.err.println("Missing input files");
       printUsage();
@@ -666,7 +666,7 @@ public class DistributedJoin {
     String repartition = cla.get("repartition");
     
     Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
-    boolean overwrite = cla.isOverwrite();
+    boolean overwrite = cla.is("overwrite");
 
     long result_size;
     if (repartition == null || repartition.equals("auto")) {

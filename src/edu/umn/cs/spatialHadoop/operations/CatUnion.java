@@ -355,8 +355,8 @@ public class CatUnion {
     CommandLineArguments cla = new CommandLineArguments(args);
     JobConf conf = new JobConf(CatUnion.class);
     Path[] allFiles = cla.getPaths();
-    boolean local = cla.isLocal();
-    boolean overwrite = cla.isOverwrite();
+    boolean local = cla.is("local");
+    boolean overwrite = cla.is("overwrite");
     if (allFiles.length < 2) {
       printUsage();
       throw new RuntimeException("Illegal arguments. Input file missing");
