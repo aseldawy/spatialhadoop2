@@ -353,7 +353,7 @@ public class Repartition {
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, CellInfo[] cellInfos, String sindex,
       boolean overwrite) throws IOException {
-    JobConf job = new JobConf(Repartition.class);
+    JobConf job = new JobConf(stockShape.getClass());
     job.setJobName("Repartition");
     FileSystem outFs = outPath.getFileSystem(job);
     
