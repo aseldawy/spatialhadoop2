@@ -221,7 +221,7 @@ public class FileMBR {
       sizeOfLastProcessedFile = totalLength;
       return globalIndex.getMBR();
     }
-    JobConf job = new JobConf(FileMBR.class);
+    JobConf job = new JobConf(shape.getClass());
     
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);

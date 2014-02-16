@@ -295,7 +295,7 @@ public class Plot {
         valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
       
-      JobConf job = new JobConf(Plot.class);
+      JobConf job = new JobConf(shape.getClass());
       job.setJobName("Plot");
       
       job.setMapperClass(PlotMap.class);

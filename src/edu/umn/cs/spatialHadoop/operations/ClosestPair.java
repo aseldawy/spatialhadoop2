@@ -252,7 +252,7 @@ public class ClosestPair {
 	public static <S extends Shape> void closestPair(FileSystem fs,
 			Path file, S stockShape) throws IOException {
 		// Try to get file MBR from the MBRs of blocks
-		JobConf job = new JobConf(ClosestPair.class);
+		JobConf job = new JobConf(stockShape.getClass());
 
 		Path outputPath;
 		FileSystem outFs = FileSystem.get(job);
