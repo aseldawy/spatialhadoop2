@@ -181,6 +181,10 @@ public class CommandLineArguments extends Configuration {
    */
   public boolean checkInputOutput() throws IOException {
     Path[] inputPaths = getInputPaths();
+    if (inputPaths.length == 0) {
+      LOG.error("No input files");
+      return false;
+    }
     for (Path path : inputPaths) {
       if (isWildcard(path))
         continue;
@@ -264,7 +268,7 @@ public class CommandLineArguments extends Configuration {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
         Class<? extends Shape> shapeClass =
-            Class.forName(get(key)).asSubclass(Shape.class);
+            getClassByName(get(key)).asSubclass(Shape.class);
         shape = shapeClass.newInstance();
       } catch (ClassNotFoundException e) {
       } catch (InstantiationException e) {
