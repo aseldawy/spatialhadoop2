@@ -37,9 +37,11 @@ import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.operations.DistributedJoin.DJInputFormatArray;
 import edu.umn.cs.spatialHadoop.operations.DistributedJoin.DJInputFormatRTree;
+import edu.umn.cs.spatialHadoop.operations.DistributedJoin.SpatialJoinFilter;
 
 /**
  * Computes the union of a set of shapes using a distributed MapReduce program.
@@ -64,7 +66,7 @@ public class UltimateUnion {
     return null;
   }
   
-  class UltimateUnionReducer extends MapReduceBase implements
+  static class UltimateUnionReducer extends MapReduceBase implements
       Reducer<OSMPolygon, OSMPolygon, NullWritable, OSMPolygon> {
 
     @Override
@@ -106,6 +108,7 @@ public class UltimateUnion {
     }
     FileInputFormat.addInputPath(job, input);
     FileInputFormat.addInputPath(job, input);
+    job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
     SpatialSite.setShapeClass(job, shape.getClass());
     
     job.setOutputFormat(TextOutputFormat.class);

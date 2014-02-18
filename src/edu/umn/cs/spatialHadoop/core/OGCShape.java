@@ -160,10 +160,24 @@ public class OGCShape implements Shape {
 
   @Override
   public boolean isIntersected(Shape s) {
-    Rectangle mbr = s.getMBR();
+    Rectangle s_mbr = s.getMBR();
+    Rectangle this_mbr = this.getMBR();
+    if (s_mbr == null || this_mbr == null)
+      return false;
+    // Filter step
+    if (!s_mbr.isIntersected(this_mbr))
+      return false;
+    try {
+      if (s instanceof OGCShape)
+        return geom.intersects(((OGCShape)s).geom);
+    } catch (NullPointerException e) {
+      // TODO Auto-generated catch block
+      e.printStackTrace();
+    }
+    
     ArrayList<OGCGeometry> points = new ArrayList<OGCGeometry>();
-    points.add(new OGCPoint(new com.esri.core.geometry.Point(mbr.x1, mbr.y1), geom.getEsriSpatialReference()));
-    points.add(new OGCPoint(new com.esri.core.geometry.Point(mbr.x2, mbr.y2), geom.getEsriSpatialReference()));
+    points.add(new OGCPoint(new com.esri.core.geometry.Point(s_mbr.x1, s_mbr.y1), geom.getEsriSpatialReference()));
+    points.add(new OGCPoint(new com.esri.core.geometry.Point(s_mbr.x2, s_mbr.y2), geom.getEsriSpatialReference()));
     
     OGCGeometryCollection all_points = new OGCConcreteGeometryCollection(points, geom.getEsriSpatialReference());
     
