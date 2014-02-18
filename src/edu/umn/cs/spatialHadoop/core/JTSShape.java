@@ -32,6 +32,8 @@ import com.vividsolutions.jts.io.WKBReader;
 import com.vividsolutions.jts.io.WKBWriter;
 import com.vividsolutions.jts.io.WKTReader;
 
+import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+
 /**
  * A shape class that represents an OGC compliant geometry. The geometry is
  * enclosed inside the class and all calls are delegated to it. The class also
@@ -72,11 +74,6 @@ public class JTSShape implements Shape {
    */
   public Geometry geom;
   
-  /**
-   * Any extra data after the shape information
-   */
-  public String extra;
-  
   public JTSShape() {
     this(null);
   }
@@ -106,15 +103,7 @@ public class JTSShape implements Shape {
 
   @Override
   public Text toText(Text text) {
-    //TextSerializerHelper.serializeLong(0, text, '\t');
-    String str = WKBWriter.bytesToHex(wkbWriter.write(geom));
-    byte[] str_b = str.getBytes();
-    text.append(str_b, 0, str_b.length);
-    if (extra != null) {
-      text.append(Separator, 0, Separator.length);
-      byte[] extra_bytes = extra.getBytes();
-      text.append(extra_bytes, 0, extra_bytes.length);
-    }
+    TextSerializerHelper.serializeGeometry(text, geom, '\0');
     return text;
   }
   
@@ -138,75 +127,40 @@ public class JTSShape implements Shape {
 
   @Override
   public void fromText(Text text) {
-    // Read and skip a long
-//    TextSerializerHelper.consumeLong(text, '\t');
-    try {
-      // Check whether this text is a Well Known Text (WKT) or a hexed string
-      boolean wkt = false;
-      byte[] bytes = text.getBytes();
-      int length = text.getLength();
-      int i_shape = 0;
-      while (!wkt && i_shape < ShapeNames.length) {
-        byte[] shapeName = ShapeNames[i_shape];
-        if (length > shapeName.length) {
-          int i = 0;
-          while (i < shapeName.length && shapeName[i] == bytes[i])
-            i++;
-          if (i == shapeName.length) {
-            wkt = true;
-            break;
-          }
-        }
-        i_shape++;
-      }
-      
-      // Look for the terminator of the shape text
-      byte terminator = Separator[0];
-      int i1 = 0;
-      if (bytes[i1] == '\'' || bytes[i1] == '\"') {
-        terminator = bytes[i1++];
-      }
-      int i2 = i1;
-      while (i2 < length && bytes[i2] != terminator)
-        i2++;
-      
-      String str = new String(bytes, i1, i2-i1);
-      geom = parseText(str);
-      
-      if (++i2 < length) {
-        extra = new String(bytes, i2, length - i2);
-      } else {
-        extra = null;
-      }
-    } catch (RuntimeException e) {
-      LOG.error("Error parsing: "+text);
-      throw e;
-    } catch (ParseException e) {
-      LOG.error("Error parsing: "+text);
-      e.printStackTrace();
-    }
+    this.geom = TextSerializerHelper.consumeGeometryJTS(text, '\0');
   }
 
   @Override
   public Rectangle getMBR() {
-    if (geom.isEmpty())
+    if (geom == null || geom.isEmpty())
       return null;
-    com.vividsolutions.jts.geom.Polygon mbr = (com.vividsolutions.jts.geom.Polygon) geom.getEnvelope();
-    LineString mbrr = mbr.getExteriorRing();
-    int pointCount = mbrr.getNumPoints();
-    double xmin = mbrr.getPointN(0).getX();
-    double ymin = mbrr.getPointN(0).getY();
-    double xmax = xmin, ymax = ymin;
-    for (int i = 1; i < pointCount; i++) {
-      com.vividsolutions.jts.geom.Point point = mbrr.getPointN(i);
-      if (point.getX() < xmin)
-        xmin = point.getX();
-      if (point.getX() > xmax)
-        xmax = point.getX();
-      if (point.getY() < ymin)
-        ymin = point.getY();
-      if (point.getY() > ymax)
-        ymax = point.getY();
+    Geometry envelope = geom.getEnvelope();
+    double xmin, ymin, xmax, ymax;
+    if (envelope instanceof com.vividsolutions.jts.geom.Point) {
+      com.vividsolutions.jts.geom.Point pt = (com.vividsolutions.jts.geom.Point) envelope;
+      xmin = xmax = pt.getX();
+      ymin = ymax = pt.getY();
+    } else if (envelope instanceof com.vividsolutions.jts.geom.Polygon) {
+      com.vividsolutions.jts.geom.Polygon mbr = (com.vividsolutions.jts.geom.Polygon) envelope;
+      LineString mbrr = mbr.getExteriorRing();
+      int pointCount = mbrr.getNumPoints();
+      xmin = mbrr.getPointN(0).getX();
+      ymin = mbrr.getPointN(0).getY();
+      xmax = xmin;
+      ymax = ymin;
+      for (int i = 1; i < pointCount; i++) {
+        com.vividsolutions.jts.geom.Point point = mbrr.getPointN(i);
+        if (point.getX() < xmin)
+          xmin = point.getX();
+        if (point.getX() > xmax)
+          xmax = point.getX();
+        if (point.getY() < ymin)
+          ymin = point.getY();
+        if (point.getY() > ymax)
+          ymax = point.getY();
+      }
+    } else {
+      throw new RuntimeException("Cannot get MBR of "+geom);
     }
     
     return new Rectangle(xmin, ymin, xmax, ymax);
@@ -234,19 +188,12 @@ public class JTSShape implements Shape {
   @Override
   public Shape clone() {
     JTSShape copy = new JTSShape(this.geom);
-    copy.extra = this.extra;
     return copy;
   }
   
   @Override
   public String toString() {
-    return super.toString()+","+extra;
-  }
-  
-  public static void main(String[] args) throws ParseException {
-    String str = "POLYGON ((-78.647906 35.31423899999999, -78.647785 35.31423899999999, -78.647785 35.314638, -78.647906 35.314638, -78.647906 35.31423899999999))";
-    Geometry read = new WKTReader().read(str);
-    System.out.println(read.toText());
+    return geom.toString();
   }
   
   @Override
@@ -313,4 +260,5 @@ public class JTSShape implements Shape {
       graphics.drawPolyline(xpoints, ypoints, xpoints.length);
     }
   }
+  
 }

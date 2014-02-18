@@ -21,11 +21,12 @@ import java.util.Map;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 
-import com.esri.core.geometry.ogc.OGCGeometry;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.io.ParseException;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
-public class OSMPolygon extends OGCShape implements WritableComparable<OSMPolygon> {
+public class OSMPolygon extends JTSShape implements WritableComparable<OSMPolygon> {
   private static final char SEPARATOR = '\t';
   public long id;
   public Map<String, String> tags;
@@ -34,7 +35,7 @@ public class OSMPolygon extends OGCShape implements WritableComparable<OSMPolygo
     tags = new HashMap<String, String>();
   }
   
-  public OSMPolygon(OGCGeometry geom) {
+  public OSMPolygon(Geometry geom) {
     super(geom);
     tags = new HashMap<String, String>();
   }
@@ -50,7 +51,7 @@ public class OSMPolygon extends OGCShape implements WritableComparable<OSMPolygo
   @Override
   public void fromText(Text text) {
     id = TextSerializerHelper.consumeLong(text, SEPARATOR);
-    this.geom = TextSerializerHelper.consumeGeometryESRI(text, SEPARATOR);
+    this.geom = TextSerializerHelper.consumeGeometryJTS(text, SEPARATOR);
     // Read the tags
     tags.clear();
     TextSerializerHelper.consumeMap(text, tags);

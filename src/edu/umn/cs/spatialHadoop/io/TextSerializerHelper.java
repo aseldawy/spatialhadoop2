@@ -19,6 +19,11 @@ import java.util.Map;
 import org.apache.hadoop.io.Text;
 
 import com.esri.core.geometry.ogc.OGCGeometry;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.io.ParseException;
+import com.vividsolutions.jts.io.WKBReader;
+import com.vividsolutions.jts.io.WKBWriter;
+import com.vividsolutions.jts.io.WKTReader;
 
 public final class TextSerializerHelper {
   /**
@@ -559,10 +564,98 @@ public final class TextSerializerHelper {
       text.append(new byte[] {(byte) toAppend}, 0, 1);
   }
   
+  private static final WKTReader wktReader = new WKTReader();
+  private static final WKBWriter wkbWriter = new WKBWriter();
+  private static final WKBReader wkbReader = new WKBReader();
+  
+  public static void serializeGeometry(Text text, Geometry geom, char toAppend) {
+    String str = bytesToHex(wkbWriter.write(geom));
+    byte[] str_b = str.getBytes();
+    text.append(str_b, 0, str_b.length);
+    if (toAppend != '\0')
+      text.append(new byte[] {(byte) toAppend}, 0, 1);
+  }
+  
+  public static Geometry consumeGeometryJTS(Text text, char separator) {
+ // Check whether this text is a Well Known Text (WKT) or a hexed string
+    boolean wkt = false;
+    byte[] bytes = text.getBytes();
+    int i_shape = 0;
+    while (!wkt && i_shape < ShapeNames.length) {
+      byte[] shapeName = ShapeNames[i_shape];
+      if (text.getLength() > shapeName.length) {
+        int i = 0;
+        while (i < shapeName.length && shapeName[i] == bytes[i])
+          i++;
+        if (i == shapeName.length) {
+          wkt = true;
+          break;
+        }
+      }
+      i_shape++;
+    }
+    
+    int i_end;
+    Geometry geom;
+    if (i_shape < ShapeNames.length) {
+      // Look for the terminator of the shape text
+      i_end = 0;
+      while (i_end < text.getLength() && bytes[i_end] != '(')
+        i_end++;
+      int nesting = 1;
+      while (i_end < text.getLength() && nesting > 0) {
+        if (bytes[i_end] == '(')
+          nesting++;
+        else if (bytes[i_end] == ')')
+          nesting--;
+        i_end++;
+      }
+      String wkt_text = new String(bytes, 0, i_end);
+      
+      try {
+        geom = wktReader.read(wkt_text);
+      } catch (ParseException e) {
+        throw new RuntimeException("Error parsing WKT '"+wkt_text+"'", e);
+      }
+    } else {
+      i_end = 0;
+      while (i_end < text.getLength() && IsHex[bytes[i_end]])
+        i_end++;
+      String hex_string = new String(bytes, 0, i_end);
+      byte[] binary = hexToBytes(hex_string);
+      try {
+        geom = wkbReader.read(binary);
+      } catch (ParseException e) {
+        throw new RuntimeException("Error parsing Hex seting '"+hex_string+"'", e);
+      }
+    }
+    
+    // Remove consumed bytes from the text
+    if (i_end < text.getLength() && bytes[i_end] == separator)
+      i_end++;
+    if (i_end >= text.getLength())
+      text.clear();
+    else
+      text.set(bytes, i_end, text.getLength() - i_end);
+    
+    return geom;
+  }
+  
+  private static final boolean[] IsHex = new boolean[256];
+  
   private static final byte[] HexLookupTable = {
     '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
     'A', 'B', 'C', 'D', 'E', 'F'
   };
+  
+  static {
+    for (char c = '0'; c <= '9'; c++)
+      IsHex[c] = true;
+    for (char c = 'A'; c <= 'F'; c++)
+      IsHex[c] = true;
+    for (char c = 'a'; c <= 'f'; c++)
+      IsHex[c] = true;
+  }
   
   /**
    * Convert binary array to a hex string.

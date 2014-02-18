@@ -32,6 +32,7 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
 import com.esri.core.geometry.ogc.OGCGeometry;
+import com.vividsolutions.jts.geom.Geometry;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
@@ -62,7 +63,7 @@ public class UltimateUnion {
    * @param overlappingShapes
    * @return
    */
-  public static OGCGeometry partialUnion(OGCGeometry shape, Collection<OGCGeometry> overlappingShapes) {
+  public static Geometry partialUnion(Geometry shape, Collection<Geometry> overlappingShapes) {
     return null;
   }
   
@@ -73,12 +74,12 @@ public class UltimateUnion {
     public void reduce(OSMPolygon shape, Iterator<OSMPolygon> overlaps,
         OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
         throws IOException {
-      Vector<OGCGeometry> overlappingShapes = new Vector<OGCGeometry>();
+      Vector<Geometry> overlappingShapes = new Vector<Geometry>();
       while (overlaps.hasNext()) {
         OSMPolygon overlap = overlaps.next();
         overlappingShapes.add(overlap.geom);
       }
-      OGCGeometry result = partialUnion(shape.geom, overlappingShapes);
+      Geometry result = partialUnion(shape.geom, overlappingShapes);
       if (result != null)
         output.collect(NullWritable.get(), new OSMPolygon(result));
     }
