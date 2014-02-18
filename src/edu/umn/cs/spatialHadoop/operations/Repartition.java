@@ -21,6 +21,7 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -40,6 +41,7 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.ClassUtil;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
@@ -353,7 +355,13 @@ public class Repartition {
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, CellInfo[] cellInfos, String sindex,
       boolean overwrite) throws IOException {
-    JobConf job = new JobConf(stockShape.getClass());
+    JobConf job = new JobConf(Repartition.class);
+    String jar1 = ClassUtil.findContainingJar(Repartition.class);
+    String jar2 = ClassUtil.findContainingJar(stockShape.getClass());
+    if (!jar1.equals(jar2))
+      DistributedCache.addArchiveToClassPath(new Path(jar2), job,
+          FileSystem.getLocal(job));
+
     job.setJobName("Repartition");
     FileSystem outFs = outPath.getFileSystem(job);
     

@@ -21,6 +21,7 @@ import java.util.Random;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -46,6 +47,7 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.util.ClassUtil;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
@@ -229,7 +231,16 @@ public class Sampler {
   public static <T extends TextSerializable, O extends TextSerializable> int sampleMapReduceWithRatio(
       FileSystem fs, Path[] files, double ratio, long sampleSize, long seed,
       final ResultCollector<O> output, T inObj, O outObj) throws IOException {
-    JobConf job = new JobConf(FileMBR.class);
+    JobConf job = new JobConf(Sampler.class);
+    String jar1 = ClassUtil.findContainingJar(Sampler.class);
+    String jar2 = ClassUtil.findContainingJar(inObj.getClass());
+    String jar3 = ClassUtil.findContainingJar(outObj.getClass());
+    if (!jar2.equals(jar1))
+      DistributedCache.addArchiveToClassPath(new Path(jar2), job,
+          FileSystem.getLocal(job));
+    if (!jar3.equals(jar1) && !jar3.equals(jar2))
+      DistributedCache.addArchiveToClassPath(new Path(jar3), job,
+          FileSystem.getLocal(job));
     
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);

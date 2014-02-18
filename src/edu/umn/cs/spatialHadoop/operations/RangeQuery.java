@@ -17,6 +17,7 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BooleanWritable;
@@ -34,6 +35,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.util.ClassUtil;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
@@ -292,7 +294,12 @@ public class RangeQuery {
       Path userOutputPath, Shape queryShape, Shape shape, boolean overwrite,
       boolean background)
       throws IOException {
-    JobConf job = new JobConf(FileMBR.class);
+    JobConf job = new JobConf(RangeQuery.class);
+    String jar1 = ClassUtil.findContainingJar(RangeQuery.class);
+    String jar2 = ClassUtil.findContainingJar(shape.getClass());
+    if (!jar2.equals(jar1))
+      DistributedCache.addArchiveToClassPath(new Path(jar2), job,
+          FileSystem.getLocal(job));
     
     FileSystem outFs = inputFile.getFileSystem(job);
     Path outputPath = userOutputPath;

@@ -415,7 +415,7 @@ public class PlotPyramid {
     boolean keepAspectRatio = cla.is("keep-ratio", true);
     boolean background = cla.is("background");
     
-    JobConf job = new JobConf(PlotPyramid.class);
+    JobConf job = new JobConf(shape.getClass());
     job.setJobName("PlotPyramid");
     
     job.setMapperClass(PlotMap.class);
