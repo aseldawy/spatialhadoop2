@@ -583,7 +583,8 @@ public class Repartition {
     ShapeRecordWriter<Shape> writer;
     boolean pack = sindex.equals("r+tree");
     boolean expand = sindex.equals("rtree");
-    if (sindex.equals("grid")) {
+    if (sindex.equals("grid") ||
+    	sindex.equals("str") || sindex.equals("str+")) {
       writer = new GridRecordWriter<Shape>(out, null, null, cells, pack, expand);
     } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
       writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells, pack, expand);
