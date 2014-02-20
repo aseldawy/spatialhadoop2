@@ -543,7 +543,8 @@ public class Repartition {
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
+    } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
+        sindex.equals("str") || sindex.equals("str+")) {
       cellInfos = packInRectangles(inFs, inFile, outFs, outFile, blockSize, stockShape);
     } else {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
