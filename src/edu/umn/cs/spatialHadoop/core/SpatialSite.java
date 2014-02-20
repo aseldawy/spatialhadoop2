@@ -39,6 +39,7 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.util.ClassUtil;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
@@ -143,13 +144,62 @@ public class SpatialSite {
     }
   }
   
+
+  /**
+   * Similar to {@link Configuration#setClass(String, Class, Class)}, this
+   * method sets the given key to the provided class in the configuration.
+   * In addition, it ensures that the jar file that contains that class is in
+   * the class path of the provided configuration. This is ensured by copying
+   * the jar file and adding it to the distributed cache using the method
+   * {@link DistributedCache#addArchiveToClassPath(Path, Configuration, Path)}.
+   * @param conf - Configuration to set the key
+   * @param key - the key to set
+   * @param klass - the class to use as a value
+   * @param xface - the interface that the provided class should implement
+   */
+  public static void setClass(Configuration conf, String key, Class<?> klass, Class<?> xface) {
+    conf.setClass(key, klass, xface);
+    // Check if we need to add the containing jar to class path
+    if (ClassUtil.findContainingJar(klass).equals(ClassUtil.findContainingJar(SpatialSite.class)))
+      return;
+    Path containingJar = new Path(ClassUtil.findContainingJar(klass));
+    Path[] existingClassPaths = DistributedCache.getArchiveClassPaths(conf);
+    if (existingClassPaths != null) {
+      for (Path existingClassPath : existingClassPaths) {
+        if (containingJar.getName().equals(existingClassPath.getName()))
+          return;
+      }
+    }
+    // The containing jar is a new one and needs to be copied to class path
+    try {
+      LOG.info("Adding JAR '"+containingJar.getName()+"' to job class path");
+      FileSystem defaultFS = FileSystem.get(conf);
+      Path libFolder;
+      if (existingClassPaths != null && existingClassPaths.length > 0) {
+        libFolder = existingClassPaths[0].getParent();
+      } else {
+        // First jar to be added like this. Create a new lib folder
+        do {
+          libFolder = new Path("lib_"+(int)(Math.random()*100000));
+        } while (defaultFS.exists(libFolder));
+        defaultFS.mkdirs(libFolder);
+        defaultFS.deleteOnExit(libFolder);
+      }
+      defaultFS.copyFromLocalFile(containingJar, libFolder);
+      Path jarFullPath = new Path(libFolder, containingJar.getName()).makeQualified(defaultFS);
+      DistributedCache.addArchiveToClassPath(jarFullPath, conf, defaultFS);
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  }
+  
   /**
    * Sets a configuration parameter with a class of type Shape.
    * @param conf
    * @param klass
    */
   public static void setShapeClass(Configuration conf, Class<? extends Shape> klass) {
-    conf.setClass(ShapeClass, klass, Shape.class);
+    setClass(conf, ShapeClass, klass, Shape.class);
   }
   
   /**
