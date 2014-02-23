@@ -21,8 +21,6 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.filecache.DistributedCache;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -41,7 +39,6 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.util.ClassUtil;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
@@ -356,11 +353,6 @@ public class Repartition {
       Shape stockShape, long blockSize, CellInfo[] cellInfos, String sindex,
       boolean overwrite) throws IOException {
     JobConf job = new JobConf(Repartition.class);
-    String jar1 = ClassUtil.findContainingJar(Repartition.class);
-    String jar2 = ClassUtil.findContainingJar(stockShape.getClass());
-    if (!jar1.equals(jar2))
-      DistributedCache.addArchiveToClassPath(new Path(jar2), job,
-          FileSystem.getLocal(job));
 
     job.setJobName("Repartition");
     FileSystem outFs = outPath.getFileSystem(job);
@@ -543,7 +535,8 @@ public class Repartition {
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
+    } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
+        sindex.equals("str") || sindex.equals("str+")) {
       cellInfos = packInRectangles(inFs, inFile, outFs, outFile, blockSize, stockShape);
     } else {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
@@ -582,7 +575,8 @@ public class Repartition {
     ShapeRecordWriter<Shape> writer;
     boolean pack = sindex.equals("r+tree");
     boolean expand = sindex.equals("rtree");
-    if (sindex.equals("grid")) {
+    if (sindex.equals("grid") ||
+    	sindex.equals("str") || sindex.equals("str+")) {
       writer = new GridRecordWriter<Shape>(out, null, null, cells, pack, expand);
     } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
       writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells, pack, expand);

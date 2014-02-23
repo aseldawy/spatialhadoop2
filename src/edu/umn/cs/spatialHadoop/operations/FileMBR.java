@@ -19,7 +19,6 @@ import java.util.Iterator;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -41,7 +40,6 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
-import org.apache.hadoop.util.ClassUtil;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
@@ -224,11 +222,6 @@ public class FileMBR {
       return globalIndex.getMBR();
     }
     JobConf job = new JobConf(FileMBR.class);
-    String jar1 = ClassUtil.findContainingJar(FileMBR.class);
-    String jar2 = ClassUtil.findContainingJar(shape.getClass());
-    if (!jar2.equals(jar1))
-      DistributedCache.addArchiveToClassPath(new Path(jar2), job,
-          FileSystem.getLocal(job));
       
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
