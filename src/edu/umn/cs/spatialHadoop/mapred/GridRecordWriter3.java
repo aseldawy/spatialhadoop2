@@ -22,6 +22,17 @@ import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
+/**
+ * A record writer to be used to write the output of MapReduce programs to
+ * a spatial index. The key is a rectangle which indicates the MBR of the
+ * partition and value is a shape. This record writer does not replicate the
+ * given shape to partition (i.e., write it only to the given partition). If
+ * the provided rectangle (key) does not match any of the existing partitions,
+ * a new partition is created with the given boundaries.
+ * @author Ahmed Eldawy
+ *
+ * @param <S>
+ */
 public class GridRecordWriter3<S extends Shape>
 extends edu.umn.cs.spatialHadoop.core.GridRecordWriter<S> implements RecordWriter<Rectangle, S> {
 

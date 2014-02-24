@@ -19,12 +19,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.WritableComparable;
 
 import com.esri.core.geometry.ogc.OGCGeometry;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
-public class OSMPolygon extends OGCShape {
+public class OSMPolygon extends OGCShape implements WritableComparable<OSMPolygon> {
+  private static final char SEPARATOR = '\t';
   public long id;
   public Map<String, String> tags;
   
@@ -39,16 +41,16 @@ public class OSMPolygon extends OGCShape {
   
   @Override
   public Text toText(Text text) {
-    TextSerializerHelper.serializeLong(id, text, '\t');
-    return super.toText(text);
+    TextSerializerHelper.serializeLong(id, text, SEPARATOR);
+    TextSerializerHelper.serializeGeometry(text, geom, SEPARATOR);
+    TextSerializerHelper.serializeMap(text, tags);
+    return text;
   }
   
   @Override
   public void fromText(Text text) {
-    id = TextSerializerHelper.consumeLong(text, '\t');
-    this.geom = TextSerializerHelper.consumeGeometryESRI(text, '\t');
-    // Remove the separator
-    text.set(text.getBytes(), 1, text.getLength() - 1);
+    id = TextSerializerHelper.consumeLong(text, SEPARATOR);
+    this.geom = TextSerializerHelper.consumeGeometryESRI(text, SEPARATOR);
     // Read the tags
     tags.clear();
     TextSerializerHelper.consumeMap(text, tags);
@@ -90,5 +92,14 @@ public class OSMPolygon extends OGCShape {
   @Override
   public boolean equals(Object obj) {
     return ((OSMPolygon)obj).id == this.id;
+  }
+
+  @Override
+  public int compareTo(OSMPolygon poly) {
+    if (this.id < poly.id)
+      return -1;
+    if (this.id > poly.id)
+      return 1;
+    return 0;
   }
 }

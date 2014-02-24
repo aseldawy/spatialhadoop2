@@ -292,7 +292,7 @@ public class RangeQuery {
       Path userOutputPath, Shape queryShape, Shape shape, boolean overwrite,
       boolean background)
       throws IOException {
-    JobConf job = new JobConf(FileMBR.class);
+    JobConf job = new JobConf(RangeQuery.class);
     
     FileSystem outFs = inputFile.getFileSystem(job);
     Path outputPath = userOutputPath;
@@ -425,8 +425,8 @@ public class RangeQuery {
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
     final Path[] paths = cla.getPaths();
-    if (paths.length == 0 || (cla.getRectangle() == null &&
-        cla.getSelectionRatio() < 0.0f)) {
+    if (paths.length == 0 || (cla.getShape("rect") == null &&
+        cla.getFloat("ratio", -1.0f) < 0.0f)) {
       printUsage();
       throw new RuntimeException("Illegal parameters");
     }
@@ -438,10 +438,10 @@ public class RangeQuery {
       throw new RuntimeException("Input file does not exist");
     }
     final Path outputPath = paths.length > 1 ? paths[1] : null;
-    final Rectangle[] queryRanges = cla.getRectangles();
-    int concurrency = cla.getConcurrency();
-    final Shape stockShape = cla.getShape(true);
-    final boolean overwrite = cla.isOverwrite();
+    final Rectangle[] queryRanges = cla.getShapes("rect", new Rectangle());
+    int concurrency = cla.getInt("concurrency", 1);
+    final Shape stockShape = cla.getShape("shape");
+    final boolean overwrite = cla.is("overwrite");
 
     final long[] results = new long[queryRanges.length];
     final Vector<Thread> threads = new Vector<Thread>();

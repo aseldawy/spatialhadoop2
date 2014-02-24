@@ -21,7 +21,6 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -31,6 +30,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileOutputFormat;
+import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -229,10 +229,28 @@ public class Repartition {
    * @param rtree
    * @param overwrite
    * @throws IOException
+   * @deprecated this method is replaced with
+   *   {@link #repartitionMapReduce(Path, Path, CommandLineArguments)}
    */
+  @Deprecated
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, String sindex,
       boolean overwrite) throws IOException {
+    CommandLineArguments params = new CommandLineArguments();
+    if (stockShape != null)
+      params.setClass("shape", stockShape.getClass(), Shape.class);
+    params.setLong("blocksize", blockSize);
+    params.set("sindex", sindex);
+    params.setBoolean("overwrite", overwrite);
+    repartitionMapReduce(inFile, outPath, params);
+  }
+  
+  public static void repartitionMapReduce(Path inFile, Path outPath,
+      CommandLineArguments params) throws IOException {
+    String sindex = params.get("sindex");
+    boolean overwrite = params.is("overwrite");
+    long blockSize = params.getLong("blocksize", 0);
+    Shape stockShape = params.getShape("shape");
     
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileSystem outFs = outPath.getFileSystem(new Configuration());
@@ -251,7 +269,7 @@ public class Repartition {
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
     if (sindex.equals("grid")) {
-      Rectangle input_mbr = FileMBR.fileMBRMapReduce(inFs, inFile, stockShape, false);
+      Rectangle input_mbr = FileMBR.fileMBRMapReduce(inFs, inFile, params);
       long inFileSize = FileMBR.sizeOfLastProcessedFile;
       int num_partitions = calculateNumberOfPartitions(new Configuration(),
           inFileSize, outFs, outPath, blockSize);
@@ -335,6 +353,7 @@ public class Repartition {
       Shape stockShape, long blockSize, CellInfo[] cellInfos, String sindex,
       boolean overwrite) throws IOException {
     JobConf job = new JobConf(Repartition.class);
+
     job.setJobName("Repartition");
     FileSystem outFs = outPath.getFileSystem(job);
     
@@ -456,27 +475,58 @@ public class Repartition {
     return cellsInfo;
   }
   
+  /**
+   * @param inFile
+   * @param outFile
+   * @param stockShape
+   * @param blockSize
+   * @param sindex
+   * @param overwrite
+   * @throws IOException
+   * @deprecated this method is replaced with
+   *   {@link #repartitionLocal(Path, Path, CommandLineArguments)}
+   */
+  @Deprecated
   public static <S extends Shape> void repartitionLocal(Path inFile,
       Path outFile, S stockShape, long blockSize, String sindex,
       boolean overwrite)
           throws IOException {
+    CommandLineArguments params = new CommandLineArguments();
+    if (stockShape != null)
+      params.setClass("shape", stockShape.getClass(), Shape.class);
+    params.setLong("blocksize", blockSize);
+    params.set("sindex", sindex);
+    params.setBoolean("overwrite", overwrite);
+    repartitionLocal(inFile, outFile, params);
+  }
+  
+  public static <S extends Shape> void repartitionLocal(Path inFile,
+      Path outFile, CommandLineArguments params) throws IOException {
     
+    String sindex = params.get("sindex");
+    boolean overwrite = params.is("overwrite");
+    long blockSize = params.getLong("blocksize", 0);
+    Shape stockShape = params.getShape("shape");
+
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileSystem outFs = outFile.getFileSystem(new Configuration());
     
     // Calculate number of partitions in output file
-    // Copy blocksize from source file if it's globally indexed
     if (blockSize == 0) {
       GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
       if (globalIndex != null) {
+        // Copy blocksize from source file if it's globally indexed
         blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
+      } else {
+        // Use default block size for output file system
+        blockSize = outFs.getDefaultBlockSize(outFile);
       }
     }
 
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
     if (sindex.equals("grid")) {
-      Rectangle input_mbr = FileMBR.fileMBRLocal(inFs, inFile, stockShape);
+      Rectangle input_mbr = FileMBR.fileMBRLocal(inFs, inFile, params);
       long inFileSize = FileMBR.sizeOfLastProcessedFile;
       int num_partitions = calculateNumberOfPartitions(new Configuration(),
           inFileSize, outFs, outFile, blockSize);
@@ -485,7 +535,8 @@ public class Repartition {
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
+    } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
+        sindex.equals("str") || sindex.equals("str+")) {
       cellInfos = packInRectangles(inFs, inFile, outFs, outFile, blockSize, stockShape);
     } else {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
@@ -524,7 +575,8 @@ public class Repartition {
     ShapeRecordWriter<Shape> writer;
     boolean pack = sindex.equals("r+tree");
     boolean expand = sindex.equals("rtree");
-    if (sindex.equals("grid")) {
+    if (sindex.equals("grid") ||
+    	sindex.equals("str") || sindex.equals("str+")) {
       writer = new GridRecordWriter<Shape>(out, null, null, cells, pack, expand);
     } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
       writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells, pack, expand);
@@ -545,31 +597,53 @@ public class Repartition {
       ((GridRecordWriter<Shape>)writer).setBlockSize(blockSize);
     
     long length = inFileStatus.getLen();
-    FSDataInputStream datain = inFs.open(in);
-    ShapeRecordReader<S> reader = new ShapeRecordReader<S>(datain, 0, length);
+    ShapeRecordReader<S> reader = new ShapeRecordReader<S>(new Configuration(),
+        new FileSplit(in, 0, length, new String[] {}));
     Rectangle c = reader.createKey();
     
     NullWritable dummy = NullWritable.get();
     
     while (reader.next(c, stockShape)) {
-      writer.write(dummy, stockShape);
+      if (stockShape.getMBR() != null)
+        writer.write(dummy, stockShape);
     }
+    reader.close();
     writer.close(null);
   }
   
+  /**
+   * @param inFile
+   * @param outputPath
+   * @param params
+   * @throws IOException
+   */
+  public static void repartition(Path inFile, Path outputPath,
+      CommandLineArguments params) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(params);
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    boolean autoLocal = !(inFStatus.isDir() ||
+        inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    Boolean isLocal = params.is("local", autoLocal);
+    
+    if (isLocal)
+      repartitionLocal(inFile, outputPath, params);
+    else
+      repartitionMapReduce(inFile, outputPath, params);
+  }
+
   private static void printUsage() {
     System.out.println("Builds a spatial index on an input file");
     System.out.println("Parameters (* marks required parameters):");
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("shape:<point|rectangle|polygon> - (*) Type of shapes stored in input file");
-    System.out.println("sindex:<index> - (*) Type of spatial index");
+    System.out.println("sindex:<index> - (*) Type of spatial index (grid|rtree|r+tree|str|str+)");
     System.out.println("blocksize:<size> - Size of blocks in output file");
     System.out.println("-overwrite - Overwrite output file without noitce");
   }
 
   /**
-	 * Entry point to the file.
+	 * Entry point to the operation.
 	 * shape:<s> the shape to use. Automatically inferred from input file if not set.
 	 * sindex<index> Type of spatial index to build
 	 * cells-of:<filename> Use the cells of the given file for the global index.
@@ -581,47 +655,23 @@ public class Repartition {
 	 * @throws Exception
 	 */
 	public static void main(String[] args) throws Exception {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    if (cla.getPaths().length < 2 || cla.get("sindex") == null) {
-      printUsage();
-      throw new RuntimeException("Illegal arguments");
-    }
-    Path inputPath = cla.getPaths()[0];
-    FileSystem fs = inputPath.getFileSystem(new Configuration());
+    CommandLineArguments params = new CommandLineArguments(args);
     
-    if (!fs.exists(inputPath)) {
+    if (!params.checkInputOutput()) {
       printUsage();
-      throw new RuntimeException("Input file does not exist");
+      return;
     }
-    
-    Path outputPath = cla.getPaths()[1];
+    if (params.get("sindex") == null) {
+      System.err.println("Please specify type of index to build");
+      printUsage();
+      return;
+    }
+    Path inputPath = params.getInputPath();
+    Path outputPath = params.getOutputPath();
 
     // The spatial index to use
-    String sindex = cla.get("sindex");
-    
-    boolean overwrite = cla.isOverwrite();
-    boolean local = cla.isLocal();
-    long blockSize = cla.getBlockSize();
-    Shape stockShape = cla.getShape(true);
-    LOG.info("Shape: "+stockShape.getClass());
-    CellInfo[] cells = cla.getCells();
-
     long t1 = System.currentTimeMillis();
-    if (cells != null) {
-      if (local)
-        repartitionLocal(inputPath, outputPath, stockShape,
-            blockSize, cells, sindex, overwrite);
-      else
-        repartitionMapReduce(inputPath, outputPath, stockShape,
-            blockSize, cells, sindex, overwrite);
-    } else {
-      if (local)
-        repartitionLocal(inputPath, outputPath, stockShape,
-            blockSize, sindex, overwrite);
-      else
-        repartitionMapReduce(inputPath, outputPath, stockShape,
-            blockSize, sindex, overwrite);
-    }
+    repartition(inputPath, outputPath, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total indexing time in millis "+(t2-t1));
 	}

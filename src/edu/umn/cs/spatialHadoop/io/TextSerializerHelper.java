@@ -543,7 +543,7 @@ public final class TextSerializerHelper {
       else if (x >= 'A' && x <= 'F')
         x = (byte) ((x - 'A') + 0xA);
       else
-        throw new RuntimeException("Invalid hex char "+x);
+        throw new RuntimeException("Invalid hex char "+x+" at position "+i);
       if (i % 2 == 0)
         x <<= 4;
       bytes[i / 2] |= x;
@@ -555,7 +555,8 @@ public final class TextSerializerHelper {
     String str = bytesToHex(geom.asBinary().array());
     byte[] str_b = str.getBytes();
     text.append(str_b, 0, str_b.length);
-    text.append(new byte[] {(byte) toAppend}, 0, 1);
+    if (toAppend != '\0')
+      text.append(new byte[] {(byte) toAppend}, 0, 1);
   }
   
   private static final byte[] HexLookupTable = {

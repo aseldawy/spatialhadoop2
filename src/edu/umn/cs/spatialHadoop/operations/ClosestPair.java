@@ -252,7 +252,7 @@ public class ClosestPair {
 	public static <S extends Shape> void closestPair(FileSystem fs,
 			Path file, S stockShape) throws IOException {
 		// Try to get file MBR from the MBRs of blocks
-		JobConf job = new JobConf(ClosestPair.class);
+		JobConf job = new JobConf(stockShape.getClass());
 
 		Path outputPath;
 		FileSystem outFs = FileSystem.get(job);
@@ -295,9 +295,9 @@ public class ClosestPair {
 	 */
 	public static void main(String[] args) throws IOException {
 	  CommandLineArguments cla = new CommandLineArguments(args);
-	  if (cla.getPaths().length == 0 && cla.isLocal()) {
+	  if (cla.getPaths().length == 0 && cla.is("local")) {
 	    long t1 = System.currentTimeMillis();
-	    closestPairStream((Point)cla.getShape(true));
+	    closestPairStream((Point)cla.getShape("shape"));
       long t2 = System.currentTimeMillis();
       System.out.println("Total time: "+(t2-t1)+" millis");
 	    return;
@@ -313,7 +313,7 @@ public class ClosestPair {
 			throw new RuntimeException("Input file does not exist");
 		}
 
-		Point stockShape = (Point) cla.getShape(true);
+		Point stockShape = (Point) cla.getShape("shape");
 		long t1 = System.currentTimeMillis();
 		if (SpatialSite.getGlobalIndex(fs, inputFile) != null)
 		  closestPair(fs, inputFile, stockShape);

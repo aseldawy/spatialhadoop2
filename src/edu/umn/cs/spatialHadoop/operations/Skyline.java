@@ -407,9 +407,9 @@ public class Skyline {
     }    
     Path[] paths = cla.getPaths();
     if (paths.length == 0) {
-      if (cla.isLocal()) {
+      if (cla.is("local")) {
         long t1 = System.currentTimeMillis();
-        skylineStream((Point)cla.getShape(true), dir);
+        skylineStream((Point)cla.getShape("shape"), dir);
         long t2 = System.currentTimeMillis();
         System.out.println("Total time: "+(t2-t1)+" millis");
       } else {
@@ -419,14 +419,14 @@ public class Skyline {
     }
     Path inFile = paths[0];
     Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = cla.isOverwrite();
+    boolean overwrite = cla.is("overwrite");
     if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
       System.err.println("Output path already exists and overwrite flag is not set");
       return;
     }
     
     long t1 = System.currentTimeMillis();
-    skylineMapReduce(inFile, outFile, dir, cla.isOverwrite());
+    skylineMapReduce(inFile, outFile, dir, cla.is("overwrite"));
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }

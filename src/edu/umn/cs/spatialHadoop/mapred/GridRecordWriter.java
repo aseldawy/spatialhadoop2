@@ -22,6 +22,16 @@ import org.apache.hadoop.mapred.Reporter;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
+/**
+ * A record writer that can be used in MapReduce programs to write an index
+ * file where the key is the cell ID and the value is the shape to write to
+ * that cell. A given shape is not implicitly replicated to any other cells
+ * other than the one provided.
+ * 
+ * @author Ahmed Eldawy
+ *
+ * @param <S>
+ */
 public class GridRecordWriter<S extends Shape>
 extends edu.umn.cs.spatialHadoop.core.GridRecordWriter<S> implements RecordWriter<IntWritable, S> {
 

@@ -36,6 +36,7 @@ import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -228,7 +229,7 @@ public class Sampler {
   public static <T extends TextSerializable, O extends TextSerializable> int sampleMapReduceWithRatio(
       FileSystem fs, Path[] files, double ratio, long sampleSize, long seed,
       final ResultCollector<O> output, T inObj, O outObj) throws IOException {
-    JobConf job = new JobConf(FileMBR.class);
+    JobConf job = new JobConf(Sampler.class);
     
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
@@ -240,8 +241,8 @@ public class Sampler {
     job.setJobName("Sample");
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(Text.class);
-    job.setClass(InClass, inObj.getClass(), TextSerializable.class);
-    job.setClass(OutClass, outObj.getClass(), TextSerializable.class);
+    SpatialSite.setClass(job, InClass, inObj.getClass(), TextSerializable.class);
+    SpatialSite.setClass(job, OutClass, outObj.getClass(), TextSerializable.class);
     
     job.setMapperClass(Map.class);
     job.setLong(RANDOM_SEED, seed);
@@ -532,21 +533,9 @@ public class Sampler {
       while (offsets[record_i] > files_start_offset[file_i+1])
         file_i++;
 
-      // Open a stream to the current file and use it to read all samples
-      // in this file
-      InputStream in = fs.open(files[file_i]);
-
-      // Check if the file is compressed
-      CompressionCodec codec = new CompressionCodecFactory(fs.getConf()).getCodec(files[file_i]);
-      Decompressor decompressor = null;
-      if (codec != null) {
-        // Input file is compressed. Need to read the whole file sequentially
-        decompressor = CodecPool.getDecompressor(codec);
-        in = codec.createInputStream(in, decompressor);
-      }
-      
       long current_file_size = files_start_offset[file_i+1] - files_start_offset[file_i];
-      ShapeLineRecordReader reader = new ShapeLineRecordReader(in, 0, current_file_size);
+      ShapeLineRecordReader reader = new ShapeLineRecordReader(fs.getConf(),
+          new FileSplit(files[file_i], 0, current_file_size, new String[] {}));
       Rectangle key = reader.createKey();
       Text line = reader.createValue();
       long pos = files_start_offset[file_i];
@@ -566,10 +555,7 @@ public class Sampler {
           records_returned++;
         }
       }
-      in.close();
-      
-      if (decompressor != null)
-        CodecPool.returnDecompressor(decompressor);
+      reader.close();
       
       // Skip any remaining records that were supposed to be read from this file
       // This case might happen if a generated random position was in the middle
@@ -591,15 +577,15 @@ public class Sampler {
       throw new RuntimeException("Input file does not exist");
     }
     
-    int count = cla.getCount();
-    long size = cla.getSize();
-    double ratio = cla.getSelectionRatio();
-    long seed = cla.getSeed();
-    TextSerializable stockObject = cla.getShape(true);
+    int count = cla.getInt("count", 1);
+    long size = cla.getSize("size");
+    double ratio = cla.getFloat("ratio", -1.0f);
+    long seed = cla.getLong("seed", System.currentTimeMillis());
+    TextSerializable stockObject = cla.getShape("shape");
     if (stockObject == null)
       stockObject = new Text2();
 
-    TextSerializable outputShape = cla.getOutputShape();
+    TextSerializable outputShape = cla.getShape("outshape");
     if (outputShape == null)
       outputShape = new Text2();
     

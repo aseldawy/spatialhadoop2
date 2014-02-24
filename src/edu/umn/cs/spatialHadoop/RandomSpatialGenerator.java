@@ -56,7 +56,7 @@ public class RandomSpatialGenerator {
       long blocksize, Shape shape,
       String sindex, long seed, int rectsize,
       RandomShapeGenerator.DistributionType type, boolean overwrite) throws IOException {
-    JobConf job = new JobConf(RandomSpatialGenerator.class);
+    JobConf job = new JobConf(shape.getClass());
     
     job.setJobName("Generator");
     FileSystem outFs = file.getFileSystem(job);
@@ -252,23 +252,23 @@ public class RandomSpatialGenerator {
    */
   public static void main(String[] args) throws IOException {
     CommandLineArguments cla = new CommandLineArguments(args);
-    Rectangle mbr = cla.getRectangle();
+    Rectangle mbr = (Rectangle) cla.getShape("rect");
     if (mbr == null) {
       printUsage();
       throw new RuntimeException("Set MBR of the generated file using rect:<x,y,w,h>");
     }
 
     Path outputFile = cla.getPath();
-    Shape stockShape = cla.getShape(false);
-    long blocksize = cla.getBlockSize();
-    int rectSize = cla.getRectSize();
-    long seed = cla.getSeed();
+    Shape stockShape = cla.getShape("shape");
+    long blocksize = cla.getLong("blocksize", 0);
+    int rectSize = cla.getInt("rectsize", 100);
+    long seed = cla.getLong("seed", System.currentTimeMillis());
     if (stockShape == null)
       stockShape = new Rectangle();
     
-    long totalSize = cla.getSize();
+    long totalSize = cla.getSize("size");
     String sindex = cla.get("sindex");
-    boolean overwrite = cla.isOverwrite();
+    boolean overwrite = cla.is("overwrite");
     
     DistributionType type = DistributionType.UNIFORM;
     String strType = cla.get("type");

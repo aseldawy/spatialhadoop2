@@ -49,9 +49,9 @@ public class ReadFile {
     
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, inFile);
     if (gindex == null) {
-      BlockLocation[] locations = cla.getOffset() == -1 ?
+      BlockLocation[] locations = cla.getInt("offset", 0) == -1 ?
           fs.getFileBlockLocations(fs.getFileStatus(inFile), 0, length) :
-            fs.getFileBlockLocations(fs.getFileStatus(inFile), cla.getOffset(), 1);
+            fs.getFileBlockLocations(fs.getFileStatus(inFile), cla.getInt("offset", 0), 1);
       System.out.println(locations.length+" heap blocks");
     } else {
       for (Partition p : gindex) {

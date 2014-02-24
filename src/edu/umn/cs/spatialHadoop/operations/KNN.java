@@ -315,7 +315,7 @@ public class KNN {
   public static <S extends Shape> long knnMapReduce(FileSystem fs,
       Path inputPath, Path userOutputPath, final Point queryPoint, int k, S shape,
       boolean overwrite, boolean background) throws IOException {
-    JobConf job = new JobConf(FileMBR.class);
+    JobConf job = new JobConf(shape.getClass());
     
     job.setJobName("KNN");
     
@@ -536,21 +536,21 @@ public class KNN {
     Path[] paths = cla.getPaths();
     Configuration conf = new Configuration();
     final Path inputFile = paths[0];
-    int count = cla.getCount();
-    double closeness = cla.getClosenessFactor();
-    final Point[] queryPoints = closeness < 0 ? cla.getPoints() : new Point[count];
+    int count = cla.getInt("count", 1);
+    double closeness = cla.getFloat("closeness", -1.0f);
+    final Point[] queryPoints = closeness < 0 ? cla.getShapes("point", new Point()) : new Point[count];
     final FileSystem fs = inputFile.getFileSystem(conf);
     if (!fs.exists(inputFile)) {
       printUsage();
       throw new RuntimeException("Input file does not exist");
     }
-    final int k = cla.getK();
-    int concurrency = cla.getConcurrency();
-    final Shape shape = cla.getShape(true);
+    final int k = cla.getInt("k", 1);
+    int concurrency = cla.getInt("concurrency", 1);
+    final Shape shape = cla.getShape("shape");
     if (k == 0) {
       LOG.warn("k = 0");
     }
-    final boolean overwrite = cla.isOverwrite();
+    final boolean overwrite = cla.is("overwrite");
 
     if (queryPoints.length == 0) {
       printUsage();
@@ -563,7 +563,7 @@ public class KNN {
     if (closeness >= 0) {
       // Get query points according to its closeness to grid intersections
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, inputFile);
-      long seed = cla.getSeed();
+      long seed = cla.getLong("seed", System.currentTimeMillis());
       Random random = new Random(seed);
       for (int i = 0; i < count; i++) {
         int i_block = random.nextInt(gindex.size());
