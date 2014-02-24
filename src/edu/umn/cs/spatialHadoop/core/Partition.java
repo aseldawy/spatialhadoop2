@@ -24,9 +24,9 @@ public class Partition extends CellInfo {
   
   public Partition() {}
   
-  public Partition(String filename, Rectangle mbr) {
+  public Partition(String filename, CellInfo cell) {
     this.filename = filename;
-    this.set(mbr);
+    this.set(cell);
   }
   
   @Override

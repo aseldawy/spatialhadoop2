@@ -75,9 +75,19 @@ public class DistributedJoin {
     @Override
     public void selectCellPairs(GlobalIndex<Partition> gIndex1,
         GlobalIndex<Partition> gIndex2,
-        ResultCollector2<Partition, Partition> output) {
+        final ResultCollector2<Partition, Partition> output) {
       // Do a spatial join between the two global indexes
-      GlobalIndex.spatialJoin(gIndex1, gIndex2, output);
+      GlobalIndex.spatialJoin(gIndex1, gIndex2, new ResultCollector2<Partition, Partition>() {
+        @Override
+        public void collect(Partition r, Partition s) {
+          Rectangle intersection = r.getIntersection(s);
+          if (intersection.getWidth() * intersection.getHeight() > 0) {
+            output.collect(r, s);
+          } else {
+            LOG.info("Skipping touching partitions "+r+", "+s);
+          }
+        }
+      });
     }
   }
   

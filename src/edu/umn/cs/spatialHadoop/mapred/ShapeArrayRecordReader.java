@@ -23,7 +23,6 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 
-import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -66,8 +65,8 @@ public class ShapeArrayRecordReader extends SpatialRecordReader<Rectangle, Array
   }
 
   @Override
-  public CellInfo createKey() {
-    return new CellInfo();
+  public Rectangle createKey() {
+    return new Rectangle();
   }
 
   @Override

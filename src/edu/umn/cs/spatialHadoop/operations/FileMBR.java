@@ -43,6 +43,7 @@ import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -126,8 +127,7 @@ public class FileMBR {
         Rectangle rect = values.next();
         mbr.expand(rect);
       }
-      Partition partition = new Partition(filename.toString(), mbr);
-      partition.cellId = Math.abs(filename.hashCode());
+      Partition partition = new Partition(filename.toString(), new CellInfo(Math.abs(filename.hashCode()), mbr));
       output.collect(NullWritable.get(), partition);
     }
   }

@@ -301,7 +301,11 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       closeCell(-cellIndex);
       return;
     }
-    cellsMbr[cellIndex].expand(shape.getMBR());
+    try {
+      cellsMbr[cellIndex].expand(shape.getMBR());
+    } catch (NullPointerException e) {
+      e.printStackTrace();
+    }
     // Convert shape to text
     text.clear();
     shape.toText(text);
@@ -369,11 +373,11 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @throws IOException
    */
   protected void closeCell(int cellIndex) throws IOException {
-    Rectangle cell = cells[cellIndex];
+    CellInfo cell = cells[cellIndex];
     if (expand)
-      cell = cellsMbr[cellIndex];
+      cell.expand(cellsMbr[cellIndex]);
     else if (pack)
-      cell = cell.getIntersection(cellsMbr[cellIndex]);
+      cell = new CellInfo(cell.cellId, cell.getIntersection(cellsMbr[cellIndex]));
 
     closeCellBackground(intermediateCellPath[cellIndex],
         getFinalCellPath(cellIndex), intermediateCellStreams[cellIndex],
@@ -392,7 +396,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    */
   protected void closeCellBackground(final Path intermediateCellPath,
       final Path finalCellPath, final OutputStream intermediateCellStream,
-      final OutputStream masterFile, final Rectangle cellMbr) throws IOException {
+      final OutputStream masterFile, final CellInfo cellMbr) throws IOException {
     
     Thread closingThread = new Thread() {
       @Override
