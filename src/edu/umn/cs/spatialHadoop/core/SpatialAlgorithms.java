@@ -21,6 +21,7 @@ import java.util.TreeSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.mapred.OutputCollector;
 
 
 /**
@@ -97,40 +98,44 @@ public class SpatialAlgorithms {
 
 		int i = 0, j = 0;
 
-    while (i < R.size() && j < S.size()) {
-      S1 r;
-      S2 s;
-      if (comparator.compare(R.get(i), S.get(j)) < 0) {
-        r = R.get(i);
-        int jj = j;
+    try {
+      while (i < R.size() && j < S.size()) {
+        S1 r;
+        S2 s;
+        if (comparator.compare(R.get(i), S.get(j)) < 0) {
+          r = R.get(i);
+          int jj = j;
 
-        while ((jj < S.size())
-            && ((s = S.get(jj)).getMBR().x1 <= r.getMBR().x2)) {
-          // Check if r and s are overlapping but not the same object
-          // for self join
-          if (r.isIntersected(s) && !r.equals(s)) {
-            if (output != null)
-              output.collect(r, s);
-            count++;
+          while ((jj < S.size())
+              && ((s = S.get(jj)).getMBR().x1 <= r.getMBR().x2)) {
+            // Check if r and s are overlapping but not the same object
+            // for self join
+            if (r.isIntersected(s) && !r.equals(s)) {
+              if (output != null)
+                output.collect(r, s);
+              count++;
+            }
+            jj++;
           }
-          jj++;
-        }
-        i++;
-      } else {
-        s = S.get(j);
-        int ii = i;
+          i++;
+        } else {
+          s = S.get(j);
+          int ii = i;
 
-        while ((ii < R.size())
-            && ((r = R.get(ii)).getMBR().x1 <= s.getMBR().x2)) {
-          if (r.isIntersected(s) && !r.equals(s)) {
-            if (output != null)
-              output.collect(r, s);
-            count++;
+          while ((ii < R.size())
+              && ((r = R.get(ii)).getMBR().x1 <= s.getMBR().x2)) {
+            if (r.isIntersected(s) && !r.equals(s)) {
+              if (output != null)
+                output.collect(r, s);
+              count++;
+            }
+            ii++;
           }
-          ii++;
+          j++;
         }
-        j++;
       }
+    } catch (RuntimeException e) {
+      e.printStackTrace();
     }
     LOG.info("Finished plane sweep and found "+count+" pairs");
     return count;
@@ -153,38 +158,100 @@ public class SpatialAlgorithms {
 
     int i = 0, j = 0;
 
-    while (i < R.length && j < S.length) {
-      S1 r;
-      S2 s;
-      if (comparator.compare(R[i], S[j]) < 0) {
-        r = R[i];
-        int jj = j;
+    try {
+      while (i < R.length && j < S.length) {
+        S1 r;
+        S2 s;
+        if (comparator.compare(R[i], S[j]) < 0) {
+          r = R[i];
+          int jj = j;
 
-        while ((jj < S.length)
-            && ((s = S[jj]).getMBR().x1 <= r.getMBR().x2)) {
-          if (r.isIntersected(s)) {
-            if (output != null)
-              output.collect(r, s);
-            count++;
+          while ((jj < S.length)
+              && ((s = S[jj]).getMBR().x1 <= r.getMBR().x2)) {
+            if (r.isIntersected(s)) {
+              if (output != null)
+                output.collect(r, s);
+              count++;
+            }
+            jj++;
           }
-          jj++;
-        }
-        i++;
-      } else {
-        s = S[j];
-        int ii = i;
+          i++;
+        } else {
+          s = S[j];
+          int ii = i;
 
-        while ((ii < R.length)
-            && ((r = R[ii]).getMBR().x1 <= s.getMBR().x2)) {
-          if (r.isIntersected(s)) {
-            if (output != null)
-              output.collect(r, s);
-            count++;
+          while ((ii < R.length)
+              && ((r = R[ii]).getMBR().x1 <= s.getMBR().x2)) {
+            if (r.isIntersected(s)) {
+              if (output != null)
+                output.collect(r, s);
+              count++;
+            }
+            ii++;
           }
-          ii++;
+          j++;
         }
-        j++;
       }
+    } catch (RuntimeException e) {
+      e.printStackTrace();
+    }
+    LOG.info("Finished plane sweep and found "+count+" pairs");
+    return count;
+  }
+  
+  public static <S extends Shape> int SelfJoin_planeSweep(final S[] R,
+      OutputCollector<S, S> output) throws IOException {
+    // TODO try precalculating MBRs of all objects and working with them
+    int count = 0;
+
+    final Comparator<Shape> comparator = new Comparator<Shape>() {
+      @Override
+      public int compare(Shape o1, Shape o2) {
+        return o1.getMBR().x1 < o2.getMBR().x1 ? -1 : 1;
+      }
+    };
+    
+    LOG.info("Self Join of "+ R.length+" shapes");
+    Arrays.sort(R, comparator);
+
+    int i = 0, j = 0;
+
+    try {
+      while (i < R.length && j < R.length) {
+        S r;
+        S s;
+        if (comparator.compare(R[i], R[j]) < 0) {
+          r = R[i];
+          int jj = j;
+
+          while ((jj < R.length)
+              && ((s = R[jj]).getMBR().x1 <= r.getMBR().x2)) {
+            if (r != s && r.isIntersected(s)) {
+              if (output != null)
+                output.collect(r, s);
+              count++;
+            }
+            jj++;
+          }
+          i++;
+        } else {
+          s = R[j];
+          int ii = i;
+
+          while ((ii < R.length)
+              && ((r = R[ii]).getMBR().x1 <= s.getMBR().x2)) {
+            if (r != s && r.isIntersected(s)) {
+              if (output != null)
+                output.collect(r, s);
+              count++;
+            }
+            ii++;
+          }
+          j++;
+        }
+      }
+    } catch (RuntimeException e) {
+      e.printStackTrace();
     }
     LOG.info("Finished plane sweep and found "+count+" pairs");
     return count;

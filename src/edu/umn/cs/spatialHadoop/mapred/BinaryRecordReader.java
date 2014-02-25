@@ -46,6 +46,9 @@ public abstract class BinaryRecordReader<K extends Writable, V extends Writable>
   /**Configuration of the current job*/
   protected Configuration conf;
   
+  /**Progress of file 1 before reading the current record. Used for progress.*/
+  protected float progress1Before;
+  
   /**
    * Creates a record reader for one of the two splits parsed by this reader.
    * @param split
@@ -68,6 +71,7 @@ public abstract class BinaryRecordReader<K extends Writable, V extends Writable>
   @Override
   public boolean next(PairWritable<K> key, PairWritable<V> value) throws IOException {
     if (firstTime) {
+      progress1Before = internalReaders[0].getProgress();
       if (!internalReaders[0].next(key.first, value.first)) {
         return false;
       }
@@ -78,6 +82,7 @@ public abstract class BinaryRecordReader<K extends Writable, V extends Writable>
     }
     // Reached the end of the second split. Reset the second split and advance
     // to the next item in the first split
+    progress1Before = internalReaders[0].getProgress();
     if (!internalReaders[0].next(key.first, value.first)) {
       // Already finished all records in first split
       return false;
@@ -121,9 +126,7 @@ public abstract class BinaryRecordReader<K extends Writable, V extends Writable>
     float progress1 = internalReaders[0].getProgress();
     float progress2 = internalReaders[1].getProgress();
     // Scale 0-9 for most significant digit
-    float progress = (float) Math.ceil(progress1 * 9) / 10.0f;
-    // Scale 0-10 for least significant digit
-    progress += progress2 * 0.1;
+    float progress = progress1Before * (1.0f - progress2) + progress1 * progress2;
     return progress;
   }
 }

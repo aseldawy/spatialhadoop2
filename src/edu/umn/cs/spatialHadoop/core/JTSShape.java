@@ -173,6 +173,9 @@ public class JTSShape implements Shape {
 
   @Override
   public boolean isIntersected(Shape s) {
+    if (s instanceof JTSShape) {
+      return geom.intersects(((JTSShape)s).geom);
+    }
     Rectangle mbr = s.getMBR();
     Coordinate[] coordinates = new Coordinate[5];
     coordinates[0] = new Coordinate(mbr.x1, mbr.y1);

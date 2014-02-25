@@ -19,30 +19,32 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
-import com.esri.core.geometry.ogc.OGCGeometry;
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryCollection;
+import com.vividsolutions.jts.geom.GeometryFactory;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.JTSShape;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.operations.DistributedJoin.DJInputFormatArray;
-import edu.umn.cs.spatialHadoop.operations.DistributedJoin.DJInputFormatRTree;
-import edu.umn.cs.spatialHadoop.operations.DistributedJoin.SpatialJoinFilter;
 
 /**
  * Computes the union of a set of shapes using a distributed MapReduce program.
@@ -63,8 +65,36 @@ public class UltimateUnion {
    * @param overlappingShapes
    * @return
    */
+  
+  private static Geometry combineIntoOneGeometry(Collection<Geometry> collections) {
+    GeometryFactory factory = new GeometryFactory();
+    GeometryCollection geometryCollection = (GeometryCollection)factory.buildGeometry(collections);
+    return geometryCollection.buffer(0);
+  }
+  
+  /**
+   * Computes the union between the given shape with all overlapping shapes
+   * and return only the segments in the result that overlap with the shape.
+   * 
+   * @param shape
+   * @param overlappingShapes
+   * @return
+   */
   public static Geometry partialUnion(Geometry shape, Collection<Geometry> overlappingShapes) {
-    return null;
+    Geometry partialResult = shape.intersection(combineIntoOneGeometry(overlappingShapes));
+    return shape.getBoundary().intersection(partialResult.getBoundary());
+  }
+
+  static class UltimateUnionMap<S extends JTSShape> extends MapReduceBase implements
+      Mapper<Rectangle, ArrayWritable, Shape, Shape>{
+
+    @Override
+    public void map(Rectangle key, ArrayWritable value,
+        final OutputCollector<Shape, Shape> output, Reporter reporter) throws IOException {
+      Shape[] objects = (Shape[])value.get();
+      SpatialAlgorithms.SelfJoin_planeSweep(objects, output);
+    }
+    
   }
   
   static class UltimateUnionReducer extends MapReduceBase implements
@@ -94,22 +124,16 @@ public class UltimateUnion {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
 
-    job.setMapperClass(DistributedJoin.RedistributeJoinMap.class);
+    job.setMapperClass(UltimateUnionMap.class);
     job.setReducerClass(UltimateUnionReducer.class);
     
     job.setMapOutputKeyClass(shape.getClass());
     job.setMapOutputValueClass(shape.getClass());
 
     // Set input and output
-    FileSystem fs = input.getFileSystem(job);
-    if (SpatialSite.isRTree(fs, input)) {
-      job.setInputFormat(DJInputFormatRTree.class);
-    } else {
-      job.setInputFormat(DJInputFormatArray.class);
-    }
+    job.setInputFormat(ShapeArrayInputFormat.class);
     FileInputFormat.addInputPath(job, input);
     FileInputFormat.addInputPath(job, input);
-    job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
     SpatialSite.setShapeClass(job, shape.getClass());
     
     job.setOutputFormat(TextOutputFormat.class);

@@ -569,9 +569,9 @@ public final class TextSerializerHelper {
   private static final WKBReader wkbReader = new WKBReader();
   
   public static void serializeGeometry(Text text, Geometry geom, char toAppend) {
-    String str = bytesToHex(wkbWriter.write(geom));
-    byte[] str_b = str.getBytes();
-    text.append(str_b, 0, str_b.length);
+    String wkt = geom.toText();
+    byte[] wkt_b = wkt.getBytes();
+    text.append(wkt_b, 0, wkt_b.length);
     if (toAppend != '\0')
       text.append(new byte[] {(byte) toAppend}, 0, 1);
   }

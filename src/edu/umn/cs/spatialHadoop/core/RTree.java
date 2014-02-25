@@ -38,6 +38,8 @@ import org.apache.hadoop.util.LineReader;
 import org.apache.hadoop.util.PriorityQueue;
 import org.apache.hadoop.util.QuickSort;
 
+import com.vividsolutions.jts.geom.TopologyException;
+
 import edu.umn.cs.spatialHadoop.io.MemoryInputStream;
 import edu.umn.cs.spatialHadoop.io.Text2;
 
@@ -1230,11 +1232,16 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
       final RTree<S2> S,
       final ResultCollector2<S1, S2> output)
       throws IOException {
-    if (R.treeStartOffset >= 0 && S.treeStartOffset >= 0) {
-      // Both trees are read from disk
-      return spatialJoinDisk(R, S, output);
-    } else {
-      return spatialJoinMemory(R, S, output);
+    try {
+      if (R.treeStartOffset >= 0 && S.treeStartOffset >= 0) {
+        // Both trees are read from disk
+        return spatialJoinDisk(R, S, output);
+      } else {
+        return spatialJoinMemory(R, S, output);
+      }
+    } catch (TopologyException e) {
+      e.printStackTrace();
+      return 0;
     }
   }
   /**
