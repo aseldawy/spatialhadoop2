@@ -63,8 +63,6 @@ public class JTSShape implements Shape {
       "MULTILINESTRING".getBytes(), "MULTIPOLYGON".getBytes(),
       "GEOMETRYCOLLECTION".getBytes() };
   
-  private static final byte[] Separator = {','};
-  
   private final WKTReader wktReader = new WKTReader();
   private final WKBWriter wkbWriter = new WKBWriter();
   private final WKBReader wkbReader = new WKBReader();
