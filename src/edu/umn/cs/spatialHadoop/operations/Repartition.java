@@ -249,7 +249,7 @@ public class Repartition {
       CommandLineArguments params) throws IOException {
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
-    long blockSize = params.getLong("blocksize", 0);
+    long blockSize = params.getSize("blocksize");
     Shape stockShape = params.getShape("shape");
     
     FileSystem inFs = inFile.getFileSystem(new Configuration());
@@ -505,7 +505,7 @@ public class Repartition {
     
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
-    long blockSize = params.getLong("blocksize", 0);
+    long blockSize = params.getSize("blocksize");
     Shape stockShape = params.getShape("shape");
 
     FileSystem inFs = inFile.getFileSystem(new Configuration());
