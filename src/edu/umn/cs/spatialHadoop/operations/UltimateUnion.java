@@ -38,7 +38,6 @@ import com.vividsolutions.jts.geom.GeometryFactory;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.JTSShape;
-import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
@@ -98,20 +97,20 @@ public class UltimateUnion {
   }
   
   static class UltimateUnionReducer extends MapReduceBase implements
-      Reducer<OSMPolygon, OSMPolygon, NullWritable, OSMPolygon> {
+      Reducer<JTSShape, JTSShape, NullWritable, JTSShape> {
 
     @Override
-    public void reduce(OSMPolygon shape, Iterator<OSMPolygon> overlaps,
-        OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
+    public void reduce(JTSShape shape, Iterator<JTSShape> overlaps,
+        OutputCollector<NullWritable, JTSShape> output, Reporter reporter)
         throws IOException {
       Vector<Geometry> overlappingShapes = new Vector<Geometry>();
       while (overlaps.hasNext()) {
-        OSMPolygon overlap = overlaps.next();
+        JTSShape overlap = overlaps.next();
         overlappingShapes.add(overlap.geom);
       }
       Geometry result = partialUnion(shape.geom, overlappingShapes);
       if (result != null)
-        output.collect(NullWritable.get(), new OSMPolygon(result));
+        output.collect(NullWritable.get(), new JTSShape(result));
     }
   }
   
@@ -166,7 +165,12 @@ public class UltimateUnion {
     
     Path input = params.getPath();
     Path output = params.getPaths()[1];
-    Shape shape = new OSMPolygon();
+    Shape shape = params.getShape("shape");
+    
+    if (shape == null || !(shape instanceof JTSShape)) {
+      LOG.error("Given shape must be a subclass of "+JTSShape.class);
+      return;
+    }
     
     ultimateUnion(input, output, shape);
   }
