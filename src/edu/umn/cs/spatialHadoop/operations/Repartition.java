@@ -573,8 +573,8 @@ public class Repartition {
     outFs.mkdirs(out);
     
     ShapeRecordWriter<Shape> writer;
-    boolean pack = sindex.equals("r+tree");
-    boolean expand = sindex.equals("rtree");
+    boolean pack = sindex.equals("r+tree") || sindex.equals("str+");
+    boolean expand = sindex.equals("rtree") || sindex.equals("str");
     if (sindex.equals("grid") ||
     	sindex.equals("str") || sindex.equals("str+")) {
       writer = new GridRecordWriter<Shape>(out, null, null, cells, pack, expand);
