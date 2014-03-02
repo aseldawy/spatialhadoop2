@@ -234,7 +234,7 @@ public class ClosestPairHadoop {
 	public static <S extends Shape> void cloesetPair(FileSystem fs,
 			Path file, S stockShape) throws IOException {
 		// Try to get file MBR from the MBRs of blocks
-		JobConf job = new JobConf(ClosestPairHadoop.class);
+		JobConf job = new JobConf(stockShape.getClass());
 
 		Path outputPath;
 		FileSystem outFs = FileSystem.get(job);
@@ -266,7 +266,7 @@ public class ClosestPairHadoop {
 		
 		System.out.println("Begin second round!");
 		// 2nd Round
-		job = new JobConf(ClosestPairHadoop.class);
+		job = new JobConf(stockShape.getClass());
 		job.setJobName("Second Round");
 		job.setOutputKeyClass(NullWritable.class);
 		job.setMapOutputValueClass(Point.class);

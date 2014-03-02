@@ -443,7 +443,7 @@ public class DistributedJoin {
       boolean background) throws IOException {
     long t1 = System.currentTimeMillis();
 
-    JobConf job = new JobConf(DistributedJoin.class);
+    JobConf job = new JobConf(stockShape.getClass());
     
     FileSystem outFs = inputFiles[0].getFileSystem(job);
     Path outputPath = userOutputPath;

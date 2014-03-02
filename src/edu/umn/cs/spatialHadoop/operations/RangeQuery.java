@@ -292,7 +292,7 @@ public class RangeQuery {
       Path userOutputPath, Shape queryShape, Shape shape, boolean overwrite,
       boolean background)
       throws IOException {
-    JobConf job = new JobConf(FileMBR.class);
+    JobConf job = new JobConf(RangeQuery.class);
     
     FileSystem outFs = inputFile.getFileSystem(job);
     Path outputPath = userOutputPath;

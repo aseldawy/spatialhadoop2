@@ -315,7 +315,7 @@ public class KNN {
   public static <S extends Shape> long knnMapReduce(FileSystem fs,
       Path inputPath, Path userOutputPath, final Point queryPoint, int k, S shape,
       boolean overwrite, boolean background) throws IOException {
-    JobConf job = new JobConf(FileMBR.class);
+    JobConf job = new JobConf(shape.getClass());
     
     job.setJobName("KNN");
     

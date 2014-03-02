@@ -222,7 +222,7 @@ public class FileMBR {
       return globalIndex.getMBR();
     }
     JobConf job = new JobConf(FileMBR.class);
-    
+      
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
     do {

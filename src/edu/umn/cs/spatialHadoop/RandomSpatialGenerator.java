@@ -56,7 +56,7 @@ public class RandomSpatialGenerator {
       long blocksize, Shape shape,
       String sindex, long seed, int rectsize,
       RandomShapeGenerator.DistributionType type, boolean overwrite) throws IOException {
-    JobConf job = new JobConf(RandomSpatialGenerator.class);
+    JobConf job = new JobConf(shape.getClass());
     
     job.setJobName("Generator");
     FileSystem outFs = file.getFileSystem(job);

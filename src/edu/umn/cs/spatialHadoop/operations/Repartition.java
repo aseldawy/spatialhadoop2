@@ -21,7 +21,6 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -31,6 +30,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileOutputFormat;
+import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -249,7 +249,7 @@ public class Repartition {
       CommandLineArguments params) throws IOException {
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
-    long blockSize = params.getLong("blocksize", 0);
+    long blockSize = params.getSize("blocksize");
     Shape stockShape = params.getShape("shape");
     
     FileSystem inFs = inFile.getFileSystem(new Configuration());
@@ -353,6 +353,7 @@ public class Repartition {
       Shape stockShape, long blockSize, CellInfo[] cellInfos, String sindex,
       boolean overwrite) throws IOException {
     JobConf job = new JobConf(Repartition.class);
+
     job.setJobName("Repartition");
     FileSystem outFs = outPath.getFileSystem(job);
     
@@ -504,7 +505,7 @@ public class Repartition {
     
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
-    long blockSize = params.getLong("blocksize", 0);
+    long blockSize = params.getSize("blocksize");
     Shape stockShape = params.getShape("shape");
 
     FileSystem inFs = inFile.getFileSystem(new Configuration());
@@ -534,7 +535,8 @@ public class Repartition {
           input_mbr.x2, input_mbr.y2);
       gridInfo.calculateCellDimensions(num_partitions);
       cellInfos = gridInfo.getAllCells();
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
+    } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
+        sindex.equals("str") || sindex.equals("str+")) {
       cellInfos = packInRectangles(inFs, inFile, outFs, outFile, blockSize, stockShape);
     } else {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
@@ -571,9 +573,10 @@ public class Repartition {
     outFs.mkdirs(out);
     
     ShapeRecordWriter<Shape> writer;
-    boolean pack = sindex.equals("r+tree");
-    boolean expand = sindex.equals("rtree");
-    if (sindex.equals("grid")) {
+    boolean pack = sindex.equals("r+tree") || sindex.equals("str+");
+    boolean expand = sindex.equals("rtree") || sindex.equals("str");
+    if (sindex.equals("grid") ||
+    	sindex.equals("str") || sindex.equals("str+")) {
       writer = new GridRecordWriter<Shape>(out, null, null, cells, pack, expand);
     } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
       writer = new RTreeGridRecordWriter<Shape>(out, null, null, cells, pack, expand);
@@ -594,8 +597,8 @@ public class Repartition {
       ((GridRecordWriter<Shape>)writer).setBlockSize(blockSize);
     
     long length = inFileStatus.getLen();
-    FSDataInputStream datain = inFs.open(in);
-    ShapeRecordReader<S> reader = new ShapeRecordReader<S>(datain, 0, length);
+    ShapeRecordReader<S> reader = new ShapeRecordReader<S>(new Configuration(),
+        new FileSplit(in, 0, length, new String[] {}));
     Rectangle c = reader.createKey();
     
     NullWritable dummy = NullWritable.get();
@@ -604,6 +607,7 @@ public class Repartition {
       if (stockShape.getMBR() != null)
         writer.write(dummy, stockShape);
     }
+    reader.close();
     writer.close(null);
   }
   
