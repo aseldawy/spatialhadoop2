@@ -315,6 +315,8 @@ public class CommandLineArguments extends Configuration {
 
   public long getSize(String key) {
     String size_str = get(key);
+    if (size_str == null)
+      return 0;
     if (size_str.indexOf('.') == -1)
       return Long.parseLong(size_str);
     String[] size_parts = size_str.split("\\.", 2);
