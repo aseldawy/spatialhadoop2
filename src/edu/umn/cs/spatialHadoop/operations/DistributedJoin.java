@@ -13,7 +13,10 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -22,6 +25,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
@@ -109,8 +113,8 @@ public class DistributedJoin {
         // Join two arrays using the plane sweep algorithm
         if (mapperMBR != null) {
           // Only join shapes in the intersection rectangle
-          ArrayList<Shape> r = new ArrayList<Shape>();
-          ArrayList<Shape> s = new ArrayList<Shape>();
+          List<Shape> r = new Vector<Shape>();
+          List<Shape> s = new Vector<Shape>();
           for (Shape shape : (Shape[])((ArrayWritable) value.first).get()) {
             Rectangle mbr = shape.getMBR();
             if (mbr != null && mapperMBR.isIntersected(mbr))
@@ -501,6 +505,9 @@ public class DistributedJoin {
       job.setInputFormat(DJInputFormatRTree.class);
       DJInputFormatRTree.addInputPaths(job, commaSeparatedFiles);
     } else {
+      // Ensure all objects are read in one shot
+      job.setInt(SpatialSite.MaxBytesInOneRead, -1);
+      job.setInt(SpatialSite.MaxShapesInOneRead, -1);
       job.setInputFormat(DJInputFormatArray.class);
       DJInputFormatArray.addInputPaths(job, commaSeparatedFiles);
     }
@@ -646,6 +653,45 @@ public class DistributedJoin {
     return result_size;
   }
   
+  private static long selfJoinLocal(Path in, Path out, CommandLineArguments cla)
+      throws IOException {
+    FileSystem inFs = in.getFileSystem(cla);
+    long length = inFs.getFileStatus(in).getLen();
+    // Ensure all shapes are read in one shot
+    cla.setInt(SpatialSite.MaxBytesInOneRead, -1);
+    cla.setInt(SpatialSite.MaxShapesInOneRead, -1);
+    Shape shape = cla.getShape("shape");
+    SpatialSite.setShapeClass(cla, shape.getClass());
+    ShapeArrayRecordReader reader = new ShapeArrayRecordReader(cla,
+        new FileSplit(in, 0, length, new String[] {}));
+    FileSystem outFs = out.getFileSystem(cla);
+    final PrintStream writer = new PrintStream(outFs.create(out));
+    final Text temp = new Text();
+    
+    Rectangle key = reader.createKey();
+    ArrayWritable value = reader.createValue();
+    long resultSize = 0;
+    if (reader.next(key, value)) {
+      Shape[] writables = (Shape[]) value.get();
+      resultSize += SpatialAlgorithms.SelfJoin_planeSweep(writables, new OutputCollector<Shape, Shape>() {
+        @Override
+        public void collect(Shape r, Shape s) throws IOException {
+          writer.print(r.toText(temp));
+          writer.print(",");
+          writer.println(s.toText(temp));
+        }
+      });
+      if (reader.next(key, value)) {
+        throw new RuntimeException("Error! Not all values read in one shot.");
+      }
+    }
+    
+    reader.close();
+    writer.close();
+    
+    return resultSize;
+  }
+
   private static void printUsage() {
     System.out.println("Performs a spatial join between two files using the distributed join algorithm");
     System.out.println("Parameters: (* marks the required parameters)");
@@ -673,13 +719,18 @@ public class DistributedJoin {
       printUsage();
       return;
     }
+    
     String repartition = cla.get("repartition");
     
     Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
     boolean overwrite = cla.is("overwrite");
 
+
     long result_size;
-    if (repartition == null || repartition.equals("auto")) {
+    if (inputFiles[0].equals(inputFiles[1])) {
+      // Special case for self join
+      result_size = selfJoinLocal(inputFiles[0], outputPath, cla);
+    } else if (repartition == null || repartition.equals("auto")) {
       result_size = distributedJoinSmart(fs, inputFiles, outputPath, stockShape, overwrite);
     } else if (repartition.equals("yes")) {
       int file_to_repartition = selectRepartition(fs, inputFiles);
