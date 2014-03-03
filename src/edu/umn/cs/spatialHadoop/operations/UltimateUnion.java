@@ -35,15 +35,16 @@ import org.apache.hadoop.mapred.Reporter;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.util.AssertionFailedException;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.JTSShape;
-import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
@@ -58,20 +59,63 @@ public class UltimateUnion {
   private static final Log LOG = LogFactory.getLog(UltimateUnion.class);
 
   /**
-   * Computes the union between the given shape with all overlapping shapes
-   * and return only the segments in the result that overlap with the shape.
-   * 
-   * @param shape
-   * @param overlappingShapes
+   * Computes the union of all given shapes and return one shape with all
+   * segments on the boundaries of the union. This method computes the union
+   * using the buffer(0) method which should be faster but is not stable.
+   * Sometimes, it breaks with input polygons of very high precision.
+   * @param collections
    * @return
    */
-  
-  private static Geometry combineIntoOneGeometry(Collection<Geometry> collections) {
-    GeometryFactory factory = new GeometryFactory();
-    GeometryCollection geometryCollection = (GeometryCollection)factory.buildGeometry(collections);
-    return geometryCollection.buffer(0);
+  private static Geometry combineIntoOneGeometryBroken(Collection<Geometry> collections) {
+    try {
+      GeometryFactory factory = new GeometryFactory();
+      GeometryCollection geometryCollection = (GeometryCollection)factory.buildGeometry(collections);
+      return geometryCollection.buffer(0);
+    } catch (AssertionFailedException e) {
+      e.printStackTrace();
+      System.out.println(collections);
+      throw e;
+    }
   }
   
+  /**
+   * Computes the union of the given set of shapes. This method starts with
+   * one polygon and adds other polygons one by one computing the union at
+   * each step. This method is safer than using the buffer(0) method but it
+   * might be slower.
+   * @param collections
+   * @return
+   */
+  private static Geometry combineIntoOneGeometrySafe(Collection<Geometry> collections) {
+    Geometry res = null;
+    for (Geometry g : collections)
+      if (res == null) res = g;
+      else res = res.union(g);
+    return res;
+  }
+  
+  /**
+   * Similar to the {@link #combineIntoOneGeometrySafe(Collection)}, it computes
+   * the union of a set of shapes. However, it keeps doing pair-wise union
+   * between every pair of consecutive shapes (in the given list order) until
+   * we end up with one polygon. This method could be faster if we can perform
+   * independent pair-wise unions in parallel.
+   * @param collections
+   * @return
+   */
+  private static Geometry combineIntoOneGeometryFast(Collection<Geometry> collections) {
+    Geometry[] input = collections.toArray(new Geometry[collections.size()]);
+    int n = input.length; 
+    while(n > 1) {
+      int cnt = 0;
+      for (int i=0; i<n; i+=2) 
+        if (i + 1 < n) input[cnt++] = input[i].union(input[i + 1]);
+        else input[cnt++] = input[i];
+      n = cnt;
+    }
+    return input[0];
+  }
+
   /**
    * Computes the union between the given shape with all overlapping shapes
    * and return only the segments in the result that overlap with the shape.
@@ -81,7 +125,7 @@ public class UltimateUnion {
    * @return
    */
   public static Geometry partialUnion(Geometry shape, Collection<Geometry> overlappingShapes) {
-    Geometry partialResult = shape.intersection(combineIntoOneGeometry(overlappingShapes));
+    Geometry partialResult = shape.intersection(combineIntoOneGeometrySafe(overlappingShapes));
     return shape.getBoundary().intersection(partialResult.getBoundary());
   }
 
@@ -98,20 +142,20 @@ public class UltimateUnion {
   }
   
   static class UltimateUnionReducer extends MapReduceBase implements
-      Reducer<OSMPolygon, OSMPolygon, NullWritable, OSMPolygon> {
+      Reducer<JTSShape, JTSShape, NullWritable, JTSShape> {
 
     @Override
-    public void reduce(OSMPolygon shape, Iterator<OSMPolygon> overlaps,
-        OutputCollector<NullWritable, OSMPolygon> output, Reporter reporter)
+    public void reduce(JTSShape shape, Iterator<JTSShape> overlaps,
+        OutputCollector<NullWritable, JTSShape> output, Reporter reporter)
         throws IOException {
       Vector<Geometry> overlappingShapes = new Vector<Geometry>();
       while (overlaps.hasNext()) {
-        OSMPolygon overlap = overlaps.next();
+        JTSShape overlap = overlaps.next();
         overlappingShapes.add(overlap.geom);
       }
       Geometry result = partialUnion(shape.geom, overlappingShapes);
       if (result != null)
-        output.collect(NullWritable.get(), new OSMPolygon(result));
+        output.collect(NullWritable.get(), new JTSShape(result));
     }
   }
   
@@ -126,16 +170,18 @@ public class UltimateUnion {
 
     job.setMapperClass(UltimateUnionMap.class);
     job.setReducerClass(UltimateUnionReducer.class);
-    
+
     job.setMapOutputKeyClass(shape.getClass());
     job.setMapOutputValueClass(shape.getClass());
 
     // Set input and output
     job.setInputFormat(ShapeArrayInputFormat.class);
     FileInputFormat.addInputPath(job, input);
-    FileInputFormat.addInputPath(job, input);
     SpatialSite.setShapeClass(job, shape.getClass());
-    
+    // Ensure each partition is fully read in one shot for correctness
+    job.setInt(SpatialSite.MaxBytesInOneRead, -1);
+    job.setInt(SpatialSite.MaxShapesInOneRead, -1);
+
     job.setOutputFormat(TextOutputFormat.class);
     TextOutputFormat.setOutputPath(job, output);
 
@@ -166,7 +212,12 @@ public class UltimateUnion {
     
     Path input = params.getPath();
     Path output = params.getPaths()[1];
-    Shape shape = new OSMPolygon();
+    Shape shape = params.getShape("shape");
+    
+    if (shape == null || !(shape instanceof JTSShape)) {
+      LOG.error("Given shape must be a subclass of "+JTSShape.class);
+      return;
+    }
     
     ultimateUnion(input, output, shape);
   }

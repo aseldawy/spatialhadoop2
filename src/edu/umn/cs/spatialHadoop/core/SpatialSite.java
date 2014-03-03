@@ -160,7 +160,9 @@ public class SpatialSite {
   public static void setClass(Configuration conf, String key, Class<?> klass, Class<?> xface) {
     conf.setClass(key, klass, xface);
     // Check if we need to add the containing jar to class path
-    if (ClassUtil.findContainingJar(klass).equals(ClassUtil.findContainingJar(SpatialSite.class)))
+    String klassJar = ClassUtil.findContainingJar(klass);
+    String shadoopJar = ClassUtil.findContainingJar(SpatialSite.class);
+    if (klassJar == null || (shadoopJar != null && klassJar.equals(shadoopJar)))
       return;
     Path containingJar = new Path(ClassUtil.findContainingJar(klass));
     Path[] existingClassPaths = DistributedCache.getArchiveClassPaths(conf);
