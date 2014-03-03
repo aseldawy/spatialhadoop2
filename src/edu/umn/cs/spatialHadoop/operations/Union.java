@@ -69,11 +69,11 @@ public class Union {
    * @author eldawy
    *
    */
-  static class UnionReducer extends MapReduceBase
-      implements Reducer<IntWritable, JTSShape, IntWritable, JTSShape> {
+  static class UnionReducer<S extends JTSShape> extends MapReduceBase
+      implements Reducer<IntWritable, S, IntWritable, JTSShape> {
     
     @Override
-    public void reduce(IntWritable dummy, Iterator<JTSShape> shapes,
+    public void reduce(IntWritable dummy, Iterator<S> shapes,
         OutputCollector<IntWritable, JTSShape> output, Reporter reporter)
         throws IOException {
       final int threshold = 500000;
@@ -128,8 +128,7 @@ public class Union {
     JobConf job = new JobConf(Union.class);
     job.setJobName("Union");
     boolean overwrite = params.is("overwrite");
-    Shape shape = new JTSShape();
-    params.setClass("shape", shape.getClass(), Shape.class);
+    Shape shape = params.getShape("shape");
 
     // Check output file existence
     FileSystem outFs = output.getFileSystem(job);
