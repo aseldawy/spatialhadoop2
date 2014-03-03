@@ -13,6 +13,7 @@
 
 package edu.umn.cs.spatialHadoop.nasa;
 
+import java.io.File;
 import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -30,7 +31,12 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.RunningJob;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.operations.Aggregate;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.Plot;
@@ -69,6 +75,66 @@ public class HDFPlot {
   }
   
   public static MinMax lastRange;
+  
+  /**
+   * Download all HDF files in the given spatio-temporal range
+   * @param input
+   * @param range
+   * @param from
+   * @param to
+   * @throws IOException 
+   */
+  public static void HDFDownloader(Path input, Path output, Shape range,
+      final Date from, final Date to) throws IOException {
+    final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd");
+    // Retrieve all matching input directories based on date range
+    Configuration conf = new Configuration();
+    final FileSystem inFs = input.getFileSystem(conf);
+    FileStatus[] matchingDirs = inFs.listStatus(input, new PathFilter() {
+      @Override
+      public boolean accept(Path p) {
+        String dirName = p.getName();
+        try {
+          Date date = dateFormat.parse(dirName);
+          return date.compareTo(from) >= 0 &&
+              date.compareTo(to) <= 0;
+        } catch (ParseException e) {
+          LOG.warn("Cannot parse directory name: "+dirName);
+          return false;
+        }
+      }
+    });
+    
+    final FileSystem outFs = output.getFileSystem(conf);
+    for (FileStatus matchingDir : matchingDirs) {
+      final Path matchingPath = matchingDir.getPath();
+      final Path downloadPath = new Path(output, matchingPath.getName());
+      outFs.mkdirs(downloadPath);
+      
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, matchingPath);
+      if (gindex == null)
+        throw new RuntimeException("Cannot retrieve global index for "+matchingPath);
+      gindex.rangeQuery(range, new ResultCollector<Partition>() {
+        @Override
+        public void collect(Partition r) {
+          // Download only HDF files
+          if (!r.filename.toLowerCase().endsWith(".hdf"))
+            return;
+          Path filePath = new Path(matchingPath, r.filename);
+          try {
+            Path downloadFile = new Path(downloadPath, r.filename);
+            if (!outFs.exists(downloadFile)) {
+              Path tempFile = new Path(File.createTempFile(r.filename, "downloaded").getAbsolutePath());
+              inFs.copyToLocalFile(filePath, tempFile);
+              outFs.moveFromLocalFile(tempFile, downloadFile);
+            }
+          } catch (IOException e) {
+            throw new RuntimeException("Error downloading file '"+filePath+"'", e);
+          }
+        }
+      });
+    }
+  }
 
   /**
    * @param args
@@ -123,6 +189,11 @@ public class HDFPlot {
     
     // Retrieve range to plot if provided by user
     Rectangle plotRange = (Rectangle) cla.getShape("rect");
+    
+    if (cla.is("download-only")) {
+      HDFDownloader(input, output, plotRange, dateFrom, dateTo);
+      return;
+    }
 
     // Retrieve the scale
     String scale = cla.get("scale", "preset");
