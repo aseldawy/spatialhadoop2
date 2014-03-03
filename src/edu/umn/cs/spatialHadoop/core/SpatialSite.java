@@ -299,14 +299,15 @@ public class SpatialSite {
       }
       
       FileStatus masterFile = null;
-      int hdfFiles = 0;
+      int nasaFiles = 0;
       for (FileStatus fileStatus : allFiles) {
         if (fileStatus.getPath().getName().startsWith("_master")) {
           if (masterFile != null)
             throw new RuntimeException("Found more than one master file in "+dir);
           masterFile = fileStatus;
-        } else if (fileStatus.getPath().getName().toLowerCase().endsWith(".hdf")) {
-          hdfFiles++;
+        } else if (fileStatus.getPath().getName().toLowerCase().matches(".*h\\d\\dv\\d\\d.*\\.(hdf|jpg|xml)")) {
+          // Handle on-the-fly global indexes imposed from file naming of NASA data
+          nasaFiles++;
         }
       }
       if (masterFile != null) {
@@ -323,7 +324,7 @@ public class SpatialSite {
         globalIndex.setCompact(masterFile.getPath().getName().endsWith("rtree") || masterFile.getPath().getName().endsWith("r+tree"));
         globalIndex.setReplicated(masterFile.getPath().getName().endsWith("r+tree") || masterFile.getPath().getName().endsWith("grid"));
         return globalIndex;
-      } else if (hdfFiles > allFiles.length / 2) {
+      } else if (nasaFiles > allFiles.length / 2) {
         // A folder that contains HDF files
         // Create a global index on the fly for these files based on their names
         Partition[] partitions = new Partition[allFiles.length];

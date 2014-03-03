@@ -141,7 +141,7 @@ public class HDFToText {
       System.err.println("Please specify the dataset you want to extract");
       return;
     }
-    boolean skipFillValue = cla.is("skipfillvalue");
+    boolean skipFillValue = cla.is("skipfillvalue", true);
 
     HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
   }
