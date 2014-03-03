@@ -27,7 +27,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 /**
  * Performs simple algorithms for spatial data.
  * 
- * @author aseldawy
+ * @author Ahmed Eldawy
  * 
  */
 class RectangleNN implements Comparable<RectangleNN>   {
@@ -92,7 +92,8 @@ public class SpatialAlgorithms {
       }
     };
 
-    LOG.info("Joining "+ R.size()+" with "+S.size());
+    long t1 = System.currentTimeMillis();
+    LOG.info("Joining lists "+ R.size()+" with "+S.size());
     Collections.sort(R, comparator);
     Collections.sort(S, comparator);
 
@@ -137,7 +138,8 @@ public class SpatialAlgorithms {
     } catch (RuntimeException e) {
       e.printStackTrace();
     }
-    LOG.info("Finished plane sweep and found "+count+" pairs");
+    long t2 = System.currentTimeMillis();
+    LOG.info("Finished plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
     return count;
 	}
 
@@ -152,7 +154,8 @@ public class SpatialAlgorithms {
       }
     };
     
-    LOG.info("Joining "+ R.length+" with "+S.length);
+    long t1 = System.currentTimeMillis();
+    LOG.info("Joining arrays "+ R.length+" with "+S.length);
     Arrays.sort(R, comparator);
     Arrays.sort(S, comparator);
 
@@ -195,7 +198,8 @@ public class SpatialAlgorithms {
     } catch (RuntimeException e) {
       e.printStackTrace();
     }
-    LOG.info("Finished plane sweep and found "+count+" pairs");
+    long t2 = System.currentTimeMillis();
+    LOG.info("Finished plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
     return count;
   }
   
@@ -211,6 +215,7 @@ public class SpatialAlgorithms {
       }
     };
     
+    long t1 = System.currentTimeMillis();
     LOG.info("Self Join of "+ R.length+" shapes");
     Arrays.sort(R, comparator);
 
@@ -253,7 +258,9 @@ public class SpatialAlgorithms {
     } catch (RuntimeException e) {
       e.printStackTrace();
     }
-    LOG.info("Finished plane sweep and found "+count+" pairs");
+    long t2 = System.currentTimeMillis();
+    LOG.info("Finished plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
+    
     return count;
   }
 }
