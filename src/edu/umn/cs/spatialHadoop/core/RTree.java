@@ -42,12 +42,17 @@ import com.vividsolutions.jts.geom.TopologyException;
 
 import edu.umn.cs.spatialHadoop.io.MemoryInputStream;
 import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.io.TextSerializable;
 
 /**
- * An RTree loaded in bulk and never changed after that. It cannot by
- * dynamically manipulated by either insertion or deletion. It only works with
- * 2-dimensional objects (keys).
- * @author eldawy
+ * A disk-based R-tree that can be loaded using a bulk loading method and
+ * never changed afterwards. It works with any shape given in the generic
+ * parameter. To load the tree, use the {@link #bulkLoadWrite(byte[], int, int, int, DataOutput, boolean)}
+ * method. To restore the tree from disk, use the {@link #readFields(DataInput)}
+ * methods. To do queries against the tree, use the {@link #search(Shape, ResultCollector)},
+ *  {@link #knn(double, double, int, ResultCollector2)} or
+ *  {@link #spatialJoin(RTree, RTree, ResultCollector2)} methods.
+ * @author Ahmed Eldawy
  *
  */
 public class RTree<T extends Shape> implements Writable, Iterable<T> {
@@ -98,22 +103,32 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
   }
 
   /**
-   *  Builds the RTree given a serialized list of elements. It uses the given
-   * stockObject to deserialize these elements and build the tree.
-   * Also writes the created tree to the disk directly.
-   * @param elements - serialization of elements to be written
-   * @param offset - index of the first element to use in the elements array
-   * @param len - number of bytes to user from the elements array
-   * @param bytesAvailable - size available (in bytes) to store the tree structures
-   * @param dataOut - an output to use for writing the tree to
-   * @param fast_sort - setting this to <code>true</code> allows the method
-   *  to run faster by materializing the offset of each element in the list
-   *  which speeds up the comparison. However, this requires an additional
-   *  16 bytes per element. So, for each 1M elements, the method will require
-   *  an additional 16 M bytes (approximately).
+   * Builds the RTree given a serialized list of elements. It uses the given
+   * stockObject to deserialize these elements using
+   * {@link TextSerializable#fromText(Text)} and build the tree. Also writes the
+   * created tree to the disk directly.
+   * 
+   * @param element_bytes
+   *          - serialization of all elements separated by new lines
+   * @param offset
+   *          - offset of the first byte to use in elements_bytes
+   * @param len
+   *          - number of bytes to use in elements_bytes
+   * @param degree
+   *          - Degree of the R-tree to build in terms of number of children per
+   *          node
+   * @param dataOut
+   *          - output stream to write the result to.
+   * @param fast_sort
+   *          - setting this to <code>true</code> allows the method to run
+   *          faster by materializing the offset of each element in the list
+   *          which speeds up the comparison. However, this requires an
+   *          additional 16 bytes per element. So, for each 1M elements, the
+   *          method will require an additional 16 M bytes (approximately).
    */
-  public void bulkLoadWrite(final byte[] element_bytes, final int offset, final int len,
-      final int degree, DataOutput dataOut, final boolean fast_sort) {
+  public void bulkLoadWrite(final byte[] element_bytes, final int offset,
+      final int len, final int degree, DataOutput dataOut,
+      final boolean fast_sort) {
     try {
     
       // Count number of elements in the given text

@@ -13,10 +13,12 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.BooleanWritable;
@@ -278,27 +280,18 @@ public class RangeQuery {
     }
   }
   
-  /**
-   * Performs a range query using MapReduce
-   * @param fs
-   * @param inputFile
-   * @param queryRange
-   * @param shape
-   * @param output
-   * @return
-   * @throws IOException
-   */
-  public static long rangeQueryMapReduce(FileSystem fs, Path inputFile,
-      Path userOutputPath, Shape queryShape, Shape shape, boolean overwrite,
-      boolean background)
-      throws IOException {
-    JobConf job = new JobConf(RangeQuery.class);
+  public static long rangeQueryMapReduce(Path inFile, Path outFile, Shape query,
+      CommandLineArguments params) throws IOException {
+    JobConf job = new JobConf(params, RangeQuery.class);
+    boolean overwrite = params.is("overwrite");
+    Shape shape = params.getShape("shape");
+    boolean background = params.is("background");
     
-    FileSystem outFs = inputFile.getFileSystem(job);
-    Path outputPath = userOutputPath;
+    FileSystem outFs = inFile.getFileSystem(job);
+    Path outputPath = outFile;
     if (outputPath == null) {
       do {
-        outputPath = new Path(inputFile.toUri().getPath()+
+        outputPath = new Path(inFile.getName()+
             ".rangequery_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outputPath));
     } else {
@@ -313,16 +306,17 @@ public class RangeQuery {
     
     job.setJobName("RangeQuery");
     job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-    RangeFilter.setQueryRange(job, queryShape); // Set query range for filter
+    RangeFilter.setQueryRange(job, query); // Set query range for filter
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setNumReduceTasks(0);
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(shape.getClass());
+    FileSystem inFs = inFile.getFileSystem(job);
     // Decide which map function to use depending on how blocks are indexed
     // And also which input format to use
-    if (SpatialSite.isRTree(fs, inputFile)) {
+    if (SpatialSite.isRTree(inFs, inFile)) {
       // RTree indexed file
       LOG.info("Searching an RTree indexed file");
       job.setInputFormat(RTreeInputFormat.class);
@@ -332,22 +326,22 @@ public class RangeQuery {
       job.setInputFormat(ShapeInputFormat.class);
     }
     
-    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, inputFile);
+    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inFile);
     if (gIndex != null && gIndex.isReplicated())
       job.setMapperClass(RangeQueryMap.class);
     else
       job.setMapperClass(RangeQueryMapNoDupAvoidance.class);
 
     // Set query range for the map function
-    job.set(QUERY_SHAPE_CLASS, queryShape.getClass().getName());
-    job.set(QUERY_SHAPE, queryShape.toText(new Text()).toString());
+    job.set(QUERY_SHAPE_CLASS, query.getClass().getName());
+    job.set(QUERY_SHAPE, query.toText(new Text()).toString());
     
     // Set shape class for the SpatialInputFormat
     SpatialSite.setShapeClass(job, shape.getClass());
     
     job.setOutputFormat(TextOutputFormat.class);
     
-    ShapeInputFormat.setInputPaths(job, inputFile);
+    ShapeInputFormat.setInputPaths(job, inFile);
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job
@@ -358,7 +352,7 @@ public class RangeQuery {
       final long resultCount = outputRecordCounter.getValue();
       
       // If outputPath not set by user, automatically delete it
-      if (userOutputPath == null)
+      if (outFile == null)
         outFs.delete(outputPath, true);
       
       return resultCount;
@@ -367,6 +361,28 @@ public class RangeQuery {
       lastRunningJob = jc.submitJob(job);
       return -1;
     }
+  }
+  
+  /**
+   * Performs a range query using MapReduce
+   * @param fs
+   * @param inputFile
+   * @param queryRange
+   * @param shape
+   * @param output
+   * @return
+   * @throws IOException
+   */
+  @Deprecated
+  public static long rangeQueryMapReduce(FileSystem fs, Path inputFile,
+      Path userOutputPath, Shape queryShape, Shape shape, boolean overwrite,
+      boolean background)
+      throws IOException {
+    CommandLineArguments params = new CommandLineArguments();
+    params.setClass("shape", shape.getClass(), Shape.class);
+    params.setBoolean("background", background);
+    params.setBoolean("overwrite", overwrite);
+    return rangeQueryMapReduce(inputFile, userOutputPath, queryShape, params);
   }
   
   /**
@@ -380,37 +396,73 @@ public class RangeQuery {
    * @return number of results found
    * @throws IOException
    */
+  @Deprecated
   public static<S extends Shape> long rangeQueryLocal(FileSystem fs, Path file,
       Shape queryRange, S shape, ResultCollector<S> output)
       throws IOException {
-    long file_size = fs.getFileStatus(file).getLen();
-    ShapeRecordReader<S> shapeReader =
-        new ShapeRecordReader<S>(fs.open(file), 0, file_size);
+    CommandLineArguments cla = new CommandLineArguments();
+    cla.setClass("shape", shape.getClass(), Shape.class);
+    return rangeQueryLocal(file, null, queryRange, cla);
+  }
+  
+  public static long rangeQueryLocal(Path inFile, Path outFile,
+      Shape query, CommandLineArguments params) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(params);
+    long file_size = inFs.getFileStatus(inFile).getLen();
+    ShapeRecordReader<Shape> shapeReader =
+        new ShapeRecordReader<Shape>(inFs.open(inFile), 0, file_size);
+    
+    FileSystem outFs = outFile.getFileSystem(params);
+    PrintStream outStream = new PrintStream(outFs.create(outFile));
 
     long resultCount = 0;
     Rectangle cell = shapeReader.createKey();
+    Shape shape = params.getShape("shape");
 
     while (shapeReader.next(cell, shape)) {
-      if (shape.isIntersected(queryRange)) {
+      if (shape.isIntersected(query)) {
         boolean report_result;
         if (cell.isValid()) {
           // Check for duplicate avoidance
           Rectangle intersection_mbr =
-              queryRange.getMBR().getIntersection(shape.getMBR());
+              query.getMBR().getIntersection(shape.getMBR());
           report_result = cell.contains(intersection_mbr.x1, intersection_mbr.y1);
         } else {
           report_result = true;
         }
         if (report_result) {
           resultCount++;
-          if (output != null) {
-            output.collect(shape);
-          }
+          outStream.println(shape.toText(new Text()));
         }
       }
     }
     shapeReader.close();
     return resultCount;
+  }
+  
+  /**
+   * Performs a range query against the given file
+   * @param input
+   * @param outFile
+   * @param params
+   * @return
+   * @throws IOException 
+   */
+  public static<S extends Shape> long rangeQuery(Path inFile, Path outFile,
+      Shape query, CommandLineArguments params) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(params);
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    boolean autoLocal = !(inFStatus.isDir() ||
+        inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    Boolean isLocal = params.is("local", autoLocal);
+    
+    if (!isLocal) {
+      // Either a directory of file or a large file
+      return rangeQueryMapReduce(inFile, outFile, query, params);
+    } else {
+      // A single small file, process it without MapReduce
+      return rangeQueryLocal(inFile, outFile, query, params);
+    }
   }
   
   private static void printUsage() {
@@ -423,7 +475,7 @@ public class RangeQuery {
   }
   
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
+    final CommandLineArguments cla = new CommandLineArguments(args);
     final Path[] paths = cla.getPaths();
     if (paths.length == 0 || (cla.getShape("rect") == null &&
         cla.getFloat("ratio", -1.0f) < 0.0f)) {
@@ -440,8 +492,6 @@ public class RangeQuery {
     final Path outputPath = paths.length > 1 ? paths[1] : null;
     final Rectangle[] queryRanges = cla.getShapes("rect", new Rectangle());
     int concurrency = cla.getInt("concurrency", 1);
-    final Shape stockShape = cla.getShape("shape");
-    final boolean overwrite = cla.is("overwrite");
 
     final long[] results = new long[queryRanges.length];
     final Vector<Thread> threads = new Vector<Thread>();
@@ -461,8 +511,8 @@ public class RangeQuery {
         public void run() {
             try {
               int thread_i = threads.indexOf(this);
-              long result_count = rangeQueryMapReduce(fs, inputFile, outputPath,
-                  queryRanges[thread_i], stockShape, overwrite, false);
+              long result_count = rangeQuery(inputFile, outputPath,
+                  queryRanges[thread_i], cla);
               results[thread_i] = result_count;
             } catch (IOException e) {
               throw new RuntimeException(e);

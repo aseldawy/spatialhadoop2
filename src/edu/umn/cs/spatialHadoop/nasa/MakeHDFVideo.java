@@ -19,6 +19,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Vector;
@@ -242,8 +243,9 @@ public class MakeHDFVideo {
           + "[mid2][scale] overlay=main_w-overlay_w:0 [out]\" "
           + "-c:v libx264 -r 4 -pix_fmt yuv420p output.mp4 ";
     }
-    System.out.println("Run the following command to generate the video");
-    System.out.println(video_command);
+    PrintStream video_script = new PrintStream(outFs.create(new Path(output, "make_video.sh")));
+    video_script.println(video_command);
+    video_script.close();
   }
 
 }
