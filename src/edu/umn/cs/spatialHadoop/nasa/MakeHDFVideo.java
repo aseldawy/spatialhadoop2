@@ -99,7 +99,7 @@ public class MakeHDFVideo {
   public static void main(String[] args) throws IOException {
     CommandLineArguments params = new CommandLineArguments(args);
     if (!params.checkInputOutput()) {
-      return;
+      System.exit(1);
     }
     
     //Path input = params.getPaths()[0];
@@ -156,7 +156,7 @@ public class MakeHDFVideo {
     });
     if (generatedImages.length == 0) {
       Log.warn("No generated images");
-      return;
+      System.exit(1);
     }
     
     InputStream inStream = outFs.open(generatedImages[0].getPath());
