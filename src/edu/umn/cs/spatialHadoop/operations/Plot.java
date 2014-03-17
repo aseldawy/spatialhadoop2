@@ -677,7 +677,7 @@ public class Plot {
     CommandLineArguments cla = new CommandLineArguments(args);
     if (!cla.checkInputOutput()) {
       printUsage();
-      return;
+      System.exit(1);
     }
     
     Path inFile = cla.getInputPath();
