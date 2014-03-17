@@ -333,7 +333,7 @@ public class FileMBR {
   }
   
   public static Rectangle fileMBR(FileSystem fs, Path inFile, CommandLineArguments params) throws IOException {
-    FileSystem inFs = inFile.getFileSystem(new Configuration());
+    FileSystem inFs = inFile.getFileSystem(params);
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     boolean autoLocal = !(inFStatus.isDir() ||
         inFStatus.getLen() / inFStatus.getBlockSize() > 3);
