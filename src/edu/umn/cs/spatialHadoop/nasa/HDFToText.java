@@ -30,6 +30,7 @@ import org.apache.hadoop.mapred.Task;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 
@@ -43,12 +44,12 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 public class HDFToText {
   
   public static class HDFToTextMap extends MapReduceBase implements
-      Mapper<NASADataset, NASAPoint, Rectangle, NASAPoint> {
+      Mapper<NASADataset, NASAShape, Rectangle, NASAShape> {
 
-    public void map(NASADataset dataset, NASAPoint point,
-        OutputCollector<Rectangle, NASAPoint> output, Reporter reporter)
+    public void map(NASADataset dataset, NASAShape value,
+        OutputCollector<Rectangle, NASAShape> output, Reporter reporter)
             throws IOException {
-      output.collect(dataset, point);
+      output.collect(dataset, value);
     }
   }
   
@@ -79,6 +80,7 @@ public class HDFToText {
     // Set input information
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.setInputPaths(job, inPath);
+    SpatialSite.setShapeClass(job, NASARectangle.class);
     job.set(HDFRecordReader.DatasetName, datasetName);
     job.setBoolean(HDFRecordReader.SkipFillValue, skipFillValue);
     
