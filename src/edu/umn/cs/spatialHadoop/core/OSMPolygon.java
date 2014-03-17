@@ -103,4 +103,9 @@ public class OSMPolygon extends JTSShape implements WritableComparable<OSMPolygo
       return 1;
     return 0;
   }
+  
+  @Override
+  public int hashCode() {
+    return (int) (this.id % Integer.MAX_VALUE);
+  }
 }
