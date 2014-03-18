@@ -7,6 +7,7 @@ $(document).ready(function() {
     } else {
       $.ajax({
         url: "/head.jsp",
+        method: "GET",
         data: {
           file: selected.val(),
           lines: 10,

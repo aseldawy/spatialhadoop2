@@ -2,26 +2,33 @@ $(document).ready(function() {
   function plotSelected() {
     var fselector = $("#file-selector");
     var selected = fselector.find(":selected");
-    var files = selected.map( function(index, obj) {
-      return obj.value;
+    if (selected.size() == 0) {
+      $('#preview-img').html('no preview available');
+    } else {
+      var files = selected.map( function(index, obj) {
+        return obj.value;
+      });
+      $.ajax({
+        url: "/plotter.jsp",
+        data: {
+          files: jQuery.makeArray(files).join(","),
+          vflip: true,
+          partitions: $("#partitions").is(':checked')
+        },
+        success: function(response) {
+          $('#preview-img').html(response);
+        }, error: function(xhr, status) {
+          alert('err: ' + status);
+          $('#preview-img').html('no preview available');
+        }
     });
-    $.ajax({
-      url: "/plotter.jsp",
-      data: {
-        files: jQuery.makeArray(files).join(","),
-        vflip: true,
-        partitions: $("#partitions").is(':checked')
-      },
-      success: function(response) {
-        $('#preview-img').html(response);
-      }, error: function(xhr, status) {
-        alert('err: ' + status);
-      }
-    });
+    }
   }
 
   $("#file-selector").change(plotSelected);
   $("#partitions").change(plotSelected);
+  // Initialize preview area
+  plotSelected();
   
   // ------------ Range query --------
   $("#range-query-button").click( function() {

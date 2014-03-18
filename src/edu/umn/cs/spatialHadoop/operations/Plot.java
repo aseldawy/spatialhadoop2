@@ -324,8 +324,11 @@ public class Plot {
   //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
   //          GeoProjector.class);
       } else {
+        // Run MBR operation in synchronous mode
+        CommandLineArguments mbrArgs = new CommandLineArguments(args);
+        mbrArgs.setBoolean("background", false);
         fileMBR = plotRange != null ? plotRange.getMBR() :
-          FileMBR.fileMBR(inFs, inFile, args);
+          FileMBR.fileMBR(inFs, inFile, mbrArgs);
       }
       LOG.info("File MBR: "+fileMBR);
       
@@ -593,7 +596,7 @@ public class Plot {
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Path file : files) {
       FileSystem fs = file.getFileSystem(conf);
-      Rectangle mbr = FileMBR.fileMBR(fs, file, null);
+      Rectangle mbr = FileMBR.fileMBR(fs, file, new CommandLineArguments(conf));
       allMbr.expand(mbr);
     }
 
@@ -611,7 +614,7 @@ public class Plot {
       FileSystem fs = file.getFileSystem(conf);
       if (fs.getFileStatus(file).isDir()) {
         // Retrieve the MBR of this dataset
-        Rectangle mbr = FileMBR.fileMBR(fs, file, null);
+        Rectangle mbr = FileMBR.fileMBR(fs, file, new CommandLineArguments(conf));
         // Compute the coordinates of this image in the whole picture
         mbr.x1 = (mbr.x1 - allMbr.x1) * width / allMbr.getWidth();
         mbr.x2 = (mbr.x2 - allMbr.x1) * width / allMbr.getWidth();
