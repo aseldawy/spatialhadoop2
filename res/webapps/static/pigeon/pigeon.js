@@ -6,8 +6,8 @@ $(document).ready(function() {
       $('#preview-head').html('not available');
     } else {
       $.ajax({
+        type: "GET",
         url: "/head.jsp",
-        method: "GET",
         data: {
           file: selected.val(),
           lines: 10,
@@ -24,6 +24,22 @@ $(document).ready(function() {
   }
 
   $("#file-selector").change(headSelected);
+
+  $('#run-pig').submit(function(e) {
+    e.preventDefault();
+    var form = $(this);
+    var action = form.attr('action');
+    var data = form.serialize();
+    $.ajax({
+      type: "POST",
+      url: action,
+      data: data,
+      success: function(response) { alert('success');},
+      error: function(response) {
+        $('#preview-head').html(response.trim());
+      }
+    });
+  });
   
   // For initial case
   headSelected();

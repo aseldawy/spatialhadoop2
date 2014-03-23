@@ -56,12 +56,14 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
   </div>
   
   <h3>Pigeon script</h3>
-  <div style="width: 100%; height: 300px;">
-    <textarea style="width: 100%; height: 280px;">
-    </textarea>
-  <label for="query-name">Query Name</label>
-  <input type="text" name="query-name" id="query-name" value="Extract nodes"/>
-  <input type="submit" value="Submit Query"/>
+  <form id="run-pig" action="run_pig.jsp">
+    <div style="width: 100%; height: 300px;">
+      <textarea name="script-body" style="width: 100%; height: 280px;">
+      </textarea>
+    <label for="script-name">Query Name</label>
+    <input type="text" name="query-name" id="query-name" value="Extract nodes"/>
+    <input type="submit" value="Submit Query"/>
+  </form>
   </div>
 </div>
 
