@@ -14,9 +14,9 @@ $(document).ready(function() {
         },
         success: function(response) {
           $('#preview-head').html(response.trim());
-        }, error: function(xhr, status) {
+        }, error: function(xhr, error) {
           $('#preview-head').html('not available');
-          alert('err: ' + status);
+          alert(xhr.responseText);
         }
     });
     }
@@ -24,7 +24,7 @@ $(document).ready(function() {
   }
 
   $("#file-selector").change(headSelected);
-
+/*
   $('#run-pig').submit(function(e) {
     e.preventDefault();
     var form = $(this);
@@ -40,7 +40,7 @@ $(document).ready(function() {
       }
     });
   });
-  
+  */
   // For initial case
   headSelected();
 });

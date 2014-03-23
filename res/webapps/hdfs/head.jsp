@@ -23,12 +23,17 @@
   if (paramFile != null) {
     Path filePath = new Path(HtmlQuoting.unquoteHtmlChars(paramFile));
     FileSystem fs = filePath.getFileSystem(conf);
-    LineRecordReader reader = new LineRecordReader(conf, new FileSplit(filePath, 0, 4096 * numLines, new String[0]));
-    Text line = new Text();
-    LongWritable offset = new LongWritable();
-    while (numLines-- > 0 && reader.next(offset, line)) {
-        out.println(line);
+    if (!fs.getFileStatus(filePath).isDir()) {
+      LineRecordReader reader = new LineRecordReader(conf, new FileSplit(filePath, 0, 4096 * numLines, new String[0]));
+      Text line = new Text();
+      LongWritable offset = new LongWritable();
+      while (numLines-- > 0 && reader.next(offset, line)) {
+          out.println(line);
+      }
+      reader.close();
+    } else {
+      response.sendError(500, "Directory selected");
     }
-    reader.close();
+    
   }
 %>

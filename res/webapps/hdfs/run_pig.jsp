@@ -56,10 +56,21 @@
     
     Text stdout = new Text();
     Text stderr = new Text();
-    int exitCode = JspSpatialHelper.runProcess(newScriptDir, "pig -c script.pig", null, stdout, stderr, true);
-    if (exitCode == 0)
-      out.println(stdout);
-    else {
+    
+    int exitCode = JspSpatialHelper.runProcess(newScriptDir, "pig -c -f script.pig", null, stdout, stderr, true);
+    if (exitCode == 0) {
+      // Run the script for real
+      JspSpatialHelper.runProcess(newScriptDir, "pig -f script.pig", null, null, null, false);
+      
+      // Write meta data to a file
+      File metafileName = new File(newScriptDir, "metadata");
+      ps = new PrintStream(metafileName);
+      ps.println("scriptName: "+scriptName);
+      ps.close();
+      
+      out.println("Script submit correctly");
+      out.println("ID #"+scriptId);
+    } else {
       // No need to keep the directory for scripts with syntax errors
       for (String file : newScriptDir.list()) {
         new File(newScriptDir, file).delete();

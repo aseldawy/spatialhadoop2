@@ -33,7 +33,7 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
 </head>
 <body>
 <div id="filenames" style="float: left; width: 150px;">
-  <img width="100" src="/static/visualizer/pigeon_logo.png"/>
+  <img width="100" src="/static/pigeon/pigeon_logo.png"/>
   <h3>Relations</h3>
   <select id="file-selector" name="filename" multiple="multiple" style="height: 150px; width:100%;">
     <% String dir = HtmlQuoting.unquoteHtmlChars(request.getParameter("dir")); %>
@@ -56,12 +56,12 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
   </div>
   
   <h3>Pigeon script</h3>
-  <form id="run-pig" action="run_pig.jsp">
+  <form id="run-pig" method="post" action="run_pig.jsp">
     <div style="width: 100%; height: 300px;">
       <textarea name="script-body" style="width: 100%; height: 280px;">
       </textarea>
     <label for="script-name">Query Name</label>
-    <input type="text" name="query-name" id="query-name" value="Extract nodes"/>
+    <input type="text" name="script-name" id="script-name" value="" placeholder="Script name"/>
     <input type="submit" value="Submit Query"/>
   </form>
   </div>
