@@ -517,10 +517,16 @@ public class Plot {
 
   public static RunningJob plot(Path inFile, Path outFile, CommandLineArguments cla) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    // Auto choose isLocal
-    boolean autoLocal = !(CommandLineArguments.isWildcard(inFile) || inFStatus.isDir()
-        || inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    
+    boolean autoLocal = false;
+    if (CommandLineArguments.isWildcard(inFile)) {
+      autoLocal = false;
+    } else {
+      FileStatus inFStatus = inFs.getFileStatus(inFile);
+      // Auto choose isLocal
+      autoLocal = !(CommandLineArguments.isWildcard(inFile) || inFStatus.isDir()
+          || inFStatus.getLen() / inFStatus.getBlockSize() > 3);
+    }
     Boolean isLocal = cla.is("local", autoLocal);
     
     if (isLocal) {
