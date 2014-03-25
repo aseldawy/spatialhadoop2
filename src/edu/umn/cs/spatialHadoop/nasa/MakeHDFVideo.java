@@ -233,7 +233,7 @@ public class MakeHDFVideo {
           + "[mid][ways] overlay=0:0 [mid2]; "
           + "[mid2] pad=iw+64:ih [mid3]; "
           + "[mid3][scale] overlay=main_w-overlay_w:0 [out]\" "
-          + "-c:v libx264 -r 4 -pix_fmt yuv420p output.mp4 ";
+          + "-r 4 -pix_fmt yuv420p output.mp4 ";
     } else {
       video_command = "ffmpeg -r 4 -i day_%3d.png -vf"
           + "\"movie=gistic_logo.png [watermark]; "
@@ -241,7 +241,7 @@ public class MakeHDFVideo {
           + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
           + "[mid] pad=iw+64:ih [mid2]; "
           + "[mid2][scale] overlay=main_w-overlay_w:0 [out]\" "
-          + "-c:v libx264 -r 4 -pix_fmt yuv420p output.mp4 ";
+          + "-r 4 -pix_fmt yuv420p output.mp4 ";
     }
     PrintStream video_script = new PrintStream(outFs.create(new Path(output, "make_video.sh")));
     video_script.println(video_command);
