@@ -6,7 +6,6 @@
   <property name="doc" location="doc"/>
   <property name="build" location="bin"/>
   <property name="dist"  location="dist"/>
-  <property name="dist2"  location="dist2"/>
   <property name="version" value="2.1"/>
   
   <path id="hdflib.path.ref">
@@ -165,7 +164,7 @@
   <target name="install2" depends="package2"
     description="Install SpatialHadoop on an existing Hadoop 2 installation">
     <!-- Extract the constructed package file (tar) in the destination directory -->
-    <untar src="${dist2}/package/spatialhadoop-${version}-2.tar.gz"
+    <untar src="${dist}/package/spatialhadoop-${version}-2.tar.gz"
            dest="${hadoop2.dir}" compression="gzip"/>
   </target>
 
@@ -173,6 +172,5 @@
     <!-- Delete the ${build} and ${dist} directory trees -->
     <delete dir="${build}"/>
     <delete dir="${dist}"/>
-    <delete dir="${dist2}"/>
   </target>
 </project>
