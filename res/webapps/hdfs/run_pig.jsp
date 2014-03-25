@@ -22,7 +22,6 @@
 <%
   Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
   String pigeonTempDir = conf.get("pigeon.tmp", ".");
-
   
   // Return directories of all previous attempts
   String[] previousScripts = new File(pigeonTempDir).list(new FilenameFilter() {

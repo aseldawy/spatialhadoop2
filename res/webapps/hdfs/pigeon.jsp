@@ -1,5 +1,10 @@
 <%@ page
   contentType="text/html; charset=UTF-8"
+  import="java.util.Vector"
+  import="java.io.BufferedReader"
+  import="java.io.FileReader"
+  import="java.io.File"
+  import="java.io.FilenameFilter"
   import="org.apache.hadoop.http.HtmlQuoting"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
   import="org.apache.hadoop.conf.Configuration"
@@ -20,6 +25,34 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
   FileStatus[] fss = fs.listStatus(path);
   for (FileStatus fstatus : fss) {
     out.println("<option value='"+fstatus.getPath().toUri().getPath()+"'>"+fstatus.getPath().getName()+"</option>");
+  }
+}
+
+private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
+  Vector<String> names) throws java.io.IOException {
+  File pigeonTempDir = new File(conf.get("pigeon.tmp", "."));
+  
+  // Return directories of all previous attempts
+  String[] previousScripts = pigeonTempDir.list(new FilenameFilter() {
+    public boolean accept(File dir, String name) {
+      return name.matches("pigeon_[0-9]+");
+    }
+  });
+  
+  for (String previousScript : previousScripts) {
+    int id = Integer.parseInt(previousScript.replace("pigeon_", ""));
+    File metadataFile = new File (new File(pigeonTempDir, previousScript), "metadata");
+    BufferedReader reader = new BufferedReader(new FileReader(metadataFile));
+    String line;
+    String scriptName = null;
+    while (scriptName == null && (line = reader.readLine()) != null) {
+      if (line.startsWith("scriptName:"))
+        scriptName = line.replace("scriptName:", "").trim();
+    }
+    reader.close();
+    
+    ids.add(id);
+    names.add(scriptName);
   }
 }
 %>
@@ -43,8 +76,17 @@ private void listDirectory(HttpServletRequest request, JspWriter out,
 
 <h3>Queries</h3>
 <select multiple="multiple" style="width: 100%;">
-  <option value="Lakes x Roads">Lakes x Roads</option>
-  <option value="Lakes x Roads">Average City Area</option>
+  <%
+    Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+    Vector<Integer> scriptIds = new Vector<Integer>();
+    Vector<String> scriptNames = new Vector<String>();
+    listPigeonScripts(conf, scriptIds, scriptNames);
+    
+    for (int i = 0; i < scriptIds.size(); i++) {
+    
+      out.println("<option value='"+scriptIds.get(i)+"'>"+scriptNames.get(i)+"</option>");
+    }
+  %>
 </select>
 
 </div>
