@@ -75,7 +75,7 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
  </select>
 
 <h3>Queries</h3>
-<select multiple="multiple" style="width: 100%;">
+<select multiple="multiple" id="pigeon-scripts" style="width: 100%;">
   <%
     Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
     Vector<Integer> scriptIds = new Vector<Integer>();
@@ -83,7 +83,6 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
     listPigeonScripts(conf, scriptIds, scriptNames);
     
     for (int i = 0; i < scriptIds.size(); i++) {
-    
       out.println("<option value='"+scriptIds.get(i)+"'>"+scriptNames.get(i)+"</option>");
     }
   %>
@@ -100,7 +99,7 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
   <h3>Pigeon script</h3>
   <form id="run-pig" method="post" action="run_pig.jsp">
     <div style="width: 100%; height: 300px;">
-      <textarea name="script-body" style="width: 100%; height: 280px;">
+      <textarea name="script-body" id="script-body" style="width: 100%; height: 280px;">
       </textarea>
     <label for="script-name">Query Name</label>
     <input type="text" name="script-name" id="script-name" value="" placeholder="Script name"/>

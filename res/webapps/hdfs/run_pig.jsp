@@ -39,7 +39,7 @@
   }
   int scriptId = maxId + 1;
   
-  File newScriptDir = new File(pigeonTempDir, "pigeon_"+scriptId);
+  File newScriptDir = new File(pigeonTempDir, String.format("pigeon_%04d", scriptId));
   if (!newScriptDir.mkdirs()) {
     response.sendError(500, "Unable to create directory '"+newScriptDir+"'");
   } else {
@@ -59,7 +59,7 @@
     int exitCode = JspSpatialHelper.runProcess(newScriptDir, "pig -c -f script.pig", null, stdout, stderr, true);
     if (exitCode == 0) {
       // Run the script for real
-      JspSpatialHelper.runProcess(newScriptDir, "pig -f script.pig", null, null, null, false);
+      JspSpatialHelper.runProcess(newScriptDir, "pig -f script.pig -l script.log", null, null, null, false);
       
       // Write meta data to a file
       File metafileName = new File(newScriptDir, "metadata");
@@ -67,7 +67,7 @@
       ps.println("scriptName: "+scriptName);
       ps.close();
       
-      out.println("Script submit correctly");
+      out.println("Script submit successfully");
       out.println("ID #"+scriptId);
     } else {
       // No need to keep the directory for scripts with syntax errors
