@@ -1,6 +1,7 @@
 <%@ page
   contentType="text/html; charset=UTF-8"
   import="java.util.Vector"
+  import="java.util.Arrays"
   import="java.io.BufferedReader"
   import="java.io.FileReader"
   import="java.io.File"
@@ -39,6 +40,8 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
     }
   });
   
+  Arrays.sort(previousScripts);
+  
   for (String previousScript : previousScripts) {
     int id = Integer.parseInt(previousScript.replace("pigeon_", ""));
     File metadataFile = new File (new File(pigeonTempDir, previousScript), "metadata");
@@ -51,8 +54,8 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
     }
     reader.close();
     
-    ids.add(id);
-    names.add(scriptName);
+    ids.insertElementAt(id, 0);
+    names.insertElementAt(scriptName, 0);
   }
 }
 %>
@@ -67,6 +70,7 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
 <body>
 <div id="filenames" style="float: left; width: 150px;">
   <img width="100" src="/static/pigeon/pigeon_logo.png"/>
+  <h2>Pigeon</h2>
   <h3>Relations</h3>
   <select id="file-selector" name="filename" multiple="multiple" style="height: 150px; width:100%;">
     <% String dir = HtmlQuoting.unquoteHtmlChars(request.getParameter("dir")); %>

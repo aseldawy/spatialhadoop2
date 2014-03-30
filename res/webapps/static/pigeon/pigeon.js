@@ -16,13 +16,21 @@ $(document).ready(function() {
           $('#preview-head').html(response.trim());
         }, error: function(xhr, error) {
           $('#preview-head').html('not available');
-          alert(xhr.responseText);
+          //alert(xhr.responseText);
         }
     });
     }
   }
 
   $("#file-selector").change(headSelected);
+  $("#file-selector").dblclick(function() {
+    var fselector = $("#file-selector");
+    var selected = fselector.find(":selected");
+    if (selected.size() > 0) {
+      window.location.href = "pigeon.jsp?dir="+selected.val();
+    }
+    
+  });
 
   $('#run-pig').submit(function(e) {
     e.preventDefault();
@@ -33,7 +41,7 @@ $(document).ready(function() {
       type: "POST",
       url: action,
       data: data,
-      success: function(response) { alert(response);},
+      success: function(response) { windows.location.reload();},
       error: function(xhr) {
         $('#preview-head').html(xhr.responseText.trim());
       }
