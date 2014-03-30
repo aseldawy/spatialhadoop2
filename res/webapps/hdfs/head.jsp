@@ -23,7 +23,17 @@
   if (paramFile != null) {
     Path filePath = new Path(HtmlQuoting.unquoteHtmlChars(paramFile));
     FileSystem fs = filePath.getFileSystem(conf);
-    if (!fs.getFileStatus(filePath).isDir()) {
+    if (fs.getFileStatus(filePath).isDir()) {
+      // Directory selected, head one of the data files (any non hidden file)
+      FileStatus[] dataFiles = fs.listStatus(filePath, SpatialSite.NonHiddenFileFilter);
+      if (dataFiles.length == 0) {
+        response.sendError(404, "No data files");
+        filePath = null;
+      } else {
+        filePath = dataFiles[0].getPath();
+      }
+    }
+    if (filePath != null) {
       LineRecordReader reader = new LineRecordReader(conf, new FileSplit(filePath, 0, 4096 * numLines, new String[0]));
       Text line = new Text();
       LongWritable offset = new LongWritable();
@@ -31,9 +41,6 @@
           out.println(line);
       }
       reader.close();
-    } else {
-      response.sendError(500, "Directory selected");
     }
-    
   }
 %>

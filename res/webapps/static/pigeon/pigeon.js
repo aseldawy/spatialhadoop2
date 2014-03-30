@@ -34,8 +34,8 @@ $(document).ready(function() {
       url: action,
       data: data,
       success: function(response) { alert(response);},
-      error: function(response) {
-        $('#preview-head').html(response.trim());
+      error: function(xhr) {
+        $('#preview-head').html(xhr.responseText.trim());
       }
     });
   });
@@ -76,8 +76,7 @@ $(document).ready(function() {
         success: function(response) {
           $('#preview-head').html(response.trim());
         }, error: function(xhr, error) {
-          $('#preview-head').html('not available');
-          alert(xhr.responseText);
+          $('#preview-head').html(xhr.responseText);
         }
       });
     }
