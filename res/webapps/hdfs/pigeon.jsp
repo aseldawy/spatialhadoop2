@@ -74,7 +74,7 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
   <h3>Relations</h3>
   <select id="file-selector" name="filename" multiple="multiple" style="height: 150px; width:100%;">
     <% String dir = HtmlQuoting.unquoteHtmlChars(request.getParameter("dir")); %>
-    <% Path path = dir == null? new Path("/") : new Path(dir); %>
+    <% Path path = dir == null? new Path(".") : new Path(dir); %>
     <% listDirectory(request, out, path); %>
  </select>
 
