@@ -74,6 +74,10 @@ public class CommandLineArguments extends Configuration {
     this.allPaths = paths.toArray(new Path[paths.size()]);
   }
   
+  public CommandLineArguments(Configuration conf) {
+    super(conf);
+  }
+  
   public Path[] getPaths() {
     return allPaths;
   }

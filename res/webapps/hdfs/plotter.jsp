@@ -2,8 +2,6 @@
   contentType="text/html; charset=UTF-8"
   import="org.apache.hadoop.fs.*"
   import="java.awt.image.BufferedImage"
-  import="java.awt.image.AffineTransformOp"
-  import="java.awt.geom.AffineTransform"
   import="edu.umn.cs.spatialHadoop.operations.Plot"
   import="edu.umn.cs.spatialHadoop.core.SpatialSite"
   import="java.io.BufferedReader"
