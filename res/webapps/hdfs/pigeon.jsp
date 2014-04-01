@@ -6,6 +6,8 @@
   import="java.io.FileReader"
   import="java.io.File"
   import="java.io.FilenameFilter"
+  import="java.io.PrintStream"
+  import="java.io.IOException"
   import="org.apache.hadoop.http.HtmlQuoting"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
   import="org.apache.hadoop.conf.Configuration"
@@ -13,6 +15,8 @@
   import="org.apache.hadoop.fs.*"
   import="org.apache.hadoop.hdfs.server.namenode.FSNamesystem"
   import="org.apache.hadoop.hdfs.server.datanode.DataNode"
+  import="org.apache.hadoop.io.Text"
+  import="edu.umn.cs.spatialHadoop.util.JspSpatialHelper"
 %>
 
 <%! private static final long serialVersionUID = 1L;%>
@@ -58,6 +62,81 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
     names.insertElementAt(scriptName, 0);
   }
 }
+
+private String runPigeonScript(Configuration conf, String scriptName, String scriptBody) {
+  try {
+  String pigeonTempDir = conf.get("pigeon.tmp", ".");
+  String pigHome = conf.get("pig.home");
+  File pigExecutable = pigHome == null? new File("pig") : new File(pigHome, "pig");
+  
+  // Return directories of all previous attempts
+  String[] previousScripts = new File(pigeonTempDir).list(new FilenameFilter() {
+    public boolean accept(File dir, String name) {
+      return name.matches("pigeon_[0-9]+");
+    }
+  });
+
+  // Find the maximum job ID and generate a new ID by adding one
+  int maxId = 0;
+  for (String previousScript : previousScripts) {
+    int id = Integer.parseInt(previousScript.replace("pigeon_", ""));
+    if (id > maxId)
+      maxId = id;
+  }
+  int scriptId = maxId + 1;
+  
+  File newScriptDir = new File(pigeonTempDir, String.format("pigeon_%04d", scriptId));
+  if (!newScriptDir.mkdirs()) {
+    return "Unable to create directory '"+newScriptDir+"'";
+  } else {
+    // Start the script in the given directory
+    File scriptFile = new File(newScriptDir, "script.pig");
+    PrintStream ps = new PrintStream(scriptFile);
+    ps.println(scriptBody);
+    ps.close();
+    
+    Text stdout = new Text();
+    Text stderr = new Text();
+    int exitCode = JspSpatialHelper.runProcess(newScriptDir, pigExecutable+" -c -f script.pig", null, stdout, stderr, true);
+    if (exitCode == 0) {
+      // Run the script for real
+      JspSpatialHelper.runProcess(newScriptDir, pigExecutable+" -f script.pig -l script.log", null, null, null, false);
+      
+      // Write meta data to a file
+      File metafileName = new File(newScriptDir, "metadata");
+      ps = new PrintStream(metafileName);
+      ps.println("scriptName: "+scriptName);
+      ps.close();
+      return null;
+    } else {
+      // No need to keep the directory for scripts with syntax errors
+      for (String file : newScriptDir.list()) {
+        new File(newScriptDir, file).delete();
+      }
+      newScriptDir.delete();
+
+      return stderr.toString();
+    }
+  }
+  } catch (IOException e) {
+    e.printStackTrace();
+    return "error";
+  }
+}
+%>
+
+<%
+  String scriptStatus = null;
+  if (request.getParameter("script-body") != null) {
+    Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
+    
+    // Extract script name and body from request parameters
+    String scriptBody = HtmlQuoting.unquoteHtmlChars(request.getParameter("script-body"));
+    String scriptName = HtmlQuoting.unquoteHtmlChars(request.getParameter("script-name"));
+    
+    scriptStatus = runPigeonScript(conf, scriptName, scriptBody);
+    out.println("<script lanugage='javascript'>var run_script=true</script>");
+  }
 %>
 
 <html>
@@ -97,13 +176,14 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
 <div style="float: left; width: 800px;">
   <h3>Preview area</h3>
   <div style="width: 100%; height: 150px; border: 1px solid black; overflow: auto;">
-  <pre id="preview-head"> </pre>
+  <pre id="preview-head"><%= String.valueOf(scriptStatus) %> </pre>
   </div>
   
   <h3>Pigeon script</h3>
-  <form id="run-pig" method="post" action="run_pig.jsp">
+  <form id="run-pig" method="post" action="pigeon.jsp">
     <div style="width: 100%; height: 300px;">
       <textarea name="script-body" id="script-body" style="width: 100%; height: 280px;">
+<%= request.getParameter("script-body") == null ? "" : HtmlQuoting.unquoteHtmlChars(request.getParameter("script-body")) %>
       </textarea>
     <label for="script-name">Query Name</label>
     <input type="text" name="script-name" id="script-name" value="" placeholder="Script name"/>

@@ -32,24 +32,9 @@ $(document).ready(function() {
     
   });
 
-  $('#run-pig').submit(function(e) {
-    e.preventDefault();
-    var form = $(this);
-    var action = form.attr('action');
-    var data = form.serialize();
-    $.ajax({
-      type: "POST",
-      url: action,
-      data: data,
-      success: function(response) { windows.location.reload();},
-      error: function(xhr) {
-        $('#preview-head').html(xhr.responseText.trim());
-      }
-    });
-  });
-
   // For initial case
-  headSelected();
+  if (!run_script)
+    headSelected();
   
   function previewScript() {
     var scriptSelector = $("#pigeon-scripts");
