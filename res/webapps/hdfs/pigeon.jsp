@@ -49,17 +49,19 @@ private void listPigeonScripts(Configuration conf, Vector<Integer> ids,
   for (String previousScript : previousScripts) {
     int id = Integer.parseInt(previousScript.replace("pigeon_", ""));
     File metadataFile = new File (new File(pigeonTempDir, previousScript), "metadata");
-    BufferedReader reader = new BufferedReader(new FileReader(metadataFile));
-    String line;
-    String scriptName = null;
-    while (scriptName == null && (line = reader.readLine()) != null) {
-      if (line.startsWith("scriptName:"))
-        scriptName = line.replace("scriptName:", "").trim();
+    if (metadataFile.exists()) {
+      BufferedReader reader = new BufferedReader(new FileReader(metadataFile));
+      String line;
+      String scriptName = null;
+      while (scriptName == null && (line = reader.readLine()) != null) {
+        if (line.startsWith("scriptName:"))
+          scriptName = line.replace("scriptName:", "").trim();
+      }
+      reader.close();
+      
+      ids.insertElementAt(id, 0);
+      names.insertElementAt(scriptName, 0);
     }
-    reader.close();
-    
-    ids.insertElementAt(id, 0);
-    names.insertElementAt(scriptName, 0);
   }
 }
 
@@ -67,7 +69,7 @@ private String runPigeonScript(Configuration conf, String scriptName, String scr
   try {
   String pigeonTempDir = conf.get("pigeon.tmp", ".");
   String pigHome = conf.get("pig.home");
-  File pigExecutable = pigHome == null? new File("pig") : new File(pigHome, "pig");
+  File pigExecutable = pigHome == null? new File("pig") : new File(new File(pigHome, "bin"), "pig");
   
   // Return directories of all previous attempts
   String[] previousScripts = new File(pigeonTempDir).list(new FilenameFilter() {
@@ -120,7 +122,7 @@ private String runPigeonScript(Configuration conf, String scriptName, String scr
   }
   } catch (IOException e) {
     e.printStackTrace();
-    return "error";
+    return "error: "+e;
   }
 }
 %>
@@ -176,7 +178,7 @@ private String runPigeonScript(Configuration conf, String scriptName, String scr
 <div style="float: left; width: 800px;">
   <h3>Preview area</h3>
   <div style="width: 100%; height: 150px; border: 1px solid black; overflow: auto;">
-  <pre id="preview-head"><%= String.valueOf(scriptStatus) %> </pre>
+  <pre id="preview-head"><%= ""+scriptStatus %> </pre>
   </div>
   
   <h3>Pigeon script</h3>
