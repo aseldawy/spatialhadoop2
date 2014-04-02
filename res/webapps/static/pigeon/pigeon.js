@@ -42,6 +42,8 @@ $(document).ready(function() {
     if (selected.size() == 0) {
       $('#preview-head').html('not available');
     } else {
+      $('#script-name').val(selected.text());
+    
       // Retrieve script body
       $.ajax({
         type: "GET",

@@ -137,7 +137,12 @@ private String runPigeonScript(Configuration conf, String scriptName, String scr
     String scriptName = HtmlQuoting.unquoteHtmlChars(request.getParameter("script-name"));
     
     scriptStatus = runPigeonScript(conf, scriptName, scriptBody);
+    // Indicates that a script was run on page load. So, we do not overwrite
+    // the value in the #preview-head as it contains the result of running the
+    // script.
     out.println("<script lanugage='javascript'>var run_script=true</script>");
+  } else {
+    out.println("<script lanugage='javascript'>var run_script=false</script>");
   }
 %>
 
