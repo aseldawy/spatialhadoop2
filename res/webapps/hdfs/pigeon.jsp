@@ -158,14 +158,14 @@ private String runPigeonScript(Configuration conf, String scriptName, String scr
   <img width="100" src="/static/pigeon/pigeon_logo.png"/>
   <h2>Pigeon</h2>
   <h3>Relations</h3>
-  <select id="file-selector" name="filename" size="5" style="height: 150px; width:100%;">
+  <select id="file-selector" name="filename" size="8" style="height: 150px; width:100%;">
     <% String dir = HtmlQuoting.unquoteHtmlChars(request.getParameter("dir")); %>
     <% Path path = dir == null? new Path(".") : new Path(dir); %>
     <% listDirectory(request, out, path); %>
  </select>
 
 <h3>Queries</h3>
-<select size="5" id="pigeon-scripts" style="width: 100%;">
+<select size="10" id="pigeon-scripts" style="width: 100%;">
   <%
     Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
     Vector<Integer> scriptIds = new Vector<Integer>();
