@@ -194,7 +194,7 @@ public class OGCJTSShape implements Shape {
   
   @Override
   public String toString() {
-    return geom.toString();
+    return geom == null? "(empty)" : geom.toString();
   }
   
   @Override
