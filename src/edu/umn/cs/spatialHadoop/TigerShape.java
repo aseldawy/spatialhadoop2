@@ -14,14 +14,14 @@ package edu.umn.cs.spatialHadoop;
 
 import org.apache.hadoop.io.Text;
 
-import edu.umn.cs.spatialHadoop.core.JTSShape;
+import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 
 /**
  * A shape from tiger file.
  * @author aseldawy
  *
  */
-public class TigerShape extends JTSShape {
+public class TigerShape extends OGCJTSShape {
   
   @Override
   public void fromText(Text text) {

@@ -54,20 +54,20 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * @author Ahmed Eldawy
  * 
  */
-public class OGCShape implements Shape {
+public class OGCESRIShape implements Shape {
   
-  private static final Log LOG = LogFactory.getLog(OGCShape.class);
+  private static final Log LOG = LogFactory.getLog(OGCESRIShape.class);
   
   /**
    * The underlying geometry
    */
   public OGCGeometry geom;
   
-  public OGCShape() {
+  public OGCESRIShape() {
     this(null);
   }
   
-  public OGCShape(OGCGeometry geom) {
+  public OGCESRIShape(OGCGeometry geom) {
     this.geom = geom;
   }
 
@@ -168,8 +168,8 @@ public class OGCShape implements Shape {
     if (!s_mbr.isIntersected(this_mbr))
       return false;
     try {
-      if (s instanceof OGCShape)
-        return geom.intersects(((OGCShape)s).geom);
+      if (s instanceof OGCESRIShape)
+        return geom.intersects(((OGCESRIShape)s).geom);
     } catch (NullPointerException e) {
       // TODO Auto-generated catch block
       e.printStackTrace();
@@ -186,7 +186,7 @@ public class OGCShape implements Shape {
 
   @Override
   public Shape clone() {
-    OGCShape copy = new OGCShape(this.geom);
+    OGCESRIShape copy = new OGCESRIShape(this.geom);
     return copy;
   }
   
@@ -205,7 +205,7 @@ public class OGCShape implements Shape {
       for (int i = 0; i < geom_coll.numGeometries(); i++) {
         OGCGeometry sub_geom = geom_coll.geometryN(i);
         // Recursive call to draw each geometry
-        new OGCShape(sub_geom).draw(g, fileMBR, imageWidth, imageHeight, vflip, scale);
+        new OGCESRIShape(sub_geom).draw(g, fileMBR, imageWidth, imageHeight, vflip, scale);
       }
     } else if (geom.getEsriGeometry() instanceof MultiPath) {
       MultiPath path = (MultiPath) geom.getEsriGeometry();

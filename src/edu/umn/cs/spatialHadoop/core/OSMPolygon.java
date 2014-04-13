@@ -26,7 +26,7 @@ import com.vividsolutions.jts.io.ParseException;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
-public class OSMPolygon extends JTSShape implements WritableComparable<OSMPolygon> {
+public class OSMPolygon extends OGCJTSShape implements WritableComparable<OSMPolygon> {
   private static final char SEPARATOR = '\t';
   public long id;
   public Map<String, String> tags;

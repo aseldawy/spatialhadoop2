@@ -54,9 +54,9 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * @author Ahmed Eldawy
  * 
  */
-public class JTSShape implements Shape {
+public class OGCJTSShape implements Shape {
   
-  private static final Log LOG = LogFactory.getLog(JTSShape.class);
+  private static final Log LOG = LogFactory.getLog(OGCJTSShape.class);
   
   private static final byte[][] ShapeNames = { "LINESTRING".getBytes(),
       "POINT".getBytes(), "POLYGON".getBytes(), "MULTIPOINT".getBytes(),
@@ -72,11 +72,11 @@ public class JTSShape implements Shape {
    */
   public Geometry geom;
   
-  public JTSShape() {
+  public OGCJTSShape() {
     this(null);
   }
   
-  public JTSShape(Geometry geom) {
+  public OGCJTSShape(Geometry geom) {
     this.geom = geom;
   }
 
@@ -171,8 +171,8 @@ public class JTSShape implements Shape {
 
   @Override
   public boolean isIntersected(Shape s) {
-    if (s instanceof JTSShape) {
-      return geom.intersects(((JTSShape)s).geom);
+    if (s instanceof OGCJTSShape) {
+      return geom.intersects(((OGCJTSShape)s).geom);
     }
     Rectangle mbr = s.getMBR();
     Coordinate[] coordinates = new Coordinate[5];
@@ -188,7 +188,7 @@ public class JTSShape implements Shape {
 
   @Override
   public Shape clone() {
-    JTSShape copy = new JTSShape(this.geom);
+    OGCJTSShape copy = new OGCJTSShape(this.geom);
     return copy;
   }
   

@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 
-import edu.umn.cs.spatialHadoop.core.OGCShape;
+import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
@@ -265,7 +265,7 @@ public class CommandLineArguments extends Configuration {
     } else if (shapeType.startsWith("poly")) {
       shape = new Polygon();
     } else if (shapeType.startsWith("ogc")) {
-      shape = new OGCShape();
+      shape = new OGCESRIShape();
     } else if (shapeType.startsWith("nasa")) {
       shape = new NASAPoint();
     } else {
