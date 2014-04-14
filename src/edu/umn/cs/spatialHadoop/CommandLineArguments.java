@@ -24,7 +24,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 
-import edu.umn.cs.spatialHadoop.core.OGCShape;
+import edu.umn.cs.spatialHadoop.core.CSVOGC;
+import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
@@ -74,6 +75,10 @@ public class CommandLineArguments extends Configuration {
     this.allPaths = paths.toArray(new Path[paths.size()]);
   }
   
+  public CommandLineArguments(Configuration conf) {
+    super(conf);
+  }
+  
   public Path[] getPaths() {
     return allPaths;
   }
@@ -99,29 +104,6 @@ public class CommandLineArguments extends Configuration {
     return inputPaths;
   }
 
-/*  public long getSize() {
-    for (String arg : args) {
-      if (arg.startsWith("size:")) {
-        String size_str = arg.split(":")[1];
-        if (size_str.indexOf('.') == -1)
-          return Long.parseLong(size_str);
-        String[] size_parts = size_str.split("\\.", 2);
-        long size = Long.parseLong(size_parts[0]);
-        size_parts[1] = size_parts[1].toLowerCase();
-        if (size_parts[1].startsWith("k"))
-          size *= 1024;
-        else if (size_parts[1].startsWith("m"))
-          size *= 1024 * 1024;
-        else if (size_parts[1].startsWith("g"))
-          size *= 1024 * 1024 * 1024;
-        else if (size_parts[1].startsWith("t"))
-          size *= 1024 * 1024 * 1024 * 1024;
-        return size;
-      }
-    }
-    return 0;
-  }
-*/
   public boolean is(String flag, boolean defaultValue) {
     return getBoolean(flag, defaultValue);
   }
@@ -130,29 +112,6 @@ public class CommandLineArguments extends Configuration {
     return is(flag, false);
   }
 
-/*  public long getBlockSize() {
-    for (String arg : args) {
-      if (arg.startsWith("blocksize:") || arg.startsWith("block_size:")) {
-        String size_str = arg.split(":")[1];
-        if (size_str.indexOf('.') == -1)
-          return Long.parseLong(size_str);
-        String[] size_parts = size_str.split("\\.", 2);
-        long size = Long.parseLong(size_parts[0]);
-        size_parts[1] = size_parts[1].toLowerCase();
-        if (size_parts[1].startsWith("k"))
-          size *= 1024;
-        else if (size_parts[1].startsWith("m"))
-          size *= 1024 * 1024;
-        else if (size_parts[1].startsWith("g"))
-          size *= 1024 * 1024 * 1024;
-        else if (size_parts[1].startsWith("t"))
-          size *= 1024 * 1024 * 1024 * 1024;
-        return size;
-      }
-    }
-    return 0;
-  }
-*/  
   
 /*  public CellInfo[] getCells() {
     String cell_of = (String) get("cells-of");
@@ -261,7 +220,7 @@ public class CommandLineArguments extends Configuration {
     } else if (shapeType.startsWith("poly")) {
       shape = new Polygon();
     } else if (shapeType.startsWith("ogc")) {
-      shape = new OGCShape();
+      shape = new OGCESRIShape();
     } else if (shapeType.startsWith("nasa")) {
       shape = new NASAPoint();
     } else {
@@ -291,6 +250,17 @@ public class CommandLineArguments extends Configuration {
     }
     if (shape == null)
       LOG.warn("unknown shape type: '"+get(key)+"'");
+    // Special case for CSVOGC shape, specify the column if possible
+    if (shape instanceof CSVOGC) {
+      CSVOGC csvShape = (CSVOGC) shape;
+      String strColumnIndex = this.get("column");
+      if (strColumnIndex != null)
+        csvShape.setColumn(Integer.parseInt(strColumnIndex));
+      String strSeparator = this.get("separator");
+      if (strSeparator != null)
+        csvShape.setSeparator(strSeparator.charAt(0));
+    }
+      
     return shape;
   }
   

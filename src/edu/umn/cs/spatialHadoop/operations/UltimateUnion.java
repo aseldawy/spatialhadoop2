@@ -38,7 +38,7 @@ import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.util.AssertionFailedException;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
-import edu.umn.cs.spatialHadoop.core.JTSShape;
+import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
@@ -129,7 +129,7 @@ public class UltimateUnion {
     return shape.getBoundary().intersection(partialResult.getBoundary());
   }
 
-  static class UltimateUnionMap<S extends JTSShape> extends MapReduceBase implements
+  static class UltimateUnionMap<S extends OGCJTSShape> extends MapReduceBase implements
       Mapper<Rectangle, ArrayWritable, Shape, Shape>{
 
     @Override
@@ -142,20 +142,20 @@ public class UltimateUnion {
   }
   
   static class UltimateUnionReducer extends MapReduceBase implements
-      Reducer<JTSShape, JTSShape, NullWritable, JTSShape> {
+      Reducer<OGCJTSShape, OGCJTSShape, NullWritable, OGCJTSShape> {
 
     @Override
-    public void reduce(JTSShape shape, Iterator<JTSShape> overlaps,
-        OutputCollector<NullWritable, JTSShape> output, Reporter reporter)
+    public void reduce(OGCJTSShape shape, Iterator<OGCJTSShape> overlaps,
+        OutputCollector<NullWritable, OGCJTSShape> output, Reporter reporter)
         throws IOException {
       Vector<Geometry> overlappingShapes = new Vector<Geometry>();
       while (overlaps.hasNext()) {
-        JTSShape overlap = overlaps.next();
+        OGCJTSShape overlap = overlaps.next();
         overlappingShapes.add(overlap.geom);
       }
       Geometry result = partialUnion(shape.geom, overlappingShapes);
       if (result != null)
-        output.collect(NullWritable.get(), new JTSShape(result));
+        output.collect(NullWritable.get(), new OGCJTSShape(result));
     }
   }
   
@@ -214,8 +214,8 @@ public class UltimateUnion {
     Path output = params.getPaths()[1];
     Shape shape = params.getShape("shape");
     
-    if (shape == null || !(shape instanceof JTSShape)) {
-      LOG.error("Given shape must be a subclass of "+JTSShape.class);
+    if (shape == null || !(shape instanceof OGCJTSShape)) {
+      LOG.error("Given shape must be a subclass of "+OGCJTSShape.class);
       return;
     }
     

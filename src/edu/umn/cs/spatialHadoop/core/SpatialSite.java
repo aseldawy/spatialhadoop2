@@ -231,6 +231,15 @@ public class SpatialSite {
     } catch (IllegalAccessException e) {
       e.printStackTrace();
     }
+    if (stockShape instanceof CSVOGC) {
+      CSVOGC csvShape = (CSVOGC) stockShape;
+      String strColumnIndex = job.get("column");
+      if (strColumnIndex != null)
+        csvShape.setColumn(Integer.parseInt(strColumnIndex));
+      String strSeparator = job.get("separator");
+      if (strSeparator != null)
+        csvShape.setSeparator(strSeparator.charAt(0));
+    }
     return stockShape;
   }
   

@@ -45,8 +45,8 @@ import com.vividsolutions.jts.io.WKTReader;
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
-import edu.umn.cs.spatialHadoop.core.JTSShape;
-import edu.umn.cs.spatialHadoop.core.OGCShape;
+import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
+import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -69,18 +69,18 @@ public class Union {
    * @author eldawy
    *
    */
-  static class UnionReducer<S extends JTSShape> extends MapReduceBase
-      implements Reducer<IntWritable, S, IntWritable, JTSShape> {
+  static class UnionReducer<S extends OGCJTSShape> extends MapReduceBase
+      implements Reducer<IntWritable, S, IntWritable, OGCJTSShape> {
     
     @Override
     public void reduce(IntWritable dummy, Iterator<S> shapes,
-        OutputCollector<IntWritable, JTSShape> output, Reporter reporter)
+        OutputCollector<IntWritable, OGCJTSShape> output, Reporter reporter)
         throws IOException {
       final int threshold = 500000;
       Geometry[] shapes_list = new Geometry[threshold];
       int size = 0;
       while (shapes.hasNext()) {
-        JTSShape shape = shapes.next();
+        OGCJTSShape shape = shapes.next();
         shapes_list[size++] = shape.geom;
         if (size == threshold) {
           LOG.info("Computing union of "+size+" shapes");
@@ -106,10 +106,10 @@ public class Union {
         GeometryCollection union_shapes = (GeometryCollection) union;
         for (int i_geom = 0; i_geom < union_shapes.getNumGeometries(); i_geom++) {
           Geometry geom_n = union_shapes.getGeometryN(i_geom);
-          output.collect(dummy, new JTSShape(geom_n));
+          output.collect(dummy, new OGCJTSShape(geom_n));
         }
       } else {
-        output.collect(dummy, new JTSShape(union));
+        output.collect(dummy, new OGCJTSShape(union));
       }
       LOG.info("Done writing geoms to output");
     }
@@ -258,7 +258,7 @@ public class Union {
   }
 
   
-  public static <S extends JTSShape> Geometry unionStream(S shape) throws IOException {
+  public static <S extends OGCJTSShape> Geometry unionStream(S shape) throws IOException {
     ShapeRecordReader<S> reader =
         new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
     final int threshold = 5000000;
@@ -296,9 +296,9 @@ public class Union {
     
     // Prepare a hash that stores all shapes
     Vector shapes;
-    if (shape instanceof JTSShape) {
+    if (shape instanceof OGCJTSShape) {
       shapes = new Vector<Geometry>();
-    } else if (shape instanceof OGCShape) {
+    } else if (shape instanceof OGCESRIShape) {
       shapes = new Vector<OGCGeometry>();
     } else {
       throw new RuntimeException("Cannot union shapes of type '"+shape.getClass()+"'");
@@ -312,15 +312,15 @@ public class Union {
     Rectangle partition = new Rectangle();
 
     while (shapeReader.next(partition, shape)) {
-      if (shape instanceof JTSShape)
-        shapes.add(((JTSShape)shape).geom);
-      else if (shape instanceof OGCShape)
-        shapes.add(((OGCShape)shape).geom);
+      if (shape instanceof OGCJTSShape)
+        shapes.add(((OGCJTSShape)shape).geom);
+      else if (shape instanceof OGCESRIShape)
+        shapes.add(((OGCESRIShape)shape).geom);
     }
     shapeReader.close();
 
     // Find the union of all shapes
-    if (shape instanceof JTSShape) {
+    if (shape instanceof OGCJTSShape) {
       GeometryCollection all_geoms = new GeometryCollection((Geometry[])shapes.toArray(new Geometry[shapes.size()]), ((Geometry)shapes.firstElement()).getFactory());
       
       Geometry union = all_geoms.buffer(0);
@@ -369,7 +369,7 @@ public class Union {
     if (params.getPaths().length == 0) {
       if (params.is("local")) {
         long t1 = System.currentTimeMillis();
-        unionStream((JTSShape)params.getShape("shape"));
+        unionStream((OGCJTSShape)params.getShape("shape"));
         long t2 = System.currentTimeMillis();
         System.err.println("Total time for union: "+(t2-t1)+" millis");
         return;

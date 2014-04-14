@@ -47,7 +47,7 @@ import com.esri.core.geometry.ogc.OGCGeometryCollection;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.OGCShape;
+import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
@@ -160,7 +160,7 @@ public class CatUnion {
     public void reduce(IntWritable category, Iterator<Text> shape_lines,
         OutputCollector<IntWritable, Text> output, Reporter reporter)
         throws IOException {
-      OGCShape shape = new OGCShape();
+      OGCESRIShape shape = new OGCESRIShape();
       Vector<OGCGeometry> shapes = new Vector<OGCGeometry>();
       while (shape_lines.hasNext()) {
         shape.fromText(shape_lines.next());
@@ -172,7 +172,7 @@ public class CatUnion {
       geo_collection = null;
       shapes = null;
       temp_out.clear();
-      output.collect(category, new OGCShape(union).toText(temp_out));
+      output.collect(category, new OGCESRIShape(union).toText(temp_out));
     }
   }
   
@@ -251,10 +251,10 @@ public class CatUnion {
     FileSystem fs1 = shapeFile.getFileSystem(new Configuration());
     long file_size1 = fs1.getFileStatus(shapeFile).getLen();
     
-    ShapeRecordReader<OGCShape> shapeReader =
-        new ShapeRecordReader<OGCShape>(fs1.open(shapeFile), 0, file_size1);
+    ShapeRecordReader<OGCESRIShape> shapeReader =
+        new ShapeRecordReader<OGCESRIShape>(fs1.open(shapeFile), 0, file_size1);
     CellInfo cellInfo = new CellInfo();
-    OGCShape shape = new OGCShape();
+    OGCESRIShape shape = new OGCESRIShape();
 
     while (shapeReader.next(cellInfo, shape)) {
       //int shape_zip = Integer.parseInt(shape.extra.split(",", 7)[5]);

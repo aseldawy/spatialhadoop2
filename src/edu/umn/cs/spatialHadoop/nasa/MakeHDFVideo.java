@@ -225,17 +225,19 @@ public class MakeHDFVideo {
 
     String video_command;
     if (overlay != null) {
-      video_command = "ffmpeg -r 4 -i day_%3d.png "
+      video_command = "avconv -r 4 -i day_%3d.png "
           + "-vf \"movie=gistic_logo.png [watermark]; "
           + "movie=overlay.png [ways]; " 
           + "movie=scale.png [scale]; "
+          + "[in] crop="+plotRange.getWidth()+":"+plotRange.getHeight()+"[in]; "
+          + "[ways] crop="+plotRange.getWidth()+":"+plotRange.getHeight()+"[ways]; "
           + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
           + "[mid][ways] overlay=0:0 [mid2]; "
           + "[mid2] pad=iw+64:ih [mid3]; "
           + "[mid3][scale] overlay=main_w-overlay_w:0 [out]\" "
           + "-r 4 -pix_fmt yuv420p output.mp4 ";
     } else {
-      video_command = "ffmpeg -r 4 -i day_%3d.png -vf"
+      video_command = "avconv -r 4 -i day_%3d.png -vf"
           + "\"movie=gistic_logo.png [watermark]; "
           + "movie=scale.png [scale]; "
           + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
