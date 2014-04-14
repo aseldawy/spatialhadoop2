@@ -199,6 +199,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
 
       // No longer need the HDF file
       hdfFile.close();
+      fileFormat.close();
     } catch (Exception e) {
       throw new RuntimeException("Error reading HDF file '"+split.getPath()+"'", e);
     }
