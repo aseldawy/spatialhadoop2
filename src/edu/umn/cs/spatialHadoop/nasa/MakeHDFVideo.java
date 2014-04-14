@@ -163,6 +163,7 @@ public class MakeHDFVideo {
     BufferedImage firstImage = ImageIO.read(inStream);
     inStream.close();
     
+    int imageWidth = firstImage.getWidth();
     int imageHeight = firstImage.getHeight();
     
     Plot.drawScale(new Path(output, "scale.png"), HDFPlot.lastRange, 64, imageHeight);
@@ -205,19 +206,24 @@ public class MakeHDFVideo {
       // to Plot or PlotPyramid
       for (int i = 0; i < vargs.size();) {
         if (vargs.get(i).startsWith("-") && vargs.get(i).length() > 1) {
-          i++; // Skip
+          i++; // Keep this argument
         } else if (vargs.get(i).indexOf(':') != -1 && vargs.get(i).indexOf(":/") == -1) {
           if (vargs.get(i).toLowerCase().startsWith("scale:")
               || vargs.get(i).startsWith("shape:")
-              || vargs.get(i).startsWith("dataset:"))
+              || vargs.get(i).startsWith("dataset:")
+              || vargs.get(i).startsWith("width:")
+              || vargs.get(i).startsWith("height:"))
             vargs.remove(i);
           else
-            i++; // Skip
+            i++; // Keep this argument
         } else {
           vargs.remove(i);
         }
       }
       vargs.add(overlay);
+      vargs.add("width:"+imageWidth);
+      vargs.add("height:"+imageHeight);
+      vargs.add("-no-keep-ratio");
       vargs.add(new Path(output, "overlay.png").toString());
       vargs.add("shape:"+OSMPolygon.class.getName());
       Plot.main(vargs.toArray(new String[vargs.size()]));
@@ -229,8 +235,6 @@ public class MakeHDFVideo {
           + "-vf \"movie=gistic_logo.png [watermark]; "
           + "movie=overlay.png [ways]; " 
           + "movie=scale.png [scale]; "
-          + "[in] crop="+plotRange.getWidth()+":"+plotRange.getHeight()+"[in]; "
-          + "[ways] crop="+plotRange.getWidth()+":"+plotRange.getHeight()+"[ways]; "
           + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
           + "[mid][ways] overlay=0:0 [mid2]; "
           + "[mid2] pad=iw+64:ih [mid3]; "
