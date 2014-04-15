@@ -59,14 +59,15 @@ index_file.scan(FilePattern) do |href|
   dir_name = File.basename($1)
   if dir_name =~ /^(\d\d\d\d)\.(\d\d)\.(\d\d)$/
     dir_date = Time.mktime($1.to_i, $2.to_i, $3.to_i)
-    all_files << dir_name if date_range.nil? || date_range.member?(dir_date)
+    all_files << dir_name if date_range.nil? || (dir_date >= date_from && dir_date <= date_to)
   end
 end
 
 files_to_download = []
-batch_size = 4
+batch_size = 16
 
 for snapshot_dir in all_files
+  puts "Checking #{snapshot_dir}"
   snapshot_url = "#{baseUrl}/#{snapshot_dir}"
   index_file = `wget -qO- '#{snapshot_url}'`
   index_file.scan(FilePattern) do |href|
@@ -92,7 +93,6 @@ for snapshot_dir in all_files
           lon2 = x2 / Math::cos(y2 * Math::PI / 180)
           x2 = [lon1, lon2].max
           if h == 21 && v == 6
-          puts "Checking overlap of #{query_range.inspect} with #{[x1, y1, x2, y2].inspect}"
           end
           if rectOverlap(query_range, [x1, y1, x2, y2])
             # Download this file
