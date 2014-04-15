@@ -55,6 +55,8 @@ import org.apache.hadoop.util.Progressable;
  * 
  */
 public class HTTPFileSystem extends FileSystem {
+  private static final String HTTP_RETRIES = "fs.http.retries";
+
   public static final Log LOG = LogFactory.getLog(HTTPFileSystem.class);
   
   /**Default HTTP port*/
@@ -68,6 +70,9 @@ public class HTTPFileSystem extends FileSystem {
 
   /**Current working directory*/
   private Path workingDir;
+
+  /**How many times to try access a file if failed downloading it*/
+  private int retries;
   
   static {
     // Associate this class with http scheme in default configuration
@@ -92,6 +97,7 @@ public class HTTPFileSystem extends FileSystem {
 
     setConf(conf);
     this.uri = uri;
+    this.retries = conf.getInt(HTTP_RETRIES, 3);
   }
   
   @Override
@@ -102,8 +108,24 @@ public class HTTPFileSystem extends FileSystem {
   @Override
   public FSDataInputStream open(Path f, int bufferSize) throws IOException {
     URL url = f.toUri().toURL();
-    InputStream in = url.openStream();
-    return new FSDataInputStream(new HTTPInputStream(in));
+    
+    int retries = this.retries;
+    InputStream inStream = null;
+    while (inStream == null && retries-- > 0) {
+      try {
+        inStream = url.openStream();
+      } catch (java.net.SocketException e) {
+        if (retries == 0)
+          throw e;
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+      } catch (java.net.UnknownHostException e) {
+        if (retries == 0)
+          throw e;
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+      }
+    }
+    
+    return new FSDataInputStream(new HTTPInputStream(inStream));
   }
 
   @Override
@@ -116,22 +138,22 @@ public class HTTPFileSystem extends FileSystem {
   @Override
   public FSDataOutputStream append(Path f, int bufferSize, Progressable progress)
       throws IOException {
-    throw new RuntimeException("Unsupported method #create in HTTP");
+    throw new RuntimeException("Unsupported method #append in HTTP");
   }
 
   @Override
   public boolean rename(Path src, Path dst) throws IOException {
-    throw new RuntimeException("Unsupported method #create in HTTP");
+    throw new RuntimeException("Unsupported method #rename in HTTP");
   }
 
   @Override
   public boolean delete(Path f) throws IOException {
-    throw new RuntimeException("Unsupported method #create in HTTP");
+    throw new RuntimeException("Unsupported method #delete in HTTP");
   }
 
   @Override
   public boolean delete(Path f, boolean recursive) throws IOException {
-    throw new RuntimeException("Unsupported method #create in HTTP");
+    throw new RuntimeException("Unsupported method #delete in HTTP");
   }
 
   private static long parseSize(String size) {
@@ -168,7 +190,21 @@ public class HTTPFileSystem extends FileSystem {
     final Pattern httpEntryPattern = Pattern.compile("<a href=\"[^\"]+\">(.+)</a>\\s*(\\d+-\\w+-\\d+)\\s+(\\d+:\\d+)\\s+([\\d\\.]+[KMG]|-)");
     f = f.makeQualified(this);
     URL url = f.toUri().toURL();
-    InputStream inStream = url.openStream();
+    int retries = this.retries;
+    InputStream inStream = null;
+    while (inStream == null && retries-- > 0) {
+      try {
+        inStream = url.openStream();
+      } catch (java.net.SocketException e) {
+        if (retries == 0)
+          throw e;
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+      } catch (java.net.UnknownHostException e) {
+        if (retries == 0)
+          throw e;
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+      }
+    }
     BufferedReader inBuffer = new BufferedReader(new InputStreamReader(inStream));
     String line;
     while ((line = inBuffer.readLine()) != null) {
@@ -206,7 +242,7 @@ public class HTTPFileSystem extends FileSystem {
 
   @Override
   public boolean mkdirs(Path f, FsPermission permission) throws IOException {
-    throw new RuntimeException("Unsupported method #create in HTTP");
+    throw new RuntimeException("Unsupported method #mkdirs in HTTP");
   }
 
   /**
@@ -220,7 +256,23 @@ public class HTTPFileSystem extends FileSystem {
   public FileStatus getFileStatus(Path f) throws IOException {
     f = f.makeQualified(this);
     URL url = f.toUri().toURL();
-    URLConnection connection = url.openConnection();
+    int retries = this.retries;
+    
+    URLConnection connection = null;
+    while (connection == null && retries-- > 0) {
+      try {
+        connection = url.openConnection();
+      } catch (java.net.SocketException  e) {
+        if (retries == 0)
+          throw e;
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+      } catch (java.net.UnknownHostException e) {
+        if (retries == 0)
+          throw e;
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+      }
+    }
+    
     String lengthStr = connection.getHeaderField("content-Length");
     long length = lengthStr == null? 0 : Long.parseLong(lengthStr);
     long modificationTime = connection.getLastModified();
