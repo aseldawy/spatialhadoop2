@@ -114,6 +114,8 @@ public class HDFPlot {
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, matchingPath);
       if (gindex == null)
         throw new RuntimeException("Cannot retrieve global index for "+matchingPath);
+      if (range != null) {
+
       gindex.rangeQuery(range, new ResultCollector<Partition>() {
         @Override
         public void collect(Partition r) {
@@ -133,6 +135,24 @@ public class HDFPlot {
           }
         }
       });
+      } else {
+        for (Partition r : gindex) {
+          if (!r.filename.toLowerCase().endsWith(".hdf"))
+            continue;
+          Path filePath = new Path(matchingPath, r.filename);
+          try {
+            Path downloadFile = new Path(downloadPath, r.filename);
+            if (!outFs.exists(downloadFile)) {
+              Path tempFile = new Path(File.createTempFile(r.filename, "downloaded").getAbsolutePath());
+              inFs.copyToLocalFile(filePath, tempFile);
+              outFs.moveFromLocalFile(tempFile, downloadFile);
+            }
+          } catch (IOException e) {
+            throw new RuntimeException("Error downloading file '"+filePath+"'", e);
+          }
+
+        }
+      }
     }
   }
 

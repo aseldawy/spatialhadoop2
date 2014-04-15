@@ -76,7 +76,8 @@ public class MakeHDFVideo {
       int crop_y1 = (int) Math.floor((original.y1 - extended.y1) * img.getHeight() / extended.getHeight()); 
       int crop_x2 = (int) Math.ceil((original.x2 - extended.x1) * img.getWidth() / extended.getWidth());
       int crop_y2 = (int) Math.ceil((original.y2 - extended.y1) * img.getHeight() / extended.getHeight());
-      if ((crop_y1 - crop_y1) % 2 == 1)
+      // Ensure even height for compatibility with some codecs
+      if ((crop_y2 - crop_y1) % 2 == 1)
         crop_y2++;
       
       BufferedImage cropped = new BufferedImage(crop_x2 - crop_x1, crop_y2 - crop_y1, BufferedImage.TYPE_INT_ARGB);
