@@ -21,6 +21,7 @@ import java.util.TreeSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 
 
@@ -203,51 +204,60 @@ public class SpatialAlgorithms {
     return count;
   }
   
-  public static <S extends Shape> int SelfJoin_planeSweep(final S[] R,
+  /**
+   * Self join of rectangles. This method runs faster than the general version
+   * because it just performs the filter step based on the rectangles.
+   * @param rs
+   * @param output
+   * @return
+   * @throws IOException
+   */
+  public static <S extends Rectangle> int SelfJoin_rectangles(final S[] rs,
       OutputCollector<S, S> output) throws IOException {
-    // TODO try precalculating MBRs of all objects and working with them
     int count = 0;
 
-    final Comparator<Shape> comparator = new Comparator<Shape>() {
+    final Comparator<Rectangle> comparator = new Comparator<Rectangle>() {
       @Override
-      public int compare(Shape o1, Shape o2) {
-        return o1.getMBR().x1 < o2.getMBR().x1 ? -1 : 1;
+      public int compare(Rectangle o1, Rectangle o2) {
+        return o1.x1 < o2.x1 ? -1 : 1;
       }
     };
     
     long t1 = System.currentTimeMillis();
-    LOG.info("Self Join of "+ R.length+" shapes");
-    Arrays.sort(R, comparator);
+    LOG.info("Self Join of "+ rs.length+" shapes");
+    Arrays.sort(rs, comparator);
 
     int i = 0, j = 0;
 
     try {
-      while (i < R.length && j < R.length) {
+      while (i < rs.length && j < rs.length) {
         S r;
         S s;
-        if (comparator.compare(R[i], R[j]) < 0) {
-          r = R[i];
+        if (rs[i].x1 < rs[j].x1) {
+          r = rs[i];
           int jj = j;
 
-          while ((jj < R.length)
-              && ((s = R[jj]).getMBR().x1 <= r.getMBR().x2)) {
+          while ((jj < rs.length)
+              && ((s = rs[jj]).x1 <= r.x2)) {
             if (r != s && r.isIntersected(s)) {
-              if (output != null)
+              if (output != null) {
                 output.collect(r, s);
+              }
               count++;
             }
             jj++;
           }
           i++;
         } else {
-          s = R[j];
+          s = rs[j];
           int ii = i;
 
-          while ((ii < R.length)
-              && ((r = R[ii]).getMBR().x1 <= s.getMBR().x2)) {
+          while ((ii < rs.length)
+              && ((r = rs[ii]).x1 <= s.x2)) {
             if (r != s && r.isIntersected(s)) {
-              if (output != null)
+              if (output != null) {
                 output.collect(r, s);
+              }
               count++;
             }
             ii++;
@@ -262,5 +272,58 @@ public class SpatialAlgorithms {
     LOG.info("Finished plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
     
     return count;
+  }
+
+  /**
+   * MBR of a shape along with its ID. Used to performs the filter step while
+   * keeping track of the ID of each object to be able to do the refine step.
+   * @author eldawy
+   *
+   */
+  public static class RectangleID extends Rectangle {
+    public int id;
+    
+    public RectangleID(int id, Rectangle rect) {
+      super(rect);
+      this.id = id;
+    }
+  }
+  
+  /**
+   * The general version of self join algorithm which works with arbitrary
+   * shapes. It first performs a filter step based on MBRs of input shapes and
+   * then a refine step for objects with overlapping MBRs.
+   * @param R
+   * @param output
+   * @return
+   * @throws IOException
+   */
+  public static <S extends Shape> int SelfJoin_planeSweep(final S[] R,
+      final OutputCollector<S, S> output) throws IOException {
+    // Use a two-phase filter and refine approach
+    // 1- Use MBRs as a first filter
+    // 2- Use ConvexHull as a second filter
+    // 3- Use the exact shape for refinement
+    final RectangleID[] mbrs = new RectangleID[R.length];
+    for (int i = 0; i < R.length; i++) {
+      mbrs[i] = new RectangleID(i, R[i].getMBR());
+    }
+    
+    final IntWritable count = new IntWritable();
+    int filterCount = SelfJoin_rectangles(mbrs, new OutputCollector<RectangleID, RectangleID>() {
+      @Override
+      public void collect(RectangleID r1, RectangleID r2)
+          throws IOException {
+        if (R[r1.id].isIntersected(R[r2.id])) {
+          if (output != null)
+            output.collect(R[r1.id], R[r2.id]);
+          count.set(count.get() + 1);
+        }
+      }
+    });
+    
+    LOG.info("Filtered result size "+filterCount+", refined result size "+count.get());
+    
+    return count.get();
   }
 }

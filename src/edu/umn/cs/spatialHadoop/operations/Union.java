@@ -27,6 +27,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -306,18 +308,47 @@ public class Union {
     
     FileSystem fs = inFile.getFileSystem(new Configuration());
     long file_size = fs.getFileStatus(inFile).getLen();
-    
-    ShapeRecordReader<Shape> shapeReader =
-        new ShapeRecordReader<Shape>(fs.open(inFile), 0, file_size);
-    Rectangle partition = new Rectangle();
+    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+    JobConf job = new JobConf(params);
+    ShapeInputFormat.addInputPath(job, inFile);
+    InputSplit[] splits = inputFormat.getSplits(job, 1);
 
-    while (shapeReader.next(partition, shape)) {
-      if (shape instanceof OGCJTSShape)
-        shapes.add(((OGCJTSShape)shape).geom);
-      else if (shape instanceof OGCESRIShape)
-        shapes.add(((OGCESRIShape)shape).geom);
+    double progress = 0;
+    for (InputSplit split : splits) {
+      ShapeRecordReader<Shape> shapeReader =
+          new ShapeRecordReader<Shape>(job, (FileSplit)split);
+      Rectangle partition = new Rectangle();
+      
+      // Number of entries before we perform a partial union
+      int threshold = 1000;
+      
+      while (shapeReader.next(partition, shape)) {
+        if (shape instanceof OGCJTSShape)
+          shapes.add(((OGCJTSShape)shape).geom);
+        else if (shape instanceof OGCESRIShape)
+          shapes.add(((OGCESRIShape)shape).geom);
+        
+        if (shapes.size() > threshold ) {
+          System.out.print("Calculating union for "+shapes.size()+" shapes ... ");
+          // Find the union of all shapes
+          if (shape instanceof OGCJTSShape) {
+            GeometryCollection all_geoms = new GeometryCollection((Geometry[])shapes.toArray(new Geometry[shapes.size()]), ((Geometry)shapes.firstElement()).getFactory());
+            
+            Geometry union = all_geoms.buffer(0);
+            shapes.clear();
+            shapes.add(union);
+          } else {
+            OGCConcreteGeometryCollection all_geoms = new OGCConcreteGeometryCollection(shapes, ((OGCGeometry)shapes.firstElement()).getEsriSpatialReference());
+            OGCGeometry union = all_geoms.union((OGCGeometry)shapes.firstElement());
+            shapes.clear();
+            shapes.add(union);
+          }
+          System.out.println(((int)((progress + shapeReader.getProgress() / splits.length)*100))+"% done");
+        }
+      }
+      shapeReader.close();
+      progress += 1.0f / splits.length;
     }
-    shapeReader.close();
 
     // Find the union of all shapes
     if (shape instanceof OGCJTSShape) {

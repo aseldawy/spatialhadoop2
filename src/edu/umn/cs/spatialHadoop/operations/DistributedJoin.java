@@ -30,6 +30,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
@@ -62,6 +63,7 @@ import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.RTreeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
@@ -94,6 +96,17 @@ public class DistributedJoin {
       });
     }
   }
+  
+  static class SelfJoinMap extends MapReduceBase implements
+    Mapper<Rectangle, ArrayWritable, Shape, Shape>{
+    @Override
+    public void map(Rectangle key, ArrayWritable value,
+        final OutputCollector<Shape, Shape> output, Reporter reporter) throws IOException {
+      Shape[] objects = (Shape[])value.get();
+      SpatialAlgorithms.SelfJoin_planeSweep(objects, output);
+    }
+  }
+
   
   public static class RedistributeJoinMap extends MapReduceBase
   implements Mapper<PairWritable<Rectangle>, PairWritable<? extends Writable>, Shape, Shape> {
@@ -480,19 +493,6 @@ public class DistributedJoin {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     GlobalIndex<Partition> gindex1 = SpatialSite.getGlobalIndex(fs, inputFiles[0]);
     GlobalIndex<Partition> gindex2 = SpatialSite.getGlobalIndex(fs, inputFiles[1]);
-    if (gindex1 != null && gindex2 != null &&
-        gindex1.isReplicated() && gindex2.isReplicated())
-      job.setMapperClass(RedistributeJoinMap.class);
-    else if (gindex1 == null || gindex2 == null || (!gindex1.isReplicated() && !gindex2.isReplicated()))
-      job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
-    else {
-      LOG.warn("Don't know how to join a replicated file with a non-replicated file");
-      //throw new RuntimeException("Don't know how to join a replicated file with a non-replicated file");
-    }
-    job.setMapOutputKeyClass(stockShape.getClass());
-    job.setMapOutputValueClass(stockShape.getClass());
-    job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
-    job.setNumReduceTasks(0); // No reduce needed for this task
 
     LOG.info("Joining "+inputFiles[0]+" X "+inputFiles[1]);
     String commaSeparatedFiles = "";
@@ -501,17 +501,39 @@ public class DistributedJoin {
         commaSeparatedFiles += ',';
       commaSeparatedFiles += inputFiles[i].toUri().toString();
     }
+    
     if (SpatialSite.isRTree(fs, inputFiles[0]) && SpatialSite.isRTree(fs, inputFiles[1])) {
       job.setInputFormat(DJInputFormatRTree.class);
-      DJInputFormatRTree.addInputPaths(job, commaSeparatedFiles);
     } else {
       // Ensure all objects are read in one shot
       job.setInt(SpatialSite.MaxBytesInOneRead, -1);
       job.setInt(SpatialSite.MaxShapesInOneRead, -1);
       job.setInputFormat(DJInputFormatArray.class);
-      DJInputFormatArray.addInputPaths(job, commaSeparatedFiles);
     }
     job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
+    
+    if (gindex1 != null && gindex2 != null &&
+        gindex1.isReplicated() && gindex2.isReplicated()) {
+      job.setMapperClass(RedistributeJoinMap.class);
+      if (inputFiles[0].equals(inputFiles[1])) {
+        job.setInputFormat(ShapeArrayInputFormat.class);
+        // Remove the spatial filter to ensure all partitions are loaded
+        job.unset(SpatialSite.FilterClass);
+        FileInputFormat.setInputPaths(job, inputFiles[0]);
+      } else
+        FileInputFormat.addInputPaths(job, commaSeparatedFiles);
+    } else if (gindex1 == null || gindex2 == null || (!gindex1.isReplicated() && !gindex2.isReplicated())) {
+      job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
+      FileInputFormat.addInputPaths(job, commaSeparatedFiles);
+    } else {
+      LOG.warn("Don't know how to join a replicated file with a non-replicated file");
+      //throw new RuntimeException("Don't know how to join a replicated file with a non-replicated file");
+    }
+    job.setMapOutputKeyClass(stockShape.getClass());
+    job.setMapOutputValueClass(stockShape.getClass());
+    job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
+    job.setNumReduceTasks(0); // No reduce needed for this task
+
     SpatialSite.setShapeClass(job, stockShape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
@@ -662,31 +684,38 @@ public class DistributedJoin {
     cla.setInt(SpatialSite.MaxShapesInOneRead, -1);
     Shape shape = cla.getShape("shape");
     SpatialSite.setShapeClass(cla, shape.getClass());
-    ShapeArrayRecordReader reader = new ShapeArrayRecordReader(cla,
-        new FileSplit(in, 0, length, new String[] {}));
+    ShapeArrayInputFormat inputFormat = new ShapeArrayInputFormat();
+    JobConf job = new JobConf(cla);
+    FileInputFormat.addInputPath(job, in);
+    InputSplit[] splits = inputFormat.getSplits(job, 1);
     FileSystem outFs = out.getFileSystem(cla);
     final PrintStream writer = new PrintStream(outFs.create(out));
-    final Text temp = new Text();
-    
-    Rectangle key = reader.createKey();
-    ArrayWritable value = reader.createValue();
+
+    // Process all input files
     long resultSize = 0;
-    if (reader.next(key, value)) {
-      Shape[] writables = (Shape[]) value.get();
-      resultSize += SpatialAlgorithms.SelfJoin_planeSweep(writables, new OutputCollector<Shape, Shape>() {
-        @Override
-        public void collect(Shape r, Shape s) throws IOException {
-          writer.print(r.toText(temp));
-          writer.print(",");
-          writer.println(s.toText(temp));
-        }
-      });
+    for (InputSplit split : splits) {
+      ShapeArrayRecordReader reader = new ShapeArrayRecordReader(job, (FileSplit)split);
+      final Text temp = new Text();
+      
+      Rectangle key = reader.createKey();
+      ArrayWritable value = reader.createValue();
       if (reader.next(key, value)) {
-        throw new RuntimeException("Error! Not all values read in one shot.");
+        Shape[] writables = (Shape[]) value.get();
+        resultSize += SpatialAlgorithms.SelfJoin_planeSweep(writables, new OutputCollector<Shape, Shape>() {
+          @Override
+          public void collect(Shape r, Shape s) throws IOException {
+            writer.print(r.toText(temp));
+            writer.print(",");
+            writer.println(s.toText(temp));
+          }
+        });
+        if (reader.next(key, value)) {
+          throw new RuntimeException("Error! Not all values read in one shot.");
+        }
       }
+      
+      reader.close();
     }
-    
-    reader.close();
     writer.close();
     
     return resultSize;
@@ -729,8 +758,8 @@ public class DistributedJoin {
     long result_size;
     if (inputFiles[0].equals(inputFiles[1])) {
       // Special case for self join
-      result_size = selfJoinLocal(inputFiles[0], outputPath, cla);
-    } else if (repartition == null || repartition.equals("auto")) {
+      selfJoinLocal(inputFiles[0], outputPath, cla);
+    } if (repartition == null || repartition.equals("auto")) {
       result_size = distributedJoinSmart(fs, inputFiles, outputPath, stockShape, overwrite);
     } else if (repartition.equals("yes")) {
       int file_to_repartition = selectRepartition(fs, inputFiles);

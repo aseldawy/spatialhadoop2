@@ -92,6 +92,36 @@ public class SJMR {
   }
   
   /**
+   * Map function for the self join version of SJMR. Instead of associating
+   * each record with an index to indicate whether it's left or right, each
+   * record is only replicated once and the reduce function will do a self join
+   * for all input records.
+   *  
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class SelfSJMRMap extends MapReduceBase
+  implements
+  Mapper<Rectangle, Shape, IntWritable, Shape> {
+    private GridInfo gridInfo;
+    private IntWritable cellId = new IntWritable();
+    
+    @Override
+    public void map(Rectangle key, Shape shape,
+        OutputCollector<IntWritable, Shape> output, Reporter reporter)
+        throws IOException {
+      java.awt.Rectangle cells = gridInfo.getOverlappingCells(shape.getMBR());
+      
+      for (int col = cells.x; col < cells.x + cells.width; col++) {
+        for (int row = cells.y; row < cells.y + cells.height; row++) {
+          cellId.set(row * gridInfo.columns + col + 1);
+          output.collect(cellId, shape);
+        }
+      }
+    }
+  }
+  
+  /**
    * The map class maps each object to all cells it overlaps with.
    * @author Ahmed Eldawy
    *
@@ -99,7 +129,6 @@ public class SJMR {
   public static class SJMRMap extends MapReduceBase
   implements
   Mapper<Rectangle, Text, IntWritable, IndexedText> {
-    /**List of cells used by the mapper*/
     private Shape shape;
     private IndexedText outputValue = new IndexedText();
     private GridInfo gridInfo;
@@ -146,6 +175,48 @@ public class SJMR {
           output.collect(cellId, outputValue);
         }
       }
+    }
+  }
+  
+  public static class SelfSJMRReduce<S extends Shape> extends MapReduceBase implements
+  Reducer<IntWritable, S, S, S> {
+    /**List of cells used by the reducer*/
+    private GridInfo grid;
+
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      grid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+    }
+
+    @Override
+    public void reduce(IntWritable cellId, Iterator<S> values,
+        final OutputCollector<S, S> output, Reporter reporter) throws IOException {
+      // Extract CellInfo (MBR) for duplicate avoidance checking
+      final CellInfo cellInfo = grid.getCell(cellId.get());
+      
+      Vector<S> shapes = new Vector<S>();
+      
+      while (values.hasNext()) {
+        S s = values.next();
+        shapes.add((S) s.clone());
+      }
+      
+      SpatialAlgorithms.SelfJoin_planeSweep(shapes.toArray(new Shape[shapes.size()]), new OutputCollector<Shape, Shape>() {
+
+        @Override
+        public void collect(Shape r, Shape s) throws IOException {
+          // Perform a reference point duplicate avoidance technique
+          Rectangle intersectionMBR = r.getMBR().getIntersection(s.getMBR());
+          // Error: intersectionMBR may be null.
+          if (intersectionMBR != null) {
+            if (cellInfo.contains(intersectionMBR.x1, intersectionMBR.y1)) {
+              // Report to the reduce result collector
+              output.collect((S)r, (S)s);
+            }
+          }
+        }
+      });
     }
   }
   

@@ -166,7 +166,7 @@ public class OGCJTSShape implements Shape {
 
   @Override
   public double distanceTo(double x, double y) {
-    return this.distanceTo(x, y);
+    return this.geom.distance(geom.getFactory().createPoint(new Coordinate(x, y)));
   }
 
   @Override

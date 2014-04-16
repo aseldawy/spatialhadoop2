@@ -109,6 +109,14 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
 
   /**The type of the currently parsed block*/
   protected BlockType blockType;
+
+  /**
+   * The input stream that reads directly from the input file.
+   * If the file is not compressed, this stream is the same as the in.
+   * Otherwise, this is the raw (compressed) input stream. This stream is used
+   * to calculate the progress of the input file.
+   */
+  private FSDataInputStream directIn;
   
   /**
    * Initialize from an input split
@@ -147,7 +155,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     this.end = s + l;
     this.path = p;
     this.fs = this.path.getFileSystem(job);
-    FSDataInputStream fileIn = fs.open(this.path);
+    this.directIn = fs.open(this.path);
     this.blockSize = fs.getFileStatus(this.path).getBlockSize();
     this.cellMbr = new Rectangle();
     
@@ -160,20 +168,20 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       if (codec instanceof SplittableCompressionCodec) {
         final SplitCompressionInputStream cIn =
             ((SplittableCompressionCodec)codec).createInputStream(
-              fileIn, decompressor, start, end,
+              directIn, decompressor, start, end,
               SplittableCompressionCodec.READ_MODE.BYBLOCK);
         in = cIn;
         start = cIn.getAdjustedStart();
         end = cIn.getAdjustedEnd();
         filePosition = cIn; // take pos from compressed stream
       } else {
-        in = codec.createInputStream(fileIn, decompressor);
-        filePosition = fileIn;
+        in = codec.createInputStream(directIn, decompressor);
+        filePosition = directIn;
       }
     } else {
-      fileIn.seek(start);
-      in = fileIn;
-      filePosition = fileIn;
+      directIn.seek(start);
+      in = directIn;
+      filePosition = directIn;
     }
     this.pos = start;
     this.maxShapesInOneRead = job.getInt(SpatialSite.MaxShapesInOneRead, 1000000);
@@ -259,7 +267,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       return 0.0f;
     } else {
       return Math.min(1.0f,
-        (getFilePosition() - start) / (float)(end - start));
+        (directIn.getPos() - start) / (float)(end - start));
     }
   }
   

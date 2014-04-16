@@ -13,6 +13,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Vector;
@@ -32,9 +33,11 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
+import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.TopologyException;
 import com.vividsolutions.jts.util.AssertionFailedException;
 
 import edu.umn.cs.spatialHadoop.CommandLineArguments;
@@ -44,7 +47,6 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
@@ -55,6 +57,8 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  *
  */
 public class UltimateUnion {
+  public static final GeometryFactory FACTORY = new GeometryFactory();
+  
   /**Logger for this class*/
   private static final Log LOG = LogFactory.getLog(UltimateUnion.class);
 
@@ -73,7 +77,7 @@ public class UltimateUnion {
       return geometryCollection.buffer(0);
     } catch (AssertionFailedException e) {
       e.printStackTrace();
-      System.out.println(collections);
+      System.err.println(collections);
       throw e;
     }
   }
@@ -128,15 +132,50 @@ public class UltimateUnion {
     Geometry partialResult = shape.intersection(combineIntoOneGeometrySafe(overlappingShapes));
     return shape.getBoundary().intersection(partialResult.getBoundary());
   }
+  
+  /**
+   * A second version of partial union that takes a partition boundary along
+   * with all shapes overlapping this partition and returns the part of the
+   * answer that falls within the boundaries of the given partition.
+   * 
+   * @param partition
+   * @param shapes
+   * @return
+   */
+  public static Geometry partialUnion(Rectangle partition, Collection<Geometry> shapes) {
+    Geometry shapesUnion;
+    try {
+      shapesUnion = combineIntoOneGeometryFast(shapes);
+      Coordinate[] coords = new Coordinate[5];
+      coords[0] = new Coordinate(partition.x1, partition.y1);
+      coords[1] = new Coordinate(partition.x2, partition.y1);
+      coords[2] = new Coordinate(partition.x2, partition.y2);
+      coords[3] = new Coordinate(partition.x1, partition.y2);
+      coords[4] = coords[0];
+      Geometry grid = FACTORY.createPolygon(FACTORY.createLinearRing(coords), null);
+
+      Geometry croppedUnion = shapesUnion.getBoundary().intersection(grid);
+      return croppedUnion;
+    } catch (TopologyException e) {
+      LOG.warn("Error computing parial union", e);
+      return null;
+    }
+  }
 
   static class UltimateUnionMap<S extends OGCJTSShape> extends MapReduceBase implements
-      Mapper<Rectangle, ArrayWritable, Shape, Shape>{
+      Mapper<Rectangle, ArrayWritable, NullWritable, Shape>{
 
     @Override
     public void map(Rectangle key, ArrayWritable value,
-        final OutputCollector<Shape, Shape> output, Reporter reporter) throws IOException {
+        final OutputCollector<NullWritable, Shape> output, Reporter reporter) throws IOException {
+      ArrayList<Geometry> geoms = new ArrayList<Geometry>();
       Shape[] objects = (Shape[])value.get();
-      SpatialAlgorithms.SelfJoin_planeSweep(objects, output);
+      for (Shape s : objects) {
+        geoms.add(((OGCJTSShape)s).geom);
+      }
+      Geometry result = partialUnion(key, geoms);
+      if (result != null)
+        output.collect(NullWritable.get(), new OGCJTSShape(result));
     }
     
   }
@@ -166,7 +205,8 @@ public class UltimateUnion {
 
     // Set map and reduce
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
+//    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
+    job.setNumReduceTasks(0);
 
     job.setMapperClass(UltimateUnionMap.class);
     job.setReducerClass(UltimateUnionReducer.class);
