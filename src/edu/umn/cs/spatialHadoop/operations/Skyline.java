@@ -32,8 +32,9 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Partition;
@@ -364,7 +365,6 @@ public class Skyline {
     job.setOutputKeyClass(NullWritable.class);
     job.setOutputValueClass(Point.class);
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, Point.class);
     ShapeInputFormat.addInputPath(job, inFile);
     job.setOutputFormat(GridOutputFormat2.class);
     GridOutputFormat2.setOutputPath(job, outPath);
@@ -383,10 +383,11 @@ public class Skyline {
     System.err.println("<output file>: Path to output file");
     System.err.println("<direction (max-max|max-min|min-max|min-min)>: Direction of skyline (default is max-max)");
     System.err.println("-overwrite: Overwrite output file without notice");
+    GenericOptionsParser.printGenericCommandUsage(System.err);
   }
   
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
+    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
     String strdir = cla.get("dir");
     Direction dir = Direction.MaxMax;
     if (strdir != null) {

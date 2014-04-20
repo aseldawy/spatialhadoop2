@@ -20,8 +20,9 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
@@ -160,7 +161,7 @@ public class Tail {
   }
   
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
+    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
     JobConf conf = new JobConf(Sampler.class);
     Path inputFile = cla.getPath();
     FileSystem fs = inputFile.getFileSystem(conf);

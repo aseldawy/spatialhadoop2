@@ -34,9 +34,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.log.Log;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.operations.Plot;
@@ -61,7 +62,7 @@ public class MakeHDFVideo {
    */
   public static void cropImages(Path dir, Rectangle original, Rectangle extended) throws IOException {
     FileSystem fs = dir.getFileSystem(new Configuration());
-    FileStatus[] allImages = CommandLineArguments.isWildcard(dir) ?
+    FileStatus[] allImages = OperationsParams.isWildcard(dir) ?
         fs.globStatus(dir) : fs.listStatus(dir);
     if (!extended.contains(original))
       throw new RuntimeException("Original rectangle must be totally contained in the extended rectangle. "
@@ -98,7 +99,7 @@ public class MakeHDFVideo {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments params = new CommandLineArguments(args);
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {
       System.exit(1);
     }

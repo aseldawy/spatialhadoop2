@@ -44,10 +44,11 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
@@ -379,11 +380,12 @@ public class DistributedJoin {
    *   -1 if all files are non-indexed
    * @throws IOException 
    */
-  protected static int selectRepartition(FileSystem fs, final Path[] files) throws IOException {
+  protected static int selectRepartition(final Path[] files, OperationsParams params) throws IOException {
     int largest_partitioned_file = -1;
     long largest_size = 0;
     
     for (int i_file = 0; i_file < files.length; i_file++) {
+      FileSystem fs = files[i_file].getFileSystem(params);
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, files[i_file]);
       if (gindex != null) {
         // Compute total size (all files in directory)
@@ -410,14 +412,15 @@ public class DistributedJoin {
    * @param gIndexes
    * @throws IOException
    */
-  protected static void repartitionStep(FileSystem fs, final Path[] files,
-      int file_to_repartition, Shape stockShape) throws IOException {
+  protected static void repartitionStep(final Path[] files,
+      int file_to_repartition, OperationsParams params) throws IOException {
     
     // Do the repartition step
     long t1 = System.currentTimeMillis();
   
     // Repartition the smaller file
     Path partitioned_file;
+    FileSystem fs = files[file_to_repartition].getFileSystem(params);
     do {
       partitioned_file = new Path(files[file_to_repartition].getName()+
           ".repartitioned_"+(int)(Math.random() * 1000000));
@@ -440,7 +443,7 @@ public class DistributedJoin {
       throw new RuntimeException("Unknown index at: "+files[1-file_to_repartition]);
     
     Repartition.repartitionMapReduce(files[file_to_repartition],
-        partitioned_file, stockShape, 0, cells, sindex, true);
+        partitioned_file, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Repartition time "+(t2-t1)+" millis");
   
@@ -460,49 +463,43 @@ public class DistributedJoin {
    * Performs a redistribute join between the given files using the redistribute
    * join algorithm. Currently, we only support a pair of files.
    * @param fs
-   * @param inputFiles
+   * @param inFiles
    * @param output
    * @return
    * @throws IOException 
    */
-  public static <S extends Shape> long joinStep(FileSystem fs,
-      Path[] inputFiles, Path userOutputPath, S stockShape, boolean overwrite,
-      boolean background) throws IOException {
+  public static <S extends Shape> long joinStep(Path[] inFiles,
+      Path userOutputPath, OperationsParams params) throws IOException {
     long t1 = System.currentTimeMillis();
-
-    JobConf job = new JobConf(stockShape.getClass());
     
-    FileSystem outFs = inputFiles[0].getFileSystem(job);
+    JobConf job = new JobConf(params, DistributedJoin.class);
+    
+    FileSystem fs[] = new FileSystem[inFiles.length];
+    for (int i_file = 0; i_file < inFiles.length; i_file++)
+      fs[i_file] = inFiles[i_file].getFileSystem(job);
+    
     Path outputPath = userOutputPath;
     if (outputPath == null) {
       do {
-        outputPath = new Path(inputFiles[0].getName()+
+        outputPath = new Path(inFiles[0].getName()+
             ".dj_"+(int)(Math.random() * 1000000));
-      } while (outFs.exists(outputPath));
-    } else {
-      if (outFs.exists(outputPath)) {
-        if (overwrite) {
-          outFs.delete(outputPath, true);
-        } else {
-          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
-        }
-      }
+      } while (fs[0].exists(outputPath));
     }
 
     job.setJobName("DistributedJoin");
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    GlobalIndex<Partition> gindex1 = SpatialSite.getGlobalIndex(fs, inputFiles[0]);
-    GlobalIndex<Partition> gindex2 = SpatialSite.getGlobalIndex(fs, inputFiles[1]);
+    GlobalIndex<Partition> gindex1 = SpatialSite.getGlobalIndex(fs[0], inFiles[0]);
+    GlobalIndex<Partition> gindex2 = SpatialSite.getGlobalIndex(fs[1], inFiles[1]);
 
-    LOG.info("Joining "+inputFiles[0]+" X "+inputFiles[1]);
+    LOG.info("Joining "+inFiles[0]+" X "+inFiles[1]);
     String commaSeparatedFiles = "";
-    for (int i = 0; i < inputFiles.length; i++) {
+    for (int i = 0; i < inFiles.length; i++) {
       if (i > 0)
         commaSeparatedFiles += ',';
-      commaSeparatedFiles += inputFiles[i].toUri().toString();
+      commaSeparatedFiles += inFiles[i].toUri().toString();
     }
     
-    if (SpatialSite.isRTree(fs, inputFiles[0]) && SpatialSite.isRTree(fs, inputFiles[1])) {
+    if (SpatialSite.isRTree(fs[0], inFiles[0]) && SpatialSite.isRTree(fs[1], inFiles[1])) {
       job.setInputFormat(DJInputFormatRTree.class);
     } else {
       // Ensure all objects are read in one shot
@@ -515,11 +512,11 @@ public class DistributedJoin {
     if (gindex1 != null && gindex2 != null &&
         gindex1.isReplicated() && gindex2.isReplicated()) {
       job.setMapperClass(RedistributeJoinMap.class);
-      if (inputFiles[0].equals(inputFiles[1])) {
+      if (inFiles[0].equals(inFiles[1])) {
         job.setInputFormat(ShapeArrayInputFormat.class);
         // Remove the spatial filter to ensure all partitions are loaded
         job.unset(SpatialSite.FilterClass);
-        FileInputFormat.setInputPaths(job, inputFiles[0]);
+        FileInputFormat.setInputPaths(job, inFiles[0]);
       } else
         FileInputFormat.addInputPaths(job, commaSeparatedFiles);
     } else if (gindex1 == null || gindex2 == null || (!gindex1.isReplicated() && !gindex2.isReplicated())) {
@@ -529,17 +526,17 @@ public class DistributedJoin {
       LOG.warn("Don't know how to join a replicated file with a non-replicated file");
       //throw new RuntimeException("Don't know how to join a replicated file with a non-replicated file");
     }
-    job.setMapOutputKeyClass(stockShape.getClass());
-    job.setMapOutputValueClass(stockShape.getClass());
+    Shape shape = params.getShape("shape");
+    job.setMapOutputKeyClass(shape.getClass());
+    job.setMapOutputValueClass(shape.getClass());
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
     job.setNumReduceTasks(0); // No reduce needed for this task
 
-    SpatialSite.setShapeClass(job, stockShape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
     TextOutputFormat.setOutputPath(job, outputPath);
     
-    if (!background) {
+    if (!params.is("background")) {
       LOG.info("Submit job in sync mode");
       RunningJob runningJob = JobClient.runJob(job);
       Counters counters = runningJob.getCounters();
@@ -551,8 +548,9 @@ public class DistributedJoin {
           .findCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
       System.out.println("Number of map tasks "+mapTaskCountCounter.getValue());
       
+      // Delete output directory if not explicitly set by user
       if (userOutputPath == null)
-        outFs.delete(outputPath, true);
+        fs[0].delete(outputPath, true);
       long t2 = System.currentTimeMillis();
       System.out.println("Join time "+(t2-t1)+" millis");
       
@@ -576,31 +574,24 @@ public class DistributedJoin {
    * @throws IOException
    */
   @SuppressWarnings("unchecked")
-  public static long distributedJoinSmart(FileSystem fs,
-      final Path[] inputFiles, Path userOutputPath, Shape stockShape,
-      boolean overwrite) throws IOException {
+  public static long distributedJoinSmart(final Path[] inputFiles, Path userOutputPath,
+      OperationsParams params) throws IOException {
     Path[] originalInputFiles = inputFiles.clone();
-    FileSystem outFs = inputFiles[0].getFileSystem(new Configuration());
+    FileSystem outFs = inputFiles[0].getFileSystem(params);
     Path outputPath = userOutputPath;
     if (outputPath == null) {
       do {
         outputPath = new Path(inputFiles[0].getName()+
             ".dj_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outputPath));
-    } else {
-      if (outFs.exists(outputPath)) {
-        if (overwrite) {
-          outFs.delete(outputPath, true);
-        } else {
-          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
-        }
-      }
     }
     
     // Decide whether to do a repartition step or not
     int cost_with_repartition, cost_without_repartition;
     final FileStatus[] fStatus = new FileStatus[inputFiles.length];
     for (int i_file = 0; i_file < inputFiles.length; i_file++) {
+      // TODO work with folders. Calculate size more accurately
+      FileSystem fs = inputFiles[i_file].getFileSystem(params);
       fStatus[i_file] = fs.getFileStatus(inputFiles[i_file]);
     }
     
@@ -654,8 +645,8 @@ public class DistributedJoin {
     LOG.info("Cost without repartition is estimated to "+cost_without_repartition);
     boolean need_repartition = cost_with_repartition < cost_without_repartition;
     if (need_repartition) {
-      int file_to_repartition = selectRepartition(fs, inputFiles);
-      repartitionStep(fs, inputFiles, file_to_repartition, stockShape);
+      int file_to_repartition = selectRepartition(inputFiles, params);
+      repartitionStep(inputFiles, file_to_repartition, params);
     }
     
     // Restore inputFiles to the original order by user
@@ -666,8 +657,7 @@ public class DistributedJoin {
     }
     
     // Redistribute join the larger file and the partitioned file
-    long result_size = DistributedJoin.joinStep(fs, inputFiles, outputPath, stockShape,
-        overwrite, false);
+    long result_size = DistributedJoin.joinStep(inputFiles, outputPath, params);
     
     if (userOutputPath == null)
       outFs.delete(outputPath, true);
@@ -675,20 +665,16 @@ public class DistributedJoin {
     return result_size;
   }
   
-  private static long selfJoinLocal(Path in, Path out, CommandLineArguments cla)
+  private static long selfJoinLocal(Path in, Path out, OperationsParams params)
       throws IOException {
-    FileSystem inFs = in.getFileSystem(cla);
-    long length = inFs.getFileStatus(in).getLen();
     // Ensure all shapes are read in one shot
-    cla.setInt(SpatialSite.MaxBytesInOneRead, -1);
-    cla.setInt(SpatialSite.MaxShapesInOneRead, -1);
-    Shape shape = cla.getShape("shape");
-    SpatialSite.setShapeClass(cla, shape.getClass());
+    params.setInt(SpatialSite.MaxBytesInOneRead, -1);
+    params.setInt(SpatialSite.MaxShapesInOneRead, -1);
     ShapeArrayInputFormat inputFormat = new ShapeArrayInputFormat();
-    JobConf job = new JobConf(cla);
+    JobConf job = new JobConf(params);
     FileInputFormat.addInputPath(job, in);
     InputSplit[] splits = inputFormat.getSplits(job, 1);
-    FileSystem outFs = out.getFileSystem(cla);
+    FileSystem outFs = out.getFileSystem(params);
     final PrintStream writer = new PrintStream(outFs.create(out));
 
     // Process all input files
@@ -728,45 +714,46 @@ public class DistributedJoin {
     System.out.println("<input file 2> - (*) Path to the second input file");
     System.out.println("<output file> - Path to output file");
     System.out.println("-overwrite - Overwrite output file without notice");
+    
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    Path[] allFiles = cla.getPaths();
-    JobConf conf = new JobConf(DistributedJoin.class);
-    Shape stockShape = cla.getShape("shape");
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    Path[] allFiles = params.getPaths();
     if (allFiles.length < 2) {
-      System.err.println("Missing input files");
+      System.err.println("This operation requires at least two input files");
       printUsage();
-      return;
+      System.exit(1);
+    }
+    if (allFiles.length == 2 && !params.checkInput()) {
+      // One of the input files does not exist
+      printUsage();
+      System.exit(1);
+    }
+    if (allFiles.length > 2 && !params.checkInputOutput()) {
+      printUsage();
+      System.exit(1);
     }
     
-    Path[] inputFiles = new Path[] {allFiles[0], allFiles[1]};
-    FileSystem fs = allFiles[0].getFileSystem(conf);
-    if (!fs.exists(inputFiles[0]) || !fs.exists(inputFiles[1])) {
-      System.err.println("Input file does not exist");
-      printUsage();
-      return;
-    }
+    String repartition = params.get("repartition", "no");
     
-    String repartition = cla.get("repartition");
-    
-    Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
-    boolean overwrite = cla.is("overwrite");
+    Path[] inputPaths = params.getInputPaths();
+    Path outputPath = params.getOutputPath();
 
 
     long result_size;
-    if (inputFiles[0].equals(inputFiles[1])) {
+    if (inputPaths[0].equals(inputPaths[1])) {
       // Special case for self join
-      selfJoinLocal(inputFiles[0], outputPath, cla);
-    } if (repartition == null || repartition.equals("auto")) {
-      result_size = distributedJoinSmart(fs, inputFiles, outputPath, stockShape, overwrite);
+      selfJoinLocal(inputPaths[0], outputPath, params);
+    } if (repartition.equals("auto")) {
+      result_size = distributedJoinSmart(inputPaths, outputPath, params);
     } else if (repartition.equals("yes")) {
-      int file_to_repartition = selectRepartition(fs, inputFiles);
-      repartitionStep(fs, inputFiles, file_to_repartition, stockShape);
-      result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite, false);
+      int file_to_repartition = selectRepartition(inputPaths, params);
+      repartitionStep(inputPaths, file_to_repartition, params);
+      result_size = joinStep(inputPaths, outputPath, params);
     } else if (repartition.equals("no")) {
-      result_size = joinStep(fs, inputFiles, outputPath, stockShape, overwrite, false);
+      result_size = joinStep(inputPaths, outputPath, params);
     } else {
       throw new RuntimeException("Illegal parameter repartition:"+repartition);
     }

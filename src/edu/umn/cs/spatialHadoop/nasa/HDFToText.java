@@ -27,9 +27,11 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
@@ -80,7 +82,7 @@ public class HDFToText {
     // Set input information
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.setInputPaths(job, inPath);
-    SpatialSite.setShapeClass(job, NASARectangle.class);
+    job.setClass("shape", NASARectangle.class, Shape.class);
     job.set(HDFRecordReader.DatasetName, datasetName);
     job.setBoolean(HDFRecordReader.SkipFillValue, skipFillValue);
     
@@ -110,7 +112,7 @@ public class HDFToText {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
+    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
     JobConf conf = new JobConf(HDFToText.class);
     Path[] paths = cla.getPaths();
     if (paths.length < 2) {

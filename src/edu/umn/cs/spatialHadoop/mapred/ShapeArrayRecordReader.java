@@ -37,18 +37,18 @@ public class ShapeArrayRecordReader extends SpatialRecordReader<Rectangle, Array
   public static final Log LOG = LogFactory.getLog(ShapeArrayRecordReader.class);
   
   /**Shape used to deserialize shapes from disk*/
-  private Class<? extends Shape> shapeClass;
+  private Shape shape;
   
   public ShapeArrayRecordReader(CombineFileSplit split, Configuration conf,
       Reporter reporter, Integer index) throws IOException {
     super(split, conf, reporter, index);
-    shapeClass = SpatialSite.getShapeClass(conf);
+    shape = SpatialSite.getShape(conf, "shape");
   }
   
   public ShapeArrayRecordReader(Configuration job, FileSplit split)
       throws IOException {
     super(job, split);
-    shapeClass = SpatialSite.getShapeClass(job);
+    shape = SpatialSite.getShape(job, "shape");
   }
 
   public ShapeArrayRecordReader(InputStream is, long offset, long endOffset)
@@ -71,7 +71,7 @@ public class ShapeArrayRecordReader extends SpatialRecordReader<Rectangle, Array
 
   @Override
   public ArrayWritable createValue() {
-    return new ArrayWritable(shapeClass);
+    return new ArrayWritable(shape.getClass());
   }
   
 }

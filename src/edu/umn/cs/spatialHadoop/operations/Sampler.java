@@ -46,9 +46,10 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
@@ -566,26 +567,40 @@ public class Sampler {
     }
     return records_returned;
   }
+  
+  private static void printUsage() {
+    System.out.println("Reads a random sample of an input file. Sample is written to stdout");
+    System.out.println("Parameters (* marks required parameters):");
+    System.out.println("<input file> - (*) Path to input file");
+    System.out.println("shape:<s> - Type of shapes stored in the file");
+    System.out.println("outshape:<s> - Shapes to write to output");
+    System.out.println("ratio:<r> - ratio of random sample to read [0, 1]");
+    System.out.println("count:<s> - approximate number of records in the sample");
+    System.out.println("size:<s> - approximate size of the sample in bytes");
+    System.out.println("seed:<s> - random seed to use while reading the sample");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
+  }
 
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     JobConf conf = new JobConf(Sampler.class);
-    Path[] inputFiles = cla.getPaths();
+    Path[] inputFiles = params.getPaths();
     FileSystem fs = inputFiles[0].getFileSystem(conf);
     
-    if (!fs.exists(inputFiles[0])) {
-      throw new RuntimeException("Input file does not exist");
+    if (!params.checkInput()) {
+      printUsage();
+      System.exit(1);
     }
     
-    int count = cla.getInt("count", 1);
-    long size = cla.getSize("size");
-    double ratio = cla.getFloat("ratio", -1.0f);
-    long seed = cla.getLong("seed", System.currentTimeMillis());
-    TextSerializable stockObject = cla.getShape("shape");
+    int count = params.getInt("count", 1);
+    long size = params.getSize("size");
+    double ratio = params.getFloat("ratio", -1.0f);
+    long seed = params.getLong("seed", System.currentTimeMillis());
+    TextSerializable stockObject = params.getShape("shape");
     if (stockObject == null)
       stockObject = new Text2();
 
-    TextSerializable outputShape = cla.getShape("outshape");
+    TextSerializable outputShape = params.getShape("outshape");
     if (outputShape == null)
       outputShape = new Text2();
     

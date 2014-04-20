@@ -36,6 +36,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextInputFormat;
+import org.apache.hadoop.util.GenericOptionsParser;
 
 import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
 import com.esri.core.geometry.ogc.OGCGeometry;
@@ -44,7 +45,7 @@ import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.io.ParseException;
 import com.vividsolutions.jts.io.WKTReader;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
@@ -126,7 +127,7 @@ public class Union {
    * @throws IOException
    */
   public static void unionMapReduce(Path inFile, Path output,
-      CommandLineArguments params) throws IOException {
+      OperationsParams params) throws IOException {
     JobConf job = new JobConf(Union.class);
     job.setJobName("Union");
     boolean overwrite = params.is("overwrite");
@@ -198,7 +199,7 @@ public class Union {
       SpatialSite.setCells(job, unionGroups);
       reduceBuckets = unionGroups.length;
     } else {
-      Rectangle mbr = FileMBR.fileMBR(inFile.getFileSystem(job), inFile, params);
+      Rectangle mbr = FileMBR.fileMBR(inFile, params);
       CellInfo[] unionGroups = new CellInfo[1];
       unionGroups[0] = new CellInfo(1, mbr);
       SpatialSite.setCells(job, unionGroups);
@@ -219,7 +220,6 @@ public class Union {
 
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, shape.getClass());
     TextInputFormat.addInputPath(job, inFile);
     
     job.setOutputFormat(GridOutputFormat.class);
@@ -291,7 +291,7 @@ public class Union {
    * @return
    * @throws IOException
    */
-  public static Geometry unionLocal(Path inFile, CommandLineArguments params)
+  public static Geometry unionLocal(Path inFile, OperationsParams params)
       throws IOException {
     Shape shape = params.getShape("shape");
     // Read shapes from the shape file and relate each one to a category
@@ -376,7 +376,7 @@ public class Union {
   }
 
   public static void union(Path inFile, Path outFile,
-      CommandLineArguments params) throws IOException {
+      OperationsParams params) throws IOException {
     FileSystem inFs = inFile.getFileSystem(params);
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     boolean autoLocal = !(inFStatus.isDir() ||
@@ -396,7 +396,7 @@ public class Union {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments params = new CommandLineArguments(args);
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (params.getPaths().length == 0) {
       if (params.is("local")) {
         long t1 = System.currentTimeMillis();

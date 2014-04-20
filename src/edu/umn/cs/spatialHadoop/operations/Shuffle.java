@@ -31,21 +31,19 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextInputFormat;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 
 /**
- * Calculates number of records in a file depending on its type. If the file
- * is a text file, it counts number of lines. If it's a grid file with no local
- * index, it counts number of non-empty lines. If it's a grid file with RTree
- * index, it counts total number of records stored in all RTrees.
- * @author eldawy
+ * Shuffle the lines in an input text file.
+ * @author Ahmed Eldawy
  *
  */
-public class LineRandomizer {
+public class Shuffle {
 
   private static final String NumOfPartitions =
       "edu.umn.cs.spatialHadoop.operations.LineRandomizer";
@@ -108,13 +106,8 @@ public class LineRandomizer {
    * @throws IOException 
    */
   public static void randomizerMapReduce(Path infile, Path outfile,
-      boolean overwrite) throws IOException {
-    JobConf job = new JobConf(LineRandomizer.class);
-    
-    FileSystem outfs = outfile.getFileSystem(job);
-
-    if (overwrite)
-      outfs.delete(outfile, true);
+      OperationsParams params) throws IOException {
+    JobConf job = new JobConf(Shuffle.class);
     
     job.setJobName("Randomizer");
     job.setMapOutputKeyClass(IntWritable.class);
@@ -142,16 +135,27 @@ public class LineRandomizer {
     JobClient.runJob(job);
   }
   
+  private static void printUsage() {
+    System.out.println("Shuffles the lines of an input text file");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file>: (*) Path to input file");
+    System.out.println("<output file>: (*) Path to output file");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
+  }
+  
   /**
    * @param args
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    Path inputFile = cla.getPaths()[0];
-    Path outputFile = cla.getPaths()[1];
-    boolean overwrite = cla.is("overwrite");
-    randomizerMapReduce(inputFile, outputFile, overwrite);
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    if (!params.checkInputOutput()) {
+      printUsage();
+      System.exit(1);
+    }
+    Path inputFile = params.getInputPath();
+    Path outputFile = params.getOutputPath();
+    randomizerMapReduce(inputFile, outputFile, params);
   }
 
 }

@@ -21,7 +21,6 @@ import java.util.Iterator;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
@@ -36,8 +35,9 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -249,10 +249,10 @@ public class ClosestPair {
 	 * @return
 	 * @throws IOException 
 	 */
-	public static <S extends Shape> void closestPair(FileSystem fs,
-			Path file, S stockShape) throws IOException {
+	public static void closestPair( Path file, OperationsParams params) throws IOException {
 		// Try to get file MBR from the MBRs of blocks
-		JobConf job = new JobConf(stockShape.getClass());
+	  Shape shape = params.getShape("shape");
+		JobConf job = new JobConf(params, ClosestPair.class);
 
 		Path outputPath;
 		FileSystem outFs = FileSystem.get(job);
@@ -263,7 +263,7 @@ public class ClosestPair {
 
 		job.setJobName("ClosestPair");
 		job.setMapOutputKeyClass(NullWritable.class);
-		job.setMapOutputValueClass(stockShape.getClass());
+		job.setMapOutputValueClass(shape.getClass());
 		
 		job.setMapperClass(Map.class);
 		job.setReducerClass(Reduce.class);
@@ -271,8 +271,6 @@ public class ClosestPair {
 		job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
 
 		job.setInputFormat(ShapeArrayInputFormat.class);
-//		job.setInputFormat(ShapeInputFormat.class);
-		SpatialSite.setShapeClass(job, stockShape.getClass());
 		ShapeInputFormat.setInputPaths(job, file);
 
 		job.setOutputFormat(TextOutputFormat.class);
@@ -288,16 +286,19 @@ public class ClosestPair {
 		System.out.println("Finds the average area of all rectangles in an input file");
 		System.out.println("Parameters: (* marks required parameters)");
 		System.out.println("<input file>: (*) Path to input file");
+		
+		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
 	/**
 	 * @param args
 	 * @throws IOException 
 	 */
 	public static void main(String[] args) throws IOException {
-	  CommandLineArguments cla = new CommandLineArguments(args);
-	  if (cla.getPaths().length == 0 && cla.is("local")) {
+	  GenericOptionsParser parser = new GenericOptionsParser(args);
+	  OperationsParams params = new OperationsParams(parser);
+	  if (params.getPaths().length == 0 && params.is("local")) {
 	    long t1 = System.currentTimeMillis();
-	    closestPairStream((Point)cla.getShape("shape"));
+	    closestPairStream((Point)params.getShape("shape"));
       long t2 = System.currentTimeMillis();
       System.out.println("Total time: "+(t2-t1)+" millis");
 	    return;
@@ -307,18 +308,17 @@ public class ClosestPair {
 			throw new RuntimeException("Illegal arguments. Input file missing");
 		}
 		Path inputFile = new Path(args[0]);
-		FileSystem fs = inputFile.getFileSystem(new Configuration());
+		FileSystem fs = inputFile.getFileSystem(params);
 		if (!fs.exists(inputFile)) {
 			printUsage();
 			throw new RuntimeException("Input file does not exist");
 		}
 
-		Point stockShape = (Point) cla.getShape("shape");
 		long t1 = System.currentTimeMillis();
 		if (SpatialSite.getGlobalIndex(fs, inputFile) != null)
-		  closestPair(fs, inputFile, stockShape);
+		  closestPair(inputFile, params);
 		else
-		  ClosestPairHadoop.cloesetPair(fs, inputFile, stockShape);
+		  ClosestPairHadoop.cloesetPair(inputFile, params);
 //		closestPairLocal(fs, inputFile, stockShape);
 		long t2 = System.currentTimeMillis();
 		System.out.println("Total time: "+(t2-t1)+" millis");

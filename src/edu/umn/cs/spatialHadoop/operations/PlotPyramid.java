@@ -43,9 +43,10 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
@@ -82,14 +83,6 @@ public class PlotPyramid {
   
   /**Minimal Bounding Rectangle of input file*/
   private static final String InputMBR = "PlotPyramid.InputMBR";
-  /**Number of levels in the pyramid ,to plot (+ve Integer)*/
-  private static final String NumLevels = "PlotPyramid.NumLevel";
-  /**Width of each tile in pixels*/
-  private static final String TileWidth = "PlotPyramid.TileWidth";
-  /**Height of each tile in pixels*/
-  private static final String TileHeight = "PlotPyramid.TileHeight";
-  /**Color uses to plot shapes and points*/
-  private static final String StrokeColor = "plot.stroke_color";
   /**Valid range of values for HDF dataset*/
   private static final String MinValue = "plot.min_value";
   private static final String MaxValue = "plot.max_value";
@@ -177,14 +170,14 @@ public class PlotPyramid {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      this.numLevels = job.getInt(NumLevels, 1);
+      this.numLevels = job.getInt("numlevels", 1);
       Rectangle inputMBR = SpatialSite.getRectangle(job, InputMBR);
       this.bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
       this.bottomGrid.rows = bottomGrid.columns =
           (int) Math.round(Math.pow(2, numLevels - 1));
       this.key = new TileIndex();
-      this.tileWidth = job.getInt(TileWidth, 256);
-      this.tileHeight = job.getInt(TileHeight, 256);
+      this.tileWidth = job.getInt("tilewidth", 256);
+      this.tileHeight = job.getInt("tileheight", 256);
       this.currentSplit = null;
       this.levelProb = new double[this.numLevels];
     }
@@ -269,15 +262,15 @@ public class PlotPyramid {
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
       fileMBR = SpatialSite.getRectangle(job, InputMBR);
-      tileWidth = job.getInt(TileWidth, 256);
-      tileHeight = job.getInt(TileHeight, 256);
-      this.vflip = job.getBoolean(ImageOutputFormat.VFlip, false);
+      tileWidth = job.getInt("tilewidth", 256);
+      tileHeight = job.getInt("tileheight", 256);
+      this.vflip = job.getBoolean("vflip", false);
       if (vflip) {
         double temp = this.fileMBR.y1;
         this.fileMBR.y1 = -this.fileMBR.y2;
         this.fileMBR.y2 = -temp;
       }
-      this.strokeColor = new Color(job.getInt(StrokeColor, 0));
+      this.strokeColor = new Color(job.getInt("color", 0));
       NASAPoint.minValue = job.getInt(MinValue, 0);
       NASAPoint.maxValue = job.getInt(MaxValue, 65535);
     }
@@ -352,8 +345,8 @@ public class PlotPyramid {
         LOG.warn("No output files were written by reducers");
       } else {
         // Write a default empty image to be displayed for non-generated tiles
-        int tileWidth = job.getInt(TileWidth, 256);
-        int tileHeight = job.getInt(TileHeight, 256);
+        int tileWidth = job.getInt("tilewidth", 256);
+        int tileHeight = job.getInt("tileheight", 256);
         BufferedImage emptyImg = new BufferedImage(tileWidth, tileHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = new SimpleGraphics(emptyImg);
         g.setBackground(new Color(0,0,0,0));
@@ -365,7 +358,7 @@ public class PlotPyramid {
         out.close();
         
         // Add an HTML file that visualizes the result using Google Maps
-        int numLevels = job.getInt(NumLevels, 7);
+        int numLevels = job.getInt("numlevel", 7);
         LineReader templateFileReader = new LineReader(getClass().getResourceAsStream("/zoom_view.html"));
         PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath, "index.html")));
         Text line = new Text();
@@ -401,19 +394,19 @@ public class PlotPyramid {
    * @throws IOException
    */
   public static <S extends Shape> RunningJob plotMapReduce(Path inFile,
-      Path outFile, CommandLineArguments cla) throws IOException {
-    int tileWidth = cla.getInt("tilewidth", 256);
-    int tileHeight = cla.getInt("tileheight", 256);
-    int numLevels = cla.getInt("numlevels", 8);
-    boolean vflip = cla.is("vflip");
-    Color color = cla.getColor("color", Color.BLACK);
+      Path outFile, OperationsParams params) throws IOException {
+    int tileWidth = params.getInt("tilewidth", 256);
+    int tileHeight = params.getInt("tileheight", 256);
+    int numLevels = params.getInt("numlevels", 8);
+    boolean vflip = params.is("vflip");
+    Color color = params.getColor("color", Color.BLACK);
     
-    String hdfDataset = (String) cla.get("dataset");
-    Shape shape = hdfDataset != null ? new NASARectangle() : cla.getShape("shape");
-    Shape plotRange = cla.getShape("rect");
+    String hdfDataset = (String) params.get("dataset");
+    Shape shape = hdfDataset != null ? new NASARectangle() : params.getShape("shape");
+    Shape plotRange = params.getShape("rect");
 
-    boolean keepAspectRatio = cla.is("keep-ratio", true);
-    boolean background = cla.is("background");
+    boolean keepAspectRatio = params.is("keep-ratio", true);
+    boolean background = params.is("background");
     
     JobConf job = new JobConf(shape.getClass());
     job.setJobName("PlotPyramid");
@@ -422,22 +415,19 @@ public class PlotPyramid {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    SpatialSite.setShapeClass(job, shape.getClass());
     job.setMapOutputKeyClass(TileIndex.class);
     job.setMapOutputValueClass(shape.getClass());
-    job.setInt(StrokeColor, color.getRGB());
+    job.setInt("color", color.getRGB());
 
     job.setReducerClass(PlotReduce.class);
     
-    FileSystem inFs = inFile.getFileSystem(job);
-
     Rectangle fileMBR;
     if (hdfDataset != null) {
       // Input is HDF
       job.set(HDFRecordReader.DatasetName, hdfDataset);
       job.setBoolean(HDFRecordReader.SkipFillValue, true);
       // Determine the range of values by opening one of the HDF files
-      Aggregate.MinMax minMax = Aggregate.aggregate(inFs, new Path[] {inFile}, plotRange, false);
+      Aggregate.MinMax minMax = Aggregate.aggregate(new Path[] {inFile}, params);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
       //fileMBR = new Rectangle(-180, -90, 180, 90);
@@ -445,7 +435,7 @@ public class PlotPyramid {
       job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
           GeoProjector.class);
     } else {
-      fileMBR = FileMBR.fileMBR(inFs, inFile, cla);
+      fileMBR = FileMBR.fileMBR(inFile, params);
     }
     
     if (keepAspectRatio) {
@@ -461,17 +451,12 @@ public class PlotPyramid {
     }
 
     SpatialSite.setRectangle(job, InputMBR, fileMBR);
-    job.setInt(TileWidth, tileWidth);
-    job.setInt(TileHeight, tileHeight);
-    job.setInt(NumLevels, numLevels);
-    job.setBoolean(ImageOutputFormat.VFlip, vflip);
     
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     if (plotRange != null) {
       job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-      RangeFilter.setQueryRange(job, plotRange); // Set query range for filter
     }
     
     job.setOutputFormat(PyramidOutputFormat.class);
@@ -487,7 +472,7 @@ public class PlotPyramid {
 
   }
   
-  public static <S extends Shape> void plot(Path inFile, Path outFile, CommandLineArguments cla)
+  public static <S extends Shape> void plot(Path inFile, Path outFile, OperationsParams cla)
           throws IOException {
     plotMapReduce(inFile, outFile, cla);
   }
@@ -514,7 +499,7 @@ public class PlotPyramid {
    */
   public static void main(String[] args) throws IOException {
     System.setProperty("java.awt.headless", "true");
-    CommandLineArguments cla = new CommandLineArguments(args);
+    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
     if (!cla.checkInputOutput()) {
       printUsage();
       return;

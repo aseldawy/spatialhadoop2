@@ -32,8 +32,9 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 
 /**
  * Recovers missing data from a set of images by substituting missing points
@@ -60,7 +61,7 @@ public class RecoverHoles {
    */
   public static void recoverNearest(Path dir) throws IOException {
     FileSystem fs = dir.getFileSystem(new Configuration());
-    FileStatus[] allImages = CommandLineArguments.isWildcard(dir)?
+    FileStatus[] allImages = OperationsParams.isWildcard(dir)?
         fs.globStatus(dir) : fs.listStatus(dir);
     Arrays.sort(allImages, new Comparator<FileStatus>() {
       @Override
@@ -119,7 +120,7 @@ public class RecoverHoles {
    */
   public static void recoverInterpolationDir(Path dir) throws IOException {
     FileSystem fs = dir.getFileSystem(new Configuration());
-    FileStatus[] allImages = CommandLineArguments.isWildcard(dir)?
+    FileStatus[] allImages = OperationsParams.isWildcard(dir)?
         fs.globStatus(dir) : fs.listStatus(dir);
     Arrays.sort(allImages, new Comparator<FileStatus>() {
       @Override
@@ -314,7 +315,7 @@ public class RecoverHoles {
 
   public static void addDate(Path dir) throws IOException {
     FileSystem fs = dir.getFileSystem(new Configuration());
-    FileStatus[] allImages = CommandLineArguments.isWildcard(dir) ?
+    FileStatus[] allImages = OperationsParams.isWildcard(dir) ?
         fs.globStatus(dir) : fs.listStatus(dir);
 
     final Font font = new Font("Arial", Font.BOLD, 48);
@@ -351,7 +352,7 @@ public class RecoverHoles {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
+    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
     Path dir = cla.getPath();
     if (dir == null) {
       System.err.println("Please provide an input directory");

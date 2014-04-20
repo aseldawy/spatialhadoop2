@@ -40,12 +40,13 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextInputFormat;
+import org.apache.hadoop.util.GenericOptionsParser;
 
 import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
 import com.esri.core.geometry.ogc.OGCGeometry;
 import com.esri.core.geometry.ogc.OGCGeometryCollection;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
@@ -63,7 +64,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  *    ID as it appears in the second file and the union of all shapes assigned
  *    to this ID
  * 
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class CatUnion {
@@ -188,14 +189,15 @@ public class CatUnion {
    * @throws IOException
    */
   public static void unionMapReduce(Path shapeFile, Path categoryFile,
-      Path output, boolean overwrite) throws IOException {
-    JobConf job = new JobConf(CatUnion.class);
+      Path output, OperationsParams params) throws IOException {
+    
+    JobConf job = new JobConf(params, CatUnion.class);
     job.setJobName("Union");
 
     // Check output file existence
     FileSystem outFs = output.getFileSystem(job);
     if (outFs.exists(output)) {
-      if (overwrite) {
+      if (params.is("overwrite")) {
         outFs.delete(output, true);
       } else {
         throw new RuntimeException("Output path already exists and -overwrite flag is not set");
@@ -345,6 +347,8 @@ public class CatUnion {
     System.out.println("<shape file>: (*) Path to file that contains all shapes");
     System.out.println("<category file>: (*) Path to a file that contains the category of each shape");
     System.out.println("<output file>: (*) Path to output file.");
+    
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
   /**
@@ -352,33 +356,29 @@ public class CatUnion {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    JobConf conf = new JobConf(CatUnion.class);
-    Path[] allFiles = cla.getPaths();
-    boolean local = cla.is("local");
-    boolean overwrite = cla.is("overwrite");
-    if (allFiles.length < 2) {
+    GenericOptionsParser parser = new GenericOptionsParser(args);
+    OperationsParams params = new OperationsParams(parser);
+    if (!params.checkInputOutput()) {
       printUsage();
-      throw new RuntimeException("Illegal arguments. Input file missing");
+      System.exit(1);
     }
     
-    for (int i = 0; i < allFiles.length - 1; i++) {
-      Path inputFile = allFiles[i];
-      FileSystem fs = inputFile.getFileSystem(conf);
-      if (!fs.exists(inputFile)) {
-        printUsage();
-        throw new RuntimeException("Input file does not exist");
-      }
+    Path[] allFiles = params.getPaths();
+    if (allFiles.length < 3) {
+      LOG.error("Error! This operations requires two input paths and one output path");
+      printUsage();
+      System.exit(1);
     }
 
     long t1 = System.currentTimeMillis();
-    if (local) {
+    // TODO automatically decide whether to do local or not if not explicitly specified
+    if (params.is("local")) {
       Map<Integer, OGCGeometry> union = unionLocal(allFiles[0], allFiles[1]);
 //    for (Map.Entry<Text, Geometry> category : union.entrySet()) {
 //      System.out.println(category.getValue().toText()+","+category);
 //    }
     } else {
-      unionMapReduce(allFiles[0], allFiles[1], allFiles[2], overwrite);
+      unionMapReduce(allFiles[0], allFiles[1], allFiles[2], params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");

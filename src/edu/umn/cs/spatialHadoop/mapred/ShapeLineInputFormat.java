@@ -35,7 +35,8 @@ public class ShapeLineInputFormat extends SpatialInputFormat<Rectangle, Text> {
   @Override
   public RecordReader<Rectangle, Text> getRecordReader(InputSplit split,
       JobConf job, Reporter reporter) throws IOException {
-    reporter.setStatus(split.toString());
+    if (reporter != null)
+      reporter.setStatus(split.toString());
     this.rrClass = ShapeLineRecordReader.class;
     return super.getRecordReader(split, job, reporter);
   }

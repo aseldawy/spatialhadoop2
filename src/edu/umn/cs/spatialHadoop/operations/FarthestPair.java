@@ -38,11 +38,12 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.QuickSort;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -427,7 +428,7 @@ public class FarthestPair {
   }
   
   public static void farthestPairMapReduce(Path inFile, Path userOutPath,
-      boolean overwrite) throws IOException {
+      OperationsParams params) throws IOException {
     JobConf job = new JobConf(FarthestPair.class);
     Path outPath = userOutPath;
     FileSystem outFs = (userOutPath == null ? inFile : userOutPath).getFileSystem(job);
@@ -437,14 +438,6 @@ public class FarthestPair {
         outPath = new Path(inFile.toUri().getPath()+
             ".farthest_pair_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outPath));
-    } else {
-      if (outFs.exists(outPath)) {
-        if (overwrite) {
-          outFs.delete(outPath, true);
-        } else {
-          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
-        }
-      }
     }
     
     job.setJobName("FarthestPair");
@@ -454,7 +447,7 @@ public class FarthestPair {
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(PairDistance.class);
     job.setInputFormat(FPInputFormatArray.class);
-    SpatialSite.setShapeClass(job, Point.class);
+    job.setClass("shape", Point.class, Shape.class);
     // Add input file twice to treat it as a binary function
     FPInputFormatArray.addInputPath(job, inFile);
     FPInputFormatArray.addInputPath(job, inFile);
@@ -474,32 +467,38 @@ public class FarthestPair {
     System.err.println("<input file>: (*) Path to input file");
     System.err.println("<output file>: Path to output file");
     System.err.println("-overwrite: Overwrite output file without notice");
+    
+    GenericOptionsParser.printGenericCommandUsage(System.err);
   }
   
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    Path[] paths = cla.getPaths();
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    Path[] paths = params.getPaths();
     if (paths.length == 0) {
-      if (cla.is("local")) {
+      if (params.is("local")) {
         long t1 = System.currentTimeMillis();
-        farthestPairStream((Point)cla.getShape("shape"));
+        farthestPairStream((Point)params.getShape("shape"));
         long t2 = System.currentTimeMillis();
         System.out.println("Total time: "+(t2-t1)+" millis");
       } else {
         printUsage();
+        System.exit(1);
       }
       return;
     }
-    Path inFile = paths[0];
-    Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = cla.is("overwrite");
-    if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
-      System.err.println("Output path already exists and overwrite flag is not set");
-      return;
+    if (paths.length == 1 && !params.checkInput()) {
+      printUsage();
+      System.exit(1);
     }
+    if (paths.length > 1 && !params.checkInputOutput()) {
+      printUsage();
+      System.exit(1);
+    }
+    Path inFile = params.getInputPath();
+    Path outFile = params.getOutputPath();
     
     long t1 = System.currentTimeMillis();
-    farthestPairMapReduce(inFile, outFile, cla.is("overwrite"));
+    farthestPairMapReduce(inFile, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }

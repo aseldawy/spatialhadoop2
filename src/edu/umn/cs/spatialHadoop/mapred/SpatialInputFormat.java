@@ -35,7 +35,7 @@ import org.apache.hadoop.mapred.LineRecordReader;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
@@ -113,7 +113,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, dir);
     if (gindex == null) {
       FileStatus[] listStatus;
-      if (CommandLineArguments.isWildcard(dir)) {
+      if (OperationsParams.isWildcard(dir)) {
         // Wild card
         listStatus = fs.globStatus(dir);
       } else {
@@ -136,7 +136,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
         }
       }
     } else {
-      final Path indexDir = CommandLineArguments.isWildcard(dir)?
+      final Path indexDir = OperationsParams.isWildcard(dir)?
           dir.getParent() : dir;
       // Use the global index to limit files
       filter.selectCells(gindex, new ResultCollector<Partition>() {

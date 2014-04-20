@@ -46,7 +46,7 @@ public class ImageWritable implements Writable {
     ImageIO.write(this.image, "png", baos);
     baos.close();
     byte[] bytes = baos.toByteArray();
-    out.write(bytes.length);
+    out.writeInt(bytes.length);
     out.write(bytes);
   }
 

@@ -34,8 +34,9 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Partition;
@@ -259,8 +260,8 @@ public class ConvexHull {
   }
   
   public static void convexHullMapReduce(Path inFile, Path userOutPath,
-      boolean overwrite) throws IOException {
-    JobConf job = new JobConf(ConvexHull.class);
+      OperationsParams params) throws IOException {
+    JobConf job = new JobConf(params, ConvexHull.class);
     Path outPath = userOutPath;
     FileSystem outFs = (userOutPath == null ? inFile : userOutPath).getFileSystem(job);
     
@@ -271,7 +272,7 @@ public class ConvexHull {
       } while (outFs.exists(outPath));
     } else {
       if (outFs.exists(outPath)) {
-        if (overwrite) {
+        if (params.is("overwrite")) {
           outFs.delete(outPath, true);
         } else {
           throw new RuntimeException("Output path already exists and -overwrite flag is not set");
@@ -287,7 +288,6 @@ public class ConvexHull {
     job.setOutputKeyClass(NullWritable.class);
     job.setOutputValueClass(Point.class);
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, Point.class);
     ShapeInputFormat.addInputPath(job, inFile);
     job.setOutputFormat(GridOutputFormat2.class);
     GridOutputFormat2.setOutputPath(job, outPath);
@@ -300,37 +300,40 @@ public class ConvexHull {
   }
   
   private static void printUsage() {
-    System.err.println("Computes the convex hull of an input file of shapes");
-    System.err.println("Parameters: (* marks required parameters)");
-    System.err.println("<input file>: (*) Path to input file");
-    System.err.println("<output file>: Path to output file");
-    System.err.println("-overwrite: Overwrite output file without notice");
+    System.out.println("Computes the convex hull of an input file of shapes");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file>: (*) Path to input file");
+    System.out.println("<output file>: Path to output file");
+    System.out.println("-overwrite: Overwrite output file without notice");
+    
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
   
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    if (cla.is("local") && cla.getPaths().length == 0) {
+    GenericOptionsParser parser = new GenericOptionsParser(args);
+    OperationsParams params = new OperationsParams(parser);
+    if (params.is("local") && params.getPaths().length == 0) {
       long t1 = System.currentTimeMillis();
-      convexHullStream((Point)cla.getShape("shape"));
+      convexHullStream((Point)params.getShape("shape"));
       long t2 = System.currentTimeMillis();
       System.err.println("Total time for convex hull: "+(t2-t1)+" millis");
       return;
     }
-    Path[] paths = cla.getPaths();
+    Path[] paths = params.getPaths();
     if (paths.length == 0) {
       printUsage();
       return;
     }
     Path inFile = paths[0];
     Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = cla.is("overwrite");
+    boolean overwrite = params.is("overwrite");
     if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
       System.err.println("Output path already exists and overwrite flag is not set");
       return;
     }
     
     long t1 = System.currentTimeMillis();
-    convexHullMapReduce(inFile, outFile, cla.is("overwrite"));
+    convexHullMapReduce(inFile, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }

@@ -32,6 +32,7 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.GenericOptionsParser;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
@@ -40,7 +41,7 @@ import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.TopologyException;
 import com.vividsolutions.jts.util.AssertionFailedException;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -217,7 +218,6 @@ public class UltimateUnion {
     // Set input and output
     job.setInputFormat(ShapeArrayInputFormat.class);
     FileInputFormat.addInputPath(job, input);
-    SpatialSite.setShapeClass(job, shape.getClass());
     // Ensure each partition is fully read in one shot for correctness
     job.setInt(SpatialSite.MaxBytesInOneRead, -1);
     job.setInt(SpatialSite.MaxShapesInOneRead, -1);
@@ -243,7 +243,7 @@ public class UltimateUnion {
   }
 
   public static void main(String[] args) throws IOException {
-    CommandLineArguments params = new CommandLineArguments(args);
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     
     if (!params.checkInputOutput()) {
       printUsage();

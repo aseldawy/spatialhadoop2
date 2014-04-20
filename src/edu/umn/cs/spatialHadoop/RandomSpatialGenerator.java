@@ -27,6 +27,7 @@ import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
@@ -52,33 +53,13 @@ import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionReduce;
  */
 public class RandomSpatialGenerator {
   
-  public static void generateMapReduce(Path file, Rectangle mbr, long size,
-      long blocksize, Shape shape,
-      String sindex, long seed, int rectsize,
-      RandomShapeGenerator.DistributionType type, boolean overwrite) throws IOException {
-    JobConf job = new JobConf(shape.getClass());
-    
+  private static void generateMapReduce(Path outFile, OperationsParams params)
+      throws IOException{
+    JobConf job = new JobConf(params, RandomSpatialGenerator.class);
     job.setJobName("Generator");
-    FileSystem outFs = file.getFileSystem(job);
+    Shape shape = params.getShape("shape");
     
-    // Overwrite output file
-    if (outFs.exists(file)) {
-      if (overwrite)
-        outFs.delete(file, true);
-      else
-        throw new RuntimeException("Output file '" + file
-            + "' already exists and overwrite flag is not set");
-    }
-
-    // Set generation parameters in job
-    job.setLong(RandomShapeGenerator.GenerationSize, size);
-    SpatialSite.setRectangle(job, RandomShapeGenerator.GenerationMBR, mbr);
-    if (seed != 0)
-      job.setLong(RandomShapeGenerator.GenerationSeed, seed);
-    if (rectsize != 0)
-      job.setInt(RandomShapeGenerator.GenerationRectSize, rectsize);
-    if (type != null)
-      job.set(RandomShapeGenerator.GenerationType, type.toString());
+    FileSystem outFs = outFile.getFileSystem(job);
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     // Set input format and map class
@@ -88,22 +69,18 @@ public class RandomSpatialGenerator {
     job.setMapOutputValueClass(shape.getClass());
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
     
-    SpatialSite.setShapeClass(job, shape.getClass());
-    
-    if (blocksize != 0) {
-      job.setLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE, blocksize);
-    }
+    String sindex = params.get("sindex");
+    Rectangle mbr = params.getShape("mbr").getMBR();
     
     CellInfo[] cells;
     if (sindex == null) {
       cells = new CellInfo[] {new CellInfo(1, mbr)};
     } else if (sindex.equals("grid")) {
       GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-      FileSystem fs = file.getFileSystem(job);
-      if (blocksize == 0) {
-        blocksize = fs.getDefaultBlockSize(file);
-      }
-      int numOfCells = Repartition.calculateNumberOfPartitions(job, size, fs, file, blocksize);
+      FileSystem fs = outFile.getFileSystem(job);
+      long blocksize = fs.getDefaultBlockSize(outFile);
+      long size = params.getSize("size");
+      int numOfCells = Repartition.calculateNumberOfPartitions(job, size, fs, outFile, blocksize);
       gridInfo.calculateCellDimensions(numOfCells);
       cells = gridInfo.getAllCells();
     } else {
@@ -125,7 +102,7 @@ public class RandomSpatialGenerator {
     }
     
     // Set output path
-    FileOutputFormat.setOutputPath(job, file);
+    FileOutputFormat.setOutputPath(job, outFile);
     if (sindex == null || sindex.equals("grid")) {
       job.setOutputFormat(GridOutputFormat.class);
     } else {
@@ -134,8 +111,9 @@ public class RandomSpatialGenerator {
     
     JobClient.runJob(job);
     
+    // TODO move the following part to OutputCommitter
     // Concatenate all master files into one file
-    FileStatus[] resultFiles = outFs.listStatus(file, new PathFilter() {
+    FileStatus[] resultFiles = outFs.listStatus(outFile, new PathFilter() {
       @Override
       public boolean accept(Path path) {
         return path.getName().contains("_master");
@@ -143,7 +121,7 @@ public class RandomSpatialGenerator {
     });
     String ext = resultFiles[0].getPath().getName()
         .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
-    Path masterPath = new Path(file, "_master" + ext);
+    Path masterPath = new Path(outFile, "_master" + ext);
     OutputStream destOut = outFs.create(masterPath);
     byte[] buffer = new byte[4096];
     for (FileStatus f : resultFiles) {
@@ -160,8 +138,6 @@ public class RandomSpatialGenerator {
     destOut.close();
   }
   
-
-  
   /**
    * Generates random rectangles and write the result to a file.
    * @param outFS - The file system that contains the output file
@@ -173,13 +149,12 @@ public class RandomSpatialGenerator {
    * @param blocksize 
    * @throws IOException 
    */
-  public static void generateFileLocal(Path outFile,
-      Shape shape, String sindex, long totalSize, Rectangle mbr,
-      DistributionType type, int rectSize, long seed, long blocksize,
-      boolean overwrite) throws IOException {
-    FileSystem outFS = outFile.getFileSystem(new Configuration());
-    if (blocksize == 0)
-      blocksize = outFS.getDefaultBlockSize(outFile);
+  private static void generateFileLocal(Path outFile, OperationsParams params) throws IOException {
+    FileSystem outFS = outFile.getFileSystem(params);
+    long blocksize = outFS.getDefaultBlockSize(outFile);
+    String sindex = params.get("sindex");
+    Rectangle mbr = params.getShape("mbr").getMBR();
+    long totalSize = params.getSize("size");
     
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cells;
@@ -196,15 +171,6 @@ public class RandomSpatialGenerator {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
     
-    
-    // Overwrite output file
-    if (outFS.exists(outFile)) {
-      if (overwrite)
-        outFS.delete(outFile, true);
-      else
-        throw new RuntimeException("Output file '" + outFile
-            + "' already exists and overwrite flag is not set");
-    }
     outFS.mkdirs(outFile);
 
     ShapeRecordWriter<Shape> writer;
@@ -214,8 +180,11 @@ public class RandomSpatialGenerator {
       throw new RuntimeException("Unupoorted spatial idnex: "+sindex);
     }
 
-    if (rectSize == 0)
-      rectSize = 100;
+    int rectSize = params.getInt("rectsize", 100);
+    long seed = params.getLong("seed", System.currentTimeMillis());
+    DistributionType type = SpatialSite.getDistributionType(params, "type",
+        DistributionType.UNIFORM);
+    Shape shape = params.getShape("shape");
     long t1 = System.currentTimeMillis();
     
     RandomShapeGenerator<Shape> generator = new RandomShapeGenerator<Shape>(
@@ -244,6 +213,7 @@ public class RandomSpatialGenerator {
     System.out.println("seed:<s> - Use a specific seed to generate the file");
     System.out.println("rectsize:<rs> - Maximum edge size for generated rectangles");
     System.out.println("-overwrite - Overwrite output file without notice");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
   
   /**
@@ -251,59 +221,32 @@ public class RandomSpatialGenerator {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
-    Rectangle mbr = (Rectangle) cla.getShape("rect");
-    if (mbr == null) {
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    if (params.get("mbr") == null) {
+      System.err.println("Set MBR of the generated file using rect:<x1,y1,x2,y2>");
       printUsage();
-      throw new RuntimeException("Set MBR of the generated file using rect:<x,y,w,h>");
+      System.exit(1);
+    }
+    
+    if (params.get("shape") == null) {
+      System.err.println("Shape should be specified");
+      printUsage();
+      System.exit(1);
+    }
+    
+    if (!params.checkOutput()) {
+      printUsage();
+      System.exit(1);
     }
 
-    Path outputFile = cla.getPath();
-    Shape stockShape = cla.getShape("shape");
-    long blocksize = cla.getLong("blocksize", 0);
-    int rectSize = cla.getInt("rectsize", 100);
-    long seed = cla.getLong("seed", System.currentTimeMillis());
-    if (stockShape == null)
-      stockShape = new Rectangle();
+    Path outputFile = params.getPath();
     
-    long totalSize = cla.getSize("size");
-    String sindex = cla.get("sindex");
-    boolean overwrite = cla.is("overwrite");
-    
-    DistributionType type = DistributionType.UNIFORM;
-    String strType = cla.get("type");
-    if (strType != null) {
-      strType = strType.toLowerCase();
-      if (strType.startsWith("uni"))
-        type = DistributionType.UNIFORM;
-      else if (strType.startsWith("gaus"))
-        type = DistributionType.GAUSSIAN;
-      else if (strType.startsWith("cor"))
-        type = DistributionType.CORRELATED;
-      else if (strType.startsWith("anti"))
-        type = DistributionType.ANTI_CORRELATED;
-      else if (strType.startsWith("circle"))
-        type = DistributionType.CIRCLE;
-      else {
-        System.err.println("Unknown distribution type: "+cla.get("type"));
-        printUsage();
-        return;
-      }
-    }
-
-    if (outputFile != null) {
-      System.out.print("Generating a file ");
-      System.out.print("with sindex:"+sindex+" ");
-      System.out.println("file of size: "+totalSize);
-      System.out.println("To: " + outputFile);
-      System.out.println("In the range: " + mbr);
-    }
+    long totalSize = params.getSize("size");
 
     if (totalSize < 100*1024*1024)
-      generateFileLocal(outputFile, stockShape, sindex, totalSize, mbr, type, rectSize, seed, blocksize, overwrite);
+      generateFileLocal(outputFile, params);
     else
-    generateMapReduce(outputFile, mbr, totalSize, blocksize, stockShape,
-        sindex, seed, rectSize, type, overwrite);
+      generateMapReduce(outputFile, params);
 //    if (gindex == null && lindex == null)
 //      generateHeapFile(fs, outputFile, stockShape, totalSize, mbr, type, rectSize, seed, blocksize, overwrite);
 //    else

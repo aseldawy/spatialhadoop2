@@ -41,8 +41,9 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -281,7 +282,7 @@ public class SJMR {
   }
 
   public static <S extends Shape> long sjmr(Path[] inputFiles,
-      Path userOutputPath, CommandLineArguments params) throws IOException {
+      Path userOutputPath, OperationsParams params) throws IOException {
     JobConf job = new JobConf(SJMR.class);
     boolean overwrite = params.is("overwrite");
     Shape stockShape = params.getShape("shape");
@@ -321,7 +322,6 @@ public class SJMR {
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
 
     job.setInputFormat(ShapeLineInputFormat.class);
-    SpatialSite.setShapeClass(job, stockShape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
     String commaSeparatedFiles = "";
@@ -337,7 +337,7 @@ public class SJMR {
     Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Path file : inputFiles) {
-      Rectangle file_mbr = FileMBR.fileMBR(inFs, file, params);
+      Rectangle file_mbr = FileMBR.fileMBR(file, params);
       mbr.expand(file_mbr);
       total_size += FileMBR.sizeOfLastProcessedFile;
     }
@@ -373,7 +373,7 @@ public class SJMR {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments params = new CommandLineArguments(args);
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] allFiles = params.getPaths();
     if (allFiles.length < 2) {
       printUsage();

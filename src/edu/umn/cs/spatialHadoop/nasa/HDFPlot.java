@@ -29,8 +29,9 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -161,7 +162,7 @@ public class HDFPlot {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
+    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
     Path input = cla.getPaths()[0];
     Path output = cla.getPaths()[1];
     String timeRange = cla.get("time");
@@ -219,12 +220,13 @@ public class HDFPlot {
     String scale = cla.get("scale", "preset");
     MinMax valueRange;
     if (scale.equals("preset") || scale.equals("tight")) {
-      valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, scale.equals("tight"));
+      cla.setBoolean("force", true);
+      valueRange = Aggregate.aggregate(matchingPaths, cla);
     } else if (scale.matches("\\d+,\\d+")) {
       String[] parts = scale.split(",");
       valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     } else {
-      valueRange = Aggregate.aggregate(inFs, matchingPaths, plotRange, false);
+      valueRange = Aggregate.aggregate(matchingPaths, cla);
     }
     lastRange = valueRange;
     

@@ -31,7 +31,8 @@ public class ShapeArrayInputFormat extends SpatialInputFormat<Rectangle, ArrayWr
 	@Override
 	public RecordReader<Rectangle, ArrayWritable> getRecordReader(InputSplit split,
 	    JobConf job, Reporter reporter) throws IOException {
-    reporter.setStatus(split.toString());
+	  if (reporter != null)
+	    reporter.setStatus(split.toString());
     this.rrClass = ShapeArrayRecordReader.class;
     return super.getRecordReader(split, job, reporter);
 	}

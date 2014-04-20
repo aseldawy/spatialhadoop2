@@ -18,7 +18,6 @@ import java.util.Iterator;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -27,6 +26,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -36,13 +36,15 @@ import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
@@ -50,12 +52,9 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
-import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 
 /**
  * Finds the minimal bounding rectangle for a file.
@@ -68,7 +67,8 @@ public class FileMBR {
 
   /**
    * Keeps track of the size of last processed file. Used to determine the
-   * uncompressed size of a file.
+   * uncompressed size of a file which is helpful to calculate the number
+   * of required partitions to index a file.
    */
   public static long sizeOfLastProcessedFile;
 
@@ -132,6 +132,14 @@ public class FileMBR {
     }
   }
   
+  /**
+   * This output committer caches the MBR calculated for the input file such
+   * that subsequent calls to FileMBR will return the answer right away. This
+   * is only possible if the input is a directory as it stores the answer in
+   * a hidden file inside this directory.
+   * @author Ahmed Eldawy
+   *
+   */
   public static class MBROutputCommitter extends FileOutputCommitter {
     // If input is a directory, save the MBR to a _master file there
     @Override
@@ -175,53 +183,16 @@ public class FileMBR {
   }
 
   /**
+   * Computes the MBR of the input file using an aggregate MapReduce job.
    * 
-   * @param fs
-   * @param file
-   * @param stockShape
-   * @param background
-   * @return
-   * @throws IOException
-   * @deprecated this method is replaced by
-   *   #{fileMBRMapReduce(FileSystem, Path, CommandLineArguments)}
-   */
-  @Deprecated
-  public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
-      Path file, S stockShape, boolean background) throws IOException {
-    CommandLineArguments params = new CommandLineArguments();
-    params.setClass("shape", stockShape.getClass(), Shape.class);
-    params.setBoolean("background", background);
-    return fileMBRMapReduce(fs, file, params);
-  }
-  
-  /**
-   * 
-   * @param fs
-   * @param file
-   * @param args
+   * @param file - Path to input file
+   * @param params - Additional operation parameters
    * @return
    * @throws IOException
    */
-  public static <S extends Shape> Rectangle fileMBRMapReduce(FileSystem fs,
-      Path file, CommandLineArguments args) throws IOException {
-    Shape shape = args.getShape("shape");
-    boolean background = args.is("background");
-    // Quickly get file MBR if it is globally indexed
-    GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(fs, file);
-    if (globalIndex != null) {
-      // Return the MBR of the global index.
-      // Compute file size by adding up sizes of all files assuming they are
-      // not compressed
-      long totalLength = 0;
-      for (Partition p : globalIndex) {
-        Path filePath = new Path(file, p.filename);
-        if (fs.exists(filePath))
-          totalLength += fs.getFileStatus(filePath).getLen();
-      }
-      sizeOfLastProcessedFile = totalLength;
-      return globalIndex.getMBR();
-    }
-    JobConf job = new JobConf(args, FileMBR.class);
+  private static <S extends Shape> Rectangle fileMBRMapReduce(Path file,
+      OperationsParams params) throws IOException {
+    JobConf job = new JobConf(params, FileMBR.class);
       
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
@@ -240,7 +211,6 @@ public class FileMBR {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     
     job.setInputFormat(ShapeInputFormat.class);
-    SpatialSite.setShapeClass(job, shape.getClass());
     job.setOutputFormat(TextOutputFormat.class);
     
     ShapeInputFormat.setInputPaths(job, file);
@@ -248,7 +218,7 @@ public class FileMBR {
     job.setOutputCommitter(MBROutputCommitter.class);
     
     // Submit the job
-    if (background) {
+    if (params.is("background")) {
       JobClient jc = new JobClient(job);
       lastSubmittedJob = jc.submitJob(job);
       return null;
@@ -259,13 +229,14 @@ public class FileMBR {
       FileMBR.sizeOfLastProcessedFile = inputBytesCounter.getValue();
       
       // Read job result
+      OperationsParams smallRQParams = new OperationsParams(params);
+      smallRQParams.setClass("shape", Partition.class, Shape.class);
       FileStatus[] results = outFs.listStatus(outputPath);
       Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
           -Double.MAX_VALUE, -Double.MAX_VALUE);
       for (FileStatus fileStatus : results) {
         if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-          mbr.expand(fileMBRLocal(outFs, fileStatus.getPath(),
-              new CommandLineArguments("shape:"+Partition.class.getName())));
+          mbr.expand(fileMBRLocal(fileStatus.getPath(), smallRQParams));
         }
       }
       outFs.delete(outputPath, true);
@@ -274,77 +245,72 @@ public class FileMBR {
     }
   }
 
-  /**
-   * 
-   * @param fs
-   * @param file
-   * @param shape
-   * @return
-   * @throws IOException
-   */
-  @Deprecated
-  public static Rectangle fileMBRLocal(FileSystem fs, Path file, Shape shape)
-      throws IOException {
-    CommandLineArguments params = new CommandLineArguments();
-    params.setClass("shape", shape.getClass(), Shape.class);
-    return fileMBRLocal(fs, file, params);
-  }
-  
-  public static Rectangle fileMBRLocal(FileSystem fs,
-      Path file, CommandLineArguments args) throws IOException {
-    Shape shape = args.getShape("shape");
-    // Try to get file MBR from the global index (if possible)
-    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, file);
-    if (gindex != null) {
-      return gindex.getMBR();
-    }
-    long file_size = fs.getFileStatus(file).getLen();
-    sizeOfLastProcessedFile = file_size;
+  private static Rectangle fileMBRLocal(Path inFile, OperationsParams params)
+      throws IOException {    
+    JobConf job = new JobConf(params);
+    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+    ShapeInputFormat.addInputPath(job, inFile);
+    InputSplit[] splits = inputFormat.getSplits(job, 1);
     
-    Rectangle mbr = null;
-    
-    if (file.getName().matches("(?i:.*\\.hdf$)")) {
-      // HDF file
-      HDFRecordReader reader = new HDFRecordReader(new Configuration(),
-          new FileSplit(file, 0, file_size, new String[] {}), null, true);
-      NASADataset key = reader.createKey();
-      NASAShape point = reader.createValue();
-      if (reader.next(key, point)) {
-        mbr = key.getMBR();
-      }
-      reader.close();
-    } else {
-      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(
-          new Configuration(), new FileSplit(file, 0, file_size, new String[] {}));
-      
-      mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-          -Double.MAX_VALUE, -Double.MAX_VALUE);
+    Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
+    sizeOfLastProcessedFile = 0;
 
-      Rectangle key = reader.createKey();
+    for (InputSplit split : splits) {
+      sizeOfLastProcessedFile += split.getLength();
+      RecordReader<Rectangle, Shape> reader = inputFormat.getRecordReader(split, job, null);
       
-      while (reader.next(key, shape)) {
-        Rectangle rect = shape.getMBR();
-        if (rect != null)
-          mbr.expand(rect);
+      Rectangle key = (Rectangle) reader.createKey();
+      Shape value = (Shape) reader.createValue();
+      if (key instanceof NASADataset) {
+        // For HDF file, extract MBR from the file header
+        if (reader.next(key, value)) {
+          mbr.expand(key);
+        }
+      } else {
+        while (reader.next(key, value)) {
+          Rectangle shapeMBR = value.getMBR();
+          if (shapeMBR != null)
+            mbr.expand(shapeMBR);;
+        }
       }
       reader.close();
     }
+
     return mbr;
   }
   
-  public static Rectangle fileMBR(FileSystem fs, Path inFile, CommandLineArguments params) throws IOException {
+  public static Rectangle fileMBR(Path inFile, OperationsParams params) throws IOException {
     FileSystem inFs = inFile.getFileSystem(params);
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    boolean autoLocal = !(inFStatus.isDir() ||
-        inFStatus.getLen() / inFStatus.getBlockSize() > 3);
-    Boolean isLocal = params.is("local", autoLocal);
+    // Quickly get file MBR if it is globally indexed
+    GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
+    if (globalIndex != null) {
+      // Return the MBR of the global index.
+      // Compute file size by adding up sizes of all files assuming they are
+      // not compressed.
+      long totalLength = 0;
+      for (Partition p : globalIndex) {
+        Path filePath = new Path(inFile, p.filename);
+        if (inFs.exists(filePath))
+          totalLength += inFs.getFileStatus(filePath).getLen();
+      }
+      sizeOfLastProcessedFile = totalLength;
+      return globalIndex.getMBR();
+    }
+ 
+    JobConf job = new JobConf(params, FileMBR.class);
+    FileInputFormat.addInputPath(job, inFile);
+    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+
+    boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
+    boolean isLocal = params.is("local", autoLocal);
     
     if (!isLocal) {
-      // Either a directory of file or a large file
-      return fileMBRMapReduce(fs, inFile, params);
+      // Process with MapReduce
+      return fileMBRMapReduce(inFile, params);
     } else {
-      // A single small file, process it without MapReduce
-      return fileMBRLocal(fs, inFile, params);
+      // Process without MapReduce
+      return fileMBRLocal(inFile, params);
     }
   }
 
@@ -353,36 +319,28 @@ public class FileMBR {
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<input file>: (*) Path to input file");
     System.out.println("shape:<input shape>: (*) Input file format");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
+
   /**
    * @param args
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments params = new CommandLineArguments(args);
-    Configuration conf = new Configuration();
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    if (!params.checkInput()) {
+      printUsage();
+      System.exit(1);
+    }
     Path inputFile = params.getInputPath();
-    if (inputFile == null) {
-      System.err.println("Please provide the input file");
-      printUsage();
-      return;
-    }
     
-    FileSystem fs = inputFile.getFileSystem(conf);
-    if (!fs.exists(inputFile)) {
-      LOG.error("Input file '"+inputFile+"' does not exist");
-      printUsage();
-      return;
-    }
-
-    Shape shape = params.getShape("shape");
-    if (shape == null) {
+    if (params.getShape("shape") == null) {
       LOG.error("Input file format not specified");
       printUsage();
       return;
     }
     long t1 = System.currentTimeMillis();
-    Rectangle mbr = fileMBR(fs, inputFile, params);
+    Rectangle mbr = fileMBR(inputFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total processing time: "+(t2-t1)+" millis");
     System.out.println("MBR of records in file '"+inputFile+"' is "+mbr);

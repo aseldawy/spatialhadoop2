@@ -32,7 +32,8 @@ public class RTreeInputFormat<S extends Shape> extends SpatialInputFormat<CellIn
   @Override
 	public RecordReader<CellInfo, RTree<S>> getRecordReader(InputSplit split,
 	    JobConf job, Reporter reporter) throws IOException {
-    reporter.setStatus(split.toString());
+    if (reporter != null)
+      reporter.setStatus(split.toString());
     this.rrClass = RTreeRecordReader.class;
     return super.getRecordReader(split, job, reporter);
 	}

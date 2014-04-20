@@ -19,6 +19,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.RecordReader;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -40,24 +41,6 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
     UNIFORM, GAUSSIAN, CORRELATED, ANTI_CORRELATED, CIRCLE
   }
  
-  /**Configuration line for total size of generated data in bytes*/
-  public static final String GenerationSize = "Generator.FileSize";
-  
-  /**Configuration line for the area to generate shapes in*/
-  public static final String GenerationMBR = "Generator.MBR";
-  
-  /**Configuration line for distribution type to use for generation*/
-  public static final String GenerationType = "Generator.Type";
-  
-  /**Configuration line for maximum edge length for generated rectangles*/
-  public static final String GenerationRectSize = "Generator.RectSize";
-  
-  /**
-   * Configuration line for seed of generators to be used. This can be used to
-   * generate deterministic files by reusing the same seed again.
-   */
-  public static final String GenerationSeed = "Generator.Seed";
-  
   /**Correlation factor for correlated, anticorrelated data*/
   private final static double rho = 0.9;
 
@@ -95,10 +78,10 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   @SuppressWarnings("unchecked")
   public RandomShapeGenerator(Configuration job,
       RandomInputFormat.GeneratedSplit split) throws IOException {
-    this(split.length, SpatialSite.getRectangle(job, GenerationMBR),
-        DistributionType.valueOf(job.get(GenerationType)),
-        job.getInt(GenerationRectSize, 100),
-        split.index + job.getLong(GenerationSeed, System.currentTimeMillis()));
+    this(split.length, OperationsParams.getShape(job, "mbr").getMBR(),
+        SpatialSite.getDistributionType(job, "type", DistributionType.UNIFORM),
+        job.getInt("rectsize", 100),
+        split.index + job.getLong("seed", System.currentTimeMillis()));
     setShape((S) SpatialSite.createStockShape(job));
   }
 

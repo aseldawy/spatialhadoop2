@@ -36,12 +36,13 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.util.GenericOptionsParser;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
@@ -231,10 +232,9 @@ public class ClosestPairHadoop {
 	 * @return
 	 * @throws IOException 
 	 */
-	public static <S extends Shape> void cloesetPair(FileSystem fs,
-			Path file, S stockShape) throws IOException {
+	public static <S extends Shape> void cloesetPair(Path file, OperationsParams params) throws IOException {
 		// Try to get file MBR from the MBRs of blocks
-		JobConf job = new JobConf(stockShape.getClass());
+		JobConf job = new JobConf(params, ClosestPairHadoop.class);
 
 		Path outputPath;
 		FileSystem outFs = FileSystem.get(job);
@@ -254,7 +254,6 @@ public class ClosestPairHadoop {
 
 		job.setInputFormat(ShapeArrayInputFormat.class);
 //		job.setInputFormat(ShapeInputFormat.class);
-		SpatialSite.setShapeClass(job, stockShape.getClass());
 		ShapeInputFormat.setInputPaths(job, file);
 		
 		job.setOutputFormat(TextOutputFormat.class);
@@ -266,7 +265,7 @@ public class ClosestPairHadoop {
 		
 		System.out.println("Begin second round!");
 		// 2nd Round
-		job = new JobConf(stockShape.getClass());
+		job = new JobConf(params, ClosestPairHadoop.class);
 		job.setJobName("Second Round");
 		job.setOutputKeyClass(NullWritable.class);
 		job.setMapOutputValueClass(Point.class);
@@ -278,7 +277,6 @@ public class ClosestPairHadoop {
 		
 		job.setInputFormat(ShapeArrayInputFormat.class);
 //		job.setInputFormat(ShapeInputFormat.class);
-		SpatialSite.setShapeClass(job, stockShape.getClass());
 		ShapeInputFormat.setInputPaths(job, outputPath);  // The previous output is the current input
 		
 		Path newPath = new Path(outputPath.getName() + "_result");
@@ -305,12 +303,16 @@ public class ClosestPairHadoop {
 		System.out.println("Finds the average area of all rectangles in an input file");
 		System.out.println("Parameters: (* marks required parameters)");
 		System.out.println("<input file>: (*) Path to input file");
+		
+		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
 	/**
 	 * @param args
 	 * @throws IOException 
 	 */
 	public static void main(String[] args) throws IOException {
+	  GenericOptionsParser parser = new GenericOptionsParser(args);
+	  OperationsParams params = new OperationsParams(parser);
 		if (args.length == 0) {
 			printUsage();
 			throw new RuntimeException("Illegal arguments. Input file missing");
@@ -321,19 +323,19 @@ public class ClosestPairHadoop {
 			printUsage();
 			throw new RuntimeException("Input file does not exist");
 		}
-		Shape stockShape = new Point();
+		params.setClass("shape", Point.class, Shape.class);
 		samplePoint(fs, inputFile);
-	    final long fileSize = fs.getFileStatus(inputFile).getLen();
-	    long delta = (long) (1.0 * sample.size() / (1.0 * fileSize / localMemory));
-	    if (delta == 0) delta = 1;
-	    System.out.println("delta = " +delta);
-	    Vector<Point> axis = new Vector<Point>();
-	    for (int i=0; i<sample.size(); i+=delta)
-	    	axis.add(sample.get(i));
-	    sample = axis;
-		
+		final long fileSize = fs.getFileStatus(inputFile).getLen();
+		long delta = (long) (1.0 * sample.size() / (1.0 * fileSize / localMemory));
+		if (delta == 0) delta = 1;
+		System.out.println("delta = " +delta);
+		Vector<Point> axis = new Vector<Point>();
+		for (int i=0; i<sample.size(); i+=delta)
+		  axis.add(sample.get(i));
+		sample = axis;
+
 		System.out.println("Finish Sampling.");
-		cloesetPair(fs, inputFile, stockShape);
+		cloesetPair(inputFile, params);
 	}
 }
 

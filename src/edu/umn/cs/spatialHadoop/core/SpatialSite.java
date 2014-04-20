@@ -41,7 +41,8 @@ import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.ClassUtil;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 /**
@@ -79,7 +80,8 @@ public class SpatialSite {
       "spatialHadoop.storage.RTreeBuildMode";
   
   /**Configuration line to set the default shape class to use if not set*/
-  public static final String ShapeClass = "SpatialSite.ShapeClass";
+  @Deprecated
+  public static final String ShapeClass = "shape";
   
   /**Configuration line name for replication overhead*/
   public static final String INDEXING_OVERHEAD =
@@ -196,24 +198,6 @@ public class SpatialSite {
   }
   
   /**
-   * Sets a configuration parameter with a class of type Shape.
-   * @param conf
-   * @param klass
-   */
-  public static void setShapeClass(Configuration conf, Class<? extends Shape> klass) {
-    setClass(conf, ShapeClass, klass, Shape.class);
-  }
-  
-  /**
-   * Retrieves the shape class from a configuration parameter.
-   * @param conf
-   * @return
-   */
-  public static Class<? extends Shape> getShapeClass(Configuration conf) {
-    return conf.getClass(ShapeClass, Point.class, Shape.class);
-  }
-  
-  /**
    * Creates a stock shape according to the given configuration. It retrieves
    * the shape class using {@link #getShapeClass(Configuration)} then
    * creates an instance of this shape using {@link Class#newInstance()}.
@@ -222,25 +206,7 @@ public class SpatialSite {
    * @return
    */
   public static Shape createStockShape(Configuration job) {
-    Shape stockShape = null;
-    try {
-      Class<? extends Shape> shapeClass = getShapeClass(job);
-      stockShape = shapeClass.newInstance();
-    } catch (InstantiationException e) {
-      e.printStackTrace();
-    } catch (IllegalAccessException e) {
-      e.printStackTrace();
-    }
-    if (stockShape instanceof CSVOGC) {
-      CSVOGC csvShape = (CSVOGC) stockShape;
-      String strColumnIndex = job.get("column");
-      if (strColumnIndex != null)
-        csvShape.setColumn(Integer.parseInt(strColumnIndex));
-      String strSeparator = job.get("separator");
-      if (strSeparator != null)
-        csvShape.setSeparator(strSeparator.charAt(0));
-    }
-    return stockShape;
+    return OperationsParams.getShape(job, "shape");
   }
   
   /**
@@ -267,6 +233,7 @@ public class SpatialSite {
    * @param param
    * @return
    */
+  @Deprecated
   public static Shape getShape(Configuration conf, String param) {
     String str = conf.get(param);
     if (str == null)
@@ -303,7 +270,7 @@ public class SpatialSite {
       Path dir) {
     try {
       FileStatus[] allFiles;
-      if (CommandLineArguments.isWildcard(dir)) {
+      if (OperationsParams.isWildcard(dir)) {
         allFiles = fs.globStatus(dir);
       } else {
         allFiles = fs.listStatus(dir);
@@ -545,6 +512,36 @@ public class SpatialSite {
       rect.fromText(new Text(rectStr));
     }
     return rect;
+  }
+
+  /**
+   * Retrieves the distribution type used for generating synthetic data
+   * @param job
+   * @param key
+   * @param defaultValue
+   * @return
+   */
+  public static DistributionType getDistributionType(Configuration job,
+      String key, DistributionType defaultValue) {
+    DistributionType type = defaultValue;
+    String strType = job.get(key);
+    if (strType != null) {
+      strType = strType.toLowerCase();
+      if (strType.startsWith("uni"))
+        type = DistributionType.UNIFORM;
+      else if (strType.startsWith("gaus"))
+        type = DistributionType.GAUSSIAN;
+      else if (strType.startsWith("cor"))
+        type = DistributionType.CORRELATED;
+      else if (strType.startsWith("anti"))
+        type = DistributionType.ANTI_CORRELATED;
+      else if (strType.startsWith("circle"))
+        type = DistributionType.CIRCLE;
+      else {
+        type = null;
+      }
+    }
+    return type;
   }
 
 }

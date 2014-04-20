@@ -19,7 +19,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Iterator;
 
-import org.apache.hadoop.conf.Configuration;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -27,6 +28,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -35,7 +37,9 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.GenericOptionsParser;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
@@ -50,14 +54,18 @@ import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
- * Computes a number of aggregate functions for an input file
+ * Computes the minimum and maximum values for a set of input HDF files.
+ * Used to find a tight range to plot heat maps.
  * @author Ahmed Eldawy
  *
  */
 public class Aggregate {
+  /**Logger*/
+  @SuppressWarnings("unused")
+  private static final Log LOG = LogFactory.getLog(Aggregate.class);
   
   /**
-   * A structure to hold some aggregate values used to draw HDF files efficiently
+   * A structure to hold the minimum and maximum values for aggregation.
    * @author Ahmed Eldawy
    *
    */
@@ -147,9 +155,10 @@ public class Aggregate {
    * @return
    * @throws IOException 
    */
-  public static MinMax aggregateMapReduce(FileSystem fs, Path[] files, Shape plotRange)
+  public static MinMax aggregateMapReduce(Path[] files, OperationsParams params)
       throws IOException {
-    JobConf job = new JobConf(Aggregate.class);
+    Shape plotRange = params.getShape("rect");
+    JobConf job = new JobConf(params, Aggregate.class);
     
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
@@ -168,12 +177,11 @@ public class Aggregate {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     
     job.setInputFormat(ShapeInputFormat.class);
+    job.setClass("shape", NASAPoint.class, Shape.class);
     if (plotRange != null) {
       job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-      RangeFilter.setQueryRange(job, plotRange); // Set query range for filter
     }
 
-    SpatialSite.setShapeClass(job, NASAPoint.class);
     job.setOutputFormat(TextOutputFormat.class);
     
     ShapeInputFormat.setInputPaths(job, files);
@@ -211,15 +219,16 @@ public class Aggregate {
    * @return
    * @throws IOException
    */
-  public static MinMax aggregateLocal(FileSystem fs, Path[] files, Shape plotRange) throws IOException {
+  public static MinMax aggregateLocal(Path[] files, OperationsParams params) throws IOException {
+    Shape plotRange = params.getShape("rect");
+    params.setClass("shape", NASAPoint.class, Shape.class);
     MinMax minMax = new MinMax();
     for (Path file : files) {
+      FileSystem fs = file.getFileSystem(params);
       long file_size = fs.getFileStatus(file).getLen();
       
       // HDF file
-      Configuration conf = new Configuration();
-      SpatialSite.setShapeClass(conf, NASAPoint.class);
-      HDFRecordReader reader = new HDFRecordReader(conf,
+      HDFRecordReader reader = new HDFRecordReader(params,
           new FileSplit(file, 0, file_size, new String[] {}), null, true);
       NASADataset key = reader.createKey();
       NASAShape point = reader.createValue();
@@ -240,7 +249,6 @@ public class Aggregate {
   /**
    * Computes the minimum and maximum values of readings in input. Useful as
    * a preparatory step before drawing.
-   * @param fs - File system of input files.
    * @param inFiles - A list of input files.
    * @param plotRange - The spatial range to plot
    * @param forceCompute - Ignore any preset values and force computation of
@@ -248,40 +256,58 @@ public class Aggregate {
    * @return
    * @throws IOException
    */
-  public static MinMax aggregate(FileSystem fs, Path[] inFiles,
-      Shape plotRange, boolean forceCompute) throws IOException {
-    MinMax min_max = new MinMax();
+  public static MinMax aggregate(Path[] inFiles, OperationsParams params)
+      throws IOException {
+    boolean forceCompute = params.is("force");
 
-    // Check if we have cached values for the given dataset
+    // Check if we have hard-coded cached values for the given dataset
     String inPathStr = inFiles[0].toString();
     if (!forceCompute &&
         (inPathStr.contains("MOD11A1") || inPathStr.contains("MYD11A1"))) {
+      MinMax min_max = new MinMax();
       // Land temperature
       min_max = new MinMax();
       //min_max.minValue = 10000; // 200 K, -73 C, -100 F
       //min_max.maxValue = 18000; // 360 K,  87 C,  188 F
       min_max.minValue = 13650; // 273 K,  0 C
       min_max.maxValue = 17650; // 353 K, 80 C
-    } else {
-      // Need to process input files to get stats from it and calculate its size
-      if (inFiles.length == 1) {
-        FileSystem inFs = inFiles[0].getFileSystem(new Configuration());
-        FileStatus inFStatus = inFs.getFileStatus(inFiles[0]);
-        
-        if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 3) {
-          // Either a directory of file or a large file
-          min_max = aggregateMapReduce(fs, inFiles, plotRange);
-        } else {
-          // A single small file, process it without MapReduce
-          min_max = aggregateLocal(fs, inFiles, plotRange);
-        }
-      } else {
-        min_max = aggregateMapReduce(fs, inFiles, plotRange);
-      }
-
+      return min_max;
     }
+
+    // Need to process input files to get stats from it and calculate its size
+    JobConf job = new JobConf(params, FileMBR.class);
+    FileInputFormat.setInputPaths(job, inFiles);
+    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+
+    boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
+    boolean isLocal = params.is("local", autoLocal);
     
-    return min_max;
+    return isLocal ? aggregateLocal(inFiles, params) : aggregateMapReduce(inFiles, params);
+  }
+  
+  private static void printUsage() {
+    System.out.println("Calculates the minimum and maximum values from HDF files");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file>: (*) Path to input file");
+    System.out.println("dataset: The dataset to read from HDF flies");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
+  /**
+   * @param args
+   * @throws IOException 
+   */
+  public static void main(String[] args) throws IOException {
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    if (!params.checkInput()) {
+      printUsage();
+      System.exit(1);
+    }
+
+    long t1 = System.currentTimeMillis();
+    MinMax minmax = aggregate(params.getPaths(), params);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total processing time: "+(t2-t1)+" millis");
+    System.out.println("MinMax of readings is "+minmax);
+  }
 }

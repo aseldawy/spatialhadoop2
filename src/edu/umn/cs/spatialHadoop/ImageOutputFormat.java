@@ -40,18 +40,9 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
   /**MBR of the input file*/
   private static final String InputFileMBR = "plot.file_mbr";
   
-  /**Configuration line for image width*/
-  private static final String ImageWidth = "plot.image_width";
-
-  /**Configuration line for image height*/
-  private static final String ImageHeight = "plot.image_height";
-
   /**Used to indicate the progress*/
   private Progressable progress;
 
-  /**Flip the image vertically to correct +ve Y-axis direction*/
-  public static final String VFlip = "plot.vflip";
-  
   class ImageRecordWriter implements RecordWriter<Rectangle, ImageWritable> {
 
     private final FileSystem outFs;
@@ -109,31 +100,15 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
     Path file = FileOutputFormat.getTaskOutputPath(job, name);
     FileSystem fs = file.getFileSystem(job);
     Rectangle fileMbr = getFileMBR(job);
-    int imageWidth = getImageWidth(job);
-    int imageHeight = getImageHeight(job);
-    boolean vflip = job.getBoolean(VFlip, false);
+    int imageWidth = job.getInt("width", 1000);
+    int imageHeight = job.getInt("height", 1000);
+    boolean vflip = job.getBoolean("vflip", false);
 
     return new ImageRecordWriter(file, fs, imageWidth, imageHeight, fileMbr, vflip);
   }
 
-  public static void setImageWidth(Configuration conf, int width) {
-    conf.setInt(ImageWidth, width);
-  }
-
-  public static void setImageHeight(Configuration conf, int height) {
-    conf.setInt(ImageHeight, height);
-  }
-  
   public static void setFileMBR(Configuration conf, Rectangle mbr) {
     SpatialSite.setShape(conf, InputFileMBR, mbr);
-  }
-  
-  public static int getImageWidth(Configuration conf) {
-    return conf.getInt(ImageWidth, 1000);
-  }
-
-  public static int getImageHeight(Configuration conf) {
-    return conf.getInt(ImageHeight, 1000);
   }
   
   public static Rectangle getFileMBR(Configuration conf) {

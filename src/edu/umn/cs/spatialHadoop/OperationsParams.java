@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
@@ -35,12 +36,16 @@ import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 
 
 /**
- * Parses command line arguments.
+ * A class that encapsulates all parameters sent for an operations implemented
+ * in SpatialHadoop. Internally, it stores everything in {@link Configuration}
+ * which makes it easier to pass around to mappers and reducers.
+ * It can be initialized from a configuration and/or a list of command line
+ * arguments.
  * @author Ahmed Eldawy
  *
  */
-public class CommandLineArguments extends Configuration {
-  private static final Log LOG = LogFactory.getLog(CommandLineArguments.class);
+public class OperationsParams extends Configuration {
+  private static final Log LOG = LogFactory.getLog(OperationsParams.class);
 
   /**All detected input paths*/
   private Path[] allPaths;
@@ -51,7 +56,28 @@ public class CommandLineArguments extends Configuration {
     Configuration.addDefaultResource("spatial-site.xml");
   }
   
-  public CommandLineArguments(String... args) {
+  public OperationsParams() {
+  }
+  
+  public OperationsParams(GenericOptionsParser parser) {
+    super(parser.getConfiguration());
+    initialize(parser.getRemainingArgs());
+  }
+
+  /**
+   * Initialize the command line arguments from an existing configuration and
+   * a list of additional arguments.
+   * @param params
+   * @param additionalArgs
+   */
+  public OperationsParams(Configuration params, String ... additionalArgs) {
+    super(params);
+    initialize(additionalArgs);
+  }
+
+  public void initialize(String... args) {
+    // TODO if the argument shape is set to a class in a third party jar file
+    // add that jar file to the archives
     Vector<Path> paths = new Vector<Path>();
     for (String arg : args) {
       String argl = arg.toLowerCase();
@@ -74,11 +100,7 @@ public class CommandLineArguments extends Configuration {
     }
     this.allPaths = paths.toArray(new Path[paths.size()]);
   }
-  
-  public CommandLineArguments(Configuration conf) {
-    super(conf);
-  }
-  
+
   public Path[] getPaths() {
     return allPaths;
   }
@@ -127,7 +149,35 @@ public class CommandLineArguments extends Configuration {
     }
     return null;
   }
- */ 
+ */
+  
+  /**
+   * Checks that there is at least one input path and that all input paths
+   * exist. It treats all passed paths as input. This is useful for input-only
+   * operations which do not take any output path (e.g., MBR and Aggregate).
+   * @return
+   * @throws IOException
+   */
+  public boolean checkInput() throws IOException {
+    Path[] inputPaths = getPaths();
+    if (inputPaths.length == 0) {
+      LOG.error("No input files");
+      return false;
+    }
+    
+    for (Path path : inputPaths) {
+      // Skip existence checks for wild card input
+      if (isWildcard(path))
+        continue;
+      FileSystem fs = path.getFileSystem(this);
+      if (!fs.exists(path)) {
+        LOG.error("Input file '"+path+"' does not exist");
+        return false;
+      }
+    }
+    
+    return true;
+  }
 
   /**
    * Makes standard checks for input and output files. It is assumed that all
@@ -154,6 +204,23 @@ public class CommandLineArguments extends Configuration {
       }
     }
     Path outputPath = getOutputPath();
+    if (outputPath != null) {
+      FileSystem fs = outputPath.getFileSystem(this);
+      if (fs.exists(outputPath)) {
+        if (this.is("overwrite")) {
+          fs.delete(outputPath, true);
+        } else {
+          LOG.error("Output file '"+outputPath+"' exists and overwrite flag is not set");
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+  
+  public boolean checkOutput() throws IOException {
+    Path[] inputPaths = getInputPaths();
+    Path outputPath = inputPaths[inputPaths.length - 1];
     if (outputPath != null) {
       FileSystem fs = outputPath.getFileSystem(this);
       if (fs.exists(outputPath)) {
@@ -202,7 +269,19 @@ public class CommandLineArguments extends Configuration {
   }
   
   public Shape getShape(String key, Shape defaultValue) {
-    String shapeType = get(key);
+    return getShape(this, key, defaultValue);
+  }
+  
+  public Shape getShape(String key) {
+    return getShape(key, null);
+  }
+  
+  public static Shape getShape(Configuration job, String key) {
+    return getShape(job, key, null);
+  }
+
+  public static Shape getShape(Configuration conf, String key, Shape defaultValue) {
+    String shapeType = conf.get(key);
     if (shapeType == null)
       return defaultValue;
     
@@ -227,7 +306,7 @@ public class CommandLineArguments extends Configuration {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
         Class<? extends Shape> shapeClass =
-            getClassByName(get(key)).asSubclass(Shape.class);
+            conf.getClassByName(conf.get(key)).asSubclass(Shape.class);
         shape = shapeClass.newInstance();
       } catch (ClassNotFoundException e) {
       } catch (InstantiationException e) {
@@ -239,33 +318,29 @@ public class CommandLineArguments extends Configuration {
         if (shapeType.split(",").length == 2) {
           // A point
           shape = new Point();
-          shape.fromText(new Text((String)get(key)));
+          shape.fromText(new Text((String)conf.get(key)));
         } else if (shapeType.split(",").length == 4) {
           // A rectangle
           shape = new Rectangle();
-          shape.fromText(new Text((String)get(key)));
+          shape.fromText(new Text((String)conf.get(key)));
         }
         // TODO parse from WKT
       }
     }
     if (shape == null)
-      LOG.warn("unknown shape type: '"+get(key)+"'");
+      LOG.warn("unknown shape type: '"+conf.get(key)+"'");
     // Special case for CSVOGC shape, specify the column if possible
     if (shape instanceof CSVOGC) {
       CSVOGC csvShape = (CSVOGC) shape;
-      String strColumnIndex = this.get("column");
+      String strColumnIndex = conf.get("column");
       if (strColumnIndex != null)
         csvShape.setColumn(Integer.parseInt(strColumnIndex));
-      String strSeparator = this.get("separator");
+      String strSeparator = conf.get("separator");
       if (strSeparator != null)
         csvShape.setSeparator(strSeparator.charAt(0));
     }
       
     return shape;
-  }
-  
-  public Shape getShape(String key) {
-    return getShape(key, null);
   }
 
   public <S extends Shape> S[] getShapes(String key, S stock) {
@@ -284,7 +359,11 @@ public class CommandLineArguments extends Configuration {
   }
 
   public long getSize(String key) {
-    String size_str = get(key);
+    return getSize(this, key);
+  }
+  
+  public static long getSize(Configuration conf, String key) {
+    String size_str = conf.get(key);
     if (size_str == null)
       return 0;
     if (size_str.indexOf('.') == -1)

@@ -26,7 +26,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 /**
  * An input format used with spatial data. It filters generated splits before
  * creating record readers.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  * @param <S>
  */
@@ -35,7 +35,8 @@ public class ShapeInputFormat<S extends Shape> extends SpatialInputFormat<Rectan
   @Override
   public RecordReader<Rectangle, S> getRecordReader(InputSplit split,
       JobConf job, Reporter reporter) throws IOException {
-    reporter.setStatus(split.toString());
+    if (reporter != null)
+      reporter.setStatus(split.toString());
     this.rrClass = ShapeRecordReader.class;
     return super.getRecordReader(split, job, reporter);
   }

@@ -30,9 +30,10 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.Estimator;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
@@ -48,11 +49,12 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  *
  */
 public class RecordCount {
-  private static final NullWritable Dummy = NullWritable.get();
-  private static final LongWritable ONEL = new LongWritable(1);
 
   public static class Map extends MapReduceBase implements
       Mapper<CellInfo, Text, NullWritable, LongWritable> {
+    private static final NullWritable Dummy = NullWritable.get();
+    private static final LongWritable ONEL = new LongWritable(1);
+
     public void map(CellInfo lineId, Text line,
         OutputCollector<NullWritable, LongWritable> output, Reporter reporter)
         throws IOException {
@@ -220,15 +222,15 @@ public class RecordCount {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    CommandLineArguments cla = new CommandLineArguments(args);
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     JobConf conf = new JobConf(RecordCount.class);
-    Path inputFile = cla.getPath();
+    Path inputFile = params.getPath();
     FileSystem fs = inputFile.getFileSystem(conf);
     if (!fs.exists(inputFile)) {
       throw new RuntimeException("Input file does not exist");
     }
-    boolean local = cla.is("local");
-    boolean random = cla.is("random");
+    boolean local = params.is("local");
+    boolean random = params.is("random");
     long lineCount;
     if (local) {
       if (random) {

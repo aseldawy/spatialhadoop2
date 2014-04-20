@@ -24,6 +24,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
@@ -72,7 +73,7 @@ public class RandomInputFormat<S extends Shape> implements InputFormat<Rectangle
   
   @Override
   public InputSplit[] getSplits(JobConf job, int numSplits) throws IOException {
-    long totalFileSize = job.getLong(RandomShapeGenerator.GenerationSize, 0);
+    long totalFileSize = OperationsParams.getSize(job, "size");
     long splitSize = FileSystem.get(job).getDefaultBlockSize(new Path("/"));
     InputSplit[] splits = new InputSplit[(int) Math.ceil((double)totalFileSize / splitSize)];
     int i;

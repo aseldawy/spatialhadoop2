@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.FileSplit;
@@ -39,8 +40,9 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.CommandLineArguments;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
@@ -60,7 +62,7 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 /**
- * Repartitions a file according to a different grid through a MapReduce job
+ * Creates an index on an input file
  * @author Ahmed Eldawy
  *
  */
@@ -230,13 +232,13 @@ public class Repartition {
    * @param overwrite
    * @throws IOException
    * @deprecated this method is replaced with
-   *   {@link #repartitionMapReduce(Path, Path, CommandLineArguments)}
+   *   {@link #repartitionMapReduce(Path, Path, OperationsParams)}
    */
   @Deprecated
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, String sindex,
       boolean overwrite) throws IOException {
-    CommandLineArguments params = new CommandLineArguments();
+    OperationsParams params = new OperationsParams();
     if (stockShape != null)
       params.setClass("shape", stockShape.getClass(), Shape.class);
     params.setLong("blocksize", blockSize);
@@ -246,7 +248,7 @@ public class Repartition {
   }
   
   public static void repartitionMapReduce(Path inFile, Path outPath,
-      CommandLineArguments params) throws IOException {
+      OperationsParams params) throws IOException {
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
     long blockSize = params.getSize("blocksize");
@@ -269,7 +271,7 @@ public class Repartition {
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
     if (sindex.equals("grid")) {
-      Rectangle input_mbr = FileMBR.fileMBRMapReduce(inFs, inFile, params);
+      Rectangle input_mbr = FileMBR.fileMBR(inFile, params);
       long inFileSize = FileMBR.sizeOfLastProcessedFile;
       int num_partitions = calculateNumberOfPartitions(new Configuration(),
           inFileSize, outFs, outPath, blockSize);
@@ -386,9 +388,6 @@ public class Repartition {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
 
-    // Set default parameters for reading input file
-    SpatialSite.setShapeClass(job, stockShape.getClass());
-  
     FileOutputFormat.setOutputPath(job,outPath);
     if (sindex.equals("grid") || sindex.equals("str") || sindex.equals("str+")) {
       job.setOutputFormat(GridOutputFormat.class);
@@ -484,14 +483,14 @@ public class Repartition {
    * @param overwrite
    * @throws IOException
    * @deprecated this method is replaced with
-   *   {@link #repartitionLocal(Path, Path, CommandLineArguments)}
+   *   {@link #repartitionLocal(Path, Path, OperationsParams)}
    */
   @Deprecated
   public static <S extends Shape> void repartitionLocal(Path inFile,
       Path outFile, S stockShape, long blockSize, String sindex,
       boolean overwrite)
           throws IOException {
-    CommandLineArguments params = new CommandLineArguments();
+    OperationsParams params = new OperationsParams();
     if (stockShape != null)
       params.setClass("shape", stockShape.getClass(), Shape.class);
     params.setLong("blocksize", blockSize);
@@ -501,7 +500,7 @@ public class Repartition {
   }
   
   public static <S extends Shape> void repartitionLocal(Path inFile,
-      Path outFile, CommandLineArguments params) throws IOException {
+      Path outFile, OperationsParams params) throws IOException {
     
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
@@ -526,7 +525,7 @@ public class Repartition {
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
     if (sindex.equals("grid")) {
-      Rectangle input_mbr = FileMBR.fileMBRLocal(inFs, inFile, params);
+      Rectangle input_mbr = FileMBR.fileMBR(inFile, params);
       long inFileSize = FileMBR.sizeOfLastProcessedFile;
       int num_partitions = calculateNumberOfPartitions(new Configuration(),
           inFileSize, outFs, outFile, blockSize);
@@ -618,12 +617,13 @@ public class Repartition {
    * @throws IOException
    */
   public static void repartition(Path inFile, Path outputPath,
-      CommandLineArguments params) throws IOException {
-    FileSystem inFs = inFile.getFileSystem(params);
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    boolean autoLocal = !(inFStatus.isDir() ||
-        inFStatus.getLen() / inFStatus.getBlockSize() > 3);
-    Boolean isLocal = params.is("local", autoLocal);
+      OperationsParams params) throws IOException {
+    JobConf job = new JobConf(params, FileMBR.class);
+    FileInputFormat.addInputPath(job, inFile);
+    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+
+    boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
+    boolean isLocal = params.is("local", autoLocal);
     
     if (isLocal)
       repartitionLocal(inFile, outputPath, params);
@@ -640,6 +640,7 @@ public class Repartition {
     System.out.println("sindex:<index> - (*) Type of spatial index (grid|rtree|r+tree|str|str+)");
     System.out.println("blocksize:<size> - Size of blocks in output file");
     System.out.println("-overwrite - Overwrite output file without noitce");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
   /**
@@ -655,14 +656,14 @@ public class Repartition {
 	 * @throws Exception
 	 */
 	public static void main(String[] args) throws Exception {
-    CommandLineArguments params = new CommandLineArguments(args);
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     
     if (!params.checkInputOutput()) {
       printUsage();
       return;
     }
     if (params.get("sindex") == null) {
-      System.err.println("Please specify type of index to build");
+      System.err.println("Please specify type of index to build (grid, rtree, r+tree, str, str+)");
       printUsage();
       return;
     }
