@@ -146,11 +146,27 @@ def test_spatial_join
   spatial_join('dj', heap_file1, heap_file2, 'bnlj')
   bnlj_results = `shadoop fs -cat bnlj/data* | sort`.lines.to_a
   raise "Results of SJMR and BNLJ on heap files do not match" unless array_compare(sjmr_heap_results, bnlj_results)
+
+  # Try with indexes (same index for both files)
+  %w(grid rtree r+tree str str+).each do |sindex|
+    indexed_file1 = index_file(heap_file1, sindex)
+    indexed_file2 = index_file(heap_file2, sindex)
+    
+    # Run both SJMR and DJ on indexed files and check the result
+    spatial_join('sjmr', indexed_file1, indexed_file2, "sjmr_#{sindex}")
+    sjmr_indexed_results = `shadoop fs -cat sjmr_#{sindex}/data* | sort`.lines.to_a
+    raise "Results of #{sindex} file does not match the heap file" if !array_compare(sjmr_indexed_results, sjmr_heap_results) 
+    
+    spatial_join('dj', indexed_file1, indexed_file2, "dj_#{sindex}")
+    dj_indexed_results = `shadoop fs -cat dj_#{sindex}/data* | sort`.lines.to_a
+    raise "Results of #{sindex} file does not match the heap file" if !array_compare(dj_indexed_results, bnlj_results) 
+  end
+
 end
 
 # Main
 if $0 == __FILE__
-  # test_range_query
-  # test_knn
+  test_range_query
+  test_knn
   test_spatial_join
 end
