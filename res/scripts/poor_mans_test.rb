@@ -129,10 +129,28 @@ def test_knn_query
     results_indexed_mr = `hadoop fs -cat results_#{sindex}_mr/part* `.lines.to_a
     raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_mr, results_heap_local) 
   end
-    
+end
+
+def spatial_join(method, file1, file2, output, extra_args = '')
+  shape = File.extname(file1)[1..-1]
+  system_check "shadoop #{method} #{file1} #{file2} #{output} shape:#{shape} #{extra_args} -overwrite"
+end
+
+def test_spatial_join
+  # Try with heap files
+  heap_file1 = generate_file('test1', 'rect')
+  heap_file2 = generate_file('test2', 'rect')
+
+  spatial_join('sjmr', heap_file1, heap_file2, 'sjmr_heap')
+  sjmr_heap_results = `shadoop fs -cat sjmr_heap/data* | sort`.lines.to_a
+  spatial_join('dj', heap_file1, heap_file2, 'bnlj')
+  bnlj_results = `shadoop fs -cat bnlj/data* | sort`.lines.to_a
+  raise "Results of SJMR and BNLJ on heap files do not match" unless array_compare(sjmr_heap_results, bnlj_results)
 end
 
 # Main
 if $0 == __FILE__
-  test_knn_query
+  # test_range_query
+  # test_knn
+  test_spatial_join
 end

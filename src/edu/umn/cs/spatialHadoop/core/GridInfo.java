@@ -142,12 +142,12 @@ public class GridInfo extends Rectangle {
     col1 = (int)Math.floor((rect.x1 - this.x1) / (this.x2 - this.x1) * columns);
     if (col1 < 0) col1 = 0;
     col2 = (int)Math.ceil((rect.x2 - this.x1) / (this.x2 - this.x1) * columns);
-    if (col2 >= columns) col2 = columns - 1;
+    if (col2 > columns) col2 = columns;
     row1 = (int)Math.floor((rect.y1 - this.y1) / (this.y2 - this.y1) * rows);
     if (row1 < 0) row1 = 0;
     row2 = (int)Math.ceil((rect.y2 - this.y1) / (this.y2 - this.y1) * rows);
-    if (row2 >= rows) row2 = rows - 1;
-    return new java.awt.Rectangle(col1, row1, col2 - col1 + 1, row2 - row1 + 1);
+    if (row2 > rows) row2 = rows;
+    return new java.awt.Rectangle(col1, row1, col2 - col1, row2 - row1);
   }
   
   public CellInfo getCell(int cellId) {

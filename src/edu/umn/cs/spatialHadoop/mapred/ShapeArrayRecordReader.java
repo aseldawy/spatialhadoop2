@@ -23,6 +23,7 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -42,13 +43,13 @@ public class ShapeArrayRecordReader extends SpatialRecordReader<Rectangle, Array
   public ShapeArrayRecordReader(CombineFileSplit split, Configuration conf,
       Reporter reporter, Integer index) throws IOException {
     super(split, conf, reporter, index);
-    shape = SpatialSite.getShape(conf, "shape");
+    shape = OperationsParams.getShape(conf, "shape");
   }
   
   public ShapeArrayRecordReader(Configuration job, FileSplit split)
       throws IOException {
     super(job, split);
-    shape = SpatialSite.getShape(job, "shape");
+    shape = OperationsParams.getShape(job, "shape");
   }
 
   public ShapeArrayRecordReader(InputStream is, long offset, long endOffset)

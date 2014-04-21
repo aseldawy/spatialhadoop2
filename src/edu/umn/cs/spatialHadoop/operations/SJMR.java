@@ -283,9 +283,7 @@ public class SJMR {
 
   public static <S extends Shape> long sjmr(Path[] inputFiles,
       Path userOutputPath, OperationsParams params) throws IOException {
-    JobConf job = new JobConf(SJMR.class);
-    boolean overwrite = params.is("overwrite");
-    Shape stockShape = params.getShape("shape");
+    JobConf job = new JobConf(params, SJMR.class);
     
     FileSystem inFs = inputFiles[0].getFileSystem(job);
     Path outputPath = userOutputPath;
@@ -295,15 +293,6 @@ public class SJMR {
         outputPath = new Path(inputFiles[0].getName() + ".sjmr_"
             + (int) (Math.random() * 1000000));
       } while (outFs.exists(outputPath));
-    } else {
-      FileSystem outFs = outputPath.getFileSystem(job);
-      if (outFs.exists(outputPath)) {
-        if (overwrite) {
-          outFs.delete(outputPath, true);
-        } else {
-          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
-        }
-      }
     }
     FileSystem outFs = outputPath.getFileSystem(job);
     
@@ -366,6 +355,7 @@ public class SJMR {
     System.out.println("<input file 2> - (*) Path to the second input file");
     System.out.println("<output file> - Path to output file");
     System.out.println("-overwrite - Overwrite output file without notice");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
   
   /**
@@ -376,9 +366,19 @@ public class SJMR {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] allFiles = params.getPaths();
     if (allFiles.length < 2) {
+      System.err.println("Input files are missing");
       printUsage();
-      throw new RuntimeException("Input files missing");
+      System.exit(1);
     }
+    if (allFiles.length == 2 && !params.checkInput()) {
+      printUsage();
+      System.exit(1);
+    }
+    if (allFiles.length > 2 && !params.checkInputOutput()) {
+      printUsage();
+      System.exit(1);
+    }
+    
     Path[] inputFiles = new Path[] {allFiles[0], allFiles[1]};
     JobConf conf = new JobConf(DistributedJoin.class);
     FileSystem fs = inputFiles[0].getFileSystem(conf);
