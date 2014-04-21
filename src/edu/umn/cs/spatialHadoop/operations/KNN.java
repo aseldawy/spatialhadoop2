@@ -298,10 +298,15 @@ public class KNN {
         knn.insert(t.clone());
       }
       
+      TextWithDistance[] knnAscendingOrder = new TextWithDistance[knn.size()];
+      int i = knnAscendingOrder.length;
       while (knn.size() > 0) {
         TextWithDistance t = knn.pop();
-        output.collect(dummy, t);
+        knnAscendingOrder[--i] = t;
       }
+      // Write results in the ascending order
+      for (TextWithDistance t : knnAscendingOrder)
+        output.collect(dummy, t);
     }
   }
   
@@ -315,7 +320,7 @@ public class KNN {
    * @return
    * @throws IOException
    */
-  public static <S extends Shape> long knnMapReduce(Path inputPath,
+  private static <S extends Shape> long knnMapReduce(Path inputPath,
       Path userOutputPath, final Point queryPoint, int k,
       OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, KNN.class);
@@ -471,7 +476,7 @@ public class KNN {
     return resultCount;
   }
   
-  public static<S extends Shape> long knnLocal(Path inFile, Path outPath,
+  private static<S extends Shape> long knnLocal(Path inFile, Path outPath,
       Point queryPoint, int k, OperationsParams params)
       throws IOException {
     JobConf job = new JobConf(params);
@@ -517,7 +522,7 @@ public class KNN {
       PrintStream ps = new PrintStream(outFs.create(outPath));
       for (int i = 0; i < knn.length; i++) {
         if (knn[i] != null) {
-          ps.println(knn[i].distance+"\t"+knn[i].text);
+          ps.println(knn[i].distance+","+knn[i].text);
           resultCount++;
         }
       }
@@ -629,7 +634,7 @@ public class KNN {
         public void run() {
           try {
             Point query_point = queryPoints[threads.indexOf(this)];
-            long result_count = knnMapReduce(inputFile, outputPath,
+            long result_count = knn(inputFile, outputPath,
                 query_point, k, params);
             results.add(result_count);
           } catch (IOException e) {
