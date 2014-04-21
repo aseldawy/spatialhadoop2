@@ -201,6 +201,55 @@ public class Repartition {
     
   }
   
+  public static class RepartitionOutputCommitter extends FileOutputCommitter {
+      @Override
+      public void commitJob(JobContext context) throws IOException {
+        super.commitJob(context);
+        
+        JobConf job = context.getJobConf();
+        Path outPath = GridOutputFormat.getOutputPath(job);
+        FileSystem outFs = outPath.getFileSystem(job);
+  
+        // Concatenate all master files into one file
+        FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
+          @Override
+          public boolean accept(Path path) {
+            return path.getName().contains("_master");
+          }
+        });
+        
+        if (resultFiles.length == 0) {
+          LOG.warn("No _master files were written by reducers");
+        } else {
+          String ext = resultFiles[0].getPath().getName()
+                .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
+          Path masterPath = new Path(outPath, "_master" + ext);
+          OutputStream destOut = outFs.create(masterPath);
+          byte[] buffer = new byte[4096];
+          for (FileStatus f : resultFiles) {
+            InputStream in = outFs.open(f.getPath());
+            int bytes_read;
+            do {
+              bytes_read = in.read(buffer);
+              if (bytes_read > 0)
+                destOut.write(buffer, 0, bytes_read);
+            } while (bytes_read > 0);
+            in.close();
+            outFs.delete(f.getPath(), false);
+          }
+          destOut.close();
+        }
+        
+        // Plot an image for the partitions used in file
+  /*      
+        CellInfo[] cellInfos = SpatialSite.getCells(job);
+        Path imagePath = new Path(outPath, "_partitions.png");
+        int imageSize = (int) (Math.sqrt(cellInfos.length) * 300);
+        Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, Color.BLACK, false, false, false);
+  */      
+      }
+    }
+
   /**
    * Calculates number of partitions required to index the given file
    * @param inFs
@@ -288,57 +337,73 @@ public class Repartition {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
     
-    repartitionMapReduce(inFile, outPath, stockShape, blockSize, cellInfos,
-        sindex, overwrite);
-  }
-  
-  public static class RepartitionOutputCommitter extends FileOutputCommitter {
-    @Override
-    public void commitJob(JobContext context) throws IOException {
-      super.commitJob(context);
-      
-      JobConf job = context.getJobConf();
-      Path outPath = GridOutputFormat.getOutputPath(job);
-      FileSystem outFs = outPath.getFileSystem(job);
+    JobConf job = new JobConf(params, Repartition.class);
 
-      // Concatenate all master files into one file
-      FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
-        @Override
-        public boolean accept(Path path) {
-          return path.getName().contains("_master");
-        }
-      });
-      
-      if (resultFiles.length == 0) {
-        LOG.warn("No _master files were written by reducers");
-      } else {
-        String ext = resultFiles[0].getPath().getName()
-              .substring(resultFiles[0].getPath().getName().lastIndexOf('.'));
-        Path masterPath = new Path(outPath, "_master" + ext);
-        OutputStream destOut = outFs.create(masterPath);
-        byte[] buffer = new byte[4096];
-        for (FileStatus f : resultFiles) {
-          InputStream in = outFs.open(f.getPath());
-          int bytes_read;
-          do {
-            bytes_read = in.read(buffer);
-            if (bytes_read > 0)
-              destOut.write(buffer, 0, bytes_read);
-          } while (bytes_read > 0);
-          in.close();
-          outFs.delete(f.getPath(), false);
-        }
-        destOut.close();
-      }
-      
-      // Plot an image for the partitions used in file
-/*      
-      CellInfo[] cellInfos = SpatialSite.getCells(job);
-      Path imagePath = new Path(outPath, "_partitions.png");
-      int imageSize = (int) (Math.sqrt(cellInfos.length) * 300);
-      Plot.plotLocal(masterPath, imagePath, new Partition(), imageSize, imageSize, Color.BLACK, false, false, false);
-*/      
+    job.setJobName("Repartition");
+    
+    // Overwrite output file
+    if (outFs.exists(outPath)) {
+      if (overwrite)
+        outFs.delete(outPath, true);
+      else
+        throw new RuntimeException("Output file '" + outPath
+            + "' already exists and overwrite flag is not set");
     }
+    
+    // Decide which map function to use depending on the type of global index
+    if (sindex.equals("rtree") || sindex.equals("str")) {
+      // Repartition without replication
+      job.setMapperClass(RepartitionMapNoReplication.class);
+    } else {
+      // Repartition with replication (grid and r+tree)
+      job.setMapperClass(RepartitionMap.class);
+    }
+    job.setMapOutputKeyClass(IntWritable.class);
+    job.setMapOutputValueClass(stockShape.getClass());
+    ShapeInputFormat.setInputPaths(job, inFile);
+    job.setInputFormat(ShapeInputFormat.class);
+    boolean pack = sindex.equals("r+tree") || sindex.equals("str+");
+    boolean expand = sindex.equals("rtree") || sindex.equals("str");
+    job.setBoolean(SpatialSite.PACK_CELLS, pack);
+    job.setBoolean(SpatialSite.EXPAND_CELLS, expand);
+
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
+
+    FileOutputFormat.setOutputPath(job,outPath);
+    if (sindex.equals("grid") || sindex.equals("str") || sindex.equals("str+")) {
+      job.setOutputFormat(GridOutputFormat.class);
+    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
+      // For now, the two types of local index are the same
+      job.setOutputFormat(RTreeGridOutputFormat.class);
+    } else {
+      throw new RuntimeException("Unsupported spatial index: "+sindex);
+    }
+    // Copy block size from source file if it's globally indexed
+    
+    if (blockSize == 0) {
+      GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inFile);
+      if (globalIndex != null) {
+        blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
+        LOG.info("Automatically setting block size to "+blockSize);
+      }
+    }
+
+    if (blockSize != 0)
+      job.setLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE, blockSize);
+    SpatialSite.setCells(job, cellInfos);
+    job.setBoolean(SpatialSite.OVERWRITE, overwrite);
+
+    // Set reduce function
+    job.setReducerClass(RepartitionReduce.class);
+    job.setNumReduceTasks(Math.max(1, Math.min(cellInfos.length,
+        (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
+
+    // Set output committer that combines output files together
+    job.setOutputCommitter(RepartitionOutputCommitter.class);
+    
+    JobClient.runJob(job);
+  
   }
   
   /**
@@ -350,7 +415,10 @@ public class Repartition {
    * @param rtree
    * @param overwrite
    * @throws IOException
+   * @deprecated this method is deprecated. Use the method
+   * {@link #repartitionMapReduce(Path, Path, OperationsParams)} instead.
    */
+  @Deprecated
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, CellInfo[] cellInfos, String sindex,
       boolean overwrite) throws IOException {

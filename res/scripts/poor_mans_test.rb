@@ -29,17 +29,53 @@ def generate_file(prefix, shape)
   filename
 end
 
+def index_file(filename, sindex)
+  shape = File.extname(filename)[1..-1]
+  indexed_filename = filename.dup; indexed_filename[-File.extname(filename).length, 0] = ".#{sindex}"
+  system_check "shadoop index #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite"
+  indexed_filename
+end
+
 def range_query(input, output, query, extra_args)
   shape = File.extname(input)[1..-1]
-  system_check "shadoop rangequery #{input} #{output} shape:#{shape} rect:#{query} #{extra_args}"
+  system_check "shadoop rangequery #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
 end
 
 def run_tests
-  test_file = generate_file('test', 'point')
-  range_query(test_file, 'results_rq', '40,990,1000,800', '-no-local')
-  results_rq = `hadoop fs -cat results_rq/part*`
-  range_query(test_file, 'results_local', '40,990,1000,800', '-local')
-  results_local = `hadoop fs -cat results_local`
+  # Try range query with heap files
+  heap_file = generate_file('test', 'point')
+  query = '40,990,1000,8000'
+  range_query(heap_file, 'results_mr', query, '-no-local')
+  results_rq = `hadoop fs -cat results_mr/part*`.lines.to_a.sort
+  range_query(heap_file, 'results_local', query, '-local')
+  results_local = `hadoop fs -cat results_local`.lines.to_a.sort
+  raise "Results of local and MapReduce implementations are different" if results_rq != results_local
+  
+  # Try with indexed files
+  %w(grid rtree r+tree str str+).each do |sindex|
+    indexed_file = index_file(heap_file, sindex)
+    
+    # Make sure the indexed file has the same number of records as the heap file
+    if sindex != 'rtree' && sindex != 'r+tree'
+      heap_file_count = `hadoop fs -cat #{heap_file}/part* | wc -l`
+      if sindex == 'str+'
+        indexed_file_count = `hadoop fs -cat #{indexed_file}/part* | sort | uniq | wc -l`
+      else
+        indexed_file_count = `hadoop fs -cat #{indexed_file}/part* | wc -l`
+      end
+      raise "#{sindex} index size #{indexed_file_count} should be equal to heap file size #{heap_file_count}" unless heap_file_count == indexed_file_count
+    end
+    
+    # Run range query on the heap file and make sure it gives the same result as before
+    range_query(indexed_file, "results_#{sindex}_mr", query, '-no-local')
+    results_indexed_local = `hadoop fs -cat results_#{sindex}_mr/part*`.lines.to_a.sort
+    raise "Results of #{sindex} file does not match the heap file" if results_indexed_local.size != results_local.size
+      
+    range_query(indexed_file, "results_#{sindex}_local", query, '-local')
+    results_indexed_mr = `hadoop fs -cat results_#{sindex}_local`.lines.to_a.sort
+    raise "Results of #{sindex} file does not match the heap file" if results_indexed_mr.size != results_local.size 
+  end
+  
 end
 
 # Main
