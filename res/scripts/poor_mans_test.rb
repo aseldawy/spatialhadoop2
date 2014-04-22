@@ -142,9 +142,11 @@ def test_spatial_join
   heap_file2 = generate_file('test2', 'rect')
 
   spatial_join('sjmr', heap_file1, heap_file2, 'sjmr_heap')
-  sjmr_heap_results = `shadoop fs -cat sjmr_heap/data* | sort`.lines.to_a
+  sjmr_heap_results = `shadoop fs -cat sjmr_heap/part* | sort`.lines.to_a
+  puts "Result size is #{sjmr_heap_results.size}"
+  return
   spatial_join('dj', heap_file1, heap_file2, 'bnlj')
-  bnlj_results = `shadoop fs -cat bnlj/data* | sort`.lines.to_a
+  bnlj_results = `shadoop fs -cat bnlj/part* | sort`.lines.to_a
   raise "Results of SJMR and BNLJ on heap files do not match" unless array_compare(sjmr_heap_results, bnlj_results)
 
   # Try with indexes (same index for both files)
@@ -154,12 +156,16 @@ def test_spatial_join
     
     # Run both SJMR and DJ on indexed files and check the result
     spatial_join('sjmr', indexed_file1, indexed_file2, "sjmr_#{sindex}")
-    sjmr_indexed_results = `shadoop fs -cat sjmr_#{sindex}/data* | sort`.lines.to_a
-    raise "Results of #{sindex} file does not match the heap file" if !array_compare(sjmr_indexed_results, sjmr_heap_results) 
+    sjmr_indexed_results = `shadoop fs -cat sjmr_#{sindex}/part* | sort`.lines.to_a
+    raise "SJMR results with #{sindex} file does not match the heap file" if !array_compare(sjmr_indexed_results, sjmr_heap_results) 
     
     spatial_join('dj', indexed_file1, indexed_file2, "dj_#{sindex}")
-    dj_indexed_results = `shadoop fs -cat dj_#{sindex}/data* | sort`.lines.to_a
-    raise "Results of #{sindex} file does not match the heap file" if !array_compare(dj_indexed_results, bnlj_results) 
+    dj_indexed_results = `shadoop fs -cat dj_#{sindex}/part* | sort`.lines.to_a
+    raise "Distributed Join results with #{sindex} file does not match the heap file" if !array_compare(dj_indexed_results, bnlj_results)
+    
+    # Try one indexed file and one non-indexed file
+    # spatial_join('sjmr', indexed_file1, heap_file2, "sjmr_#{sindex}_heap")
+    # sjmr_one_side_results = `shadoop fs -cat sjmr_#{sindex}_heap/par* | sort`.lines.to_a
   end
 
 end
