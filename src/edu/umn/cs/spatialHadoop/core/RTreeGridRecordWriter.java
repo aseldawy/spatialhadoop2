@@ -57,8 +57,8 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
    * @throws IOException
    */
   public RTreeGridRecordWriter(Path outDir, JobConf job, String prefix,
-      CellInfo[] cells, boolean pack, boolean expand) throws IOException {
-    super(outDir, job, prefix, cells, pack, expand);
+      CellInfo[] cells) throws IOException {
+    super(outDir, job, prefix, cells);
     LOG.info("Writing to RTrees");
 
     // Initialize the counters for each cell

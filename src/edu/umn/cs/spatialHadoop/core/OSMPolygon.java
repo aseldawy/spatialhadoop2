@@ -22,7 +22,6 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 
 import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.io.ParseException;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 

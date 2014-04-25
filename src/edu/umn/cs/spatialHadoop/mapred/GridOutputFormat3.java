@@ -35,9 +35,7 @@ public class GridOutputFormat3<S extends Shape> extends FileOutputFormat<Rectang
       throws IOException {
     // Get grid info
     CellInfo[] cellsInfo = SpatialSite.getCells(job);
-    boolean pack = job.getBoolean(SpatialSite.PACK_CELLS, false);
-    boolean expand = job.getBoolean(SpatialSite.EXPAND_CELLS, false);
-    GridRecordWriter3<S> writer = new GridRecordWriter3<S>(job, name, cellsInfo, pack, expand);
+    GridRecordWriter3<S> writer = new GridRecordWriter3<S>(job, name, cellsInfo);
     return writer;
   }
   

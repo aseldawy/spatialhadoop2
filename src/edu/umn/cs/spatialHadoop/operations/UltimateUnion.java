@@ -39,7 +39,6 @@ import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.TopologyException;
-import com.vividsolutions.jts.util.AssertionFailedException;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
@@ -72,15 +71,9 @@ public class UltimateUnion {
    * @return
    */
   private static Geometry combineIntoOneGeometryBroken(Collection<Geometry> collections) {
-    try {
-      GeometryFactory factory = new GeometryFactory();
-      GeometryCollection geometryCollection = (GeometryCollection)factory.buildGeometry(collections);
-      return geometryCollection.buffer(0);
-    } catch (AssertionFailedException e) {
-      e.printStackTrace();
-      System.err.println(collections);
-      throw e;
-    }
+    GeometryFactory factory = new GeometryFactory();
+    GeometryCollection geometryCollection = (GeometryCollection)factory.buildGeometry(collections);
+    return geometryCollection.buffer(0);
   }
   
   /**
@@ -130,7 +123,13 @@ public class UltimateUnion {
    * @return
    */
   public static Geometry partialUnion(Geometry shape, Collection<Geometry> overlappingShapes) {
-    Geometry partialResult = shape.intersection(combineIntoOneGeometrySafe(overlappingShapes));
+    Geometry partialResult;
+    try {
+      partialResult = shape.union(combineIntoOneGeometryBroken(overlappingShapes));
+    } catch (TopologyException e) {
+      LOG.warn("Error computing union");
+      partialResult = shape.union(combineIntoOneGeometrySafe(overlappingShapes));
+    }
     return shape.getBoundary().intersection(partialResult.getBoundary());
   }
   
@@ -163,7 +162,17 @@ public class UltimateUnion {
     }
   }
 
-  static class UltimateUnionMap<S extends OGCJTSShape> extends MapReduceBase implements
+  /**
+   * The map function for the UltimateUnion algorithm which works on a cell
+   * level. It takes all shapes in a rectangular cell, and returns the portion
+   * of the union that is contained in this cell. The output is of type
+   * MultiLineString and contains the lines that is part of the final result
+   * and contained in the given cell.
+   * @author Ahmed Eldawy
+   *
+   * @param <S>
+   */
+  static class UltimateUnionMapInCell<S extends OGCJTSShape> extends MapReduceBase implements
       Mapper<Rectangle, ArrayWritable, NullWritable, Shape>{
 
     @Override
@@ -178,9 +187,47 @@ public class UltimateUnion {
       if (result != null)
         output.collect(NullWritable.get(), new OGCJTSShape(result));
     }
+  }
+  
+  /**
+   * The map function of the UltimateUnion algorithm which works on a shape
+   * level. It takes a set of shapes, and performs a self join on these shapes
+   * to relate each shape to all overlapping shapes. Later in the reduce
+   * function, the union of each shape with all overlapping shapes is computed
+   * and the parts that contribute to final answer is computed.
+   * @author Ahmed Eldawy
+   *
+   */
+  static class UltimateUnionMapPerShape extends MapReduceBase
+      implements Mapper<Rectangle, ArrayWritable, Shape, Shape> {
+    
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+    }
+
+    @Override
+    public void map(Rectangle key, ArrayWritable values,
+        OutputCollector<Shape, Shape> output, Reporter reporter)
+        throws IOException {
+      // Perform a self spatial join to relate each shape with all overlapping
+      // shapes. Notice that we run a filter-only join for efficiency which
+      // might relate a shape to another disjoint shape. These extra shapes
+      // will be handled and avoided in the reduce step.
+      Shape[] shapes = (Shape[]) values.get();
+      SpatialAlgorithms.SelfJoin_planeSweep(shapes, false, output);
+    }
     
   }
   
+  /**
+   * The reduce function of the UltimateUnion algorithm which runs on a shape
+   * level. It takes a shape with all overlapping shapes and performs a polygon
+   * union algorithm over all these polygons. However, instead of returning the
+   * union, it returns only the parts that overlap the shape.
+   * @author Ahmed Eldawy
+   *
+   */
   static class UltimateUnionReducer extends MapReduceBase implements
       Reducer<OGCJTSShape, OGCJTSShape, NullWritable, OGCJTSShape> {
 
@@ -200,20 +247,31 @@ public class UltimateUnion {
   }
   
   private static void ultimateUnionMapReduce(Path input, Path output,
-      Shape shape) throws IOException {
-    JobConf job = new JobConf(Union.class);
+      OperationsParams params) throws IOException {
+    JobConf job = new JobConf(params, UltimateUnion.class);
     job.setJobName("UltimateUnion");
 
-    // Set map and reduce
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-//    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
-    job.setNumReduceTasks(0);
-
-    job.setMapperClass(UltimateUnionMap.class);
-    job.setReducerClass(UltimateUnionReducer.class);
-
-    job.setMapOutputKeyClass(shape.getClass());
-    job.setMapOutputValueClass(shape.getClass());
+    String method = params.get("method", "cell").toLowerCase();
+    Shape shape = params.getShape("shape");
+    if (method.equals("cell")) {
+      // Set map and reduce
+      job.setNumReduceTasks(0);
+      
+      job.setMapperClass(UltimateUnionMapInCell.class);
+      job.setMapOutputKeyClass(NullWritable.class);
+      job.setMapOutputValueClass(shape.getClass());
+    } else if (method.equals("shape")) {
+      // Set map and reduce
+      ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
+      
+      job.setMapperClass(UltimateUnionMapPerShape.class);
+      job.setReducerClass(UltimateUnionReducer.class);
+      job.setMapOutputKeyClass(shape.getClass());
+      job.setMapOutputValueClass(shape.getClass());
+    } else {
+      throw new RuntimeException("Unknown partition method: '"+method+"'");
+    }
 
     // Set input and output
     job.setInputFormat(ShapeArrayInputFormat.class);
@@ -229,8 +287,8 @@ public class UltimateUnion {
     JobClient.runJob(job);
   }
 
-  public static void ultimateUnion(Path input, Path output, Shape shape) throws IOException {
-    ultimateUnionMapReduce(input, output, shape);
+  public static void ultimateUnion(Path input, Path output, OperationsParams params) throws IOException {
+    ultimateUnionMapReduce(input, output, params);
   }
 
   private static void printUsage() {
@@ -258,7 +316,10 @@ public class UltimateUnion {
       LOG.error("Given shape must be a subclass of "+OGCJTSShape.class);
       return;
     }
-    
-    ultimateUnion(input, output, shape);
+
+    long t1 = System.currentTimeMillis();
+    ultimateUnion(input, output, params);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time: "+(t2-t1)+" millis");
   }
 }

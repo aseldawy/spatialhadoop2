@@ -58,11 +58,6 @@ public class OGCJTSShape implements Shape {
   
   private static final Log LOG = LogFactory.getLog(OGCJTSShape.class);
   
-  private static final byte[][] ShapeNames = { "LINESTRING".getBytes(),
-      "POINT".getBytes(), "POLYGON".getBytes(), "MULTIPOINT".getBytes(),
-      "MULTILINESTRING".getBytes(), "MULTIPOLYGON".getBytes(),
-      "GEOMETRYCOLLECTION".getBytes() };
-  
   private final WKTReader wktReader = new WKTReader();
   private final WKBWriter wkbWriter = new WKBWriter();
   private final WKBReader wkbReader = new WKBReader();

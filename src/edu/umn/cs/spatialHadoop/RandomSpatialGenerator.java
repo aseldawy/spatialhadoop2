@@ -150,6 +150,7 @@ public class RandomSpatialGenerator {
    * @throws IOException 
    */
   private static void generateFileLocal(Path outFile, OperationsParams params) throws IOException {
+    JobConf job = new JobConf(params, RandomSpatialGenerator.class);
     FileSystem outFS = outFile.getFileSystem(params);
     long blocksize = outFS.getDefaultBlockSize(outFile);
     String sindex = params.get("sindex");
@@ -161,7 +162,7 @@ public class RandomSpatialGenerator {
     if (sindex == null) {
       cells = new CellInfo[] {new CellInfo(1, mbr)};
     } else if (sindex.equals("grid")) {
-      int num_partitions = Repartition.calculateNumberOfPartitions(new Configuration(),
+      int num_partitions = Repartition.calculateNumberOfPartitions(params,
           totalSize, outFS, outFile, blocksize);
 
       GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
@@ -175,7 +176,7 @@ public class RandomSpatialGenerator {
 
     ShapeRecordWriter<Shape> writer;
     if (sindex == null || sindex.equals("grid")) {
-      writer = new GridRecordWriter<Shape>(outFile, null, null, cells, false, false);
+      writer = new GridRecordWriter<Shape>(outFile, job, null, cells);
     } else {
       throw new RuntimeException("Unupoorted spatial idnex: "+sindex);
     }

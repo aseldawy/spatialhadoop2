@@ -88,7 +88,7 @@ public class DistributedJoin {
         @Override
         public void collect(Partition r, Partition s) {
           Rectangle intersection = r.getIntersection(s);
-          if (intersection.getWidth() * intersection.getHeight() > 0) {
+          if (intersection != null && intersection.getWidth() * intersection.getHeight() > 0) {
             output.collect(r, s);
           } else {
             LOG.info("Skipping touching partitions "+r+", "+s);
@@ -104,7 +104,7 @@ public class DistributedJoin {
     public void map(Rectangle key, ArrayWritable value,
         final OutputCollector<Shape, Shape> output, Reporter reporter) throws IOException {
       Shape[] objects = (Shape[])value.get();
-      SpatialAlgorithms.SelfJoin_planeSweep(objects, output);
+      SpatialAlgorithms.SelfJoin_planeSweep(objects, true, output);
     }
   }
 
@@ -687,7 +687,7 @@ public class DistributedJoin {
       ArrayWritable value = reader.createValue();
       if (reader.next(key, value)) {
         Shape[] writables = (Shape[]) value.get();
-        resultSize += SpatialAlgorithms.SelfJoin_planeSweep(writables, new OutputCollector<Shape, Shape>() {
+        resultSize += SpatialAlgorithms.SelfJoin_planeSweep(writables, true, new OutputCollector<Shape, Shape>() {
           @Override
           public void collect(Shape r, Shape s) throws IOException {
             writer.print(r.toText(temp));

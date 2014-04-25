@@ -141,7 +141,7 @@ public class SJMR {
     public void configure(JobConf job) {
       super.configure(job);
       // Retrieve grid to use for partitioning
-      gridInfo = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+      gridInfo = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
       // Create a stock shape for deserializing lines
       shape = SpatialSite.createStockShape(job);
       // Get input paths to determine file index for every record
@@ -149,7 +149,7 @@ public class SJMR {
     }
 
     @Override
-    public void map(Rectangle dummy, Text value,
+    public void map(Rectangle cellMbr, Text value,
         OutputCollector<IntWritable, IndexedText> output,
         Reporter reporter) throws IOException {
       if (reporter.getInputSplit() != currentSplit) {
@@ -161,19 +161,24 @@ public class SJMR {
       	}
       	currentSplit = reporter.getInputSplit();
       }
+      
 
       Text tempText = new Text(value);
       outputValue.text = value;
       shape.fromText(tempText);
-      Rectangle shapeMBR = shape.getMBR();
-      if (shapeMBR == null)
-        return;
-      
-      java.awt.Rectangle cells = gridInfo.getOverlappingCells(shapeMBR);
-      for (int col = cells.x; col < cells.x + cells.width; col++) {
-        for (int row = cells.y; row < cells.y + cells.height; row++) {
-          cellId.set(row * gridInfo.columns + col + 1);
-          output.collect(cellId, outputValue);
+      Rectangle shape_mbr = shape.getMBR();
+      // Do a reference point technique to avoid processing the same record twice
+      if (!cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
+        Rectangle shapeMBR = shape.getMBR();
+        if (shapeMBR == null)
+          return;
+
+        java.awt.Rectangle cells = gridInfo.getOverlappingCells(shapeMBR);
+        for (int col = cells.x; col < cells.x + cells.width; col++) {
+          for (int row = cells.y; row < cells.y + cells.height; row++) {
+            cellId.set(row * gridInfo.columns + col + 1);
+            output.collect(cellId, outputValue);
+          }
         }
       }
     }
@@ -187,7 +192,7 @@ public class SJMR {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      grid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+      grid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
     }
 
     @Override
@@ -203,7 +208,7 @@ public class SJMR {
         shapes.add((S) s.clone());
       }
       
-      SpatialAlgorithms.SelfJoin_planeSweep(shapes.toArray(new Shape[shapes.size()]), new OutputCollector<Shape, Shape>() {
+      SpatialAlgorithms.SelfJoin_planeSweep(shapes.toArray(new Shape[shapes.size()]), true, new OutputCollector<Shape, Shape>() {
 
         @Override
         public void collect(Shape r, Shape s) throws IOException {
@@ -234,7 +239,7 @@ public class SJMR {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      grid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+      grid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
       shape = (S) SpatialSite.createStockShape(job);
       inputFileCount = FileInputFormat.getInputPaths(job).length;
     }

@@ -17,6 +17,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -113,6 +115,43 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   private boolean expand;
   private int counter;
   
+  /**Type of index being constructed*/
+  private String sindex;
+
+  /**
+   * A list of indexes the can be optimized by packing each partition to remove
+   * empty space
+   */
+  public static final Set<String> PackedIndexes;
+  
+  /**
+   * Indexes where an object might be replicated to multiple partitions.
+   */
+  public static final Set<String> ReplicatedIndexes;
+
+  /**
+   * A list of indexes in which each partition has to be expanded to fully
+   * contain all the records inside it
+   */
+  public static final Set<String> ExpandedIndexes;
+  
+  static {
+    PackedIndexes = new HashSet<String>();
+    PackedIndexes.add("heap");
+    PackedIndexes.add("rtree");
+    PackedIndexes.add("r+tree");
+    PackedIndexes.add("str");
+    PackedIndexes.add("str+");
+    ExpandedIndexes = new HashSet<String>();
+    ExpandedIndexes.add("heap");
+    ExpandedIndexes.add("rtree");
+    ExpandedIndexes.add("str");
+    ReplicatedIndexes = new HashSet<String>();
+    ReplicatedIndexes.add("grid");
+    ReplicatedIndexes.add("r+tree");
+    ReplicatedIndexes.add("str+");
+  }
+  
   /**
    * Creates a new GridRecordWriter that will write all data files to the
    * given directory
@@ -124,9 +163,12 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @throws IOException
    */
   public GridRecordWriter(Path outDir, JobConf job, String prefix,
-      CellInfo[] cells, boolean pack, boolean expand) throws IOException {
-    this.pack = pack;
-    this.expand = expand;
+      CellInfo[] cells) throws IOException {
+    if (job != null) {
+      this.sindex = job.get("sindex", "heap");
+      this.pack = PackedIndexes.contains(sindex);
+      this.expand = ExpandedIndexes.contains(sindex);
+    }
     this.prefix = prefix;
     this.fileSystem = outDir == null ? 
       FileOutputFormat.getOutputPath(job).getFileSystem(job):
@@ -165,23 +207,15 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
           -Double.MAX_VALUE, -Double.MAX_VALUE);
     }
 
-    this.blockSize = job == null ? fileSystem.getDefaultBlockSize(this.outDir) :
-      job.getLong(SpatialSite.LOCAL_INDEX_BLOCK_SIZE,
-            fileSystem.getDefaultBlockSize(this.outDir));
+    this.blockSize = fileSystem.getDefaultBlockSize(this.outDir);
     
     closingThreads = new ArrayList<Thread>();
     text = new Text();
   }
 
   protected Path getMasterFilePath() throws IOException {
-    String extension;
-    if (pack)
-      extension = ".r+tree";
-    else if (expand)
-      extension = ".rtree";
-    else
-      extension = ".grid";
-    return getFilePath("_master"+extension);
+    String extension = sindex;
+    return getFilePath("_master."+extension);
   }
   
   /**
@@ -198,10 +232,6 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       FileOutputFormat.getTaskOutputPath(jobConf, filename);
   }
 
-  public void setBlockSize(long _block_size) {
-    this.blockSize = _block_size;
-  }
-  
   public void setStockObject(S stockObject) {
     this.stockObject = stockObject;
   }
@@ -376,7 +406,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     CellInfo cell = cells[cellIndex];
     if (expand)
       cell.expand(cellsMbr[cellIndex]);
-    else if (pack)
+    if (pack)
       cell = new CellInfo(cell.cellId, cell.getIntersection(cellsMbr[cellIndex]));
 
     closeCellBackground(intermediateCellPath[cellIndex],

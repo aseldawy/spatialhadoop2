@@ -7,9 +7,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 import ncsa.hdf.object.Attribute;
 import ncsa.hdf.object.Group;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 /**
  * A class that contains meta information about a NASA dataset extracted from

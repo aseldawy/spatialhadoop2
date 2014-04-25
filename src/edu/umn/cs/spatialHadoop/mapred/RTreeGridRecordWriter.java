@@ -26,8 +26,8 @@ public class RTreeGridRecordWriter<S extends Shape>
     extends edu.umn.cs.spatialHadoop.core.RTreeGridRecordWriter<S>
     implements RecordWriter<IntWritable, S> {
 
-  public RTreeGridRecordWriter(JobConf job, String prefix, CellInfo[] cells, boolean pack, boolean expand) throws IOException {
-    super(null, job, prefix, cells, pack, expand);
+  public RTreeGridRecordWriter(JobConf job, String prefix, CellInfo[] cells) throws IOException {
+    super(null, job, prefix, cells);
   }
   
   @Override

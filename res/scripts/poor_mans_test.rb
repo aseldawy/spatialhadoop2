@@ -23,16 +23,18 @@ def system_check(cmd)
   raise "Error running '#{cmd}'" unless success 
 end
 
+ExtraConfigParams = "-D dfs.block.size=#{64*1024}"
+
 def generate_file(prefix, shape)
   filename = "#{prefix}.#{shape}"
-  system_check "shadoop generate shape:#{shape} '#{filename}' size:200.mb mbr:0,0,1000000,1000000 -overwrite"
+  system_check "shadoop generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:200.kb mbr:0,0,10000,10000 -overwrite"
   filename
 end
 
 def index_file(filename, sindex)
   shape = File.extname(filename)[1..-1]
   indexed_filename = filename.dup; indexed_filename[-File.extname(filename).length, 0] = ".#{sindex}"
-  system_check "shadoop index #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite"
+  system_check "shadoop index #{ExtraConfigParams} #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite"
   indexed_filename
 end
 
@@ -42,13 +44,15 @@ def array_compare(ar1, ar2)
   values1 = ar1.map{|x| x.split(/[\s,]+/)}.flatten
   values2 = ar2.map{|x| x.split(/[\s,]+/)}.flatten
   unless values1.size == values2.size
-    raise "Non-equal sizes #{values1.size} != #{values2.size}, #{ar1.size} != #{ar2.size}"
+    $stderr.puts "Non-equal sizes #{values1.size} != #{values2.size}, #{ar1.size} != #{ar2.size}"
+    return false
   end
   values1.each_with_index do |v1, index|
     x1 = v1.to_f
     x2 = values2[index].to_f
     if ((x2 - x1).abs / [x1, x2].min) > TOO_SMALL
-      raise "Error! Different values #{v1}, #{values2[index]}" 
+      $stderr.puts "Error! Different values #{v1}, #{values2[index]}" 
+      return false
     end
   end
   return true
@@ -56,14 +60,14 @@ end
 
 def range_query(input, output, query, extra_args)
   shape = File.extname(input)[1..-1]
-  system_check "shadoop rangequery #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
+  system_check "shadoop rangequery #{ExtraConfigParams} #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
 end
 
 def test_range_query
   %w(point rect).each do |shape|
     # Try range query with heap files
     heap_file = generate_file('test', shape)
-    query = '40,990,1000,8000'
+    query = '40,990,100,800'
     range_query(heap_file, 'results_mr', query, '-no-local')
     results_heap_mr = `hadoop fs -cat results_mr/part* | sort`.lines.to_a
     range_query(heap_file, 'results_local', query, '-local')
@@ -88,11 +92,11 @@ def test_range_query
       # Run range query on the heap file and make sure it gives the same result as before
       range_query(indexed_file, "results_#{sindex}_mr", query, '-no-local')
       results_indexed_local = `hadoop fs -cat results_#{sindex}_mr/part* | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_local.size, results_local)
+      raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_local, results_heap_local)
         
       range_query(indexed_file, "results_#{sindex}_local", query, '-local')
       results_indexed_mr = `hadoop fs -cat results_#{sindex}_local | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_mr, results_local)
+      raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_mr, results_heap_local)
     end
   end
 end
@@ -100,13 +104,13 @@ end
 
 def knn_query(input, output, point, k, extra_args="")
   shape = File.extname(input)[1..-1]
-  system_check "shadoop knn #{input} #{output} shape:#{shape} point:#{point} k:#{k} #{extra_args} -overwrite"
+  system_check "shadoop knn #{ExtraConfigParams} #{input} #{output} shape:#{shape} point:#{point} k:#{k} #{extra_args} -overwrite"
 end
 
 def test_knn_query
   shape = 'point'
   k = 1000
-  point = "70000,24532"
+  point = "700,232"
 
   # Try with heap files
   heap_file = generate_file('test', shape)
@@ -133,7 +137,7 @@ end
 
 def spatial_join(method, file1, file2, output, extra_args = '')
   shape = File.extname(file1)[1..-1]
-  system_check "shadoop #{method} #{file1} #{file2} #{output} shape:#{shape} #{extra_args} -overwrite"
+  system_check "shadoop #{method} #{ExtraConfigParams} #{file1} #{file2} #{output} shape:#{shape} #{extra_args} -overwrite"
 end
 
 def test_spatial_join
@@ -142,11 +146,9 @@ def test_spatial_join
   heap_file2 = generate_file('test2', 'rect')
 
   spatial_join('sjmr', heap_file1, heap_file2, 'sjmr_heap')
-  sjmr_heap_results = `shadoop fs -cat sjmr_heap/part* | sort`.lines.to_a
-  puts "Result size is #{sjmr_heap_results.size}"
-  return
+  sjmr_heap_results = `hadoop fs -cat sjmr_heap/part* | sort`.lines.to_a
   spatial_join('dj', heap_file1, heap_file2, 'bnlj')
-  bnlj_results = `shadoop fs -cat bnlj/part* | sort`.lines.to_a
+  bnlj_results = `hadoop fs -cat bnlj/part* | sort`.lines.to_a
   raise "Results of SJMR and BNLJ on heap files do not match" unless array_compare(sjmr_heap_results, bnlj_results)
 
   # Try with indexes (same index for both files)
@@ -156,23 +158,23 @@ def test_spatial_join
     
     # Run both SJMR and DJ on indexed files and check the result
     spatial_join('sjmr', indexed_file1, indexed_file2, "sjmr_#{sindex}")
-    sjmr_indexed_results = `shadoop fs -cat sjmr_#{sindex}/part* | sort`.lines.to_a
+    sjmr_indexed_results = `hadoop fs -cat sjmr_#{sindex}/part* | sort`.lines.to_a
     raise "SJMR results with #{sindex} file does not match the heap file" if !array_compare(sjmr_indexed_results, sjmr_heap_results) 
     
     spatial_join('dj', indexed_file1, indexed_file2, "dj_#{sindex}")
-    dj_indexed_results = `shadoop fs -cat dj_#{sindex}/part* | sort`.lines.to_a
+    dj_indexed_results = `hadoop fs -cat dj_#{sindex}/part* | sort`.lines.to_a
     raise "Distributed Join results with #{sindex} file does not match the heap file" if !array_compare(dj_indexed_results, bnlj_results)
     
     # Try one indexed file and one non-indexed file
     # spatial_join('sjmr', indexed_file1, heap_file2, "sjmr_#{sindex}_heap")
-    # sjmr_one_side_results = `shadoop fs -cat sjmr_#{sindex}_heap/par* | sort`.lines.to_a
+    # sjmr_one_side_results = `hadoop fs -cat sjmr_#{sindex}_heap/par* | sort`.lines.to_a
   end
 
 end
 
 # Main
 if $0 == __FILE__
-  test_range_query
-  test_knn
+  #test_range_query
+  #test_knn
   test_spatial_join
 end

@@ -112,6 +112,6 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
   }
   
   public static Rectangle getFileMBR(Configuration conf) {
-    return (Rectangle) SpatialSite.getShape(conf, InputFileMBR);
+    return (Rectangle) OperationsParams.getShape(conf, InputFileMBR);
   }
 }

@@ -35,9 +35,7 @@ public class GridOutputFormat<S extends Shape> extends FileOutputFormat<IntWrita
       throws IOException {
     // Get grid info
     CellInfo[] cellsInfo = SpatialSite.getCells(job);
-    boolean pack = job.getBoolean(SpatialSite.PACK_CELLS, false);
-    boolean expand = job.getBoolean(SpatialSite.EXPAND_CELLS, false);
-    GridRecordWriter<S> writer = new GridRecordWriter<S>(job, name, cellsInfo, pack, expand);
+    GridRecordWriter<S> writer = new GridRecordWriter<S>(job, name, cellsInfo);
     return writer;
   }
   

@@ -50,9 +50,9 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.GenericOptionsParser;
 
-import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
@@ -104,7 +104,7 @@ public class Plot {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      partitionGrid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+      partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
       cellNumber = new IntWritable();
       queryRange = OperationsParams.getShape(job, "rect");
     }
@@ -150,7 +150,7 @@ public class Plot {
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
-      this.partitionGrid = (GridInfo) SpatialSite.getShape(job, PartitionGrid);
+      this.partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
       this.fileMbr = ImageOutputFormat.getFileMBR(job);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);

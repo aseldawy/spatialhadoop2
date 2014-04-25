@@ -71,17 +71,9 @@ public class SpatialSite {
   /**The class used to filter blocks before starting map tasks*/
   public static final String FilterClass = "spatialHadoop.mapreduce.filter";
   
-  /**Maximum size of an RTree.*/
-  public static final String LOCAL_INDEX_BLOCK_SIZE =
-      "spatialHadoop.storage.LocalIndexBlockSize";
-  
   /**Whether to build the RTree in fast mode or slow (memory saving) mode.*/
   public static final String RTREE_BUILD_MODE =
       "spatialHadoop.storage.RTreeBuildMode";
-  
-  /**Configuration line to set the default shape class to use if not set*/
-  @Deprecated
-  public static final String ShapeClass = "shape";
   
   /**Configuration line name for replication overhead*/
   public static final String INDEXING_OVERHEAD =
@@ -92,9 +84,6 @@ public class SpatialSite {
   
   /**Ratio of the sample to read from files to build a global R-tree*/
   public static final String SAMPLE_SIZE = "spatialHadoop.storage.SampleSize";
-  
-  /**Inform index writers to pack cells around its contents upon write*/
-  public static final String PACK_CELLS = "spatialHadoop.storage.pack";
   
   /**
    * A marker put in the beginning of each block to indicate that this block
@@ -123,9 +112,6 @@ public class SpatialSite {
    */
   public static final String MaxBytesInOneRead =
       "spatialHadoop.mapred.MaxBytesPerRead";
-
-  /**Expand global index partitions to cover all of its contents*/
-  public static final String EXPAND_CELLS = "spatialHadoop.storage.expand";
 
   public static byte[] RTreeFileMarkerB;
   
@@ -219,7 +205,7 @@ public class SpatialSite {
    * @param shape
    */
   public static void setShape(Configuration conf, String param, Shape shape) {
-    String str = shape.getClass().getName() + ",";
+    String str = shape.getClass().getName() + OperationsParams.ShapeValueSeparator;
     str += shape.toText(new Text()).toString();
     conf.set(param, str);
   }
@@ -235,25 +221,7 @@ public class SpatialSite {
    */
   @Deprecated
   public static Shape getShape(Configuration conf, String param) {
-    String str = conf.get(param);
-    if (str == null)
-      return null;
-    String[] parts = str.split(",", 2);
-    String shapeClassName = parts[0];
-    Shape shape = null;
-    try {
-      Class<? extends Shape> shapeClass =
-          Class.forName(shapeClassName).asSubclass(Shape.class);
-      shape = shapeClass.newInstance();
-      shape.fromText(new Text(parts[1]));
-    } catch (ClassNotFoundException e) {
-      e.printStackTrace();
-    } catch (InstantiationException e) {
-      e.printStackTrace();
-    } catch (IllegalAccessException e) {
-      e.printStackTrace();
-    }
-    return shape;
+    return OperationsParams.getShape(conf, param);
   }
 
   /**
@@ -299,8 +267,10 @@ public class SpatialSite {
         }
         GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
         globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
-        globalIndex.setCompact(masterFile.getPath().getName().endsWith("rtree") || masterFile.getPath().getName().endsWith("r+tree"));
-        globalIndex.setReplicated(masterFile.getPath().getName().endsWith("r+tree") || masterFile.getPath().getName().endsWith("grid"));
+        String extension = masterFile.getPath().getName();
+        extension = extension.substring(extension.lastIndexOf('.') + 1);
+        globalIndex.setCompact(GridRecordWriter.PackedIndexes.contains(extension));
+        globalIndex.setReplicated(GridRecordWriter.ReplicatedIndexes.contains(extension));
         return globalIndex;
       } else if (nasaFiles > allFiles.length / 2) {
         // A folder that contains HDF files

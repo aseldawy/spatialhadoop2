@@ -366,56 +366,61 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
       // Now we have our data sorted in the required order. Start building
       // the tree.
       // Store the offset of each leaf node in the tree
-      FSDataOutputStream fakeOut =
-          new FSDataOutputStream(new java.io.OutputStream() {
-            // Null output stream
-            @Override
-            public void write(int b) throws IOException {
-              // Do nothing
-            }
-            @Override
-            public void write(byte[] b, int off, int len) throws IOException {
-              // Do nothing
-            }
-            @Override
-            public void write(byte[] b) throws IOException {
-              // Do nothing
-            }
-          }, null, TreeHeaderSize + nodes.size() * NodeSize);
-      for (int i_leaf = nonLeafNodeCount, i=0; i_leaf < nodes.size(); i_leaf++) {
-        nodes.elementAt(i_leaf).offsetOfFirstElement = (int)fakeOut.getPos();
-        if (i != nodes.elementAt(i_leaf).index1) throw new RuntimeException();
-        double x1, y1, x2, y2;
-        
-        // Initialize MBR to first object
-        int eol = skipToEOL(element_bytes, offsets[i]);
-        fakeOut.write(element_bytes, offsets[i],
-            eol - offsets[i]);
-        line.set(element_bytes, offsets[i], eol - offsets[i] - 1);
-        stockObject.fromText(line);
-        Rectangle mbr = stockObject.getMBR();
-        x1 = mbr.x1;
-        y1 = mbr.y1;
-        x2 = mbr.x2;
-        y2 = mbr.y2;
-        i++;
-
-        while (i < nodes.elementAt(i_leaf).index2) {
-          eol = skipToEOL(element_bytes, offsets[i]);
+      FSDataOutputStream fakeOut = null;
+      try {
+        fakeOut = new FSDataOutputStream(new java.io.OutputStream() {
+          // Null output stream
+          @Override
+          public void write(int b) throws IOException {
+            // Do nothing
+          }
+          @Override
+          public void write(byte[] b, int off, int len) throws IOException {
+            // Do nothing
+          }
+          @Override
+          public void write(byte[] b) throws IOException {
+            // Do nothing
+          }
+        }, null, TreeHeaderSize + nodes.size() * NodeSize);
+        for (int i_leaf = nonLeafNodeCount, i=0; i_leaf < nodes.size(); i_leaf++) {
+          nodes.elementAt(i_leaf).offsetOfFirstElement = (int)fakeOut.getPos();
+          if (i != nodes.elementAt(i_leaf).index1) throw new RuntimeException();
+          double x1, y1, x2, y2;
+          
+          // Initialize MBR to first object
+          int eol = skipToEOL(element_bytes, offsets[i]);
           fakeOut.write(element_bytes, offsets[i],
               eol - offsets[i]);
           line.set(element_bytes, offsets[i], eol - offsets[i] - 1);
           stockObject.fromText(line);
-          mbr = stockObject.getMBR();
-          if (mbr.x1 < x1) x1 = mbr.x1;
-          if (mbr.y1 < y1) y1 = mbr.y1;
-          if (mbr.x2 > x2) x2 = mbr.x2;
-          if (mbr.y2 > y2) y2 = mbr.y2;
+          Rectangle mbr = stockObject.getMBR();
+          x1 = mbr.x1;
+          y1 = mbr.y1;
+          x2 = mbr.x2;
+          y2 = mbr.y2;
           i++;
+          
+          while (i < nodes.elementAt(i_leaf).index2) {
+            eol = skipToEOL(element_bytes, offsets[i]);
+            fakeOut.write(element_bytes, offsets[i],
+                eol - offsets[i]);
+            line.set(element_bytes, offsets[i], eol - offsets[i] - 1);
+            stockObject.fromText(line);
+            mbr = stockObject.getMBR();
+            if (mbr.x1 < x1) x1 = mbr.x1;
+            if (mbr.y1 < y1) y1 = mbr.y1;
+            if (mbr.x2 > x2) x2 = mbr.x2;
+            if (mbr.y2 > y2) y2 = mbr.y2;
+            i++;
+          }
+          nodes.elementAt(i_leaf).set(x1, y1, x2, y2);
         }
-        nodes.elementAt(i_leaf).set(x1, y1, x2, y2);
+        
+      } finally {
+        if (fakeOut != null)
+          fakeOut.close();
       }
-      fakeOut.close(); fakeOut = null;
       
       // Calculate MBR and offsetOfFirstElement for non-leaves
       for (int i_node = nonLeafNodeCount-1; i_node >= 0; i_node--) {

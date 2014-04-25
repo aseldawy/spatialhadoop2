@@ -36,8 +36,8 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 public class GridRecordWriter3<S extends Shape>
 extends edu.umn.cs.spatialHadoop.core.GridRecordWriter<S> implements RecordWriter<Rectangle, S> {
 
-  public GridRecordWriter3(JobConf job, String name, CellInfo[] cells, boolean pack, boolean expand) throws IOException {
-    super(null, job, name, cells, pack, expand);
+  public GridRecordWriter3(JobConf job, String name, CellInfo[] cells) throws IOException {
+    super(null, job, name, cells);
   }
   
   @Override

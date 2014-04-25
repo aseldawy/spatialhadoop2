@@ -104,6 +104,7 @@ public abstract class BinarySpatialInputFormat<K extends Writable, V extends Wri
       for (int i_file = 0; i_file < inputFiles.length; i_file++) {
         FileSystem fs = inputFiles[i_file].getFileSystem(job);
         FileStatus fileStatus = fs.getFileStatus(inputFiles[i_file]);
+        // XXX handle the case where the inputFile points to a directory
         fileBlockLocations[i_file] = fs.getFileBlockLocations(fileStatus, 0,
             fileStatus.getLen());
       }

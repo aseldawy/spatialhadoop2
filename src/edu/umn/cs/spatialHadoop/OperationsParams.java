@@ -46,6 +46,9 @@ import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
  */
 public class OperationsParams extends Configuration {
   private static final Log LOG = LogFactory.getLog(OperationsParams.class);
+  
+  /**Separator between shape type and value*/
+  public static final String ShapeValueSeparator = "//";
 
   /**All detected input paths*/
   private Path[] allPaths;
@@ -285,28 +288,35 @@ public class OperationsParams extends Configuration {
     if (shapeType == null)
       return defaultValue;
     
-    shapeType = shapeType.toLowerCase();
+    int separatorIndex = shapeType.indexOf(ShapeValueSeparator);
+    Text shapeValue = null;
+    if (separatorIndex != -1) {
+      shapeValue = new Text(shapeType.substring(separatorIndex + ShapeValueSeparator.length()));
+      shapeType = shapeType.substring(0, separatorIndex);
+    }
+    
+    String shapeTypeI = shapeType.toLowerCase();
     Shape shape = null;
     
-    if (shapeType.startsWith("rect")) {
+    if (shapeTypeI.startsWith("rect")) {
       shape = new Rectangle();
-    } else if (shapeType.startsWith("point")) {
+    } else if (shapeTypeI.startsWith("point")) {
       shape = new Point();
-    } else if (shapeType.startsWith("tiger")) {
+    } else if (shapeTypeI.startsWith("tiger")) {
       shape = new TigerShape();
-    } else if (shapeType.startsWith("osm")) {
+    } else if (shapeTypeI.startsWith("osm")) {
       shape = new OSMPolygon();
-    } else if (shapeType.startsWith("poly")) {
+    } else if (shapeTypeI.startsWith("poly")) {
       shape = new Polygon();
-    } else if (shapeType.startsWith("ogc")) {
+    } else if (shapeTypeI.startsWith("ogc")) {
       shape = new OGCESRIShape();
-    } else if (shapeType.startsWith("nasa")) {
+    } else if (shapeTypeI.startsWith("nasa")) {
       shape = new NASAPoint();
     } else {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
         Class<? extends Shape> shapeClass =
-            conf.getClassByName(conf.get(key)).asSubclass(Shape.class);
+            conf.getClassByName(shapeType).asSubclass(Shape.class);
         shape = shapeClass.newInstance();
       } catch (ClassNotFoundException e) {
       } catch (InstantiationException e) {
@@ -329,6 +339,8 @@ public class OperationsParams extends Configuration {
     }
     if (shape == null)
       LOG.warn("unknown shape type: '"+conf.get(key)+"'");
+    else if (shapeValue != null)
+      shape.fromText(shapeValue);
     // Special case for CSVOGC shape, specify the column if possible
     if (shape instanceof CSVOGC) {
       CSVOGC csvShape = (CSVOGC) shape;

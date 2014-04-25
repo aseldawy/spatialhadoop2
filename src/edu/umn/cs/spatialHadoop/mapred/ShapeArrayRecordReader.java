@@ -26,7 +26,6 @@ import org.apache.hadoop.mapred.lib.CombineFileSplit;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 
 /**
