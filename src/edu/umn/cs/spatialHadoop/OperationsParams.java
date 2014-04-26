@@ -66,6 +66,11 @@ public class OperationsParams extends Configuration {
   public OperationsParams(GenericOptionsParser parser) {
     super(parser.getConfiguration());
     initialize(parser.getRemainingArgs());
+    Shape shape = getShape("shape");
+    if (shape != null) {
+      // In case this class is in a third part jar file, add it to path
+      SpatialSite.addClassToPath(this, shape.getClass());
+    }
   }
 
   /**

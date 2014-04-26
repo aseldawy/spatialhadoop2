@@ -177,29 +177,34 @@ end
 
 def test_custom_class
   # Create a custom class that extends Point and try to process using it
-  temp_dir = Dir.mkdir("test_custom_class")
+  temp_dir = "test_custom_class"
+  temp_dir = Dir.mkdir(temp_dir) unless File.exists?(temp_dir)
   source_filename = File.join(temp_dir, "CustomPoint.java")
-  File.new(source_filename, "w") do |f|
+  File.open(source_filename, "w") do |f|
     f.puts <<-JAVA
-public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {}
-public static void main(String[] args) {
-  edu.umn.cs.spatialHadoop.operations.FileMBR.main(args);
+public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {
+  public static void main(String[] args) throws java.io.IOException {
+    edu.umn.cs.spatialHadoop.operations.FileMBR.main(args);
+  }
 }
     JAVA
   end
   
   # Compile the class
-  shadoop_jar = Dir.glob(File.join("lib", "spatialhadoop*.jar")).first
-  system_check "javac -cp #{shadoop_jar} #{source_filename}"
+  required_jars = []
+  required_jars += Dir.glob(File.join("lib", "spatialhadoop*.jar"))
+  required_jars += Dir.glob("hadoop-core*jar")
+  system_check "javac -cp #{required_jars.join(File::PATH_SEPARATOR)} #{source_filename}"
   class_filename = source_filename.sub('.java', '.class')
   
   # Create the jar file
   jar_file = File.join(temp_dir, "custom_point.jar")
-  system_check "jar -c #{jar_file} #{class_filename}"
+  system_check "jar cf #{jar_file} -C #{temp_dir} #{File.basename(class_filename)}"
   
   # Create a test file with points and try with the custom jar file
   test_file = generate_file('test', 'point')
-  system_check "hadoop jar #{jar_file} CustomPoint #{test_file} shape:CustomPoint"
+  system_check "hadoop jar #{jar_file} CustomPoint #{test_file}/data_00001 shape:CustomPoint -no-local"
+  system_check "hadoop jar #{jar_file} CustomPoint #{test_file}/data_00001 shape:CustomPoint -local"
 end
 
 # Main
@@ -207,4 +212,5 @@ if $0 == __FILE__
   test_range_query
   test_knn
   test_spatial_join
+  test_custom_class
 end

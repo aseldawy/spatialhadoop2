@@ -152,9 +152,4 @@ public class Point implements Shape, Comparable<Point> {
     int imageY = (int) Math.round(((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     g.fillRect(imageX, imageY, 1, 1);  	
   }
-  
-  public static void main(String[] args) {
-    System.out.println("7183.023069104042");
-    System.out.println(TextSerializerHelper.consumeDouble(new Text("7183.023069104042"), '\0'));
-  }
 }

@@ -147,6 +147,18 @@ public class SpatialSite {
    */
   public static void setClass(Configuration conf, String key, Class<?> klass, Class<?> xface) {
     conf.setClass(key, klass, xface);
+    addClassToPath(conf, klass);
+  }
+
+  /**
+   * Ensures that the given class is in the class path of running jobs.
+   * If the jar is not already in the class path, it is added to the
+   * DisributedCache of the given job to ensure the associated job will work
+   * fine.
+   * @param conf
+   * @param klass
+   */
+  public static void addClassToPath(Configuration conf, Class<?> klass) {
     // Check if we need to add the containing jar to class path
     String klassJar = ClassUtil.findContainingJar(klass);
     String shadoopJar = ClassUtil.findContainingJar(SpatialSite.class);
