@@ -83,9 +83,19 @@ public class Point implements Shape, Comparable<Point> {
 	  return new Point(this.x, this.y);
 	}
 
+	/**
+	 * Returns the minimal bounding rectangle of this point. This method returns
+	 * the smallest rectangle that contains this point. For consistency with
+	 * other methods such as {@link Rectangle#isIntersected(Shape)}, the rectangle
+	 * cannot have a zero width or height. Thus, we use the method
+	 * {@link Math#ulp(double)} to compute the smallest non-zero rectangle that
+	 * contains this point. In other words, for a point <code>p</code> the
+	 * following statement should return true.
+	 * <code>p.getMBR().isIntersected(p);</code>
+	 */
   @Override
   public Rectangle getMBR() {
-    return new Rectangle(x, y, x, y);
+    return new Rectangle(x, y, x + Math.ulp(x), y + Math.ulp(y));
   }
 
   @Override
@@ -142,5 +152,9 @@ public class Point implements Shape, Comparable<Point> {
     int imageY = (int) Math.round(((vflip? -this.y : this.y) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     g.fillRect(imageX, imageY, 1, 1);  	
   }
-
+  
+  public static void main(String[] args) {
+    System.out.println("7183.023069104042");
+    System.out.println(TextSerializerHelper.consumeDouble(new Text("7183.023069104042"), '\0'));
+  }
 }

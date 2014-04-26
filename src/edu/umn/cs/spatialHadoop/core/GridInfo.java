@@ -123,10 +123,10 @@ public class GridInfo extends Rectangle {
     CellInfo[] cells = new CellInfo[columns * rows];
     double ystart = y1;
     for (int row = 0; row < rows; row++) {
-      double yend = row == rows-1 ? y2 + Math.ulp(this.y2) : (y1 + (y2 - y1) * (row+1) / rows);
+      double yend = row == rows-1 ? y2 : (y1 + (y2 - y1) * (row+1) / rows);
       double xstart = x1;
       for (int col = 0; col < columns; col++) {
-        double xend = col == columns - 1? x2 + Math.ulp(this.x2) : (x1 + (x2 - x1) * (col+1) / columns);
+        double xend = col == columns - 1? x2 : (x1 + (x2 - x1) * (col+1) / columns);
 
         cells[cellIndex] = new CellInfo(++cellIndex, xstart, ystart, xend, yend);
 

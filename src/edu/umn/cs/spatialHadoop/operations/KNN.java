@@ -15,7 +15,6 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.PrintStream;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -26,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -51,7 +51,6 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.apache.hadoop.util.LineReader;
 import org.apache.hadoop.util.PriorityQueue;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -354,9 +353,6 @@ public class KNN {
     
     job.setClass(SpatialSite.FilterClass, RangeQuery.RangeFilter.class, BlockFilter.class);
     
-    // TextWithDistance used to read output results
-    final TextWithDistance t = new TextWithDistance();
-    
     Shape range_for_this_iteration = new Point(queryPoint.x, queryPoint.y);
     final IntWritable additional_blocks_2b_processed = new IntWritable(0);
     long resultCount;
@@ -374,15 +370,17 @@ public class KNN {
     TextOutputFormat.setOutputPath(job, outputPath);
     
     GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inputPath);
+    Configuration templateConf = job;
 
     do {
+      job = new JobConf(templateConf);
       // Delete results of last iteration if not first iteration
       if (outputPath != null)
         outFs.delete(outputPath, true);
         
       LOG.info("Running iteration: "+(++iterations));
       // Set query range for the SpatialInputFormat
-      job.set("rect", range_for_this_iteration.toText(new Text()).toString());
+      OperationsParams.setShape(job, "rect", range_for_this_iteration);
 
       // Submit the job
       if (params.is("background")) {
@@ -438,13 +436,14 @@ public class KNN {
           FileStatus[] results = outFs.listStatus(outputPath);
           for (FileStatus result_file : results) {
             if (result_file.getLen() > 0 && result_file.getPath().getName().startsWith("part-")) {
-              InputStream in = outFs.open(result_file.getPath());
-              LineReader reader = new LineReader(in);
-              Text first_line = new Text();
-              reader.readLine(first_line);
-              t.fromText(first_line);
-              distance_to_kth_neighbor.set(t.distance);
-              in.close();
+              // Read the last line (kth neighbor)
+              Tail.tail(outFs, result_file.getPath(), 1, new TextWithDistance(), new ResultCollector<TextWithDistance>() {
+
+                @Override
+                public void collect(TextWithDistance r) {
+                  distance_to_kth_neighbor.set(r.distance);
+                }
+              });
             }
           }
           range_for_next_iteration = new Circle(queryPoint.x, queryPoint.y,
@@ -479,7 +478,9 @@ public class KNN {
   private static<S extends Shape> long knnLocal(Path inFile, Path outPath,
       Point queryPoint, int k, OperationsParams params)
       throws IOException {
-    JobConf job = new JobConf(params);
+    // TODO sort partitions by distance and keep processing until the result
+    // is correct
+    JobConf job = new JobConf(params, KNN.class);
     ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
     ShapeInputFormat.addInputPath(job, inFile);
     InputSplit[] splits = inputFormat.getSplits(job, 1);

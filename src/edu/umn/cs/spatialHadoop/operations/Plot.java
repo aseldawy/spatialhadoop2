@@ -574,7 +574,7 @@ public class Plot {
           fileMBR.y2);
       partitionGrid.calculateCellDimensions(
           (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-      SpatialSite.setShape(job, PartitionGrid, partitionGrid);
+      OperationsParams.setShape(job, PartitionGrid, partitionGrid);
       
       job.setInputFormat(ShapeInputFormat.class);
       ShapeInputFormat.addInputPath(job, inFile);

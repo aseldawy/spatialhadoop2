@@ -32,6 +32,7 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 
 
@@ -374,6 +375,21 @@ public class OperationsParams extends Configuration {
     return getSize(this, key);
   }
   
+  /**
+   * Sets the specified configuration parameter to the current value of the shape.
+   * Both class name and shape values are encoded in one string and set as the
+   * value of the configuration parameter. The shape can be retrieved later
+   * using {@link SpatialSite#getShape(Configuration, String)}.
+   * @param conf
+   * @param param
+   * @param shape
+   */
+  public static void setShape(Configuration conf, String param, Shape shape) {
+    String str = shape.getClass().getName() + ShapeValueSeparator;
+    str += shape.toText(new Text()).toString();
+    conf.set(param, str);
+  }
+
   public static long getSize(Configuration conf, String key) {
     String size_str = conf.get(key);
     if (size_str == null)

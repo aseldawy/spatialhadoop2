@@ -69,20 +69,11 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 public class Sampler {
   private static final Log LOG = LogFactory.getLog(Sampler.class);
 
-  /**Name of the configuration line for sample ratio*/
-  private static final String SAMPLE_RATIO = "sampler.SampleRatio";
-  
-  private static final String InClass = "sampler.InClass";
-  private static final String OutClass = "sampler.OutClass";
-  
   /**
    * Keeps track of the (uncompressed) size of the last processed file or
    * directory.
    */
   public static long sizeOfLastProcessedFile;
-  
-  /**Random seed to use by all mappers to ensure unique result per seed*/
-  private static final String RANDOM_SEED = "sampler.RandomSeed";
   
   public static class Map extends MapReduceBase implements
   Mapper<Rectangle, Text, IntWritable, Text> {
@@ -104,14 +95,14 @@ public class Sampler {
     
     @Override
     public void configure(JobConf job) {
-      sampleRatio = job.getFloat(SAMPLE_RATIO, 0.01f);
-      random = new Random(job.getLong(RANDOM_SEED, System.currentTimeMillis()));
+      sampleRatio = job.getFloat("ratio", 0.01f);
+      random = new Random(job.getLong("seed", System.currentTimeMillis()));
       
       try {
         Class<? extends TextSerializable> inClass =
-            job.getClass(InClass, null).asSubclass(TextSerializable.class);
+            job.getClass("shape", null).asSubclass(TextSerializable.class);
         Class<? extends TextSerializable> outClass =
-            job.getClass(OutClass, null).asSubclass(TextSerializable.class);
+            job.getClass("outshape", null).asSubclass(TextSerializable.class);
 
         if (inClass == outClass) {
           conversion = Conversion.None;
@@ -191,29 +182,58 @@ public class Sampler {
     }
   }
   
-  public static <T extends TextSerializable, O extends TextSerializable> int sampleWithRatio(
-      FileSystem fs, Path[] files, double ratio, long threshold, long seed,
-      final ResultCollector<O> output, T inObj, O outObj) throws IOException {
+  @Deprecated
+  public static int sampleWithRatio(
+      FileSystem fs, Path[] files, float ratio, long threshold, long seed,
+      final ResultCollector<TextSerializable> output, TextSerializable inObj,
+      TextSerializable outObj) throws IOException {
+    OperationsParams params = new OperationsParams();
+    params.setFloat("ratio", ratio);
+    params.setLong("size", threshold);
+    params.setLong("seed", seed);
+    params.setClass("shape", inObj.getClass(), TextSerializable.class);
+    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
+    return sampleWithRatio(files, output, params);
+  }
+  
+  public static <T extends TextSerializable> int sampleWithRatio(
+      Path[] files, final ResultCollector<T> output, OperationsParams params) throws IOException {
+    FileSystem fs = files[0].getFileSystem(params);
     FileStatus inFStatus = fs.getFileStatus(files[0]);
     if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 1) {
       // Either a directory of file or a large file
-      return sampleMapReduceWithRatio(fs, files, ratio, threshold, seed, output, inObj, outObj);
+      return sampleMapReduceWithRatio(files, output, params);
     } else {
       // A single small file, process it without MapReduce
-      return sampleLocalWithRatio(fs, files, ratio, threshold, seed, output, inObj, outObj);
+      return sampleLocalWithRatio(files, output, params);
     }
   }  
 
-  public static <T extends TextSerializable, O extends TextSerializable> int sampleLocalWithRatio(
-      FileSystem fs, Path[] files, double ratio, long threshold, long seed,
-      final ResultCollector<O> output, T inObj, O outObj) throws IOException {
+  @Deprecated
+  public static int sampleLocalWithRatio(
+      FileSystem fs, Path[] files, float ratio, long threshold, long seed,
+      final ResultCollector<TextSerializable> output, TextSerializable inObj,
+      TextSerializable outObj) throws IOException {
+    OperationsParams params = new OperationsParams();
+    params.setFloat("ratio", ratio);
+    params.setLong("size", threshold);
+    params.setLong("seed", seed);
+    params.setClass("shape", inObj.getClass(), TextSerializable.class);
+    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
+    return sampleLocalWithRatio(files, output, params);
+  }
+  
+  public static <T extends TextSerializable> int sampleLocalWithRatio(
+      Path[] files, final ResultCollector<T> output, OperationsParams params) throws IOException {
     long total_size = 0;
     for (Path file : files) {
+      FileSystem fs = file.getFileSystem(params);
       total_size += fs.getFileStatus(file).getLen();
     }
     sizeOfLastProcessedFile = total_size;
-    return sampleLocalWithSize(fs, files, (long) (total_size * ratio), seed,
-        output, inObj, outObj);
+    float ratio = params.getFloat("ratio", 0.0f);
+    params.setLong("size", (long) (total_size * ratio));
+    return sampleLocalWithSize(files, output, params);
   }
 
   /**
@@ -221,16 +241,32 @@ public class Sampler {
    * @param fs
    * @param files
    * @param ratio
-   * @param threshold - Maximum number of elements to be sampled
-   * @param output
+   * @param maxSampleSize - Maximum size of sample in bytes
+   * @param seed - Random seed to use in randomization for repeatable tests
+   * @param output - Collects the generated output
    * @param inObj
+   * @param outObj
    * @return
    * @throws IOException
    */
-  public static <T extends TextSerializable, O extends TextSerializable> int sampleMapReduceWithRatio(
-      FileSystem fs, Path[] files, double ratio, long sampleSize, long seed,
-      final ResultCollector<O> output, T inObj, O outObj) throws IOException {
-    JobConf job = new JobConf(Sampler.class);
+  @Deprecated
+  public static int sampleMapReduceWithRatio(
+      FileSystem fs, Path[] files, float ratio, long maxSampleSize, long seed,
+      final ResultCollector<TextSerializable> output, TextSerializable inObj,
+      TextSerializable outObj) throws IOException {
+    OperationsParams params = new OperationsParams();
+    params.setFloat("ratio", ratio);
+    params.setLong("size", maxSampleSize);
+    params.setLong("seed", seed);
+    params.setClass("shape", inObj.getClass(), TextSerializable.class);
+    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
+    return sampleMapReduceWithRatio(files, output, params);
+  }
+  
+  public static <T extends TextSerializable> int sampleMapReduceWithRatio(
+      Path[] files, final ResultCollector<T> output,
+      OperationsParams params) throws IOException {
+    JobConf job = new JobConf(params, Sampler.class);
     
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
@@ -242,12 +278,8 @@ public class Sampler {
     job.setJobName("Sample");
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(Text.class);
-    SpatialSite.setClass(job, InClass, inObj.getClass(), TextSerializable.class);
-    SpatialSite.setClass(job, OutClass, outObj.getClass(), TextSerializable.class);
     
     job.setMapperClass(Map.class);
-    job.setLong(RANDOM_SEED, seed);
-    job.setFloat(SAMPLE_RATIO, (float) ratio);
     job.setReducerClass(Reduce.class);
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
@@ -282,8 +314,20 @@ public class Sampler {
     // Ratio of records to return from output based on the threshold
     // Note that any number greater than or equal to one will cause all
     // elements to be returned
-    final double selectRatio = (double)sampleSize / resultSize;
-    
+    long sampleSize = job.getLong("size", 0);
+    final double selectRatio = sampleSize <= 0? 2.0 : (double)sampleSize / resultSize;
+    long seed = job.getLong("seed", System.currentTimeMillis());
+    T outObj;
+    try {
+      Class<? extends TextSerializable> outClass = job.getClass("outshape", Text.class).asSubclass(TextSerializable.class);
+      outObj = (T) outClass.newInstance();
+    } catch (InstantiationException e1) {
+      outObj = (T) new Text2();
+    } catch (IllegalAccessException e1) {
+      outObj = (T) new Text2();
+    }
+
+
     // Read job result
     int result_size = 0;
     if (output != null) {
@@ -307,7 +351,7 @@ public class Sampler {
               decompressor = CodecPool.getDecompressor(codec);
               in = codec.createInputStream(in, decompressor);
             }
-            
+
             LineReader lineReader = new LineReader(in);
             try {
               while (lineReader.readLine(line) > 0) {
@@ -334,11 +378,12 @@ public class Sampler {
         // Return a (small) ratio of the result using a MapReduce job
         // In this case, the files are very big and we need just a small ratio
         // of them. It is better to do it in parallel
-        result_size = sampleMapReduceWithRatio(outFs, new Path[] { outputPath},
-            selectRatio, sampleSize, seed, output, outObj, outObj);
+        result_size = sampleMapReduceWithRatio(new Path[] { outputPath},
+            output, params);
         sizeOfLastProcessedFile = tempSize;
       }
     }
+
     
     outFs.delete(outputPath, true);
     
@@ -356,16 +401,50 @@ public class Sampler {
    * @return
    * @throws IOException
    */
-  public static <T extends TextSerializable, O extends TextSerializable> int
-    sampleLocalWithSize(
-      FileSystem fs, Path[] files, long total_size, long seed,
-      final ResultCollector<O> output, final T inObj, final O outObj)
+  @Deprecated
+  public static int sampleLocalWithSize(FileSystem fs, Path[] files,
+      long total_size, long seed,
+      final ResultCollector<TextSerializable> output,
+      final TextSerializable inObj, final TextSerializable outObj)
       throws IOException {
+    OperationsParams params = new OperationsParams();
+    params.setLong("size", total_size);
+    params.setLong("seed", seed);
+    params.setClass("shape", inObj.getClass(), TextSerializable.class);
+    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
+    return sampleLocalWithSize(files, output, params);
+  }
+
+  public static <T extends TextSerializable> int sampleLocalWithSize(Path[] files,
+      final ResultCollector<T> output, OperationsParams params)
+      throws IOException {
+
     int average_record_size = 1024; // A wild guess for record size
     final LongWritable current_sample_size = new LongWritable();
     int sample_count = 0;
 
-    final ResultCollector<T> converter = createConverter(output, inObj, outObj);
+    TextSerializable inObj1, outObj1;
+    try {
+      Class<? extends TextSerializable> inClass = params.getClass("shape", TextSerializable.class).asSubclass(TextSerializable.class);
+      inObj1 = inClass.newInstance();
+    } catch (InstantiationException e) {
+      inObj1 = new Text2();
+    } catch (IllegalAccessException e) {
+      inObj1 = new Text2();
+    }
+
+    try {
+      Class<? extends TextSerializable> outClass = params.getClass("outshape", TextSerializable.class).asSubclass(TextSerializable.class);
+      outObj1 = outClass.newInstance();
+    } catch (InstantiationException e) {
+      outObj1 = new Text2();
+    } catch (IllegalAccessException e) {
+      outObj1 = new Text2();
+    }
+    // Make the objects final to be able to use in the anonymous inner class
+    final TextSerializable inObj = inObj1;
+    final T outObj = (T) outObj1;
+    final ResultCollector<TextSerializable> converter = createConverter(output, inObj, outObj);
 
     final ResultCollector<Text2> counter = new ResultCollector<Text2>() {
       @Override
@@ -375,13 +454,21 @@ public class Sampler {
         converter.collect(inObj);
       }
     };
+    
+    long total_size = params.getLong("size", 0);
+    long seed = params.getLong("seed", System.currentTimeMillis());
 
     while (current_sample_size.get() < total_size) {
       int count = (int) ((total_size - current_sample_size.get()) / average_record_size);
       if (count < 10)
         count = 10;
 
-      sample_count += sampleLocalByCount(fs, files, count, seed, counter, new Text2(), new Text2());
+      OperationsParams params2 = new OperationsParams(params);
+      params2.setClass("shape", Text2.class, TextSerializable.class);
+      params2.setClass("outshape", Text2.class, TextSerializable.class);
+      params2.setInt("count", count);
+      params2.setLong("seed", seed);
+      sample_count += sampleLocalByCount(files, counter, params);
       // Change the seed to get different sample next time.
       // Still we need to ensure that repeating the program will generate
       // the same value
@@ -469,9 +556,10 @@ public class Sampler {
   }; 
 
   
-  public static <T extends TextSerializable, O extends TextSerializable>
-  int sampleLocal(FileSystem fs, Path file, int count, long seed,
-      ResultCollector<O> output, T inObj, O outObj) throws IOException {
+  @Deprecated
+  public static int sampleLocalByCount(FileSystem fs, Path file, int count, long seed,
+      ResultCollector<TextSerializable> output, TextSerializable inObj,
+      TextSerializable outObj) throws IOException {
     return sampleLocalByCount(fs, new Path[] {file}, count, seed, output, inObj, outObj);
   }
   
@@ -484,12 +572,24 @@ public class Sampler {
    * @return
    * @throws IOException
    */
-  public static <T extends TextSerializable, O extends TextSerializable>
-  int sampleLocalByCount(
-      FileSystem fs, Path[] files, int count, long seed,
-      ResultCollector<O> output, T inObj, O outObj) throws IOException {
+  @Deprecated
+  public static int sampleLocalByCount(FileSystem fs, Path[] files, int count,
+      long seed, ResultCollector<TextSerializable> output,
+      TextSerializable inObj, TextSerializable outObj) throws IOException {
+    OperationsParams params = new OperationsParams();
+    params.setInt("count", count);
+    params.setLong("seed", seed);
+    params.setClass("shape", inObj.getClass(), TextSerializable.class);
+    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
+    return sampleLocalByCount(files, output, params);
+  }
+  
+  public static <T extends TextSerializable> int sampleLocalByCount(Path[] files,
+      ResultCollector<T> output, OperationsParams params) throws IOException {
+
     ArrayList<Path> data_files = new ArrayList<Path>();
     for (Path file : files) {
+      FileSystem fs = file.getFileSystem(params);
       if (fs.getFileStatus(file).isDir()) {
         // Directory, process all data files in this directory (visible files)
         FileStatus[] fileStatus = fs.listStatus(file, hiddenFileFilter);
@@ -504,10 +604,33 @@ public class Sampler {
     
     files = data_files.toArray(new Path[data_files.size()]);
     
-    ResultCollector<T> converter = createConverter(output, inObj, outObj);
+    TextSerializable inObj1, outObj1;
+    try {
+      Class<? extends TextSerializable> inClass = params.getClass("shape", TextSerializable.class).asSubclass(TextSerializable.class);
+      inObj1 = inClass.newInstance();
+    } catch (InstantiationException e) {
+      inObj1 = new Text2();
+    } catch (IllegalAccessException e) {
+      inObj1 = new Text2();
+    }
+
+    try {
+      Class<? extends TextSerializable> outClass = params.getClass("outshape", TextSerializable.class).asSubclass(TextSerializable.class);
+      outObj1 = outClass.newInstance();
+    } catch (InstantiationException e) {
+      outObj1 = new Text2();
+    } catch (IllegalAccessException e) {
+      outObj1 = new Text2();
+    }
+    // Make the objects final to be able to use in the anonymous inner class
+    final TextSerializable inObj = inObj1;
+    final T outObj = (T) outObj1;
+    
+    ResultCollector<TextSerializable> converter = createConverter(output, inObj, outObj);
     long[] files_start_offset = new long[files.length+1]; // Prefix sum of files sizes
     long total_length = 0;
     for (int i_file = 0; i_file < files.length; i_file++) {
+      FileSystem fs = files[i_file].getFileSystem(params);
       files_start_offset[i_file] = total_length;
       total_length += fs.getFileStatus(files[i_file]).getLen();
     }
@@ -515,8 +638,8 @@ public class Sampler {
 
     // Generate offsets to read from and make sure they are ordered to minimize
     // seeks between different HDFS blocks
-    Random random = new Random(seed);
-    long[] offsets = new long[count];
+    Random random = new Random(params.getLong("seed", System.currentTimeMillis()));
+    long[] offsets = new long[params.getInt("count", 0)];
     for (int i = 0; i < offsets.length; i++) {
       if (total_length == 0)
         offsets[i] = 0;
@@ -529,19 +652,20 @@ public class Sampler {
     int records_returned = 0;
 
     int file_i = 0; // Index of the current file being sampled
-    while (record_i < count) {
+    while (record_i < offsets.length) {
       // Skip to the file that contains the next sample
       while (offsets[record_i] > files_start_offset[file_i+1])
         file_i++;
 
       long current_file_size = files_start_offset[file_i+1] - files_start_offset[file_i];
+      FileSystem fs = files[file_i].getFileSystem(params);
       ShapeLineRecordReader reader = new ShapeLineRecordReader(fs.getConf(),
           new FileSplit(files[file_i], 0, current_file_size, new String[] {}));
       Rectangle key = reader.createKey();
       Text line = reader.createValue();
       long pos = files_start_offset[file_i];
       
-      while (record_i < count &&
+      while (record_i < offsets.length &&
           offsets[record_i] <= files_start_offset[file_i+1] &&
           reader.next(key, line)) {
         pos += line.getLength();
@@ -561,7 +685,7 @@ public class Sampler {
       // Skip any remaining records that were supposed to be read from this file
       // This case might happen if a generated random position was in the middle
       // of the last line.
-      while (record_i < count &&
+      while (record_i < offsets.length &&
           offsets[record_i] <= files_start_offset[file_i+1])
         record_i++;
     }
@@ -583,19 +707,15 @@ public class Sampler {
 
   public static void main(String[] args) throws IOException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    JobConf conf = new JobConf(Sampler.class);
     Path[] inputFiles = params.getPaths();
-    FileSystem fs = inputFiles[0].getFileSystem(conf);
     
     if (!params.checkInput()) {
       printUsage();
       System.exit(1);
     }
     
-    int count = params.getInt("count", 1);
     long size = params.getSize("size");
-    double ratio = params.getFloat("ratio", -1.0f);
-    long seed = params.getLong("seed", System.currentTimeMillis());
+    float ratio = params.getFloat("ratio", -1.0f);
     TextSerializable stockObject = params.getShape("shape");
     if (stockObject == null)
       stockObject = new Text2();
@@ -613,14 +733,12 @@ public class Sampler {
     };
     
     if (size != 0) {
-      sampleLocalWithSize(fs, inputFiles, size, seed, output, stockObject, outputShape);
+      sampleLocalWithSize(inputFiles, output, params);
     } else if (ratio != -1.0) {
-      long maxSampleSize = conf.getLong(SpatialSite.SAMPLE_SIZE, 1024*1024*100);
-      sampleMapReduceWithRatio(fs, inputFiles, ratio, maxSampleSize, seed,
-          output, stockObject, outputShape);
+      sampleMapReduceWithRatio(inputFiles, output, params);
     } else {
       // The only way to sample by count is using the local sampler
-      sampleLocalByCount(fs, inputFiles, count, seed, output, stockObject, outputShape);
+      sampleLocalByCount(inputFiles, output, params);
     }
   }
 }

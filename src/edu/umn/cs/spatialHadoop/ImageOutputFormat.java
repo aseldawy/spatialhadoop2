@@ -29,7 +29,6 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * An output format that is used to plot ImageWritable to PNG image.
@@ -108,7 +107,7 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
   }
 
   public static void setFileMBR(Configuration conf, Rectangle mbr) {
-    SpatialSite.setShape(conf, InputFileMBR, mbr);
+    OperationsParams.setShape(conf, InputFileMBR, mbr);
   }
   
   public static Rectangle getFileMBR(Configuration conf) {

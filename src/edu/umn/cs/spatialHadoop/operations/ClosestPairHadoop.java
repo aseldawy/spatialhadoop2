@@ -43,6 +43,7 @@ import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
@@ -295,10 +296,15 @@ public class ClosestPairHadoop {
 		        sample.add(value.clone());
 		      }
 		};
-		Sampler.sampleMapReduceWithRatio(fs, new Path[]{inputFile}, sample_ratio, sample_count,
-		          System.currentTimeMillis(), resultCollector, stockShape, new Point());
+		OperationsParams params = new OperationsParams();
+		params.setFloat("ratio", (float) sample_ratio);
+		params.setInt("count", sample_count);
+		params.setClass("shape", stockShape.getClass(), TextSerializable.class);
+		params.setClass("outshape", Point.class, TextSerializable.class);
+		Sampler.sampleMapReduceWithRatio(new Path[] {inputFile}, resultCollector, params);
 		Collections.sort(sample);
 	}
+	
 	private static void printUsage() {
 		System.out.println("Finds the average area of all rectangles in an input file");
 		System.out.println("Parameters: (* marks required parameters)");

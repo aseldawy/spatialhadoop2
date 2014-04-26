@@ -165,68 +165,6 @@ public final class TextSerializerHelper {
     return l;
   }
   
-  enum DoubleParseState {BeforeDecimal, AfterDecimal, AfterExp};
-  public static double deserializeDouble(byte[] buf, int offset, int len) {
-    DoubleParseState state = DoubleParseState.BeforeDecimal;
-
-    int exponent1 = 0; // Exponent part coming from the decimal point
-    boolean exponent2Negative = false;
-    int exponent2 = 0; // Exponent part written explicitly (e.g., E+32)
-
-    boolean mantissaNegative = false;
-    long mantissa = 0;
-    
-    while (len-- > 0) {
-      if (buf[offset] >= '0' && buf[offset] <= '9') {
-        switch(state) {
-        case AfterDecimal:
-          exponent1--;
-          // Fall through
-        case BeforeDecimal:
-          mantissa = mantissa * 10 + (buf[offset] - '0');
-          break;
-        case AfterExp:
-          exponent2 = exponent2 * 10 + (buf[offset] - '0');
-          break;
-        }
-      } else if (buf[offset] == '.') {
-        state = DoubleParseState.AfterDecimal;
-      } else if (buf[offset] == 'e' || buf[offset] == 'E') {
-        state = DoubleParseState.AfterExp;
-      } else if (buf[offset] == '-') {
-        if (state == DoubleParseState.BeforeDecimal) {
-          mantissaNegative = true;
-        } else if (state == DoubleParseState.AfterExp) {
-          exponent2Negative = true;
-        } else {
-          throw new RuntimeException("Error parsing double "+
-                new String(buf, offset, len)+" at position "+offset);
-        }
-      } else if (buf[offset] == '+') {
-        // Just skip. The default sign is positive
-      } else {
-        throw new RuntimeException("Error parsing double "+
-            new String(buf, offset, len)+" at position "+offset);
-      }
-      offset++;
-    }
-    
-    if (mantissaNegative)
-      mantissa = -mantissa;
-    if (exponent2Negative)
-      exponent2 = -exponent2;
-
-    int exponent = exponent1 + exponent2;
-    double d = mantissa;
-    if (exponent > 0) {
-      while (exponent-- != 0)
-        d *= 10;
-    } else if (exponent < 0) {
-      while (exponent++ != 0)
-        d /= 10;
-    }
-    return d;
-  }
   
   /**
    * Deserializes and consumes a double from the given text. Consuming means all
@@ -245,7 +183,7 @@ public final class TextSerializerHelper {
         && ((bytes[i] >= '0' && bytes[i] <= '9') || bytes[i] == 'e'
             || bytes[i] == 'E' || bytes[i] == '-' || bytes[i] == '+' || bytes[i] == '.'))
       i++;
-    double d = deserializeDouble(bytes, 0, i);
+    double d = Double.parseDouble(new String(bytes, 0, i));
     if (i < text.getLength() && bytes[i] == separator)
       i++;
     System.arraycopy(bytes, i, bytes, 0, text.getLength() - i);

@@ -492,12 +492,6 @@ public class DistributedJoin {
     GlobalIndex<Partition> gindex2 = SpatialSite.getGlobalIndex(fs[1], inFiles[1]);
 
     LOG.info("Joining "+inFiles[0]+" X "+inFiles[1]);
-    String commaSeparatedFiles = "";
-    for (int i = 0; i < inFiles.length; i++) {
-      if (i > 0)
-        commaSeparatedFiles += ',';
-      commaSeparatedFiles += inFiles[i].toUri().toString();
-    }
     
     if (SpatialSite.isRTree(fs[0], inFiles[0]) && SpatialSite.isRTree(fs[1], inFiles[1])) {
       job.setInputFormat(DJInputFormatRTree.class);
@@ -507,25 +501,31 @@ public class DistributedJoin {
       job.setInt(SpatialSite.MaxShapesInOneRead, -1);
       job.setInputFormat(DJInputFormatArray.class);
     }
-    job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
     
-    if (gindex1 != null && gindex2 != null &&
-        gindex1.isReplicated() && gindex2.isReplicated()) {
-      job.setMapperClass(RedistributeJoinMap.class);
-      if (inFiles[0].equals(inFiles[1])) {
-        job.setInputFormat(ShapeArrayInputFormat.class);
-        // Remove the spatial filter to ensure all partitions are loaded
-        job.unset(SpatialSite.FilterClass);
-        FileInputFormat.setInputPaths(job, inFiles[0]);
-      } else
-        FileInputFormat.addInputPaths(job, commaSeparatedFiles);
-    } else if (gindex1 == null || gindex2 == null || (!gindex1.isReplicated() && !gindex2.isReplicated())) {
-      job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
-      FileInputFormat.addInputPaths(job, commaSeparatedFiles);
+    // Set input paths and map function
+    if (inFiles[0].equals(inFiles[1])) {
+      // Self join
+      job.setInputFormat(ShapeArrayInputFormat.class);
+      // Remove the spatial filter to ensure all partitions are loaded
+      FileInputFormat.setInputPaths(job, inFiles[0]);
+      if (gindex1 != null && gindex1.isReplicated())
+        job.setMapperClass(RedistributeJoinMap.class);
+      else
+        job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
     } else {
-      LOG.warn("Don't know how to join a replicated file with a non-replicated file");
-      //throw new RuntimeException("Don't know how to join a replicated file with a non-replicated file");
+      // Binary version of spatial join (two different input files)
+      job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
+      FileInputFormat.setInputPaths(job, inFiles);
+      if ((gindex1 != null && gindex1.isReplicated()) ||
+          (gindex1 != null && gindex2.isReplicated())) {
+        // Need the map function with duplicate avoidance step.
+        job.setMapperClass(RedistributeJoinMap.class);
+      } else {
+        // No replication in both indexes, use map function with no dup avoidance
+        job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
+      }
     }
+
     Shape shape = params.getShape("shape");
     job.setMapOutputKeyClass(shape.getClass());
     job.setMapOutputValueClass(shape.getClass());

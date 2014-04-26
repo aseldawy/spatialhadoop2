@@ -340,7 +340,7 @@ public class SJMR {
     int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * 20);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(num_cells);
-    SpatialSite.setShape(job, PartitionGrid, gridInfo);
+    OperationsParams.setShape(job, PartitionGrid, gridInfo);
     
     TextOutputFormat.setOutputPath(job, outputPath);
     

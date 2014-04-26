@@ -40,7 +40,7 @@ end
 
 TOO_SMALL = 1E-6
 
-def array_compare(ar1, ar2)
+def array_equal?(ar1, ar2)
   values1 = ar1.map{|x| x.split(/[\s,]+/)}.flatten
   values2 = ar2.map{|x| x.split(/[\s,]+/)}.flatten
   unless values1.size == values2.size
@@ -67,36 +67,35 @@ def test_range_query
   %w(point rect).each do |shape|
     # Try range query with heap files
     heap_file = generate_file('test', shape)
-    query = '40,990,100,800'
+    heap_file_count = `hadoop fs -cat #{heap_file}/data* | wc -l`.to_i
+    query = '40,990,1000,8000'
     range_query(heap_file, 'results_mr', query, '-no-local')
     results_heap_mr = `hadoop fs -cat results_mr/part* | sort`.lines.to_a
     range_query(heap_file, 'results_local', query, '-local')
     results_heap_local = `hadoop fs -cat results_local | sort`.lines.to_a
-    raise "Results of local and MapReduce implementations are different" if !array_compare(results_heap_local, results_heap_mr)
+    raise "Results of local and MapReduce implementations are different" unless array_equal?(results_heap_local, results_heap_mr)
     
     # Try with indexed files
     %w(grid rtree r+tree str str+).each do |sindex|
       indexed_file = index_file(heap_file, sindex)
       
       # Make sure the indexed file has the same number of records as the heap file
-      if sindex != 'rtree' && sindex != 'r+tree'
-        heap_file_count = `hadoop fs -cat #{heap_file}/part* | wc -l`
-        if sindex == 'str+' && shape == 'rect'
-          indexed_file_count = `hadoop fs -cat #{indexed_file}/part* | sort | uniq | wc -l`
-        else
-          indexed_file_count = `hadoop fs -cat #{indexed_file}/part* | wc -l`
-        end
+      # Exclude R-tree and R+-tree as they use a binary format that cannot be easily determined
+      unless %w(r+tree rtree).include?(sindex)
+        replicated = %w(grid r+tree str+).include?(sindex)
+        indexed_file_count = (replicated && shape == 'rect') ? `hadoop fs -cat #{indexed_file}/part* | sort | uniq | wc -l`.to_i :
+             `hadoop fs -cat #{indexed_file}/part* | wc -l`.to_i
         raise "#{sindex} index size #{indexed_file_count} should be equal to heap file size #{heap_file_count}" unless heap_file_count == indexed_file_count
       end
       
       # Run range query on the heap file and make sure it gives the same result as before
       range_query(indexed_file, "results_#{sindex}_mr", query, '-no-local')
       results_indexed_local = `hadoop fs -cat results_#{sindex}_mr/part* | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_local, results_heap_local)
+      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_local, results_heap_local)
         
       range_query(indexed_file, "results_#{sindex}_local", query, '-local')
       results_indexed_mr = `hadoop fs -cat results_#{sindex}_local | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_mr, results_heap_local)
+      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_local)
     end
   end
 end
@@ -107,7 +106,7 @@ def knn_query(input, output, point, k, extra_args="")
   system_check "shadoop knn #{ExtraConfigParams} #{input} #{output} shape:#{shape} point:#{point} k:#{k} #{extra_args} -overwrite"
 end
 
-def test_knn_query
+def test_knn
   shape = 'point'
   k = 1000
   point = "700,232"
@@ -118,7 +117,7 @@ def test_knn_query
   results_heap_local = `hadoop fs -cat 'knn_heap_local'`.lines.to_a
   knn_query(heap_file, 'knn_heap_mr', point, k, '-no-local')
   results_heap_mr = `hadoop fs -cat 'knn_heap_mr/part*'`.lines.to_a
-  raise "Results of range query with local and MapReduce implementations differ" if !array_compare(results_heap_local, results_heap_mr)
+  raise "Results of range query with local and MapReduce implementations differ" unless array_equal?(results_heap_local, results_heap_mr)
   
   # Try with indexed files
   %w(grid rtree r+tree str str+).each do |sindex|
@@ -127,11 +126,11 @@ def test_knn_query
     # Run knn on the heap file and make sure it gives the same result as before
     knn_query(indexed_file, "results_#{sindex}_local", point, k, '-local')
     results_indexed_local = `hadoop fs -cat results_#{sindex}_local `.lines.to_a
-    raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_local, results_heap_local)
+    raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_local, results_heap_local)
       
     knn_query(indexed_file, "results_#{sindex}_mr", point, k, '-no-local')
     results_indexed_mr = `hadoop fs -cat results_#{sindex}_mr/part* `.lines.to_a
-    raise "Results of #{sindex} file does not match the heap file" if !array_compare(results_indexed_mr, results_heap_local) 
+    raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_local) 
   end
 end
 
@@ -149,32 +148,63 @@ def test_spatial_join
   sjmr_heap_results = `hadoop fs -cat sjmr_heap/part* | sort`.lines.to_a
   spatial_join('dj', heap_file1, heap_file2, 'bnlj')
   bnlj_results = `hadoop fs -cat bnlj/part* | sort`.lines.to_a
-  raise "Results of SJMR and BNLJ on heap files do not match" unless array_compare(sjmr_heap_results, bnlj_results)
+  raise "Results of SJMR and BNLJ on heap files do not match" unless array_equal?(sjmr_heap_results, bnlj_results)
 
   # Try with indexes (same index for both files)
   %w(grid rtree r+tree str str+).each do |sindex|
     indexed_file1 = index_file(heap_file1, sindex)
     indexed_file2 = index_file(heap_file2, sindex)
-    
+
     # Run both SJMR and DJ on indexed files and check the result
     spatial_join('sjmr', indexed_file1, indexed_file2, "sjmr_#{sindex}")
     sjmr_indexed_results = `hadoop fs -cat sjmr_#{sindex}/part* | sort`.lines.to_a
-    raise "SJMR results with #{sindex} file does not match the heap file" if !array_compare(sjmr_indexed_results, sjmr_heap_results) 
+    raise "SJMR results with #{sindex} file does not match the heap file" unless array_equal?(sjmr_indexed_results, sjmr_heap_results) 
     
     spatial_join('dj', indexed_file1, indexed_file2, "dj_#{sindex}")
     dj_indexed_results = `hadoop fs -cat dj_#{sindex}/part* | sort`.lines.to_a
-    raise "Distributed Join results with #{sindex} file does not match the heap file" if !array_compare(dj_indexed_results, bnlj_results)
-    
-    # Try one indexed file and one non-indexed file
-    # spatial_join('sjmr', indexed_file1, heap_file2, "sjmr_#{sindex}_heap")
-    # sjmr_one_side_results = `hadoop fs -cat sjmr_#{sindex}_heap/par* | sort`.lines.to_a
-  end
+    raise "Distributed Join results with #{sindex} file does not match the heap file" unless array_equal?(dj_indexed_results, bnlj_results)
 
+    # Try one indexed file and one non-indexed file
+    spatial_join('sjmr', indexed_file1, heap_file2, "sjmr_#{sindex}_heap")
+    sjmr_one_side_results = `hadoop fs -cat sjmr_#{sindex}_heap/par* | sort`.lines.to_a
+    raise "SJMR results with one heap file and one #{sindex} file" unless array_equal?(sjmr_one_side_results, sjmr_heap_results)
+    
+    spatial_join('dj', indexed_file1, heap_file2, "dj_#{sindex}_heap")
+    dj_one_side_results = `hadoop fs -cat dj_#{sindex}_heap/par* | sort`.lines.to_a
+    raise "DJ results with one heap file and one #{sindex} file" unless array_equal?(dj_one_side_results, bnlj_results)
+  end
+end
+
+def test_custom_class
+  # Create a custom class that extends Point and try to process using it
+  temp_dir = Dir.mkdir("test_custom_class")
+  source_filename = File.join(temp_dir, "CustomPoint.java")
+  File.new(source_filename, "w") do |f|
+    f.puts <<-JAVA
+public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {}
+public static void main(String[] args) {
+  edu.umn.cs.spatialHadoop.operations.FileMBR.main(args);
+}
+    JAVA
+  end
+  
+  # Compile the class
+  shadoop_jar = Dir.glob(File.join("lib", "spatialhadoop*.jar")).first
+  system_check "javac -cp #{shadoop_jar} #{source_filename}"
+  class_filename = source_filename.sub('.java', '.class')
+  
+  # Create the jar file
+  jar_file = File.join(temp_dir, "custom_point.jar")
+  system_check "jar -c #{jar_file} #{class_filename}"
+  
+  # Create a test file with points and try with the custom jar file
+  test_file = generate_file('test', 'point')
+  system_check "hadoop jar #{jar_file} CustomPoint #{test_file} shape:CustomPoint"
 end
 
 # Main
 if $0 == __FILE__
-  #test_range_query
-  #test_knn
+  test_range_query
+  test_knn
   test_spatial_join
 end

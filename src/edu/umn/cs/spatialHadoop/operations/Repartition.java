@@ -57,6 +57,7 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.ShapeRecordWriter;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
@@ -111,12 +112,22 @@ public class Repartition {
       // This ensures that a replicated shape in an already partitioned file
       // doesn't get send to output from all partitions
       if (!cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
+        int count = 0;
+        if (shape.distanceTo(342.05006382500676,0.3955442636904839) < 0.001) {
+          System.out.println("yalllllllllla");
+        }
         for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
           if (cellInfos[cellIndex].isIntersected(shape_mbr)) {
             cellId.set((int) cellInfos[cellIndex].cellId);
             output.collect(cellId, shape);
+            count++;
           }
         }
+        if (count != 1) {
+          System.out.println("Yalla "+shape_mbr);
+        }
+      } else {
+        System.out.println("Yalla2 "+shape);
       }
     }
   }
@@ -471,7 +482,7 @@ public class Repartition {
       throws IOException {
     final Vector<Point> sample = new Vector<Point>();
     
-    double sample_ratio =
+    float sample_ratio =
         outFileSystem.getConf().getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
     long sample_size =
       outFileSystem.getConf().getLong(SpatialSite.SAMPLE_SIZE, 100*1024*1024);
@@ -483,8 +494,12 @@ public class Repartition {
         sample.add(value.clone());
       }
     };
-    Sampler.sampleWithRatio(fs, files, sample_ratio, sample_size,
-        System.currentTimeMillis(), resultCollector, stockShape, new Point());
+    OperationsParams params = new OperationsParams(outFileSystem.getConf());
+    params.setFloat("ratio", sample_ratio);
+    params.setLong("size", sample_size);
+    params.setClass("shape", stockShape.getClass(), TextSerializable.class);
+    params.setClass("outshape", Point.class, TextSerializable.class);
+    Sampler.sampleWithRatio(files, resultCollector, params);
     LOG.info("Finished reading a sample of size: "+sample.size()+" records");
     
     long inFileSize = Sampler.sizeOfLastProcessedFile;

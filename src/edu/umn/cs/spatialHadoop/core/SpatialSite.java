@@ -203,15 +203,14 @@ public class SpatialSite {
    * @param conf
    * @param param
    * @param shape
+   * @deprecated Use {@link OperationsParams#setShape(Configuration,String,Shape)} instead
    */
   public static void setShape(Configuration conf, String param, Shape shape) {
-    String str = shape.getClass().getName() + OperationsParams.ShapeValueSeparator;
-    str += shape.toText(new Text()).toString();
-    conf.set(param, str);
+    OperationsParams.setShape(conf, param, shape);
   }
   
   /**
-   * Retrieves a value of a shape set earlier using {@link #setShape(Configuration, String, Shape)}.
+   * Retrieves a value of a shape set earlier using {@link OperationsParams#setShape(Configuration, String, Shape)}.
    * It reads the corresponding parameter and parses it to find the class name
    * and shape value. First, a default object is created using {@link Class#newInstance()}
    * then the value is parsed using {@link Shape#fromText(Text)}.
