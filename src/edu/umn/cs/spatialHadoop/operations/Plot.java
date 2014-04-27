@@ -516,7 +516,7 @@ public class Plot {
         valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
       
-      JobConf job = new JobConf(shape.getClass());
+      JobConf job = new JobConf(params, shape.getClass());
       job.setJobName("Plot");
       
       job.setMapperClass(PlotMap.class);
@@ -532,6 +532,7 @@ public class Plot {
       if (hdfDataset != null) {
         // Input is HDF
         job.set(HDFRecordReader.DatasetName, hdfDataset);
+        job.setClass("shape", NASARectangle.class, Shape.class);
         job.setBoolean(HDFRecordReader.SkipFillValue, true);
         // Determine the range of values by opening one of the HDF files
         if (valueRange == null)
