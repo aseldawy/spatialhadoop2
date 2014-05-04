@@ -532,6 +532,7 @@ public class Plot {
       if (hdfDataset != null) {
         // Input is HDF
         job.set(HDFRecordReader.DatasetName, hdfDataset);
+        job.setClass("shape", NASARectangle.class, Shape.class);
         job.setBoolean(HDFRecordReader.SkipFillValue, true);
         // Determine the range of values by opening one of the HDF files
         if (valueRange == null)

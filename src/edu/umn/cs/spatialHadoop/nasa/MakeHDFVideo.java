@@ -40,6 +40,7 @@ import org.mortbay.log.Log;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.Plot;
 
 /**
@@ -168,7 +169,14 @@ public class MakeHDFVideo {
     int imageWidth = firstImage.getWidth();
     int imageHeight = firstImage.getHeight();
     
-    Plot.drawScale(new Path(output, "scale.png"), HDFPlot.lastRange, 64, imageHeight);
+    String scaleRangeStr = params.get("scale-range");
+    if (scaleRangeStr != null) {
+      String[] parts = scaleRangeStr.split("\\.\\.");
+      MinMax scaleRange = new MinMax();
+      scaleRange.minValue = Integer.parseInt(parts[0]);
+      scaleRange.maxValue = Integer.parseInt(parts[1]);
+      Plot.drawScale(new Path(output, "scale.png"), scaleRange, 64, imageHeight);
+    }
     
     InputStream logoInputStream = MakeHDFVideo.class.getResourceAsStream("/gistic_logo.png");
     OutputStream logoOutputStream = outFs.create(new Path(output, "gistic_logo.png"));
@@ -243,7 +251,7 @@ public class MakeHDFVideo {
           + "[mid3][scale] overlay=main_w-overlay_w:0 [out]\" "
           + "-r 4 -pix_fmt yuv420p output.mp4 ";
     } else {
-      video_command = "avconv -r 4 -i day_%3d.png -vf"
+      video_command = "avconv -r 4 -i day_%3d.png -vf "
           + "\"movie=gistic_logo.png [watermark]; "
           + "movie=scale.png [scale]; "
           + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "

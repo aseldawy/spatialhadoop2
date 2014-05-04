@@ -162,10 +162,10 @@ public class HDFPlot {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
-    Path input = cla.getPaths()[0];
-    Path output = cla.getPaths()[1];
-    String timeRange = cla.get("time");
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    Path input = params.getPaths()[0];
+    Path output = params.getPaths()[1];
+    String timeRange = params.get("time");
     if (timeRange == null) {
       printUsage();
     }
@@ -209,26 +209,28 @@ public class HDFPlot {
       matchingPaths[i] = new Path(matchingDirs[i].getPath(), "*.hdf");
     
     // Retrieve range to plot if provided by user
-    Rectangle plotRange = (Rectangle) cla.getShape("rect");
+    Rectangle plotRange = (Rectangle) params.getShape("rect");
     
-    if (cla.is("download-only")) {
+    if (params.is("download-only")) {
       HDFDownloader(input, output, plotRange, dateFrom, dateTo);
       return;
     }
 
     // Retrieve the scale
-    String scale = cla.get("scale", "preset");
-    MinMax valueRange;
-    if (scale.equals("preset") || scale.equals("tight")) {
-      cla.setBoolean("force", true);
-      valueRange = Aggregate.aggregate(matchingPaths, cla);
-    } else if (scale.matches("\\d+,\\d+")) {
-      String[] parts = scale.split(",");
-      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-    } else {
-      valueRange = Aggregate.aggregate(matchingPaths, cla);
+    MinMax valueRange = null;
+    if (params.get("valuerange") == null) {
+      String scale = params.get("scale", "preset");
+      if (scale.equals("preset") || scale.equals("tight")) {
+        params.setBoolean("force", true);
+        valueRange = Aggregate.aggregate(matchingPaths, params);
+      } else if (scale.matches("\\d+,\\d+")) {
+        String[] parts = scale.split(",");
+        valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+      } else {
+        valueRange = Aggregate.aggregate(matchingPaths, params);
+      }
+      lastRange = valueRange;
     }
-    lastRange = valueRange;
     
     Vector<String> vargs = new Vector<String>(Arrays.asList(args));
     // Keep all arguments except input and output which change for each call
@@ -246,11 +248,11 @@ public class HDFPlot {
       }
     }
 
-    boolean overwrite = cla.is("overwrite");
-    boolean pyramid = cla.is("pyramid");
+    boolean overwrite = params.is("overwrite");
+    boolean pyramid = params.is("pyramid");
     FileSystem outFs = output.getFileSystem(conf);
     Vector<RunningJob> jobs = new Vector<RunningJob>();
-    boolean background = cla.is("background");
+    boolean background = params.is("background");
     for (Path inputPath : matchingPaths) {
       Path outputPath = new Path(output+"/"+inputPath.getParent().getName()+
           (pyramid? "" : ".png"));
