@@ -1,6 +1,7 @@
 <%@ page
   contentType="text/html; charset=UTF-8"
   import="edu.umn.cs.spatialHadoop.operations.KNN"
+  import="edu.umn.cs.spatialHadoop.OperationsParams"
   import="org.apache.hadoop.conf.Configuration"
   import="org.apache.hadoop.fs.*"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
@@ -43,8 +44,10 @@
       (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
     
     try{
-      KNN.knnMapReduce(input.getFileSystem(conf), input, output,
-          query_point, k, new OSMPolygon(), false, true);
+      OperationsParams params = new OperationsParams(conf);
+      params.setBoolean("background", true);
+      params.setClass("shape", OSMPolygon.class, Shape.class);
+      KNN.knn(input, output, query_point, k, params);
       RunningJob running_job = KNN.lastRunningJob;
       
       // Create a link to the status of the running job

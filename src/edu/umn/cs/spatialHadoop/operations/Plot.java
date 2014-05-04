@@ -413,7 +413,7 @@ public class Plot {
       valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
 
-    JobConf job = new JobConf(shape.getClass());
+    JobConf job = new JobConf(params, Plot.class);
     job.setJobName("Plot");
 
     job.setMapperClass(PlotMap.class);
@@ -516,7 +516,7 @@ public class Plot {
         valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
       
-      JobConf job = new JobConf(shape.getClass());
+      JobConf job = new JobConf(params, Plot.class);
       job.setJobName("Plot");
       
       job.setMapperClass(PlotMap.class);

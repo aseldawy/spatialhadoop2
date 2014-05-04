@@ -1,6 +1,7 @@
 <%@ page
   contentType="text/html; charset=UTF-8"
   import="edu.umn.cs.spatialHadoop.operations.RangeQuery"
+  import="edu.umn.cs.spatialHadoop.OperationsParams"
   import="org.apache.hadoop.conf.Configuration"
   import="org.apache.hadoop.fs.*"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
@@ -45,8 +46,11 @@
       (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
     
     try{
-      RangeQuery.rangeQueryMapReduce(input.getFileSystem(conf), input, output,
-          query_mbr, new OSMPolygon(), false, true);
+      OperationsParams params = new OperationsParams(conf);
+      OperationsParams.setShape(params, "rect", query_mbr);
+      params.setBoolean("background", true);
+      params.setClass("shape", OSMPolygon.class, Shape.class);
+      RangeQuery.rangeQuery(input, output, query_mbr, params);
       RunningJob running_job = RangeQuery.lastRunningJob;
       
       // Create a link to the status of the running job

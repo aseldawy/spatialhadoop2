@@ -29,7 +29,6 @@ $(document).ready(function() {
     if (selected.size() > 0) {
       window.location.href = "pigeon.jsp?dir="+selected.val();
     }
-    
   });
 
   // For initial case

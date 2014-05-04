@@ -26,6 +26,14 @@ $(document).ready(function() {
   }
 
   $("#file-selector").change(plotSelected);
+  $("#file-selector").dblclick(function() {
+    var fselector = $("#file-selector");
+    var selected = fselector.find(":selected");
+    if (selected.size() > 0) {
+      window.location.href = "visualizer.jsp?dir="+selected.val();
+    }
+  });
+
   $("#partitions").change(plotSelected);
   // Initialize preview area
   plotSelected();
@@ -56,6 +64,8 @@ $(document).ready(function() {
         $("#range-query-dialog").hide();
       }, success: function(response) {
         $('#preview-img').html(response);
+      }, error: function(xhr) {
+        $('#preview-img').html(xhr.responseText);
       }
     });
     
@@ -109,6 +119,8 @@ STORE result INTO '%output%';";
         $("#knn-dialog").hide();
       }, success: function(response) {
         $('#preview-img').html(response);
+      }, error: function(xhr) {
+        $('#preview-img').html(xhr.responseText);
       }
     });
     
@@ -164,6 +176,8 @@ STORE result INTO '%output%';";
         $("#spatial-join-dialog").hide();
       }, success: function(response) {
         $('#preview-img').html(response);
+      }, error: function(xhr) {
+        $('#preview-img').html(xhr.responseText);
       }
     });
     

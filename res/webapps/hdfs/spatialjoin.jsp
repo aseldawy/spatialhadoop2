@@ -2,9 +2,11 @@
   contentType="text/html; charset=UTF-8"
   import="edu.umn.cs.spatialHadoop.operations.DistributedJoin"
   import="org.apache.hadoop.conf.Configuration"
+  import="edu.umn.cs.spatialHadoop.OperationsParams"
   import="org.apache.hadoop.fs.*"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
   import="edu.umn.cs.spatialHadoop.core.OSMPolygon"
+  import="edu.umn.cs.spatialHadoop.core.Shape"
   import="org.apache.hadoop.mapred.RunningJob"
   
   
@@ -39,8 +41,10 @@
       (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
     
     try{
-      DistributedJoin.joinStep(input1.getFileSystem(conf),
-        new Path[] {input1, input2}, output, new OSMPolygon(), false, true);
+      OperationsParams params = new OperationsParams(conf);
+      params.setClass("shape", OSMPolygon.class, Shape.class);
+      params.setBoolean("background", true);
+      DistributedJoin.joinStep(new Path[] {input1, input2}, output, params);
       RunningJob running_job = DistributedJoin.lastRunningJob;
       String trackerAddress = conf.get("mapred.job.tracker.http.address");
       InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(trackerAddress);
@@ -56,11 +60,7 @@
       out.print("Click here to track the job");
       out.println("</a>");
     } catch(Exception e) {
-      out.println(e);
-      for (StackTraceElement ste : e.getStackTrace()) {
-        out.println(ste);
-        out.println("<br/>");
-      }
+      e.printStackTrace(out);
     }
   }
 %>

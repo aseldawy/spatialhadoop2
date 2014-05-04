@@ -17,7 +17,7 @@
   import="org.apache.commons.codec.binary.Base64"
   import="org.apache.hadoop.mapred.RunningJob"
   import="edu.umn.cs.spatialHadoop.util.JspSpatialHelper"
-  import="edu.umn.cs.spatialHadoop.CommandLineArguments"
+  import="edu.umn.cs.spatialHadoop.OperationsParams"
 %>
 
 <%! private static final long serialVersionUID = 1L;%>
@@ -36,7 +36,7 @@
       // Plot the image
       String colorName = request.getParameter("color");
       
-      CommandLineArguments plotConf = new CommandLineArguments(conf);
+      OperationsParams plotConf = new OperationsParams(conf);
       plotConf.setClass("shape", OSMPolygon.class, Shape.class);
       if (colorName != null)
         plotConf.set("color", colorName);
