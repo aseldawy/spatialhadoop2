@@ -192,7 +192,7 @@ public class ConvexHull {
     public void selectCells(GlobalIndex<Partition> gIndex,
         ResultCollector<Partition> output) {
       Set<Partition> non_dominated_partitions_all = new HashSet<Partition>();
-      for (Skyline.Direction dir : Skyline.Direction.values()) {
+      for (OperationsParams.Direction dir : OperationsParams.Direction.values()) {
         Vector<Partition> non_dominated_partitions = new Vector<Partition>();
         for (Partition p : gIndex) {
           boolean dominated = false;

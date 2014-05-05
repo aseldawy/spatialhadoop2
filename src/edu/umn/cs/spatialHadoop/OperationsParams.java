@@ -414,5 +414,32 @@ public class OperationsParams extends Configuration {
       size *= 1024 * 1024 * 1024 * 1024;
     return size;
   }
+  
+  /**Data type for the direction of skyline to compute*/
+  public enum Direction {MaxMax, MaxMin, MinMax, MinMin};
 
+  public Direction getDirection(String key, Direction defaultDirection) { 
+    return getDirection(this, key, defaultDirection);
+  }
+  
+  public static Direction getDirection(Configuration conf, String key, Direction defaultDirection) {
+    String strdir = conf.get("dir");
+    if (strdir == null)
+      return defaultDirection;
+    Direction dir;
+    if (strdir.equalsIgnoreCase("maxmax") || strdir.equalsIgnoreCase("max-max")) {
+      dir = Direction.MaxMax;
+    } else if (strdir.equalsIgnoreCase("maxmin") || strdir.equalsIgnoreCase("max-min")) {
+      dir = Direction.MaxMin;
+    } else if (strdir.equalsIgnoreCase("minmax") || strdir.equalsIgnoreCase("min-max")) {
+      dir = Direction.MinMax;
+    } else if (strdir.equalsIgnoreCase("minmin") || strdir.equalsIgnoreCase("min-min")) {
+      dir = Direction.MinMin;
+    } else {
+      System.err.println("Invalid direction: "+strdir);
+      System.err.println("Valid directions are: max-max, max-min, min-max, and min-min");
+      return null;
+    }
+    return dir;
+  }
 }

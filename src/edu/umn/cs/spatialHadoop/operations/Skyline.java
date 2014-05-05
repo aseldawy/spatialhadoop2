@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -35,12 +36,14 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.OperationsParams.Direction;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
@@ -57,9 +60,6 @@ public class Skyline {
   
   private static final Log LOG = LogFactory.getLog(Skyline.class);
   
-  /**Data type for the direction of skyline to compute*/
-  enum Direction {MaxMax, MaxMin, MinMax, MinMin}
-
   /**
    * Computes the skyline of a set of points using a divided and conquer
    * in-memory algorithm. The algorithm recursively splits the points into
@@ -164,34 +164,6 @@ public class Skyline {
   }
   
   /**
-   * Computes the skyline by reading points from stream
-   * @param p 
-   * @throws IOException 
-   */
-  public static <S extends Point> void skylineStream(S point, Direction dir) throws IOException {
-    ShapeRecordReader<S> reader =
-        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
-    final int threshold = 50000000;
-    Point[] points = new Point[threshold];
-    int size = 0;
-    
-    Rectangle key = new Rectangle();
-    while (reader.next(key, point)) {
-      points[size++] = point.clone();
-      if (size >= threshold) {
-        Point[] ch = skyline(points, dir);
-        size = 0;
-        for (Point p : ch)
-          points[size++] = p;
-        System.err.println("Size: "+size);
-      }
-    }
-    Point[] actualPoints = new Point[size];
-    System.arraycopy(points, 0, actualPoints, 0, size);
-    skyline(actualPoints, dir);
-  }
-  
-  /**
    * Computes the skyline of an input file using a single machine algorithm.
    * The output is written to the output file. If output file is null, the
    * output is just thrown away.
@@ -201,8 +173,8 @@ public class Skyline {
    * @param overwrite
    * @throws IOException
    */
-  public static void skylineLocal(Path inFile, Path outFile, Direction dir,
-      boolean overwrite) throws IOException {
+  public static void skylineLocal(Path inFile, Path outFile,
+      OperationsParams params) throws IOException {
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     long file_size = inFs.getFileStatus(inFile).getLen();
     
@@ -219,11 +191,11 @@ public class Skyline {
     }
     
     Point[] arPoints = points.toArray(new Point[points.size()]);
-    
+    Direction dir = params.getDirection("dir", Direction.MaxMax);
     Point[] skyline = skyline(arPoints, dir);
 
     if (outFile != null) {
-      if (overwrite) {
+      if (params.getBoolean("overwrite", false)) {
         FileSystem outFs = outFile.getFileSystem(new Configuration());
         outFs.delete(outFile, true);
       }
@@ -235,14 +207,6 @@ public class Skyline {
     }
   }
   
-  /**Name of the configuration line for storing the skyline direction*/
-  private static final String SkylineDirection = "skyline.direction";
-  
-  /**Sets the skyline direction in the configuration file*/
-  private static void setDirection(Configuration conf, Direction dir) {
-    conf.set(SkylineDirection, dir.toString());
-  }
-  
   public static class SkylineFilter extends DefaultBlockFilter {
     
     private Direction dir;
@@ -250,7 +214,7 @@ public class Skyline {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      dir = getDirection(job);
+      dir = OperationsParams.getDirection(job, "dir", Direction.MaxMax);
     }
     
     @Override
@@ -303,11 +267,6 @@ public class Skyline {
     
   }
   
-  private static Direction getDirection(Configuration conf) {
-    String strdir = conf.get(SkylineDirection, Direction.MaxMax.toString());
-    return Direction.valueOf(strdir);
-  }
-
   public static class SkylineReducer extends MapReduceBase implements
   Reducer<NullWritable,Point,NullWritable,Point> {
     
@@ -316,7 +275,7 @@ public class Skyline {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      dir = getDirection(job);
+      dir = OperationsParams.getDirection(job, "dir", Direction.MaxMax);
     }
     
 
@@ -335,9 +294,9 @@ public class Skyline {
     }
   }
   
-  public static void skylineMapReduce(Path inFile, Path userOutPath, Direction dir,
-      boolean overwrite) throws IOException {
-    JobConf job = new JobConf(Skyline.class);
+  private static void skylineMapReduce(Path inFile, Path userOutPath,
+      OperationsParams params) throws IOException {
+    JobConf job = new JobConf(params, Skyline.class);
     Path outPath = userOutPath;
     FileSystem outFs = (userOutPath == null ? inFile : userOutPath).getFileSystem(job);
     
@@ -346,17 +305,8 @@ public class Skyline {
         outPath = new Path(inFile.toUri().getPath()+
             ".skyline_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outPath));
-    } else {
-      if (outFs.exists(outPath)) {
-        if (overwrite) {
-          outFs.delete(outPath, true);
-        } else {
-          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
-        }
-      }
     }
     
-    setDirection(job, dir);
     job.setJobName("Skyline");
     job.setClass(SpatialSite.FilterClass, SkylineFilter.class, BlockFilter.class);
     job.setMapperClass(IdentityMapper.class);
@@ -376,6 +326,23 @@ public class Skyline {
       outFs.delete(outPath, true);
   }
   
+  public static void skyline(Path inFile, Path outFile, OperationsParams params) throws IOException {
+    JobConf job = new JobConf(params, FileMBR.class);
+    FileInputFormat.addInputPath(job, inFile);
+    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+
+    boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
+    boolean isLocal = params.is("local", autoLocal);
+    
+    if (!isLocal) {
+      // Process with MapReduce
+      skylineMapReduce(inFile, outFile, params);
+    } else {
+      // Process without MapReduce
+      skylineLocal(inFile, outFile, params);
+    }
+  }
+  
   private static void printUsage() {
     System.err.println("Computes the skyline of an input file of points");
     System.err.println("Parameters: (* marks required parameters)");
@@ -387,47 +354,21 @@ public class Skyline {
   }
   
   public static void main(String[] args) throws IOException {
-    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
-    String strdir = cla.get("dir");
-    Direction dir = Direction.MaxMax;
-    if (strdir != null) {
-      if (strdir.equalsIgnoreCase("maxmax") || strdir.equalsIgnoreCase("max-max")) {
-        dir = Direction.MaxMax;
-      } else if (strdir.equalsIgnoreCase("maxmin") || strdir.equalsIgnoreCase("max-min")) {
-        dir = Direction.MaxMin;
-      } else if (strdir.equalsIgnoreCase("minmax") || strdir.equalsIgnoreCase("min-max")) {
-        dir = Direction.MinMax;
-      } else if (strdir.equalsIgnoreCase("minmin") || strdir.equalsIgnoreCase("min-min")) {
-        dir = Direction.MinMin;
-      } else {
-        System.err.println("Invalid direction: "+strdir);
-        System.err.println("Valid directions are: max-max, max-min, min-max, and min-min");
-        printUsage();
-        return;
-      }
-    }    
-    Path[] paths = cla.getPaths();
-    if (paths.length == 0) {
-      if (cla.is("local")) {
-        long t1 = System.currentTimeMillis();
-        skylineStream((Point)cla.getShape("shape"), dir);
-        long t2 = System.currentTimeMillis();
-        System.out.println("Total time: "+(t2-t1)+" millis");
-      } else {
-        printUsage();
-      }
-      return;
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    Path[] paths = params.getPaths();
+    if (paths.length <= 1 && !params.checkInput()) {
+      printUsage();
+      System.exit(1);
     }
-    Path inFile = paths[0];
-    Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = cla.is("overwrite");
-    if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
-      System.err.println("Output path already exists and overwrite flag is not set");
-      return;
+    if (paths.length >= 2 && !params.checkInputOutput()) {
+      printUsage();
+      System.exit(1);
     }
+    Path inFile = params.getInputPath();
+    Path outFile = params.getOutputPath();
     
     long t1 = System.currentTimeMillis();
-    skylineMapReduce(inFile, outFile, dir, cla.is("overwrite"));
+    skyline(inFile, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }
