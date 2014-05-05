@@ -80,7 +80,7 @@ public class NASAPoint extends Point implements NASAShape {
   
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
-      int imageHeight, boolean vflip, double scale) {
+      int imageHeight, double scale) {
     Color color;
     if (value < minValue) {
       color = Color.getHSBColor(MaxHue, 0.5f, 1.0f);
@@ -91,6 +91,6 @@ public class NASAPoint extends Point implements NASAShape {
       color = Color.getHSBColor(0.0f, 0.5f, 1.0f);
     }
     g.setColor(color);
-    super.draw(g, fileMBR, imageWidth, imageHeight, vflip, scale);
+    super.draw(g, fileMBR, imageWidth, imageHeight, scale);
   }
 }

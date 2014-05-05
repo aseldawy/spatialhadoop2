@@ -34,7 +34,6 @@ import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 
@@ -120,10 +119,7 @@ public class Shuffle {
     job.setReducerClass(Reduce.class);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
 
-    FileSystem infs = infile.getFileSystem(job);
-    int numOfPartitions = (int) Math.ceil((double)
-        infs.getFileStatus(infile).getLen() / infs.getDefaultBlockSize(outfile));
-    job.setInt(NumOfPartitions, numOfPartitions);
+    job.setInt(NumOfPartitions, Math.max(1, clusterStatus.getMaxReduceTasks()));
     
     job.setInputFormat(TextInputFormat.class);
     TextInputFormat.setInputPaths(job, infile);

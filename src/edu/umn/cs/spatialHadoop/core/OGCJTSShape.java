@@ -194,12 +194,11 @@ public class OGCJTSShape implements Shape {
   
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
-      int imageHeight, boolean vflip, double scale) {
+      int imageHeight, double scale) {
     Geometry geom = this.geom;
     Color shape_color = g.getColor();
     
-    drawJTSShape(g, geom, fileMBR, imageWidth, imageHeight, vflip, scale,
-        shape_color);
+    drawJTSShape(g, geom, fileMBR, imageWidth, imageHeight, scale, shape_color);
     
   }
 
@@ -214,24 +213,24 @@ public class OGCJTSShape implements Shape {
    * @param shape_color
    */
   private static void drawJTSShape(Graphics graphics, Geometry geom,
-      Rectangle fileMbr, int imageWidth, int imageHeight, boolean vflip,
-      double scale, Color shape_color) {
+      Rectangle fileMbr, int imageWidth, int imageHeight, double scale,
+      Color shape_color) {
     if (geom instanceof GeometryCollection) {
       GeometryCollection geom_coll = (GeometryCollection) geom;
       for (int i = 0; i < geom_coll.getNumGeometries(); i++) {
         Geometry sub_geom = geom_coll.getGeometryN(i);
         // Recursive call to draw each geometry
-        drawJTSShape(graphics, sub_geom, fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
+        drawJTSShape(graphics, sub_geom, fileMbr, imageWidth, imageHeight, scale, shape_color);
       }
     } else if (geom instanceof com.vividsolutions.jts.geom.Polygon) {
       com.vividsolutions.jts.geom.Polygon poly = (com.vividsolutions.jts.geom.Polygon) geom;
 
       for (int i = 0; i < poly.getNumInteriorRing(); i++) {
         LineString ring = poly.getInteriorRingN(i);
-        drawJTSShape(graphics, ring, fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
+        drawJTSShape(graphics, ring, fileMbr, imageWidth, imageHeight, scale, shape_color);
       }
       
-      drawJTSShape(graphics, poly.getExteriorRing(), fileMbr, imageWidth, imageHeight, vflip, scale, shape_color);
+      drawJTSShape(graphics, poly.getExteriorRing(), fileMbr, imageWidth, imageHeight, scale, shape_color);
     } else if (geom instanceof LineString) {
       LineString line = (LineString) geom;
       double geom_alpha = line.getLength() * scale;
@@ -248,7 +247,7 @@ public class OGCJTSShape implements Shape {
         
         // Transform a point in the polygon to image coordinates
         xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        ypoints[i] = (int) Math.round(((vflip? -py : py) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        ypoints[i] = (int) Math.round((py - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       }
       
       // Draw the polygon

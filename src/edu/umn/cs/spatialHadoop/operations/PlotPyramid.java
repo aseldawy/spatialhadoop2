@@ -302,7 +302,7 @@ public class PlotPyramid {
         
         while (values.hasNext()) {
           Shape s = values.next();
-          s.draw(graphics, fileMBR, imageWidth, imageHeight, false, scale2);
+          s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
         }
         
         graphics.dispose();

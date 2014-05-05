@@ -196,7 +196,7 @@ public class Plot {
 
         while (values.hasNext()) {
           Shape s = values.next();
-          s.draw(graphics, fileMbr, imageWidth, imageHeight, false, scale2);
+          s.draw(graphics, fileMbr, imageWidth, imageHeight, scale2);
         }
         
         graphics.dispose();
@@ -334,7 +334,7 @@ public class Plot {
       
       for (Shape shape : (Shape[]) value.get()) {
         if (queryRange == null || queryRange.isIntersected(shape))
-          shape.draw(graphics, drawMbr, imageWidth, imageHeight, false, scale2);
+          shape.draw(graphics, drawMbr, imageWidth, imageHeight, scale2);
       }
   
       graphics.dispose();
@@ -590,9 +590,6 @@ public class Plot {
     int width = params.getInt("width", 1000);
     int height = params.getInt("height", 1000);
     
-    // Flip image vertically to correct Y axis +ve direction
-    boolean vflip = params.is("vflip");
-    
     Color color = params.getColor("color", Color.BLACK);
 
     String hdfDataset = (String) params.get("dataset");
@@ -614,6 +611,7 @@ public class Plot {
     FileSystem inFs = inFile.getFileSystem(conf);
 
     long fileLength = inFs.getFileStatus(inFile).getLen();
+    boolean vflip = params.is("vflip");
     if (hdfDataset != null) {
       // Collects some stats about the HDF file
       if (valueRange == null)
@@ -623,11 +621,6 @@ public class Plot {
       NASAPoint.minValue = valueRange.minValue;
       NASAPoint.maxValue = valueRange.maxValue;
       LOG.info("FileMBR: "+fileMbr);
-      if (vflip) {
-        double temp = fileMbr.y1;
-        fileMbr.y1 = -fileMbr.y2;
-        fileMbr.y2 = -temp;
-      }
       
       if (keepAspectRatio) {
         // Adjust width and height to maintain aspect ratio
@@ -655,13 +648,21 @@ public class Plot {
       
       while (reader.next(dataset, (NASAShape)shape)) {
         if (plotRange == null || shape.isIntersected(shape)) {
-          shape.draw(graphics, fileMbr, width, height, vflip, 0.0);
+          shape.draw(graphics, fileMbr, width, height, 0.0);
         }
       }
       reader.close();
 
       // Write image to output
       graphics.dispose();
+      
+      if (vflip) {
+        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+        tx.translate(0, -image.getHeight());
+        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+        image = op.filter(image, null);
+      }
+      
       FileSystem outFs = outFile.getFileSystem(conf);
       OutputStream out = outFs.create(outFile, true);
       ImageIO.write(image, "png", out);
@@ -671,11 +672,6 @@ public class Plot {
       Rectangle fileMbr = plotRange == null ?
           FileMBR.fileMBR(inFile, params) : plotRange.getMBR();
       LOG.info("FileMBR: "+fileMbr);
-      if (vflip) {
-        double temp = fileMbr.y1;
-        fileMbr.y1 = -fileMbr.y2;
-        fileMbr.y2 = -temp;
-      }
 
       if (keepAspectRatio) {
         // Adjust width and height to maintain aspect ratio
@@ -706,12 +702,20 @@ public class Plot {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR != null) {
           if (plotRange == null || shapeMBR.isIntersected(plotRange))
-            shape.draw(graphics, fileMbr, width, height, vflip, scale2);
+            shape.draw(graphics, fileMbr, width, height, scale2);
         }
       }
       reader.close();
       // Write image to output
       graphics.dispose();
+      
+      if (vflip) {
+        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+        tx.translate(0, -image.getHeight());
+        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+        image = op.filter(image, null);
+      }
+      
       FileSystem outFs = outFile.getFileSystem(conf);
       OutputStream out = outFs.create(outFile, true);
       ImageIO.write(image, "png", out);

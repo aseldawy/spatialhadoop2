@@ -197,7 +197,7 @@ public class OGCESRIShape implements Shape {
   
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
-      int imageHeight, boolean vflip, double scale) {
+      int imageHeight, double scale) {
     OGCGeometry geom = this.geom;
     Color shape_color = g.getColor();
     if (geom instanceof OGCGeometryCollection) {
@@ -205,7 +205,7 @@ public class OGCESRIShape implements Shape {
       for (int i = 0; i < geom_coll.numGeometries(); i++) {
         OGCGeometry sub_geom = geom_coll.geometryN(i);
         // Recursive call to draw each geometry
-        new OGCESRIShape(sub_geom).draw(g, fileMBR, imageWidth, imageHeight, vflip, scale);
+        new OGCESRIShape(sub_geom).draw(g, fileMBR, imageWidth, imageHeight, scale);
       }
     } else if (geom.getEsriGeometry() instanceof MultiPath) {
       MultiPath path = (MultiPath) geom.getEsriGeometry();
@@ -224,7 +224,7 @@ public class OGCESRIShape implements Shape {
         
         // Transform a point in the polygon to image coordinates
         xpoints[i] = (int) Math.round((px - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-        ypoints[i] = (int) Math.round(((vflip? -py : py) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+        ypoints[i] = (int) Math.round((py - fileMBR.y1) * imageHeight / fileMBR.getHeight());
       }
       
       // Draw the polygon

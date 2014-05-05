@@ -152,11 +152,11 @@ public class OSMEdge implements Shape {
   
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
-      int imageHeight, boolean vflip, double scale) {
+      int imageHeight, double scale) {
     int x1 = (int) ((this.lon1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int y1 = (int) (((vflip? -this.lat1 : this.lat1) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int y1 = (int) ((this.lat1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     int x2 = (int) ((this.lon2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int y2 = (int) (((vflip? -this.lat2 : this.lat2) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int y2 = (int) ((this.lat2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     Color shape_color = g.getColor();
     
     // Compute alpha to use based on edge length and image scale

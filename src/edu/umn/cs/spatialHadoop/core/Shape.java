@@ -58,8 +58,7 @@ public interface Shape extends Writable, Cloneable, TextSerializable {
    * @param fileMBR - the MBR of the file in which the shape is contained
    * @param imageWidth - width of the image to draw
    * @param imageHeight - height of the image to draw
-   * @param vflip - whether the generated image is flipped vertically or not
    * @param scale - the scale used to convert shape coordinates to image coordinates
    */
-  public void draw(Graphics g, Rectangle fileMBR, int imageWidth, int imageHeight, boolean vflip, double scale);
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth, int imageHeight, double scale);
 }
