@@ -16,7 +16,10 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
@@ -144,7 +147,6 @@ public class Plot {
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
     private Color strokeColor;
-    private boolean vflip;
 
     @Override
     public void configure(JobConf job) {
@@ -155,13 +157,6 @@ public class Plot {
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
       this.strokeColor = new Color(job.getInt("color", 0));
-      this.vflip = job.getBoolean("vflip", false);
-      
-      if (vflip) {
-        double temp = this.fileMbr.y1;
-        this.fileMbr.y1 = -this.fileMbr.y2;
-        this.fileMbr.y2 = -temp;
-      }
 
       this.scale2 = (double)imageWidth * imageHeight /
           (this.fileMbr.getWidth() * this.fileMbr.getHeight());
@@ -178,9 +173,9 @@ public class Plot {
         CellInfo cellInfo = partitionGrid.getCell(cellNumber.get());
         // Initialize the image
         int image_x1 = (int) Math.floor((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y1 = (int) Math.floor(((vflip? -cellInfo.y2 : cellInfo.y1) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_y1 = (int) Math.floor((cellInfo.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int image_x2 = (int) Math.ceil((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y2 = (int) Math.ceil(((vflip? -cellInfo.y1 : cellInfo.y2) - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_y2 = (int) Math.ceil((cellInfo.y2 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
         int tile_width = image_x2 - image_x1;
         int tile_height = image_y2 - image_y1;
 
@@ -201,7 +196,7 @@ public class Plot {
 
         while (values.hasNext()) {
           Shape s = values.next();
-          s.draw(graphics, fileMbr, imageWidth, imageHeight, vflip, scale2);
+          s.draw(graphics, fileMbr, imageWidth, imageHeight, false, scale2);
         }
         
         graphics.dispose();
@@ -224,6 +219,7 @@ public class Plot {
       Path outFile = ImageOutputFormat.getOutputPath(job);
       int width = job.getInt("width", 1000);
       int height = job.getInt("height", 1000);
+      boolean vflip = job.getBoolean("vflip", false);
       
       // Combine all images in one file
       // Rename output file
@@ -238,7 +234,7 @@ public class Plot {
         }
       });
       
-      if (resultFiles.length == 1) {
+      if (resultFiles.length == 1 && !vflip) {
         // Only one output file
         outFs.rename(resultFiles[0].getPath(), outFile);
       } else {
@@ -257,6 +253,14 @@ public class Plot {
           }
           graphics.drawImage(tileImage, 0, 0, null);
           graphics.dispose();
+        }
+        
+        // Flip image vertically if needed
+        if (vflip) {
+          AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+          tx.translate(0, -finalImage.getHeight());
+          AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+          finalImage = op.filter(finalImage, null);
         }
         
         // Finally, write the resulting image to the given output path
@@ -328,7 +332,6 @@ public class Plot {
       graphics.clearRect(0, 0, imageWidth, imageHeight);
       graphics.setColor(strokeColor);
       
-      System.out.println("Read values: "+value.get().length);
       for (Shape shape : (Shape[]) value.get()) {
         if (queryRange == null || queryRange.isIntersected(shape))
           shape.draw(graphics, drawMbr, imageWidth, imageHeight, false, scale2);
@@ -351,8 +354,6 @@ public class Plot {
   public static class PlotFastReduce extends MapReduceBase
       implements Reducer<Rectangle, ImageWritable, Rectangle, ImageWritable> {
     
-    private boolean vflip;
-  
     @Override
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
@@ -393,13 +394,7 @@ public class Plot {
     int width = params.getInt("width", 1000);
     int height = params.getInt("height", 1000);
 
-    // Flip image vertically to correct Y axis +ve direction
-    boolean vflip = params.is("vflip");
-
-    Color color = params.getColor("color", Color.BLACK);
-
     String hdfDataset = (String) params.get("dataset");
-    Shape shape = hdfDataset != null ? new NASARectangle() : params.getShape("shape", null);
     Shape plotRange = params.getShape("rect", null);
 
     boolean keepAspectRatio = params.is("keep-ratio", true);
@@ -414,21 +409,19 @@ public class Plot {
     }
 
     JobConf job = new JobConf(params, Plot.class);
-    job.setJobName("Plot");
+    job.setJobName("FastPlot");
 
-    job.setMapperClass(PlotMap.class);
+    job.setMapperClass(PlotFastMap.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setCombinerClass(PlotReduce.class);
-    job.setReducerClass(PlotReduce.class);
-    //      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setNumReduceTasks(0);
+    job.setCombinerClass(PlotFastReduce.class);
+    job.setReducerClass(PlotFastReduce.class);
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
     job.setMapOutputKeyClass(Rectangle.class);
     job.setMapOutputValueClass(ImageWritable.class);
 
-    FileSystem inFs = inFile.getFileSystem(job);
     Rectangle fileMBR;
-    // Collects some stats about the file to plot it correctly
+    // Collects some statistics about the file to plot it correctly
     if (hdfDataset != null) {
       // Input is HDF
       job.set(HDFRecordReader.DatasetName, hdfDataset);
@@ -440,8 +433,8 @@ public class Plot {
       job.setInt(MaxValue, valueRange.maxValue);
       fileMBR = plotRange != null?
           plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-          //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-          //          GeoProjector.class);
+//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//          GeoProjector.class);
     } else {
       // Run MBR operation in synchronous mode
       OperationsParams mbrArgs = new OperationsParams(params);
@@ -458,8 +451,10 @@ public class Plot {
         height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
         // Make divisible by two for compatability with ffmpeg
         height &= 0xfffffffe;
+        job.setInt("height", height);
       } else {
         width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
+        job.setInt("width", width);
       }
     }
 
@@ -473,7 +468,7 @@ public class Plot {
     ShapeInputFormat.addInputPath(job, inFile);
     // Set output committer which will stitch images together after all reducers
     // finish
-    // job.setOutputCommitter(PlotOutputCommitter.class);
+    job.setOutputCommitter(PlotOutputCommitter.class);
 
     job.setOutputFormat(ImageOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
@@ -490,17 +485,11 @@ public class Plot {
   public static RunningJob lastSubmittedJob;
   
   private static RunningJob plotMapReduce(Path inFile, Path outFile, OperationsParams params) throws IOException {
-      boolean showBorders = params.is("borders");
       boolean background = params.is("background");
       
       int width = params.getInt("width", 1000);
       int height = params.getInt("height", 1000);
       
-      // Flip image vertically to correct Y axis +ve direction
-      boolean vflip = params.is("vflip");
-      
-      Color color = params.getColor("color", Color.BLACK);
-  
       String hdfDataset = (String) params.get("dataset");
       Shape shape = hdfDataset != null ? new NASARectangle() : params.getShape("shape", null);
       Shape plotRange = params.getShape("rect", null);
@@ -557,10 +546,12 @@ public class Plot {
         if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
           // Fix width and change height
           height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
-          // Make divisible by two for compatability with ffmpeg
+          // Make divisible by two for compatibility with ffmpeg
           height &= 0xfffffffe;
+          job.setInt("height", height);
         } else {
           width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
+          job.setInt("width", width);
         }
       }
       
@@ -596,9 +587,6 @@ public class Plot {
 
   private static <S extends Shape> void plotLocal(Path inFile, Path outFile,
       OperationsParams params) throws IOException {
-    // TODO: Draw borders
-    boolean showBorders = params.is("borders");
-    
     int width = params.getInt("width", 1000);
     int height = params.getInt("height", 1000);
     
@@ -734,17 +722,22 @@ public class Plot {
   public static RunningJob plot(Path inFile, Path outFile, OperationsParams params) throws IOException {
     // Determine the size of input which needs to be processed in order to determine
     // whether to plot the file locally or using MapReduce
-    JobConf job = new JobConf(params);
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-    ShapeInputFormat.addInputPath(job, inFile);
-    Shape plotRange = params.getShape("rect");
-    if (plotRange != null) {
-      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+    boolean isLocal;
+    if (params.get("local") == null) {
+      JobConf job = new JobConf(params);
+      ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+      ShapeInputFormat.addInputPath(job, inFile);
+      Shape plotRange = params.getShape("rect");
+      if (plotRange != null) {
+        job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+      }
+      InputSplit[] splits = inputFormat.getSplits(job, 1);
+      boolean autoLocal = splits.length <= 3;
+      
+      isLocal = params.is("local", autoLocal);
+    } else {
+      isLocal = params.is("local");
     }
-    InputSplit[] splits = inputFormat.getSplits(job, 1);
-    boolean autoLocal = splits.length <= 3;
-    
-    boolean isLocal = params.is("local", autoLocal);
     
     if (isLocal) {
       plotLocal(inFile, outFile, params);
@@ -910,7 +903,10 @@ public class Plot {
     Path inFile = params.getInputPath();
     Path outFile = params.getOutputPath();
 
+    long t1 = System.currentTimeMillis();
     plot(inFile, outFile, params);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Plot finished in "+(t2-t1)+" millis");
   }
 
 }

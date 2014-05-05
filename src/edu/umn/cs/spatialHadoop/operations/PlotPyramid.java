@@ -14,6 +14,8 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -264,11 +266,6 @@ public class PlotPyramid {
       tileWidth = job.getInt("tilewidth", 256);
       tileHeight = job.getInt("tileheight", 256);
       this.vflip = job.getBoolean("vflip", false);
-      if (vflip) {
-        double temp = this.fileMBR.y1;
-        this.fileMBR.y1 = -this.fileMBR.y2;
-        this.fileMBR.y2 = -temp;
-      }
       this.strokeColor = new Color(job.getInt("color", 0));
       NASAPoint.minValue = job.getInt(MinValue, 0);
       NASAPoint.maxValue = job.getInt(MaxValue, 65535);
@@ -278,8 +275,6 @@ public class PlotPyramid {
     public void reduce(TileIndex tileIndex, Iterator<Shape> values,
         OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
         throws IOException {
-      if (vflip)
-        tileIndex = new TileIndex(tileIndex.level, tileIndex.x, ((1 << tileIndex.level) - 1) - tileIndex.y);
       // Size of the whole file in pixels at current level
       int imageWidth = tileWidth * (1 << tileIndex.level);
       int imageHeight = tileHeight * (1 << tileIndex.level);
@@ -307,10 +302,18 @@ public class PlotPyramid {
         
         while (values.hasNext()) {
           Shape s = values.next();
-          s.draw(graphics, fileMBR, imageWidth, imageHeight, vflip, scale2);
+          s.draw(graphics, fileMBR, imageWidth, imageHeight, false, scale2);
         }
         
         graphics.dispose();
+        
+        if (vflip) {
+          AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+          tx.translate(0, -image.getHeight());
+          AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+          image = op.filter(image, null);
+          tileIndex = new TileIndex(tileIndex.level, tileIndex.x, ((1 << tileIndex.level) - 1) - tileIndex.y);
+        }
         
         sharedValue.setImage(image);
         output.collect(tileIndex, sharedValue);
@@ -394,10 +397,6 @@ public class PlotPyramid {
    */
   public static <S extends Shape> RunningJob plotMapReduce(Path inFile,
       Path outFile, OperationsParams params) throws IOException {
-    int tileWidth = params.getInt("tilewidth", 256);
-    int tileHeight = params.getInt("tileheight", 256);
-    int numLevels = params.getInt("numlevels", 8);
-    boolean vflip = params.is("vflip");
     Color color = params.getColor("color", Color.BLACK);
     
     String hdfDataset = (String) params.get("dataset");
@@ -407,7 +406,7 @@ public class PlotPyramid {
     boolean keepAspectRatio = params.is("keep-ratio", true);
     boolean background = params.is("background");
     
-    JobConf job = new JobConf(shape.getClass());
+    JobConf job = new JobConf(params, PlotPyramid.class);
     job.setJobName("PlotPyramid");
     
     job.setMapperClass(PlotMap.class);

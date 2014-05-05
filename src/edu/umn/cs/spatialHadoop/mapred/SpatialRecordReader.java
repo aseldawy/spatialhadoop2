@@ -295,8 +295,15 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     
     // Read the first part of the block to determine its type
     buffer = new byte[8];
-    in.read(buffer);
-    if (Arrays.equals(buffer, SpatialSite.RTreeFileMarkerB)) {
+    int bufferLength = in.read(buffer);
+    if (bufferLength <= 0) {
+      buffer = null;
+    } else if (bufferLength < buffer.length) {
+      byte[] old_buffer = buffer;
+      buffer = new byte[bufferLength];
+      System.arraycopy(old_buffer, 0, buffer, 0, bufferLength);
+    }
+    if (buffer != null && Arrays.equals(buffer, SpatialSite.RTreeFileMarkerB)) {
       blockType = BlockType.RTREE;
       pos += 8;
       // Ignore the signature
@@ -310,7 +317,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       // Skip the first line unless we are reading the first block in file
       // For globally indexed blocks, never skip the first line in the block
       boolean skipFirstLine = getPos() != 0;
-      if (skipFirstLine) {
+      if (buffer != null && skipFirstLine) {
         // Search for the first occurrence of a new line
         int eol = RTree.skipToEOL(buffer, 0);
         // If we found an end of line in the buffer, we do not need to skip

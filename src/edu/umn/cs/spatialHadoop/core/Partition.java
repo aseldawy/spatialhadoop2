@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.core;
 
+import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -69,5 +70,15 @@ public class Partition extends CellInfo {
   @Override
   public boolean equals(Object obj) {
     return this.filename.equals(((Partition)obj).filename);
+  }
+  
+  @Override
+  public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
+      int imageHeight, boolean vflip, double scale) {
+    int s_x1 = (int) Math.round((this.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int s_y1 = (int) Math.round(((vflip? -this.y2 : this.y1) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int s_x2 = (int) Math.round((this.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int s_y2 = (int) Math.round(((vflip? -this.y1 : this.y2) - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    g.drawRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
   }
 }

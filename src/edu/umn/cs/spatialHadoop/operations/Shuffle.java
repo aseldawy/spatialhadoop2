@@ -17,9 +17,9 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.Vector;
 
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -49,9 +49,9 @@ public class Shuffle {
       "edu.umn.cs.spatialHadoop.operations.LineRandomizer";
   
   public static class Map extends MapReduceBase implements
-      Mapper<CellInfo, Text, IntWritable, Text> {
+      Mapper<LongWritable, Text, IntWritable, Text> {
     /**Total number of partitions to generate*/
-    private int totalNumberOfPartitions;
+    private int numOfPartitions;
     
     /**Temporary key used to generate intermediate records*/
     private IntWritable tempKey = new IntWritable();
@@ -59,13 +59,13 @@ public class Shuffle {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      totalNumberOfPartitions = job.getInt(NumOfPartitions, 1);
+      numOfPartitions = job.getInt(NumOfPartitions, 1);
     }
     
-    public void map(CellInfo cell, Text line,
+    public void map(LongWritable key, Text line,
         OutputCollector<IntWritable, Text> output, Reporter reporter)
         throws IOException {
-      tempKey.set((int) (Math.random() * totalNumberOfPartitions));
+      tempKey.set((int) (Math.random() * numOfPartitions));
       output.collect(tempKey, line);
     }
   }
