@@ -6,7 +6,7 @@
   <property name="doc" location="doc"/>
   <property name="build" location="bin"/>
   <property name="dist"  location="dist"/>
-  <property name="version" value="2.2-snapshot"/>
+  <property name="version" value="2.2"/>
   
   <path id="hdflib.path.ref">
     <fileset dir="lib/hdflib" includes="*.jar"/>
