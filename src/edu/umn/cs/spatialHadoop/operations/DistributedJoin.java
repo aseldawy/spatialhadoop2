@@ -517,7 +517,7 @@ public class DistributedJoin {
       job.setClass(SpatialSite.FilterClass, SpatialJoinFilter.class, BlockFilter.class);
       FileInputFormat.setInputPaths(job, inFiles);
       if ((gindex1 != null && gindex1.isReplicated()) ||
-          (gindex1 != null && gindex2.isReplicated())) {
+          (gindex2 != null && gindex2.isReplicated())) {
         // Need the map function with duplicate avoidance step.
         job.setMapperClass(RedistributeJoinMap.class);
       } else {

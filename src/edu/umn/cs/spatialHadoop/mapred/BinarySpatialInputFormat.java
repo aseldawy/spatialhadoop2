@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 import org.apache.hadoop.net.NetworkTopology;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -100,24 +101,19 @@ public abstract class BinarySpatialInputFormat<K extends Writable, V extends Wri
     final Vector<CombineFileSplit> matchedSplits = new Vector<CombineFileSplit>();
     if (gIndexes[0] == null || gIndexes[1] == null) {
       // Join every possible pair (Cartesian product)
-      BlockLocation[][] fileBlockLocations = new BlockLocation[inputFiles.length][];
+      InputSplit[][] inputSplits = new InputSplit[inputFiles.length][];
+      
       for (int i_file = 0; i_file < inputFiles.length; i_file++) {
-        FileSystem fs = inputFiles[i_file].getFileSystem(job);
-        FileStatus fileStatus = fs.getFileStatus(inputFiles[i_file]);
-        // XXX handle the case where the inputFile points to a directory
-        fileBlockLocations[i_file] = fs.getFileBlockLocations(fileStatus, 0,
-            fileStatus.getLen());
+        JobConf temp = new JobConf(job);
+        setInputPaths(temp, inputFiles[i_file]);
+        inputSplits[i_file] = super.getSplits(temp, 1);
       }
       LOG.info("Doing a Cartesian product of blocks: "+
-            fileBlockLocations[0].length+"x"+fileBlockLocations[1].length);
-      for (BlockLocation block1 : fileBlockLocations[0]) {
-        for (BlockLocation block2 : fileBlockLocations[1]) {
-          FileSplit fsplit1 = new FileSplit(inputFiles[0],
-              block1.getOffset(), block1.getLength(), block1.getHosts());
-          FileSplit fsplit2 = new FileSplit(inputFiles[1],
-              block2.getOffset(), block2.getLength(), block2.getHosts());
+          inputSplits[0].length+"x"+inputSplits[1].length);
+      for (InputSplit split1 : inputSplits[0]) {
+        for (InputSplit split2 : inputSplits[1]) {
           CombineFileSplit combinedSplit = (CombineFileSplit) FileSplitUtil
-              .combineFileSplits(job, fsplit1, fsplit2);
+              .combineFileSplits(job, (FileSplit)split1, (FileSplit)split2);
           matchedSplits.add(combinedSplit);
         }
       }
