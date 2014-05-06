@@ -19,7 +19,6 @@ import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
@@ -606,121 +605,105 @@ public class Plot {
       String[] parts = valueRangeStr.split(",");
       valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
+    
+    InputSplit[] splits;
+    FileSystem inFs = inFile.getFileSystem(params);
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    if (inFStatus != null && !inFStatus.isDir()) {
+      // One file, retrieve it immediately.
+      // This is useful if the input is a hidden file which is automatically
+      // skipped by FileInputFormat. We need to plot a hidden file for the case
+      // of plotting partition boundaries of a spatial index
+      splits = new InputSplit[] {new FileSplit(inFile, 0, inFStatus.getLen(), new String[0])};
+    } else {
+      JobConf job = new JobConf(params);
+      ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+      ShapeInputFormat.addInputPath(job, inFile);
+      splits = inputFormat.getSplits(job, 1);
+    }
 
-    Configuration conf = new Configuration();
-    FileSystem inFs = inFile.getFileSystem(conf);
-
-    long fileLength = inFs.getFileStatus(inFile).getLen();
     boolean vflip = params.is("vflip");
+
+    Rectangle fileMbr;
+    if (plotRange != null) {
+      fileMbr = plotRange.getMBR();
+    } else if (hdfDataset != null) {
+      // Plotting a NASA file
+      fileMbr = new Rectangle(-180, -90, 180, 90);
+    } else {
+      fileMbr = FileMBR.fileMBR(inFile, params);
+    }
+
+    if (keepAspectRatio) {
+      // Adjust width and height to maintain aspect ratio
+      if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
+        // Fix width and change height
+        height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
+      } else {
+        width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
+      }
+    }
+    
     if (hdfDataset != null) {
       // Collects some stats about the HDF file
       if (valueRange == null)
         valueRange = Aggregate.aggregateLocal(new Path[] {inFile}, params);
-      Rectangle fileMbr = plotRange == null ? new Rectangle(-180, -90, 180, 90)
-          : plotRange.getMBR();
       NASAPoint.minValue = valueRange.minValue;
       NASAPoint.maxValue = valueRange.maxValue;
-      LOG.info("FileMBR: "+fileMbr);
-      
-      if (keepAspectRatio) {
-        // Adjust width and height to maintain aspect ratio
-        if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
-          // Fix width and change height
-          height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
-        } else {
-          width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
-        }
-      }
-
-      // Read points from the HDF file
-      RecordReader<NASADataset, NASAShape> reader = new HDFRecordReader(conf,
-          new FileSplit(inFile, 0, fileLength, new String[0]), hdfDataset, true);
-      NASADataset dataset = reader.createKey();
-
-      // Create an image
-      BufferedImage image = new BufferedImage(width, height,
-          BufferedImage.TYPE_INT_ARGB);
-      Graphics2D graphics = image.createGraphics();
-      Color bg_color = new Color(0, 0, 0, 0);
-      graphics.setBackground(bg_color);
-      graphics.clearRect(0, 0, width, height);
-      graphics.setColor(color);
-      
-      while (reader.next(dataset, (NASAShape)shape)) {
-        if (plotRange == null || shape.isIntersected(shape)) {
-          shape.draw(graphics, fileMbr, width, height, 0.0);
-        }
-      }
-      reader.close();
-
-      // Write image to output
-      graphics.dispose();
-      
-      if (vflip) {
-        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-        tx.translate(0, -image.getHeight());
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        image = op.filter(image, null);
-      }
-      
-      FileSystem outFs = outFile.getFileSystem(conf);
-      OutputStream out = outFs.create(outFile, true);
-      ImageIO.write(image, "png", out);
-      out.close();
-    } else {
-      // Determine file MBR to be able to scale shapes correctly
-      Rectangle fileMbr = plotRange == null ?
-          FileMBR.fileMBR(inFile, params) : plotRange.getMBR();
-      LOG.info("FileMBR: "+fileMbr);
-
-      if (keepAspectRatio) {
-        // Adjust width and height to maintain aspect ratio
-        if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
-          // Fix width and change height
-          height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
-        } else {
-          width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
-        }
-      }
-      
-      double scale2 = (double) width * height
-          / (fileMbr.getWidth() * fileMbr.getHeight());
-
-      // Create an image
-      BufferedImage image = new BufferedImage(width, height,
-          BufferedImage.TYPE_INT_ARGB);
-      Graphics2D graphics = image.createGraphics();
-      Color bg_color = new Color(0,0,0,0);
-      graphics.setBackground(bg_color);
-      graphics.clearRect(0, 0, width, height);
-      graphics.setColor(color);
-      
-      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(conf,
-          new FileSplit(inFile, 0, fileLength, new String[0]));
-      Rectangle cell = reader.createKey();
-      while (reader.next(cell, shape)) {
-        Rectangle shapeMBR = shape.getMBR();
-        if (shapeMBR != null) {
-          if (plotRange == null || shapeMBR.isIntersected(plotRange))
-            shape.draw(graphics, fileMbr, width, height, scale2);
-        }
-      }
-      reader.close();
-      // Write image to output
-      graphics.dispose();
-      
-      if (vflip) {
-        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-        tx.translate(0, -image.getHeight());
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        image = op.filter(image, null);
-      }
-      
-      FileSystem outFs = outFile.getFileSystem(conf);
-      OutputStream out = outFs.create(outFile, true);
-      ImageIO.write(image, "png", out);
-      out.close();
     }
+    
+    double scale2 = (double) width * height
+        / (fileMbr.getWidth() * fileMbr.getHeight());
+
+    // Create an image
+    BufferedImage image = new BufferedImage(width, height,
+        BufferedImage.TYPE_INT_ARGB);
+    Graphics2D graphics = image.createGraphics();
+    Color bg_color = new Color(0, 0, 0, 0);
+    graphics.setBackground(bg_color);
+    graphics.clearRect(0, 0, width, height);
+    graphics.setColor(color);
+
+    for (InputSplit split : splits) {
+      if (hdfDataset != null) {
+        // Read points from the HDF file
+        RecordReader<NASADataset, NASAShape> reader = new HDFRecordReader(params,
+            (FileSplit)split, hdfDataset, true);
+        NASADataset dataset = reader.createKey();
+        
+        while (reader.next(dataset, (NASAShape)shape)) {
+          if (plotRange == null || shape.isIntersected(shape)) {
+            shape.draw(graphics, fileMbr, width, height, 0.0);
+          }
+        }
+        reader.close();
+      } else {
+        ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params,
+            (FileSplit)split);
+        Rectangle cell = reader.createKey();
+        while (reader.next(cell, shape)) {
+          Rectangle shapeMBR = shape.getMBR();
+          if (shapeMBR != null) {
+            if (plotRange == null || shapeMBR.isIntersected(plotRange))
+              shape.draw(graphics, fileMbr, width, height, scale2);
+          }
+        }
+        reader.close();
+      }      
+    }
+    // Write image to output
+    graphics.dispose();
+    if (vflip) {
+      AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+      tx.translate(0, -image.getHeight());
+      AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+      image = op.filter(image, null);
+    }
+    FileSystem outFs = outFile.getFileSystem(params);
+    OutputStream out = outFs.create(outFile, true);
+    ImageIO.write(image, "png", out);
+    out.close();
+
   }
 
   public static RunningJob plot(Path inFile, Path outFile, OperationsParams params) throws IOException {
@@ -814,7 +797,6 @@ public class Plot {
     Rectangle allMbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Path file : files) {
-      FileSystem fs = file.getFileSystem(conf);
       Rectangle mbr = FileMBR.fileMBR(file, new OperationsParams(conf));
       allMbr.expand(mbr);
     }

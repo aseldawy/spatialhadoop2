@@ -207,10 +207,34 @@ public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {
   system_check "hadoop jar #{jar_file} CustomPoint #{test_file}/data_00001 shape:CustomPoint -local"
 end
 
+def plot(input, output, extra_args="")
+  shape = File.extname(input)[1..-1]
+  system_check "shadoop plot #{ExtraConfigParams} #{input} #{output} shape:#{shape} #{extra_args} -overwrite"
+end
+
+def test_plot
+  shape = 'rect'
+  rect = "100,100,8000,9000"
+  
+  # Try with heap files
+  heap_file = generate_file('test', shape)
+  plot(heap_file, 'heap_local.png', '-local')
+  plot(heap_file, 'heap_mr.png', '-no-local')
+  
+  # Try with indexed files
+  %w(grid rtree r+tree str str+).each do |sindex|
+    indexed_file = index_file(heap_file, sindex)
+    plot(indexed_file, 'indexed_local.png', '-local')
+    plot(indexed_file, 'indexed_mr.png', '-no-local')
+  end
+  
+end
+
 # Main
 if $0 == __FILE__
-  test_range_query
-  test_knn
-  test_spatial_join
-  test_custom_class
+  #test_range_query
+  #test_knn
+  #test_spatial_join
+  #test_custom_class
+  test_plot
 end
