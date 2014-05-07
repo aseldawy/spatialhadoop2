@@ -245,6 +245,8 @@ public class MakeHDFVideo {
           + "-vf \"movie=gistic_logo.png [watermark]; "
           + "movie=overlay.png [ways]; " 
           + "movie=scale.png [scale]; "
+          + "[in] crop="+plotRange.getWidth()+":"+plotRange.getHeight()+"[in]; "
+          + "[ways] crop="+plotRange.getWidth()+":"+plotRange.getHeight()+"[ways]; "
           + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
           + "[mid][ways] overlay=0:0 [mid2]; "
           + "[mid2] pad=iw+64:ih [mid3]; "

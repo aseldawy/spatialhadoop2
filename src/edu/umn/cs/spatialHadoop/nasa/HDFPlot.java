@@ -58,23 +58,6 @@ public class HDFPlot {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(HDFPlot.class);
 
-  private static void printUsage() {
-    System.out.println("Plots all NASA datasets matching user criteria");
-    System.out.println("Parameters: (* marks required parameters)");
-    System.out.println("<input file> - (*) Path to NASA repository of all datasets");
-    System.out.println("<output file> - (*) Path to output images");
-    System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
-    System.out.println("tilewidth:<w> - Width of each tile in pixels");
-    System.out.println("tileheight:<h> - Height of each tile in pixels");
-    System.out.println("color:<c> - Main color used to draw shapes (black)");
-    System.out.println("numlevels:<n> - Number of levels in the pyrmaid");
-    System.out.println("dataset:<d> - Dataset to plot from HDF files");
-    System.out.println("time:<from..to> - Time range each formatted as yyyy.mm.dd");
-    System.out.println("-overwrite: Override output file without notice");
-    System.out.println("rect:<x1,y1,x2,y2> - Limit drawing to the selected area");
-    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
-  }
-  
   public static MinMax lastRange;
   
   /**
@@ -155,6 +138,23 @@ public class HDFPlot {
         }
       }
     }
+  }
+
+  private static void printUsage() {
+    System.out.println("Plots all NASA datasets matching user criteria");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file> - (*) Path to NASA repository of all datasets");
+    System.out.println("<output file> - (*) Path to output images");
+    System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
+    System.out.println("tilewidth:<w> - Width of each tile in pixels");
+    System.out.println("tileheight:<h> - Height of each tile in pixels");
+    System.out.println("color:<c> - Main color used to draw shapes (black)");
+    System.out.println("numlevels:<n> - Number of levels in the pyrmaid");
+    System.out.println("dataset:<d> - Dataset to plot from HDF files");
+    System.out.println("time:<from..to> - Time range each formatted as yyyy.mm.dd");
+    System.out.println("-overwrite: Override output file without notice");
+    System.out.println("rect:<x1,y1,x2,y2> - Limit drawing to the selected area");
+    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
   }
 
   /**
