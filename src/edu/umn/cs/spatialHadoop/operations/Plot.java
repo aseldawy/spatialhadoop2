@@ -726,11 +726,6 @@ public class Plot {
       isLocal = params.is("local");
     }
     
-    if (params.get("dataset") != null && params.get("shape") == null) {
-      // Set default shape class for HDF files if not explicitly set
-      params.setClass("shape", NASARectangle.class, Shape.class);
-    }
-    
     if (isLocal) {
       plotLocal(inFile, outFile, params);
       return null;
