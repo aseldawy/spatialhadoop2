@@ -647,7 +647,7 @@ public class Plot {
     if (hdfDataset != null) {
       // Collects some stats about the HDF file
       if (valueRange == null)
-        valueRange = Aggregate.aggregateLocal(new Path[] {inFile}, params);
+        valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
       NASAPoint.minValue = valueRange.minValue;
       NASAPoint.maxValue = valueRange.maxValue;
     }

@@ -32,13 +32,17 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
@@ -86,6 +90,9 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
   
   /**The class used to project NASA points upon read*/
   public static final String ProjectorClass = "HDFRecordReader.ProjectorClass";
+
+  /**Configuration line for the path to water mask*/
+  private static final String WATER_MASK_PATH = "hdf.watermaskpath";
   
 
   /**
@@ -196,6 +203,107 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
       }
 
       dataArray = matchDataset.read();
+      
+      // Recover holes if asked by user
+      if (job.getBoolean("recoverholes", false)) {
+        // Read water mask
+        if (job.get(WATER_MASK_PATH) == null) {
+          LOG.warn("Could not find water mask files");
+        } else {
+          Path wmPath = new Path(job.get(WATER_MASK_PATH));
+          final String tileIdentifier = String.format("h%02dv%02d", nasaDataset.h, nasaDataset.v);
+          FileSystem wmFs = wmPath.getFileSystem(job);
+          FileStatus[] wmFile = wmFs.listStatus(wmPath, new PathFilter() {
+            @Override
+            public boolean accept(Path path) {
+              return path.getName().contains(tileIdentifier);
+            }});
+          if (wmFile.length == 0) {
+            LOG.warn("Could not find water mask for tile '"+tileIdentifier+"'");
+          } else {
+            localFile = copyFile(job, wmFile[0]);
+            FileFormat wmHDFFile = fileFormat.createInstance(localFile, FileFormat.READ);
+            wmHDFFile.open();
+            
+            root =
+                (Group)((DefaultMutableTreeNode)wmHDFFile.getRootNode()).getUserObject();
+            
+            // Search for the datset of interest in file
+            groups2bSearched = new Stack<Group>();
+            groups2bSearched.add(root);
+
+            matchDataset = null;
+
+            while (!groups2bSearched.isEmpty()) {
+              Group top = groups2bSearched.pop();
+              List<HObject> memberList = top.getMemberList();
+
+              for (HObject member : memberList) {
+                if (member instanceof Group) {
+                  groups2bSearched.add((Group) member);
+                } else if (member instanceof Dataset) {
+                  if (member.getName().equals("water_mask")) {
+                    matchDataset = (Dataset) member;
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (matchDataset == null) {
+              LOG.warn("Water mask dataset "+datasetName+" not found in file "+split.getPath());
+            } else {
+              // Do interpolation
+              byte[] water_mask = (byte[]) matchDataset.read();
+              // Go over this image row by row
+              for (int y = 0; y < nasaDataset.resolution; y++) {
+                // First empty point in current run
+                int x1 = 0;
+                // First non-empty point in next run (last empty point + 1)
+                int x2 = 0;
+                while (x2 < nasaDataset.resolution) {
+                  // Detect next run of empty points
+                  x1 = x2;
+                  // Find first point that needs to be recovered
+                  while (x1 < nasaDataset.resolution && !needsToBeRecovered(dataArray, x1, y, nasaDataset.resolution, null))
+                    x1++;
+                  x2 = x1;
+                  while (x2 < nasaDataset.resolution && needsToBeRecovered(dataArray, x2, y, nasaDataset.resolution, null))
+                    x2++;
+                  if (x1 == 0 && x2 < nasaDataset.resolution || x1 > 0 && x1 < nasaDataset.resolution && x2 == nasaDataset.resolution) {
+                    // Only one point at one end is inside image boundaries.
+                    // Use the available point to paint all missing points
+                    Object valueToBeReplicated = Array.get(dataArray, y * nasaDataset.resolution + (x1 == 0? x2 : x1));
+                    int startOffsetToBeReplicated = y * nasaDataset.resolution + x1;
+                    int endOffsetToBeReplicated = y * nasaDataset.resolution + x2;
+                    for (int offsetToBeReplicated = startOffsetToBeReplicated; offsetToBeReplicated < endOffsetToBeReplicated; offsetToBeReplicated++) {
+                      if (needsToBeRecovered(dataArray, x1 + (offsetToBeReplicated - startOffsetToBeReplicated), y, nasaDataset.resolution, water_mask))
+                        Array.set(dataArray, offsetToBeReplicated, valueToBeReplicated);
+                    }
+                  } else if (x1 > 0 && x2 < nasaDataset.resolution) {
+                    // Two ends are available, interpolate to recover points
+                    Object value1 = Array.get(dataArray, y * nasaDataset.resolution + x1-1);
+                    Object value2 = Array.get(dataArray, y * nasaDataset.resolution + x2);
+                    
+                    // Recover all missing points that should be recovered in this run
+                    int startOffsetToBeInterpolated = y * nasaDataset.resolution + x1;
+                    int endOffsetToBeInterpolated = y * nasaDataset.resolution + x2;
+                    for (int offsetToBeInterpolated = startOffsetToBeInterpolated; offsetToBeInterpolated < endOffsetToBeInterpolated; offsetToBeInterpolated++) {
+                      if (needsToBeRecovered(dataArray, x1 + (offsetToBeInterpolated - startOffsetToBeInterpolated), y, nasaDataset.resolution, water_mask)) {
+                        Object interpolatedValue = interpolate(value1, value2, startOffsetToBeInterpolated, endOffsetToBeInterpolated, offsetToBeInterpolated);
+                        Array.set(dataArray, offsetToBeInterpolated, interpolatedValue);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            
+            wmHDFFile.close();
+          }
+          
+        }
+      }
 
       // No longer need the HDF file
       hdfFile.close();
@@ -203,6 +311,57 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
     } catch (Exception e) {
       throw new RuntimeException("Error reading HDF file '"+split.getPath()+"'", e);
     }
+  }
+
+
+  private Object interpolate(Object value1, Object value2,
+      int startOffsetToBeInterpolated, int endOffsetToBeInterpolated,
+      int offsetToBeInterpolated) {
+    float position = ((float) (offsetToBeInterpolated - startOffsetToBeInterpolated)) / (endOffsetToBeInterpolated - startOffsetToBeInterpolated);
+    if (value1 instanceof Integer) {
+      return (Integer)(int)(((Integer)value1) * (1.0f - position) + ((Integer) value2) * position);
+    } else if (value1 instanceof Short) {
+      return (Short)(short)(((Short)value1) * (1.0f - position) + ((Short) value2) * position);
+    } else {
+      throw new RuntimeException("Cannot interpolate values of type '"+value1.getClass()+"'");
+    }
+  }
+
+  private boolean needsToBeRecovered(Object dataArray, int x, int y,
+      int resolution, byte[] water_mask) {
+    int offset = y * resolution + x;
+    Object value = Array.get(dataArray, offset);
+    boolean valueIsEmpty;
+    if (value instanceof Integer) {
+      valueIsEmpty = ((Integer)value) == fillValue;
+    } else if (value instanceof Short) {
+      valueIsEmpty = ((Short)value) == fillValue;
+    } else {
+      throw new RuntimeException("Values of type "+value.getClass()+" is not supported yet");
+    }
+    if (!valueIsEmpty)
+      return false;
+    // If water mask is null, this means we want to check only for dataArray
+    if (water_mask == null)
+      return true;
+    int wm_x = x * 4800 / resolution;
+    int wm_y = y * 4800 / resolution;
+    int size = 4800 / resolution;
+    byte wm_sum = 0;
+    for (int xx = 0; xx < size; xx++) {
+      for (int yy = 0; yy < size; yy++) {
+        byte wm_value = water_mask[(yy +wm_y) * 4800 + (xx+wm_x)];
+        if (wm_value == 1)
+          wm_sum++; // water
+      }
+    }
+    if (wm_sum < (size * size) / 2)
+      return true;
+    return false;
+  }
+
+  private String copyFile(Configuration job, FileStatus fileStatus) throws IOException {
+    return copyFileSplit(job, new FileSplit(fileStatus.getPath(), 0, fileStatus.getLen(), new String[0]));
   }
 
   /**
@@ -334,4 +493,22 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
     return dataArray == null ? 0 : (float)position / Array.getLength(dataArray);
   }
 
+  public static void main(String[] args) throws IOException {
+    Configuration job = new Configuration();
+    Path file = new Path("temperature/MOD11A1.A2000065.h21v06.005.2007176155240.hdf");
+    FileSystem fs = file.getFileSystem(job);
+    FileStatus fstatus = fs.getFileStatus(file);
+    job.set(WATER_MASK_PATH, "water_mask");
+    job.setBoolean("recoverholes", true);
+    job.setClass("shape", NASAPoint.class, Shape.class);
+    HDFRecordReader reader = new HDFRecordReader(job, new FileSplit(file, 0, fstatus.getLen(), new String[0]), "LST_Day_1km", true);
+    NASADataset key = reader.createKey();
+    NASAShape value = reader.createValue();
+    int count = 0;
+    while (reader.next(key, value)) {
+      count++;
+    }
+    System.out.println(count);
+    reader.close();
+  }
 }

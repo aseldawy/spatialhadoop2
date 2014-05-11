@@ -248,6 +248,8 @@ public class SpatialSite {
   public static GlobalIndex<Partition> getGlobalIndex(FileSystem fs,
       Path dir) {
     try {
+      if (!fs.getFileStatus(dir).isDir())
+        return null;
       FileStatus[] allFiles;
       if (OperationsParams.isWildcard(dir)) {
         allFiles = fs.globStatus(dir);

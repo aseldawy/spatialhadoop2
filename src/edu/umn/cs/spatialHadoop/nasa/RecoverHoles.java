@@ -187,7 +187,7 @@ public class RecoverHoles {
     for (int y = 0; y < img.getHeight(); y++) {
       // First empty point in current run
       int x1 = 0;
-      // Last non-empty point in current run
+      // First non-empty point in next run (last empty point + 1)
       int x2 = 0;
       while (x2 < img.getWidth()) {
         // Detect next run of empty points
