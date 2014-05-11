@@ -92,7 +92,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
   public static final String ProjectorClass = "HDFRecordReader.ProjectorClass";
 
   /**Configuration line for the path to water mask*/
-  private static final String WATER_MASK_PATH = "hdf.watermaskpath";
+  private static final String WATER_MASK_PATH = "HDFRecordReader.WaterMaskPath";
   
 
   /**
