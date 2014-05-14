@@ -62,6 +62,7 @@ end
 
 baseUrl = ARGV.delete_at(0)
 downloadPath = ARGV.delete_at(0) || "."
+tempDownloadPath = File.join(downloadPath, 'tmp')
 
 index_file = `wget -qO- '#{baseUrl}'`
 
@@ -75,7 +76,7 @@ index_file.scan(FilePattern) do |href|
 end
 
 files_to_download = []
-batch_size = 16
+batch_size = 6
 
 for snapshot_dir in all_files
   puts "Checking #{snapshot_dir}"
@@ -84,6 +85,8 @@ for snapshot_dir in all_files
   index_file.scan(FilePattern) do |href|
     cell_file_name = File.basename($1)
     if File.extname(cell_file_name).downcase == ".hdf"
+      expected_download_file = File.join(downloadPath, snapshot_dir, cell_file_name)
+      next if File.exists?(expected_download_file)
       if query_range.nil?
         # No spatial filter
         files_to_download << "#{snapshot_url}/#{cell_file_name}"
@@ -119,7 +122,19 @@ for snapshot_dir in all_files
     download_threads = files_to_download.map do |url_to_download|
       snapshot_date = File.basename(File.dirname(url_to_download))
       output_dir = File.join(downloadPath, snapshot_date)
-      Thread.new {`wget -q --base=#{baseUrl} '#{url_to_download}' '--directory-prefix=#{output_dir}' --no-host-directories --no-clobber --continue`}
+      Thread.new(url_to_download, output_dir) { |_url_to_download, _output_dir|
+        if system("wget -q --base=#{baseUrl} '#{_url_to_download}' '--directory-prefix=#{tempDownloadPath}' --no-host-directories --no-clobber --continue")
+          downloadedFile = File.join(tempDownloadPath, File.basename(_url_to_download))
+          Dir.mkdir(_output_dir) unless File.exists?(_output_dir)
+          if system("mv #{downloadedFile} #{_output_dir}")
+            puts "File #{_url_to_download} downloaded successfully"
+          else
+            $stderr.puts "Error moving file #{downloadedFile}"
+          end
+        else
+          puts "Error downloading file #{_url_to_download}"
+        end
+      }
     end
     download_threads.each(&:join)
     files_to_download.clear
