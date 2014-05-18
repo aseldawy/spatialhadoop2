@@ -269,6 +269,9 @@ public class PlotPyramid {
       this.strokeColor = new Color(job.getInt("color", 0));
       NASAPoint.minValue = job.getInt(MinValue, 0);
       NASAPoint.maxValue = job.getInt(MaxValue, 65535);
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
     }
 
     @Override
@@ -424,14 +427,16 @@ public class PlotPyramid {
       // Input is HDF
       job.set(HDFRecordReader.DatasetName, hdfDataset);
       job.setBoolean(HDFRecordReader.SkipFillValue, true);
+      job.setClass("shape", NASARectangle.class, Shape.class);
       // Determine the range of values by opening one of the HDF files
       Aggregate.MinMax minMax = Aggregate.aggregate(new Path[] {inFile}, params);
       job.setInt(MinValue, minMax.minValue);
       job.setInt(MaxValue, minMax.maxValue);
       //fileMBR = new Rectangle(-180, -90, 180, 90);
-      fileMBR = new Rectangle(-180, -140, 180, 169);
-      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-          GeoProjector.class);
+      fileMBR = plotRange != null?
+          plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
+//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//          GeoProjector.class);
     } else {
       fileMBR = FileMBR.fileMBR(inFile, params);
     }

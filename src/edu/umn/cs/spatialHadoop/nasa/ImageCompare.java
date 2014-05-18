@@ -74,7 +74,7 @@ public class ImageCompare {
           // One hole and one data
           numPoints++;
           // Maximum possible error
-          error_sum_square += NASAPoint.MaxHue * NASAPoint.MaxHue;
+          error_sum_square += NASAPoint.hue2 * NASAPoint.hue2;
         } else {
           // Both values are valid, compute the error based on Hue values
           float[] hsbvals = new float[3];
@@ -90,7 +90,7 @@ public class ImageCompare {
     }
     if (numValidPoints < (image1.getWidth() * image1.getHeight() / 10))
       return 0.0;
-    float max_error = numPoints * NASAPoint.MaxHue;
+    float max_error = numPoints * NASAPoint.hue2;
     return (max_error - error_sum_square) / max_error;
   }
   

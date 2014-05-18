@@ -102,6 +102,10 @@ public class Plot {
     private GridInfo partitionGrid;
     private IntWritable cellNumber;
     private Shape queryRange;
+    private Rectangle fileMbr;
+    private int imageWidth, imageHeight;
+    private double scale2;
+    private boolean fade;
     
     @Override
     public void configure(JobConf job) {
@@ -109,6 +113,12 @@ public class Plot {
       partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
       cellNumber = new IntWritable();
       queryRange = OperationsParams.getShape(job, "rect");
+      this.fade = job.getBoolean("fade", false);
+      this.fileMbr = ImageOutputFormat.getFileMBR(job);
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+      this.scale2 = (double)imageWidth * imageHeight /
+          (this.fileMbr.getWidth() * this.fileMbr.getHeight());
     }
     
     public void map(Rectangle cell, Shape shape,
@@ -117,6 +127,13 @@ public class Plot {
       Rectangle shapeMbr = shape.getMBR();
       if (shapeMbr == null)
         return;
+      if (fade) {
+        double areaInPixels = shapeMbr.getWidth() * shapeMbr.getHeight() * scale2;
+        if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+          // This shape can be safely skipped as it is too small to be plotted
+          return;
+        }
+      }
       // Skip shapes outside query range if query range is set
       if (queryRange != null && !shapeMbr.isIntersected(queryRange))
         return;
@@ -145,7 +162,8 @@ public class Plot {
     private int imageWidth, imageHeight;
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
-    private Color strokeColor;
+    private int strokeColor;
+    private boolean fade;
 
     @Override
     public void configure(JobConf job) {
@@ -155,13 +173,18 @@ public class Plot {
       this.fileMbr = ImageOutputFormat.getFileMBR(job);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
-      this.strokeColor = new Color(job.getInt("color", 0));
+      this.strokeColor = job.getInt("color", 0);
+      this.fade = job.getBoolean("fade", false);
 
       this.scale2 = (double)imageWidth * imageHeight /
           (this.fileMbr.getWidth() * this.fileMbr.getHeight());
 
       NASAPoint.minValue = job.getInt(MinValue, 0);
       NASAPoint.maxValue = job.getInt(MaxValue, 65535);
+      
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
     }
 
     @Override
@@ -190,11 +213,27 @@ public class Plot {
         }
         graphics.setBackground(bg_color);
         graphics.clearRect(0, 0, tile_width, tile_height);
-        graphics.setColor(strokeColor);
+        Color strokeClr = new Color(strokeColor);
+        graphics.setColor(strokeClr);
         graphics.translate(-image_x1, -image_y1);
 
         while (values.hasNext()) {
           Shape s = values.next();
+          if (fade) {
+            Rectangle shapeMBR = s.getMBR();
+            double areaInPixels = shapeMBR.getWidth() * shapeMBR.getHeight() * scale2;
+            if (areaInPixels > 1.0) {
+              graphics.setColor(strokeClr);
+            } else {
+              byte alpha = (byte) Math.round(areaInPixels * 255);
+              if (alpha == 0) {
+                // Skip this shape
+                continue;
+              } else {
+                graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+              }
+            }
+          }
           s.draw(graphics, fileMbr, imageWidth, imageHeight, scale2);
         }
         
@@ -290,10 +329,13 @@ public class Plot {
     private int imageWidth;
     private int imageHeight;
     private Rectangle drawMbr;
-    private Color strokeColor;
+    private int strokeColor;
     private double scale2;
     /**Used to output values*/
     private ImageWritable sharedValue = new ImageWritable();
+    
+    /**Fade drawn shapes according to their area compared to a pixel area*/
+    private boolean fade;
     
     @Override
     public void configure(JobConf job) {
@@ -303,7 +345,8 @@ public class Plot {
       this.drawMbr = queryRange != null ? queryRange.getMBR() : ImageOutputFormat.getFileMBR(job);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
-      this.strokeColor = new Color(job.getInt("color", 0));
+      this.strokeColor = job.getInt("color", 0);
+      this.fade = job.getBoolean("fade", true);
       
       this.scale2 = (double)imageWidth * imageHeight /
           (this.drawMbr.getWidth() * this.drawMbr.getHeight());
@@ -329,11 +372,28 @@ public class Plot {
       }
       graphics.setBackground(bg_color);
       graphics.clearRect(0, 0, imageWidth, imageHeight);
-      graphics.setColor(strokeColor);
+      Color storkeClr = new Color(strokeColor);
+      graphics.setColor(storkeClr);
       
       for (Shape shape : (Shape[]) value.get()) {
-        if (queryRange == null || queryRange.isIntersected(shape))
+        if (queryRange == null || queryRange.isIntersected(shape)) {
+          if (fade) {
+            Rectangle shapeMBR = shape.getMBR();
+            // shapeArea represents how many pixels are covered by shapeMBR
+            double shapeArea = shapeMBR.getWidth() * shapeMBR.getHeight() * scale2;
+            if (shapeArea > 1.0) {
+              graphics.setColor(storkeClr);
+            } else {
+              byte alpha = (byte) Math.round(shapeArea * 255);
+              if (alpha == 0) {
+                continue;
+              } else {
+                graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+              }
+            }
+          }
           shape.draw(graphics, drawMbr, imageWidth, imageHeight, scale2);
+        }
       }
   
       graphics.dispose();
@@ -650,6 +710,9 @@ public class Plot {
         valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
       NASAPoint.minValue = valueRange.minValue;
       NASAPoint.maxValue = valueRange.maxValue;
+      NASAPoint.setColor1(params.getColor("color1", Color.BLUE));
+      NASAPoint.setColor2(params.getColor("color2", Color.RED));
+      NASAPoint.gradientType = params.getGradientType("gradient", NASAPoint.GradientType.GT_HUE);
     }
     
     double scale2 = (double) width * height
@@ -751,12 +814,14 @@ public class Plot {
     g.setBackground(Color.BLACK);
     g.clearRect(0, 0, width, height);
     
-    for (int y = 0; y < height; y++) {
-      float hue = y * NASAPoint.MaxHue / height;
-      int color = Color.HSBtoRGB(hue, 0.5f, 1.0f);
-      g.setColor(new Color(color));
-      g.drawRect(width * 3 / 4, y, width / 4, 1);
-    }
+    
+    // TODO fix this part to work according to color1, color2 and gradient type
+//    for (int y = 0; y < height; y++) {
+//      float hue = y * NASAPoint.MaxHue / height;
+//      int color = Color.HSBtoRGB(hue, 0.5f, 1.0f);
+//      g.setColor(new Color(color));
+//      g.drawRect(width * 3 / 4, y, width / 4, 1);
+//    }
     
     int fontSize = 24;
     g.setFont(new Font("Arial", Font.BOLD, fontSize));

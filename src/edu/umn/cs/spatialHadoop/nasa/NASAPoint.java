@@ -71,26 +71,30 @@ public class NASAPoint extends Point implements NASAShape {
   /**Valid range of values. Used for drawing.*/
   public static float minValue, maxValue;
   
-  public static final float MaxHue;
-  static {
+  protected static Color color1, color2;
+  protected static float hue1, hue2;
+  
+  public static enum GradientType {GT_HUE, GT_COLOR};
+  public static GradientType gradientType;
+
+  public static void setColor1(Color color) {
+    color1 = color;
     float[] hsbvals = new float[3];
-    Color.RGBtoHSB(0, 0, 255, hsbvals);
-    MaxHue = hsbvals[0];
+    Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), hsbvals);
+    hue1 = hsbvals[0];
+  }
+  
+  public static void setColor2(Color color) {
+    color2 = color;
+    float[] hsbvals = new float[3];
+    Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), hsbvals);
+    hue2 = hsbvals[0];
   }
   
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, double scale) {
-    Color color;
-    if (value < minValue) {
-      color = Color.getHSBColor(MaxHue, 0.5f, 1.0f);
-    } else if (value < maxValue) {
-      float ratio = MaxHue - MaxHue * (value - minValue) / (maxValue - minValue);
-      color = Color.getHSBColor(ratio, 0.5f, 1.0f);
-    } else {
-      color = Color.getHSBColor(0.0f, 0.5f, 1.0f);
-    }
-    g.setColor(color);
+    g.setColor(NASARectangle.calculateColor(this.value));
     super.draw(g, fileMBR, imageWidth, imageHeight, scale);
   }
 }

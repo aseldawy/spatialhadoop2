@@ -23,6 +23,7 @@ import org.apache.hadoop.io.Text;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
 
 /**
  * @author Ahmed Eldawy
@@ -94,19 +95,33 @@ public class NASARectangle extends Rectangle implements NASAShape {
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, double scale) {
-    Color color;
-    if (value < NASAPoint.minValue) {
-      color = Color.getHSBColor(NASAPoint.MaxHue, 0.5f, 1.0f);
-    } else if (value < NASAPoint.maxValue) {
-      float ratio = NASAPoint.MaxHue - NASAPoint.MaxHue
-          * (value - NASAPoint.minValue)
-          / (NASAPoint.maxValue - NASAPoint.minValue);
-      color = Color.getHSBColor(ratio, 0.5f, 1.0f);
-    } else {
-      color = Color.getHSBColor(0.0f, 0.5f, 1.0f);
-    }
-    g.setColor(color);
+    g.setColor(calculateColor(this.value));
     super.draw(g, fileMBR, imageWidth, imageHeight, scale);
   }
 
+  public static Color calculateColor(int value) {
+    Color color;
+    if (value < NASAPoint.minValue) {
+      color = NASAPoint.color1;
+    } else if (value > NASAPoint.maxValue) {
+      color = NASAPoint.color2;
+    } else {
+      // Interpolate between two colors according to gradient type
+      float ratio = (value - NASAPoint.minValue) / (NASAPoint.maxValue - NASAPoint.minValue);
+      if (NASAPoint.gradientType == GradientType.GT_HUE) {
+        // Interpolate between two hues
+        float hue = NASAPoint.hue1 * (1.0f - ratio) + NASAPoint.hue2 * ratio;
+        color = Color.getHSBColor(hue, 0.5f, 1.0f);
+      } else if (NASAPoint.gradientType == GradientType.GT_COLOR) {
+        // Interpolate between colors
+        int red = (int) (NASAPoint.color1.getRed() * (1.0f - ratio) + NASAPoint.color2.getRed() * ratio);
+        int green = (int) (NASAPoint.color1.getGreen() * (1.0f - ratio) + NASAPoint.color2.getGreen() * ratio);
+        int blue = (int) (NASAPoint.color1.getBlue() * (1.0f - ratio) + NASAPoint.color2.getBlue() * ratio);
+        color = new Color(red, green, blue);
+      } else {
+        throw new RuntimeException("Unsupported gradient type: "+NASAPoint.gradientType);
+      }
+    }
+    return color;
+  }
 }

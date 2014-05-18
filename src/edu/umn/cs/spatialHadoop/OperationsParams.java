@@ -34,6 +34,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
+import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
 
 
 /**
@@ -250,7 +251,11 @@ public class OperationsParams extends Configuration {
   }
 
   public Color getColor(String key, Color defaultValue) {
-    String colorName = get(key);
+    return getColor(this, key, defaultValue);
+  }
+  
+  public static Color getColor(Configuration conf, String key, Color defaultValue) {
+    String colorName = conf.get(key);
     if (colorName == null)
       return defaultValue;
     
@@ -270,6 +275,8 @@ public class OperationsParams extends Configuration {
       color = Color.BLACK;
     } else if (colorName.equals("gray")) {
       color = Color.GRAY;
+    } else if (colorName.equals("yellow")) {
+      color = Color.YELLOW;
     } else if (colorName.equals("orange")) {
       color = Color.ORANGE;
     }
@@ -441,5 +448,23 @@ public class OperationsParams extends Configuration {
       return null;
     }
     return dir;
+  }
+
+  public NASAPoint.GradientType getGradientType(String key, GradientType defaultValue) {
+    return getGradientType(this, key, defaultValue);
+  }
+  
+  public static NASAPoint.GradientType getGradientType(Configuration conf, String key, GradientType defaultValue) {
+    String strGradientType = conf.get(key);
+    if (strGradientType == null) {
+      return defaultValue;
+    } else if (strGradientType.equalsIgnoreCase("hue")) {
+      return GradientType.GT_HUE;
+    } else if (strGradientType.equalsIgnoreCase("color")) {
+      return GradientType.GT_COLOR;
+    } else {
+      LOG.warn("Unknown gradient type '"+strGradientType+"'. Possible values are 'hue', 'color'");
+      return defaultValue;
+    }
   }
 }
