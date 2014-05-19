@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.pig.impl.builtin.SampleLoader;
 
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
@@ -31,10 +32,14 @@ import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
+import edu.umn.cs.spatialHadoop.operations.Sampler;
 
 
 /**
@@ -285,6 +290,8 @@ public class OperationsParams extends Configuration {
   }
   
   public Shape getShape(String key, Shape defaultValue) {
+    if (defaultValue == null)
+      autoDetectShape();
     return getShape(this, key, defaultValue);
   }
   
@@ -466,5 +473,102 @@ public class OperationsParams extends Configuration {
       LOG.warn("Unknown gradient type '"+strGradientType+"'. Possible values are 'hue', 'color'");
       return defaultValue;
     }
+  }
+
+  /**
+   * Auto detect shape type based on input format
+   * @throws IOException 
+   */
+  public boolean autoDetectShape() {
+    String autoDetectedShape = null;
+    final Vector<String> sampleLines = new Vector<String>();
+    try {
+      if (this.get("shape") != null)
+        return false;
+      if (this.getInputPaths().length == 0)
+        return false;
+      // Read a random sample from the input
+      // We read a sample instead of one line for consistency
+      final int sampleCount = 10;
+      OperationsParams sampleParams = new OperationsParams(this);
+      sampleParams.setInt("count", sampleCount);
+      Sampler.sampleLocalByCount(this.getInputPaths(), new ResultCollector<Text2>() {
+        @Override
+        public void collect(Text2 line) {
+          sampleLines.add(line.toString());
+        }
+      }, sampleParams);
+      
+      // Collect some stats about the sample to help detecting shape type
+      final String Separators[] = {",", "\t"};
+      int[] numOfSplits = {0, 0}; // Number of splits with each separator
+      boolean allNumbersInAllSample = true; // Whether or not all values are numbers
+      int ogcIndex = -1; // The index of the column with OGC data
+
+      for (String sampleLine : sampleLines) {
+        // This flag is raised if all splits are numbers with any separator
+        boolean allNumbersWithAnySeparator = false;
+        // Try to parse with commas and tabs
+        for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
+          String separator = Separators[iSeparator];
+          String[] parts = sampleLine.split(separator);
+          
+          if (numOfSplits[iSeparator] == 0)
+            numOfSplits[iSeparator] = parts.length;
+          else if (numOfSplits[iSeparator] != parts.length)
+            numOfSplits[iSeparator] = -1;
+          boolean allSplitsNumbersWithCurrentSeparator = true;
+          for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            try {
+              Double.parseDouble(part);
+            } catch (NumberFormatException e) {
+              allSplitsNumbersWithCurrentSeparator = false;
+            }
+            try {
+              TextSerializerHelper.consumeGeometryJTS(new Text(part), '\0');
+              // Reaching this point means the geometry was parsed successfully
+              if (ogcIndex == -1)
+                ogcIndex = i;
+              else if (ogcIndex != i)
+                ogcIndex = -2;
+            } catch (Exception e) {
+              // Couldn't parse OGC for this column
+            }
+          }
+          if (allSplitsNumbersWithCurrentSeparator)
+            allNumbersWithAnySeparator = true;
+        }
+        if (!allNumbersWithAnySeparator)
+          allNumbersInAllSample = false;
+      }
+      
+      if (numOfSplits[0] != -1 && allNumbersInAllSample) {
+        // Each line is comma separated and all values are numbers
+        if (numOfSplits[0] == 2) {
+          // Point
+          autoDetectedShape = "point";
+        } else if (numOfSplits[0] == 4) {
+          // Rectangle
+          autoDetectedShape = "rect";
+        }
+      } else if (ogcIndex >= 0) {
+        // There is a column with geometry stored in it
+        this.setInt("column", ogcIndex);
+        for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
+          if (numOfSplits[iSeparator] != -1)
+            this.set("separator", Separators[iSeparator]);
+        }
+        autoDetectedShape = CSVOGC.class.getName();
+      }
+    } catch (IOException e) {
+    }
+    if (autoDetectedShape == null) {
+      LOG.info("Could not autodetect shape for input '"+sampleLines.get(0)+"'");
+    } else {
+      LOG.info("Autodetected shape '"+autoDetectedShape+"' for input '"+sampleLines.get(0)+"'");
+      this.set("shape", autoDetectedShape);
+    }
+    return autoDetectedShape != null;
   }
 }
