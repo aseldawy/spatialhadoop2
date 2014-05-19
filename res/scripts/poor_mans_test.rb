@@ -184,7 +184,7 @@ end
 def test_custom_class
   # Create a custom class that extends Point and try to process using it
   temp_dir = "test_custom_class"
-  temp_dir = Dir.mkdir(temp_dir) unless File.exists?(temp_dir)
+  Dir.mkdir(temp_dir) unless File.exists?(temp_dir)
   source_filename = File.join(temp_dir, "CustomPoint.java")
   File.open(source_filename, "w") do |f|
     f.puts <<-JAVA
@@ -238,9 +238,9 @@ end
 
 # Main
 if $0 == __FILE__
-  test_range_query
-  test_knn
-  test_spatial_join
+  #test_range_query
+  #test_knn
+  #test_spatial_join
   test_custom_class
   test_plot
 end
