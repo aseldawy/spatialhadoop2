@@ -104,7 +104,7 @@ public class Plot {
     private Shape queryRange;
     private Rectangle fileMbr;
     private int imageWidth, imageHeight;
-    private double scale2;
+    private double scale2, scale;
     private boolean fade;
     
     @Override
@@ -119,6 +119,7 @@ public class Plot {
       this.imageHeight = job.getInt("height", 1000);
       this.scale2 = (double)imageWidth * imageHeight /
           (this.fileMbr.getWidth() * this.fileMbr.getHeight());
+      this.scale = Math.sqrt(this.scale2);
     }
     
     public void map(Rectangle cell, Shape shape,
@@ -128,7 +129,7 @@ public class Plot {
       if (shapeMbr == null)
         return;
       if (fade) {
-        double areaInPixels = shapeMbr.getWidth() * shapeMbr.getHeight() * scale2;
+        double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
         if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
           // This shape can be safely skipped as it is too small to be plotted
           return;
@@ -161,7 +162,7 @@ public class Plot {
     private Rectangle fileMbr;
     private int imageWidth, imageHeight;
     private ImageWritable sharedValue = new ImageWritable();
-    private double scale2;
+    private double scale2, scale;
     private int strokeColor;
     private boolean fade;
 
@@ -178,6 +179,7 @@ public class Plot {
 
       this.scale2 = (double)imageWidth * imageHeight /
           (this.fileMbr.getWidth() * this.fileMbr.getHeight());
+      this.scale = Math.sqrt(scale2);
 
       NASAPoint.minValue = job.getInt(MinValue, 0);
       NASAPoint.maxValue = job.getInt(MaxValue, 65535);
@@ -203,7 +205,6 @@ public class Plot {
 
         BufferedImage image = new BufferedImage(tile_width, tile_height,
             BufferedImage.TYPE_INT_ARGB);
-        Color bg_color = new Color(0,0,0,0);
 
         Graphics2D graphics;
         try {
@@ -211,7 +212,7 @@ public class Plot {
         } catch (Throwable e) {
           graphics = new SimpleGraphics(image);
         }
-        graphics.setBackground(bg_color);
+        graphics.setBackground(new Color(0, 0, 0, 0));
         graphics.clearRect(0, 0, tile_width, tile_height);
         Color strokeClr = new Color(strokeColor);
         graphics.setColor(strokeClr);
@@ -221,7 +222,7 @@ public class Plot {
           Shape s = values.next();
           if (fade) {
             Rectangle shapeMBR = s.getMBR();
-            double areaInPixels = shapeMBR.getWidth() * shapeMBR.getHeight() * scale2;
+            double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
             if (areaInPixels > 1.0) {
               graphics.setColor(strokeClr);
             } else {
@@ -271,42 +272,41 @@ public class Plot {
           return path.toUri().getPath().contains("part-");
         }
       });
-      
-      if (resultFiles.length == 1 && !vflip) {
-        // Only one output file
-        outFs.rename(resultFiles[0].getPath(), outFile);
-      } else {
-        // Merge all images into one image (overlay)
-        BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-        for (FileStatus resultFile : resultFiles) {
-          FSDataInputStream imageFile = outFs.open(resultFile.getPath());
-          BufferedImage tileImage = ImageIO.read(imageFile);
-          imageFile.close();
 
-          Graphics2D graphics;
-          try {
-            graphics = finalImage.createGraphics();
-          } catch (Throwable e) {
-            graphics = new SimpleGraphics(finalImage);
-          }
-          graphics.drawImage(tileImage, 0, 0, null);
-          graphics.dispose();
-        }
-        
-        // Flip image vertically if needed
-        if (vflip) {
-          AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-          tx.translate(0, -finalImage.getHeight());
-          AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-          finalImage = op.filter(finalImage, null);
-        }
-        
-        // Finally, write the resulting image to the given output path
-        LOG.info("Writing final image");
-        OutputStream outputImage = outFs.create(outFile);
-        ImageIO.write(finalImage, "png", outputImage);
-        outputImage.close();
+      // Merge all images into one image (overlay)
+      BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+      Graphics2D graphics;
+      try {
+        graphics = finalImage.createGraphics();
+      } catch (Throwable e) {
+        graphics = new SimpleGraphics(finalImage);
       }
+      Color bgColor = OperationsParams.getColor(job, "bgcolor", new Color(0, 0, 0, 0));
+      graphics.setBackground(bgColor);
+      graphics.clearRect(0, 0, width, height);
+
+      for (FileStatus resultFile : resultFiles) {
+        FSDataInputStream imageFile = outFs.open(resultFile.getPath());
+        BufferedImage tileImage = ImageIO.read(imageFile);
+        imageFile.close();
+
+        graphics.drawImage(tileImage, 0, 0, null);
+      }
+      graphics.dispose();
+
+      // Flip image vertically if needed
+      if (vflip) {
+        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+        tx.translate(0, -finalImage.getHeight());
+        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+        finalImage = op.filter(finalImage, null);
+      }
+
+      // Finally, write the resulting image to the given output path
+      LOG.info("Writing final image");
+      OutputStream outputImage = outFs.create(outFile);
+      ImageIO.write(finalImage, "png", outputImage);
+      outputImage.close();
       
       outFs.delete(temp, true);
     }
@@ -336,6 +336,7 @@ public class Plot {
     
     /**Fade drawn shapes according to their area compared to a pixel area*/
     private boolean fade;
+    private double scale;
     
     @Override
     public void configure(JobConf job) {
@@ -350,6 +351,7 @@ public class Plot {
       
       this.scale2 = (double)imageWidth * imageHeight /
           (this.drawMbr.getWidth() * this.drawMbr.getHeight());
+      this.scale = Math.sqrt(scale2);
   
       NASAPoint.minValue = job.getInt(Plot.MinValue, 0);
       NASAPoint.maxValue = job.getInt(Plot.MaxValue, 65535);
@@ -362,15 +364,13 @@ public class Plot {
       BufferedImage image = new BufferedImage(imageWidth, imageHeight,
           BufferedImage.TYPE_INT_ARGB);
       
-      Color bg_color = new Color(0,0,0,0);
-  
       Graphics2D graphics;
       try {
         graphics = image.createGraphics();
       } catch (Throwable e) {
         graphics = new SimpleGraphics(image);
       }
-      graphics.setBackground(bg_color);
+      graphics.setBackground(new Color(0, 0, 0, 0));
       graphics.clearRect(0, 0, imageWidth, imageHeight);
       Color storkeClr = new Color(strokeColor);
       graphics.setColor(storkeClr);
@@ -380,7 +380,7 @@ public class Plot {
           if (fade) {
             Rectangle shapeMBR = shape.getMBR();
             // shapeArea represents how many pixels are covered by shapeMBR
-            double shapeArea = shapeMBR.getWidth() * shapeMBR.getHeight() * scale2;
+            double shapeArea = (shapeMBR.getWidth() + shapeMBR.getHeight()) * this.scale;
             if (shapeArea > 1.0) {
               graphics.setColor(storkeClr);
             } else {
@@ -722,7 +722,7 @@ public class Plot {
     BufferedImage image = new BufferedImage(width, height,
         BufferedImage.TYPE_INT_ARGB);
     Graphics2D graphics = image.createGraphics();
-    Color bg_color = new Color(0, 0, 0, 0);
+    Color bg_color = params.getColor("bgcolor", new Color(0, 0, 0, 0));
     graphics.setBackground(bg_color);
     graphics.clearRect(0, 0, width, height);
     graphics.setColor(color);

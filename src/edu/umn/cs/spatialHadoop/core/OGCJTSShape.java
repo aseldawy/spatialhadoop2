@@ -251,7 +251,7 @@ public class OGCJTSShape implements Shape {
       }
       
       // Draw the polygon
-      graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+      //graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
       graphics.drawPolyline(xpoints, ypoints, xpoints.length);
     }
   }

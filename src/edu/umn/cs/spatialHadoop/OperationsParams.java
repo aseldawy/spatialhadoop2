@@ -278,12 +278,16 @@ public class OperationsParams extends Configuration {
       color = Color.GREEN;
     } else if (colorName.equals("black")) {
       color = Color.BLACK;
+    } else if (colorName.equals("white")) {
+      color = Color.WHITE;
     } else if (colorName.equals("gray")) {
       color = Color.GRAY;
     } else if (colorName.equals("yellow")) {
       color = Color.YELLOW;
     } else if (colorName.equals("orange")) {
       color = Color.ORANGE;
+    } else {
+      LOG.warn("Does not understand the color '"+conf.get(key)+"'");
     }
     
     return color;
