@@ -28,6 +28,7 @@ import org.apache.pig.impl.builtin.SampleLoader;
 
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
+import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
@@ -334,6 +335,8 @@ public class OperationsParams extends Configuration {
       shape = new Polygon();
     } else if (shapeTypeI.startsWith("ogc")) {
       shape = new OGCESRIShape();
+    } else if (shapeTypeI.startsWith("wkt")) {
+      shape = new OGCJTSShape();
     } else if (shapeTypeI.startsWith("nasa")) {
       shape = new NASAPoint();
     } else {
@@ -559,11 +562,17 @@ public class OperationsParams extends Configuration {
       } else if (ogcIndex >= 0) {
         // There is a column with geometry stored in it
         this.setInt("column", ogcIndex);
+        int numOfColumns = 0;
         for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
-          if (numOfSplits[iSeparator] != -1)
+          if (numOfSplits[iSeparator] != -1) {
             this.set("separator", Separators[iSeparator]);
+            numOfColumns = numOfSplits[iSeparator];
+          }
         }
-        autoDetectedShape = CSVOGC.class.getName();
+        if (numOfColumns == 1 && ogcIndex == 0)
+          autoDetectedShape = OGCJTSShape.class.getName();
+        else
+          autoDetectedShape = CSVOGC.class.getName();
       }
     } catch (IOException e) {
     }
