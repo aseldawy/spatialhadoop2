@@ -67,6 +67,9 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
   /**Array of values in the dataset being read*/
   private Object dataArray;
   
+  /**Array of values in the dataset being read*/
+  private Object dataArrayTemp;
+  
   /**Position to read next in the data array*/
   private int position;
   
@@ -203,6 +206,10 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
       }
 
       dataArray = matchDataset.read();
+      dataArrayTemp = matchDataset.read();
+      if(dataArray==dataArrayTemp){
+    	  throw new Exception("Object reference equals !... HDFRecordReader"); // TODO remove this line 
+      }
       
       // Recover holes if asked by user
       if (job.getBoolean("recoverholes", false)) {
@@ -265,20 +272,26 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
                   // Detect next run of empty points
                   x1 = x2;
                   // Find first point that needs to be recovered
-                  while (x1 < nasaDataset.resolution && !needsToBeRecovered(dataArray, x1, y, nasaDataset.resolution, null))
-                    x1++;
-                  x2 = x1;
-                  while (x2 < nasaDataset.resolution && needsToBeRecovered(dataArray, x2, y, nasaDataset.resolution, null))
-                    x2++;
+                  while (x1 < nasaDataset.resolution && !needsToBeRecovered(dataArray, x1, y, nasaDataset.resolution, null)) x1++;
+                  
+                  x2 = x1; // start of needed to be recovered in X1
+                  
+                  while (x2 < nasaDataset.resolution && needsToBeRecovered(dataArray, x2, y, nasaDataset.resolution, null)) x2++;
+                  
+                  // now X2 contains the end of to be recovered.
+                  
+                  
                   if (x1 == 0 && x2 < nasaDataset.resolution || x1 > 0 && x1 < nasaDataset.resolution && x2 == nasaDataset.resolution) {
                     // Only one point at one end is inside image boundaries.
                     // Use the available point to paint all missing points
-                    Object valueToBeReplicated = Array.get(dataArray, y * nasaDataset.resolution + (x1 == 0? x2 : x1));
+                    Object valueToBeReplicated = Array.get(dataArray, y * nasaDataset.resolution + (x1 == 0? x2 : (x1-1)));
+                    
                     int startOffsetToBeReplicated = y * nasaDataset.resolution + x1;
                     int endOffsetToBeReplicated = y * nasaDataset.resolution + x2;
+                    
                     for (int offsetToBeReplicated = startOffsetToBeReplicated; offsetToBeReplicated < endOffsetToBeReplicated; offsetToBeReplicated++) {
                       if (needsToBeRecovered(dataArray, x1 + (offsetToBeReplicated - startOffsetToBeReplicated), y, nasaDataset.resolution, water_mask))
-                        Array.set(dataArray, offsetToBeReplicated, valueToBeReplicated);
+                        Array.set(dataArrayTemp, offsetToBeReplicated, valueToBeReplicated);
                     }
                   } else if (x1 > 0 && x2 < nasaDataset.resolution) {
                     // Two ends are available, interpolate to recover points
@@ -291,11 +304,108 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
                     for (int offsetToBeInterpolated = startOffsetToBeInterpolated; offsetToBeInterpolated < endOffsetToBeInterpolated; offsetToBeInterpolated++) {
                       if (needsToBeRecovered(dataArray, x1 + (offsetToBeInterpolated - startOffsetToBeInterpolated), y, nasaDataset.resolution, water_mask)) {
                         Object interpolatedValue = interpolate(value1, value2, startOffsetToBeInterpolated, endOffsetToBeInterpolated, offsetToBeInterpolated);
-                        Array.set(dataArray, offsetToBeInterpolated, interpolatedValue);
+                        Array.set(dataArrayTemp, offsetToBeInterpolated, interpolatedValue);
                       }
                     }
                   }
                 }
+              }
+              
+              for (int x = 0 ; x< nasaDataset.resolution ; x++){
+
+                  // First empty point in current run
+                  int y1 = 0;
+                  // First non-empty point in next run (last empty point + 1)
+                  int y2 = 0;
+                  while (y2 < nasaDataset.resolution) {
+                    // Detect next run of empty points
+                    y1 = y2;
+                    // Find first point that needs to be recovered
+                    while (y1 < nasaDataset.resolution && !needsToBeRecovered(dataArray, x, y1, nasaDataset.resolution, null)) y1++;
+                    
+                    y2 = y1; // start of needed to be recovered in Y1
+                    
+                    while (y2 < nasaDataset.resolution && needsToBeRecovered(dataArray, x, y2, nasaDataset.resolution, null)) y2++;
+                    
+                    // now Y2 contains the end of to be recovered.
+                    
+                    
+                    if (y1 == 0 && y2 < nasaDataset.resolution || y1 > 0 && y1 < nasaDataset.resolution && y2 == nasaDataset.resolution) {
+                      // Only one point at one end is inside image boundaries.
+                      // Use the available point to paint all missing points
+                      Object valueToBeReplicated = Array.get(dataArray, x + ( nasaDataset.resolution * (y1 == 0? y2 : (y1-1))));
+                      
+                      int startOffsetToBeReplicated = y1 * nasaDataset.resolution + x;
+                      int endOffsetToBeReplicated = y2 * nasaDataset.resolution + x;
+                      int offsetVertically=0;
+                      
+                      for (int offsetToBeReplicated = startOffsetToBeReplicated; offsetToBeReplicated < endOffsetToBeReplicated; offsetToBeReplicated+=nasaDataset.resolution) {
+                        if (needsToBeRecovered(dataArray, x,y1 + (offsetVertically), nasaDataset.resolution, water_mask))
+                        {
+                        	Object newValue = null;
+                        	
+                        	 if (needsToBeRecovered(dataArrayTemp, x,y1 + (offsetVertically), nasaDataset.resolution, water_mask)){
+                        		 // this means it is not handled in first iteration.
+                        		 newValue=valueToBeReplicated;
+                        	 }
+                        	 else{
+                        		 // need to take average between x iteration and y iteration
+                        		 Object value1= Array.get(dataArrayTemp, offsetToBeReplicated);
+                             	
+                             	if (value1 instanceof Integer) {
+                             		newValue= (Integer) (int)( (((Integer)value1) + ((Integer)valueToBeReplicated)) /2);
+                             	} else if (value1 instanceof Short) {
+                             		newValue= (Short)  (short)((((Short)value1) + ((Short)valueToBeReplicated)) /2);	
+                             	} else {
+                             	      throw new RuntimeException("Cannot interpolate values of type '"+value1.getClass()+"'");
+                             	}
+                        	 }
+                        	
+                        	
+                            Array.set(dataArray, offsetToBeReplicated, newValue);
+                        }
+                        offsetVertically++;
+                      }
+                    } else if (y1 > 0 && y2 < nasaDataset.resolution) {
+                      // Two ends are available, interpolate to recover points
+                      Object value1 = Array.get(dataArray, x + ( nasaDataset.resolution * (y1-1)));
+                      Object value2 = Array.get(dataArray, x + ( nasaDataset.resolution * y2));
+                      
+                      // Recover all missing points that should be recovered in this run
+                      int startOffsetToBeInterpolated = x + ( nasaDataset.resolution * y1);
+                      int endOffsetToBeInterpolated = x +  ( nasaDataset.resolution * y2);
+                      int offsetVertically =0;
+                      
+                      for (int offsetToBeInterpolated = startOffsetToBeInterpolated; offsetToBeInterpolated < endOffsetToBeInterpolated; offsetToBeInterpolated+=nasaDataset.resolution) {
+                        if (needsToBeRecovered(dataArray, x,y1 + (offsetVertically), nasaDataset.resolution, water_mask)) {
+                        	
+                          Object interpolatedValue = interpolate(value1, value2, startOffsetToBeInterpolated, endOffsetToBeInterpolated, offsetToBeInterpolated);
+                          
+                          Object newValue = null;
+                      	
+                          if (needsToBeRecovered(dataArrayTemp, x, y1 + (offsetVertically), nasaDataset.resolution, water_mask)) {
+                     		 // this means it is not handled in first iteration.
+                     		 newValue=interpolatedValue;
+                     	 }
+                     	 else{
+                     		 // need to take average between x iteration and y iteration
+                    		 Object valuetemp= Array.get(dataArrayTemp, offsetToBeInterpolated);
+                         	
+                         	if (valuetemp instanceof Integer) {
+                         		newValue=  (Integer)(int)( (((Integer)valuetemp) + ((Integer)interpolatedValue)) /2);
+                         	} else if (value1 instanceof Short) {
+                         		newValue= (Short)(short)((((Short)valuetemp) + ((Short)interpolatedValue)) /2);	
+                         	} else {
+                         	      throw new RuntimeException("Cannot interpolate values of type '"+value1.getClass()+"'");
+                         	}
+                     	 }
+                          
+                          Array.set(dataArray, offsetToBeInterpolated, newValue);
+                        }
+                        offsetVertically++;
+                      }
+                    }
+                  }
               }
             }
             
