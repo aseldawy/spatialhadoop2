@@ -81,7 +81,7 @@ public class HDFToText {
     // Set input information
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.setInputPaths(job, inPath);
-    job.setClass("shape", NASARectangle.class, Shape.class);
+    job.setClass("shape", NASAPoint.class, Shape.class);
     job.set(HDFRecordReader.DatasetName, datasetName);
     job.setBoolean(HDFRecordReader.SkipFillValue, skipFillValue);
     

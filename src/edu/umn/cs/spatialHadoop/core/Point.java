@@ -152,4 +152,22 @@ public class Point implements Shape, Comparable<Point> {
     int imageY = (int) Math.round((this.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     g.fillRect(imageX, imageY, 1, 1);  	
   }
+  
+  /**
+   * Computes the Z-order (Morton order) of a two-dimensional point.
+   * @param x
+   * @param y
+   * @return
+   */
+  public static int computeZOrder(short x, short y) {
+    int morton = 0;
+
+    for (int i = 0; i < 16; i++) {
+      int mask = 1 << i;
+      morton += (x & mask) << (i + 1);
+      morton += (y & mask) << i;
+    }
+    return morton;
+  }
+
 }
