@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 
-REGISTER spatialhadoop-2.1.jar;
+REGISTER spatialhadoop-2.2.jar;
 REGISTER pigeon.jar
 REGISTER esri-geometry-api-1.1.1.jar;
 REGISTER piggybank.jar;
