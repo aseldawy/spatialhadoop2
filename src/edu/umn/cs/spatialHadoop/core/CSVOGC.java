@@ -150,4 +150,12 @@ public class CSVOGC extends OGCJTSShape {
   public String toString() {
     return (prefix == null? "" : new String(prefix)) + super.toString() + (suffix == null? "" : new String(suffix));
   }
+  
+  @Override
+  public Shape clone() {
+    CSVOGC c = new CSVOGC();
+    c.separator = this.separator;
+    c.column = this.column;
+    return c;
+  }
 }

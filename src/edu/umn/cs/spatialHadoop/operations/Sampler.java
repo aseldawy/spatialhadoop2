@@ -49,12 +49,14 @@ import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
+import com.vividsolutions.jts.io.ParseException;
+import com.vividsolutions.jts.io.WKTReader;
+
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
@@ -98,35 +100,24 @@ public class Sampler {
       sampleRatio = job.getFloat("ratio", 0.01f);
       random = new Random(job.getLong("seed", System.currentTimeMillis()));
       
-      try {
-        Class<? extends TextSerializable> inClass =
-            job.getClass("shape", null).asSubclass(TextSerializable.class);
-        Class<? extends TextSerializable> outClass =
-            job.getClass("outshape", null).asSubclass(TextSerializable.class);
+      TextSerializable inObj = OperationsParams.getTextSerializable(job, "shape", new Text2());
+      TextSerializable outObj = OperationsParams.getTextSerializable(job, "outshape", new Text2());
 
-        if (inClass == outClass) {
+      if (inObj.getClass() == outObj.getClass()) {
+        conversion = Conversion.None;
+      } else {
+        if (inObj instanceof Shape && outObj instanceof Point) {
+          inShape = (Shape) inObj;
+          conversion = Conversion.ShapeToPoint;
+        } else if (inObj instanceof Shape && outObj instanceof Rectangle) {
+          inShape = (Shape) inObj;
+          conversion = Conversion.ShapeToRect;
+        } else if (outObj instanceof Text) {
           conversion = Conversion.None;
         } else {
-          TextSerializable inObj = inClass.newInstance();
-          TextSerializable outObj = outClass.newInstance();
-
-          if (inObj instanceof Shape && outObj instanceof Point) {
-            inShape = (Shape) inObj;
-            conversion = Conversion.ShapeToPoint;
-          } else if (inObj instanceof Shape && outObj instanceof Rectangle) {
-            inShape = (Shape) inObj;
-            conversion = Conversion.ShapeToRect;
-          } else if (outObj instanceof Text) {
-            conversion = Conversion.None;
-          } else {
-            throw new RuntimeException("Don't know how to convert from: "+
-                inClass+" to "+outClass);
-          }
+          throw new RuntimeException("Don't know how to convert from: "+
+              inObj.getClass()+" to "+outObj.getClass());
         }
-      } catch (InstantiationException e) {
-        e.printStackTrace();
-      } catch (IllegalAccessException e) {
-        e.printStackTrace();
       }
     }
     
@@ -196,8 +187,8 @@ public class Sampler {
     return sampleWithRatio(files, output, params);
   }
   
-  public static <T extends TextSerializable> int sampleWithRatio(
-      Path[] files, final ResultCollector<T> output, OperationsParams params) throws IOException {
+  public static int sampleWithRatio(
+      Path[] files, final ResultCollector<? extends TextSerializable> output, OperationsParams params) throws IOException {
     FileSystem fs = files[0].getFileSystem(params);
     FileStatus inFStatus = fs.getFileStatus(files[0]);
     if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 1) {
@@ -250,9 +241,9 @@ public class Sampler {
    * @throws IOException
    */
   @Deprecated
-  public static int sampleMapReduceWithRatio(
+  public static <T extends TextSerializable> int sampleMapReduceWithRatio(
       FileSystem fs, Path[] files, float ratio, long maxSampleSize, long seed,
-      final ResultCollector<TextSerializable> output, TextSerializable inObj,
+      final ResultCollector<T> output, TextSerializable inObj,
       TextSerializable outObj) throws IOException {
     OperationsParams params = new OperationsParams();
     params.setFloat("ratio", ratio);
@@ -317,16 +308,7 @@ public class Sampler {
     long sampleSize = job.getLong("size", 0);
     final double selectRatio = sampleSize <= 0? 2.0 : (double)sampleSize / resultSize;
     long seed = job.getLong("seed", System.currentTimeMillis());
-    T outObj;
-    try {
-      Class<? extends TextSerializable> outClass = job.getClass("outshape", Text.class).asSubclass(TextSerializable.class);
-      outObj = (T) outClass.newInstance();
-    } catch (InstantiationException e1) {
-      outObj = (T) new Text2();
-    } catch (IllegalAccessException e1) {
-      outObj = (T) new Text2();
-    }
-
+    T outObj = (T) OperationsParams.getTextSerializable(job, "outshape", new Text2());
 
     // Read job result
     int result_size = 0;
@@ -424,23 +406,9 @@ public class Sampler {
     int sample_count = 0;
 
     TextSerializable inObj1, outObj1;
-    try {
-      Class<? extends TextSerializable> inClass = params.getClass("shape", TextSerializable.class).asSubclass(TextSerializable.class);
-      inObj1 = inClass.newInstance();
-    } catch (InstantiationException e) {
-      inObj1 = new Text2();
-    } catch (IllegalAccessException e) {
-      inObj1 = new Text2();
-    }
-
-    try {
-      Class<? extends TextSerializable> outClass = params.getClass("outshape", TextSerializable.class).asSubclass(TextSerializable.class);
-      outObj1 = outClass.newInstance();
-    } catch (InstantiationException e) {
-      outObj1 = new Text2();
-    } catch (IllegalAccessException e) {
-      outObj1 = new Text2();
-    }
+    inObj1 = OperationsParams.getTextSerializable(params, "shape", new Text2());
+    outObj1 = OperationsParams.getTextSerializable(params, "outshape", new Text2());
+    
     // Make the objects final to be able to use in the anonymous inner class
     final TextSerializable inObj = inObj1;
     final T outObj = (T) outObj1;
@@ -468,7 +436,7 @@ public class Sampler {
       params2.setClass("outshape", Text2.class, TextSerializable.class);
       params2.setInt("count", count);
       params2.setLong("seed", seed);
-      sample_count += sampleLocalByCount(files, counter, params);
+      sample_count += sampleLocalByCount(files, counter, params2);
       // Change the seed to get different sample next time.
       // Still we need to ensure that repeating the program will generate
       // the same value
@@ -508,7 +476,13 @@ public class Sampler {
       return new ResultCollector<T>() {
         @Override
         public void collect(T r) {
-          Point pt = ((Shape)r).getMBR().getCenterPoint();
+          Shape s = (Shape) r;
+          if (s == null)
+            return;
+          Rectangle mbr = s.getMBR();
+          if (mbr == null)
+            return;
+          Point pt = mbr.getCenterPoint();
           out_pt.x = pt.x;
           out_pt.y = pt.y;
           output.collect(outObj);
@@ -605,23 +579,9 @@ public class Sampler {
     files = data_files.toArray(new Path[data_files.size()]);
     
     TextSerializable inObj1, outObj1;
-    try {
-      Class<? extends TextSerializable> inClass = params.getClass("shape", TextSerializable.class).asSubclass(TextSerializable.class);
-      inObj1 = inClass.newInstance();
-    } catch (InstantiationException e) {
-      inObj1 = new Text2();
-    } catch (IllegalAccessException e) {
-      inObj1 = new Text2();
-    }
-
-    try {
-      Class<? extends TextSerializable> outClass = params.getClass("outshape", TextSerializable.class).asSubclass(TextSerializable.class);
-      outObj1 = outClass.newInstance();
-    } catch (InstantiationException e) {
-      outObj1 = new Text2();
-    } catch (IllegalAccessException e) {
-      outObj1 = new Text2();
-    }
+    inObj1 = OperationsParams.getTextSerializable(params, "shape", new Text2());
+    outObj1 = OperationsParams.getTextSerializable(params, "outshape", new Text2());
+    
     // Make the objects final to be able to use in the anonymous inner class
     final TextSerializable inObj = inObj1;
     final T outObj = (T) outObj1;
@@ -716,13 +676,6 @@ public class Sampler {
     
     long size = params.getSize("size");
     float ratio = params.getFloat("ratio", -1.0f);
-    TextSerializable stockObject = params.getShape("shape");
-    if (stockObject == null)
-      stockObject = new Text2();
-
-    TextSerializable outputShape = params.getShape("outshape");
-    if (outputShape == null)
-      outputShape = new Text2();
     
     ResultCollector<TextSerializable> output =
     new ResultCollector<TextSerializable>() {

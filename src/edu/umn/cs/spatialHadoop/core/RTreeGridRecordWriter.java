@@ -135,7 +135,7 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
 
     // Build an RTree over the elements read from file
     RTree<S> rtree = new RTree<S>();
-    rtree.setStockObject(stockObject);
+    rtree.setStockObject((S) stockObject.clone());
     // It should create a new stream
     DataOutputStream cellStream =
       (DataOutputStream) createFinalCellStream(finalCellPath);

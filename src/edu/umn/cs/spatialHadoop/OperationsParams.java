@@ -37,6 +37,7 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
@@ -73,7 +74,7 @@ public class OperationsParams extends Configuration {
   public OperationsParams(GenericOptionsParser parser) {
     super(parser.getConfiguration());
     initialize(parser.getRemainingArgs());
-    Shape shape = getShape("shape");
+    TextSerializable shape = getShape("shape");
     if (shape != null) {
       // In case this class is in a third part jar file, add it to path
       SpatialSite.addClassToPath(this, shape.getClass());
@@ -309,6 +310,11 @@ public class OperationsParams extends Configuration {
   }
 
   public static Shape getShape(Configuration conf, String key, Shape defaultValue) {
+    TextSerializable t = getTextSerializable(conf, key, defaultValue);
+    return t instanceof Shape ? (Shape) t : null;
+  }
+  
+  public static TextSerializable getTextSerializable(Configuration conf, String key, TextSerializable defaultValue) {
     String shapeType = conf.get(key);
     if (shapeType == null)
       return defaultValue;
@@ -321,7 +327,7 @@ public class OperationsParams extends Configuration {
     }
     
     String shapeTypeI = shapeType.toLowerCase();
-    Shape shape = null;
+    TextSerializable shape = null;
     
     if (shapeTypeI.startsWith("rect")) {
       shape = new Rectangle();
@@ -342,8 +348,8 @@ public class OperationsParams extends Configuration {
     } else {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
-        Class<? extends Shape> shapeClass =
-            conf.getClassByName(shapeType).asSubclass(Shape.class);
+        Class<? extends TextSerializable> shapeClass =
+            conf.getClassByName(shapeType).asSubclass(TextSerializable.class);
         shape = shapeClass.newInstance();
       } catch (ClassNotFoundException e) {
       } catch (InstantiationException e) {
@@ -499,6 +505,8 @@ public class OperationsParams extends Configuration {
       final int sampleCount = 10;
       OperationsParams sampleParams = new OperationsParams(this);
       sampleParams.setInt("count", sampleCount);
+      sampleParams.setClass("shape", Text2.class, TextSerializable.class);
+      sampleParams.setClass("outshape", Text2.class, TextSerializable.class);
       Sampler.sampleLocalByCount(this.getInputPaths(), new ResultCollector<Text2>() {
         @Override
         public void collect(Text2 line) {

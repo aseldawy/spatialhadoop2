@@ -314,8 +314,7 @@ public class Repartition {
     boolean overwrite = params.is("overwrite");
     Shape stockShape = params.getShape("shape");
     
-    FileSystem inFs = inFile.getFileSystem(new Configuration());
-    FileSystem outFs = outPath.getFileSystem(new Configuration());
+    FileSystem outFs = outPath.getFileSystem(params);
 
     // Calculate number of partitions in output file
     // Copy blocksize from source file if it's globally indexed
@@ -336,7 +335,7 @@ public class Repartition {
     } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
         sindex.equals("str") || sindex.equals("str+")) {
       // Pack in rectangles using an RTree
-      cellInfos = packInRectangles(inFs, inFile, outFs, outPath, blockSize, stockShape);
+      cellInfos = packInRectangles(inFile, outPath, params);
     } else {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
@@ -470,22 +469,21 @@ public class Repartition {
     JobClient.runJob(job);
   }
 
-  public static <S extends Shape> CellInfo[] packInRectangles(FileSystem inFS,
-      Path inFile, FileSystem outFS, Path outFile, long blocksize, S stockShape)
+  public static <S extends Shape> CellInfo[] packInRectangles(Path inFile,
+      Path outFile, OperationsParams params)
       throws IOException {
-    return packInRectangles(inFS, new Path[] { inFile },
-        outFS, outFile, blocksize, stockShape);
+    return packInRectangles(new Path[] { inFile }, outFile, params);
   }
   
-  public static <S extends Shape> CellInfo[] packInRectangles(FileSystem fs,
-      Path[] files, FileSystem outFileSystem, Path outFile, long blocksize, S stockShape)
+  public static CellInfo[] packInRectangles(Path[] files,
+      Path outFile, OperationsParams params)
       throws IOException {
     final Vector<Point> sample = new Vector<Point>();
     
     float sample_ratio =
-        outFileSystem.getConf().getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
+        params.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
     long sample_size =
-      outFileSystem.getConf().getLong(SpatialSite.SAMPLE_SIZE, 100*1024*1024);
+      params.getLong(SpatialSite.SAMPLE_SIZE, 100*1024*1024);
     
     LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
     ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
@@ -494,12 +492,11 @@ public class Repartition {
         sample.add(value.clone());
       }
     };
-    OperationsParams params = new OperationsParams(outFileSystem.getConf());
-    params.setFloat("ratio", sample_ratio);
-    params.setLong("size", sample_size);
-    params.setClass("shape", stockShape.getClass(), TextSerializable.class);
-    params.setClass("outshape", Point.class, TextSerializable.class);
-    Sampler.sampleWithRatio(files, resultCollector, params);
+    OperationsParams params2 = new OperationsParams(params);
+    params2.setFloat("ratio", sample_ratio);
+    params2.setLong("size", sample_size);
+    params2.setClass("outshape", Point.class, TextSerializable.class);
+    Sampler.sampleWithRatio(files, resultCollector, params2);
     LOG.info("Finished reading a sample of size: "+sample.size()+" records");
     
     long inFileSize = Sampler.sizeOfLastProcessedFile;
@@ -511,6 +508,8 @@ public class Repartition {
     for (Point pt : sample) {
       approxMBR.expand(pt);
     }
+    FileSystem outFs = outFile.getFileSystem(params);
+    long blocksize = outFs.getDefaultBlockSize(outFile);
     GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
     gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
@@ -584,7 +583,7 @@ public class Repartition {
       cells = gridInfo.getAllCells();
     } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
         sindex.equals("str") || sindex.equals("str+")) {
-      cells = packInRectangles(inFs, inFile, outFs, outFile, blockSize, shape);
+      cells = packInRectangles(inFile, outFile, params);
     } else {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
