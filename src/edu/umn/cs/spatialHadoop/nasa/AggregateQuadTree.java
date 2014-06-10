@@ -12,6 +12,11 @@
  */
 package edu.umn.cs.spatialHadoop.nasa;
 
+import java.awt.Rectangle;
+import java.io.BufferedOutputStream;
+import java.io.DataOutputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.reflect.Array;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -22,6 +27,7 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
@@ -51,14 +57,14 @@ class StockQuadTree {
       return endPosition - startPosition;
     }
   }
+
+  /** The resolution of the tile associated with this quad tree*/
+  int resolution;
   
-  /** Maps each point from HDF file to its position in the array of quad tree */
-  int[] r2z;
+  /** The row-wise position of each value in the sorted values */
+  int[] r;
   
-  /** Maps each point in quad tree list to its original location in HDF file. */
-  int[] z2r;
-  
-  /** Maps each point in Z-order to its Z value. This list should be sorted. */
+  /** The Z-order for each value in the sorted values */
   int[] z;
 
   /** The ID of each node */
@@ -75,8 +81,8 @@ class StockQuadTree {
    * @param resolution
    */
   StockQuadTree(int resolution) {
-    this.r2z = new int[resolution * resolution];
-    this.z2r = new int[resolution * resolution];
+    this.resolution = resolution;
+    this.r = new int[resolution * resolution];
     this.z = new int[resolution * resolution];
     // The list of all nodes
     Vector<Node> nodes = new Vector<Node>();
@@ -88,7 +94,7 @@ class StockQuadTree {
       int zorder = AggregateQuadTree.computeZOrder(x, y);
       //System.out.println("zorder of ("+x+","+y+") = "+zorder);
       z[i] = zorder;
-      z2r[i] = i;
+      r[i] = i;
     }
     
     // Sort ArrayToZOrder1200 by Z-Order and keep the original position of
@@ -103,9 +109,9 @@ class StockQuadTree {
         z[j] = temp;
         
         // Swap their relative positions in the other array
-        temp = z2r[i];
-        z2r[i] = z2r[j];
-        z2r[j] = temp;
+        temp = r[i];
+        r[i] = r[j];
+        r[j] = temp;
       }
       
       @Override
@@ -113,11 +119,6 @@ class StockQuadTree {
         return z[i] - z[j];
       }
     }, 0, z.length);
-    
-    // Prepare the inverse lookup table (HDF Index to Quad Tree Index)
-    for (int i = 0; i < z2r.length; i++) {
-      r2z[z2r[i]] = i;
-    }
     
     // Construct the structure of the quad tree based on Z-values
     // Maximum number of values per node. Set it to a very small number to
@@ -228,36 +229,26 @@ public class AggregateQuadTree {
     return stockTree;
   }
   
-  /** Values in this tree sorted by their Z-order values */
-  protected Object sortedValues;
-  
-  /** Aggregate value of min function for each node */
-  protected short[] min;
-  /** Aggregate value of max function for each node */
-  protected short[] max;
-  /** Aggregate value of sum function for each node */
-  protected int[] sum;
-  /** Aggregate value of count function for each node */
-  protected int[] count;
-  
   /**
    * Construct an actual aggregate quad tree out of a two-dimensional array
    * of values.
    * @param values
+   * @param out - the output stream to write the constructed quad tree to
+   * @throws IOException 
    */
-  public AggregateQuadTree(Object values) {
+  public AggregateQuadTree(short[] values, DataOutputStream out) throws IOException {
     int length = Array.getLength(values);
     int resolution = (int) Math.round(Math.sqrt(length));
     StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
     // Sort values by their respective Z-Order values
-    sortedValues = Array.newInstance(Array.get(values, 0).getClass(), length);
+    short[] sortedValues = new short[length];
     for (int i = 0; i < length; i++)
-      Array.set(sortedValues, stockQuadTree.r2z[i], Array.get(values, i));
+      sortedValues[i] = values[stockQuadTree.r[i]];
     
-    min = new short[stockQuadTree.nodesID.length];
-    max = new short[stockQuadTree.nodesID.length];
-    sum = new int[stockQuadTree.nodesID.length];
-    count = new int[stockQuadTree.nodesID.length];
+    short[] min = new short[stockQuadTree.nodesID.length];
+    short[] max = new short[stockQuadTree.nodesID.length];
+    int[] sum = new int[stockQuadTree.nodesID.length];
+    int[] count = new int[stockQuadTree.nodesID.length];
     // Compute aggregate values for all nodes in the tree
     // Go in reverse ID order to ensure children are computed before parents
     for (int iNode = stockQuadTree.nodesID.length - 1; iNode >= 0 ; iNode--) {
@@ -300,6 +291,23 @@ public class AggregateQuadTree {
         }
       }
     }
+    
+    // Write the constructed quad tree to output
+    out.writeInt(resolution); // resolution
+    out.writeInt(1); // cardinality
+    for (short v : sortedValues)
+      out.writeShort(v);
+    for (int iNode = 0; iNode < min.length; iNode++) {
+      out.writeShort(min[iNode]);
+      out.writeShort(max[iNode]);
+      out.writeInt(count[iNode]);
+      out.writeInt(sum[iNode]);
+    }
+  }
+  
+  void selectionQuery(FSDataInputStream in, Rectangle r) {
+    // Compute the Z-value of the two end points of the range
+    
   }
   
   /**
@@ -319,12 +327,14 @@ public class AggregateQuadTree {
     return morton;
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws IOException {
     // Test construction of aggregate quad trees
+    DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test.quad")));
     short[] values = new short[1200 * 1200];
     long t1 = System.currentTimeMillis();
-    new AggregateQuadTree(values);
+    new AggregateQuadTree(values, out);
     long t2 = System.currentTimeMillis();
+    out.close();
     System.out.println("Elapsed time "+(t2-t1)+" millis");
   }
 }
