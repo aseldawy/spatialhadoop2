@@ -389,7 +389,8 @@ private Object ReadDataSet(int h, int v , String directory, Configuration job, S
 	  Group root;
 	  Stack<Group> groups2bSearched;
 	  Dataset matchDataset;
-	  Path wmPath = new Path("/home/shadoop/workspace/spatialhadoop2/");
+	  System.out.println(directory);
+	  Path wmPath = new Path(directory);
       final String tileIdentifier = String.format("h%02dv%02d", h, v);
       FileSystem wmFs = wmPath.getFileSystem(job);
       FileStatus[] wmFile = wmFs.listStatus(wmPath, new PathFilter() {
