@@ -384,26 +384,39 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
 
 private Object ReadDataSet(int h, int v , String directory, Configuration job, String datasetName) throws OutOfMemoryError, Exception {
 	// TODO Auto-generated method stub
-	  String localFile;
+	  String localFile = null;
       FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
 	  Group root;
 	  Stack<Group> groups2bSearched;
 	  Dataset matchDataset;
 	  
-	  File file=new File(directory);
-	  System.out.println(file.getParent());
-	  Path wmPath = new Path(file.getParent());
+	  
+	  Path wmPath = new Path(directory);
       final String tileIdentifier = String.format("h%02dv%02d", h, v);
       FileSystem wmFs = wmPath.getFileSystem(job);
       FileStatus[] wmFile = wmFs.listStatus(wmPath, new PathFilter() {
         @Override
         public boolean accept(Path path) {
           return path.getName().contains(tileIdentifier);
+          
         }});
       if (wmFile.length == 0) {
         LOG.warn("Could not find dataset for tile '"+tileIdentifier+"'");
+        wmFile = wmFs.listStatus(wmPath.getParent(), new PathFilter() {
+            @Override
+            public boolean accept(Path path) {
+              return path.getName().contains(tileIdentifier);
+              
+            }});
+        if(wmFile.length==0){
+        	 LOG.warn("Could not find dataset for tile '"+tileIdentifier+"'");
+        	 return null;
+        }
+        localFile=copyFile(job, wmFile[0]);
+        
       } else {
         localFile = copyFile(job, wmFile[0]);
+      }
         FileFormat wmHDFFile = fileFormat.createInstance(localFile, FileFormat.READ);
         wmHDFFile.open();
         
@@ -439,7 +452,7 @@ private Object ReadDataSet(int h, int v , String directory, Configuration job, S
          return matchDataset.read();
          
         }
-      }
+      
       return null;
 }
 
