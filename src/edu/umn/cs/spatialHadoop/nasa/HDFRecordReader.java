@@ -389,8 +389,10 @@ private Object ReadDataSet(int h, int v , String directory, Configuration job, S
 	  Group root;
 	  Stack<Group> groups2bSearched;
 	  Dataset matchDataset;
-	  System.out.println(directory);
-	  Path wmPath = new Path(directory);
+	  
+	  File file=new File(directory);
+	  System.out.println(file.getParent());
+	  Path wmPath = new Path(file.getParent());
       final String tileIdentifier = String.format("h%02dv%02d", h, v);
       FileSystem wmFs = wmPath.getFileSystem(job);
       FileStatus[] wmFile = wmFs.listStatus(wmPath, new PathFilter() {
