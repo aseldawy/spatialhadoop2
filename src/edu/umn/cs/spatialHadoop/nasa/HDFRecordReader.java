@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Stack;
 
@@ -295,7 +296,12 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
 						
 						int offset=(nasaDataset.resolution*nasaDataset.resolution)-nasaDataset.resolution;
 						for (int index = 0; index < nasaDataset.resolution; index++) {
-							Array.set(dataArray, offset+index-1, Array.get(surroundingDataSet[0],index));
+							Object value = null;
+							int i=0;
+							
+							while(i<nasaDataset.resolution&&( notFillValue(value=Array.get(surroundingDataSet[0],index+(i*nasaDataset.resolution))) ))i++;
+							
+							Array.set(dataArray, offset+index, value);
 						}
 					}
 					
@@ -304,7 +310,10 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
 
 						int offset=(nasaDataset.resolution*nasaDataset.resolution)-nasaDataset.resolution;
 						for (int index = 0; index < nasaDataset.resolution; index++) {
-							Object value = Array.get(surroundingDataSet[1],offset+index-1);
+							Object value = null;
+							int i=0;
+							while(i<nasaDataset.resolution&&(notFillValue( value=Array.get(surroundingDataSet[1],offset+index-(i*nasaDataset.resolution)))))i++;
+							
 							Array.set(dataArray, index, value );
 						}
 					}
@@ -315,7 +324,10 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
 						
 						int offset=nasaDataset.resolution;
 						for (int index = 0; index < nasaDataset.resolution; index++) {
-							Array.set(dataArray, offset*index, Array.get(surroundingDataSet[2],(offset*index)+offset-1));
+							Object value = null;
+							int i=1;
+							while(i<nasaDataset.resolution&&(notFillValue( value=Array.get(surroundingDataSet[2],(offset*index)+offset-i))))i++;
+							Array.set(dataArray, offset*index,value);
 						}
 					}
 					
@@ -325,10 +337,17 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
 						
 						int offset=nasaDataset.resolution;
 						for (int index = 0; index < nasaDataset.resolution; index++) {
-							Array.set(dataArray, (offset*index)+offset-1, Array.get(surroundingDataSet[3],offset*index));
+							Object value =null;
+							int i=0;
+							while(i<nasaDataset.resolution && notFillValue(value=Array.get(surroundingDataSet[3],offset*index+i)))i++;
+							Array.set(dataArray, (offset*index)+offset-1, value);
 						}
 					}
 					
+            	  for (int i = 0; i < nasaDataset.resolution*nasaDataset.resolution; i++) {
+					Array.set(dataArrayTemp, i, Array.get(dataArray, i));
+            	  }
+            	  coverHoles(water_mask);
             	  
             	  coverHoles(water_mask);
               }
@@ -352,14 +371,25 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
   }
 
 
-  private Object ReadDataSet(int h, int v , String directory, Configuration job, String datasetName) throws OutOfMemoryError, Exception {
+  private boolean notFillValue(Object object) {
+	// TODO Auto-generated method stub
+	  if (object instanceof Integer) {
+	      return (Integer)object==fillValue;
+	    } else if (object instanceof Short) {
+	    	return (Short)object==fillValue;
+	    } else {
+	      throw new RuntimeException("Values of type "+object.getClass()+" is not supported yet");
+	    }
+}
+
+private Object ReadDataSet(int h, int v , String directory, Configuration job, String datasetName) throws OutOfMemoryError, Exception {
 	// TODO Auto-generated method stub
 	  String localFile;
       FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
 	  Group root;
 	  Stack<Group> groups2bSearched;
 	  Dataset matchDataset;
-	  Path wmPath = new Path(directory);
+	  Path wmPath = new Path("/home/shadoop/workspace/spatialhadoop2/");
       final String tileIdentifier = String.format("h%02dv%02d", h, v);
       FileSystem wmFs = wmPath.getFileSystem(job);
       FileStatus[] wmFile = wmFs.listStatus(wmPath, new PathFilter() {
