@@ -301,7 +301,7 @@ public class ClosestPairHadoop {
 		params.setInt("count", sample_count);
 		params.setClass("shape", stockShape.getClass(), TextSerializable.class);
 		params.setClass("outshape", Point.class, TextSerializable.class);
-		Sampler.sampleMapReduceWithRatio(new Path[] {inputFile}, resultCollector, params);
+		Sampler.sample(new Path[] {inputFile}, resultCollector, params);
 		Collections.sort(sample);
 	}
 	

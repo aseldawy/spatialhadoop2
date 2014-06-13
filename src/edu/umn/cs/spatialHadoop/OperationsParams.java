@@ -507,7 +507,7 @@ public class OperationsParams extends Configuration {
       sampleParams.setInt("count", sampleCount);
       sampleParams.setClass("shape", Text2.class, TextSerializable.class);
       sampleParams.setClass("outshape", Text2.class, TextSerializable.class);
-      Sampler.sampleLocalByCount(this.getInputPaths(), new ResultCollector<Text2>() {
+      Sampler.sample(this.getInputPaths(), new ResultCollector<Text2>() {
         @Override
         public void collect(Text2 line) {
           sampleLines.add(line.toString());
