@@ -415,7 +415,8 @@ public class PlotPyramid {
     job.setMapperClass(PlotMap.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+//    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+    job.setNumReduceTasks(10);
     job.setMapOutputKeyClass(TileIndex.class);
     job.setMapOutputValueClass(shape.getClass());
     job.setInt("color", color.getRGB());

@@ -571,7 +571,8 @@ public class Plot {
       ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
       job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
       job.setReducerClass(PlotReduce.class);
-      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+//      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+      job.setNumReduceTasks(6);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(shape.getClass());
   
