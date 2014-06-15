@@ -349,9 +349,9 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
             	  for (int i = 0; i < nasaDataset.resolution*nasaDataset.resolution; i++) {
 					Array.set(dataArrayTemp, i, Array.get(dataArray, i));
             	  }
-            	  short v=(short)((nasaDataset.maxValue)/2);
-            	  Array.set(dataArray, (short)1600, v);
-            	  Array.set(dataArray, nasaDataset.resolution*nasaDataset.resolution-1, (short)1400);
+            	  
+
+            	  
             	  coverHoles(water_mask);
             	  
             	  coverHoles(water_mask);
