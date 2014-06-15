@@ -145,9 +145,11 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
     try {
       // HDF library can only deal with local files. So, we need to copy the file
       // to a local temporary directory before using the HDF Java library
+//    	System.out.println("file split: "+split.getPath().getParent().getName());
       String localFile = copyFileSplit(job, split);
-      String localDirectory = localFile;
+//      String localDirectory = localFile;
 
+      
       // retrieve an instance of H4File
       FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
 
@@ -287,7 +289,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
             		  int h,v;
             		  h=nasaDataset.h+dh[i];
             		  v=nasaDataset.v+dv[i];
-            		  surroundingDataSet[i]=ReadDataSet(h,v,localDirectory,job, datasetName);
+            		  surroundingDataSet[i]=ReadDataSet(h,v,split, job, datasetName);
             		  System.out.println(surroundingDataSet[i]);
             	  }
             	  
@@ -385,7 +387,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
 	    }
 }
 
-private Object ReadDataSet(int h, int v , String directory, Configuration job, String datasetName) throws OutOfMemoryError, Exception {
+private Object ReadDataSet(int h, int v, FileSplit split, Configuration job,String datasetName) throws OutOfMemoryError, Exception {
 	// TODO Auto-generated method stub
 	  String localFile = null;
       FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
@@ -394,7 +396,7 @@ private Object ReadDataSet(int h, int v , String directory, Configuration job, S
 	  Dataset matchDataset;
 	  
 	  
-	  Path wmPath = new Path(directory);
+	  Path wmPath = split.getPath().getParent();
       final String tileIdentifier = String.format("h%02dv%02d", h, v);
       FileSystem wmFs = wmPath.getFileSystem(job);
       FileStatus[] wmFile = wmFs.listStatus(wmPath, new PathFilter() {
