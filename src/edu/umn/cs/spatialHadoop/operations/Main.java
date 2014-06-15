@@ -71,7 +71,7 @@ public class Main {
       pgd.addClass("union", Union.class,
           "Computes the union of input shapes");
 
-      pgd.addClass("plot", Plot.class,
+      pgd.addClass("plot", PlotPartitioned.class,
           "Plots a file to an image");
 
       pgd.addClass("plotp", PlotPyramid.class,

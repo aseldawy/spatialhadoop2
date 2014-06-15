@@ -288,6 +288,8 @@ public class OperationsParams extends Configuration {
       color = Color.YELLOW;
     } else if (colorName.equals("orange")) {
       color = Color.ORANGE;
+    } else if (colorName.equals("none")) {
+      color = new Color(0, true);
     } else {
       LOG.warn("Does not understand the color '"+conf.get(key)+"'");
     }

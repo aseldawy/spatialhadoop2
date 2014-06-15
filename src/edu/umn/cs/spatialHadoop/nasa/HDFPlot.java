@@ -40,7 +40,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.operations.Aggregate;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
-import edu.umn.cs.spatialHadoop.operations.Plot;
+import edu.umn.cs.spatialHadoop.operations.PlotPartitioned;
 import edu.umn.cs.spatialHadoop.operations.PlotPyramid;
 
 /**
@@ -266,11 +266,11 @@ public class HDFPlot {
         if (pyramid) {
           PlotPyramid.main(plotArgs);
           if (background)
-            jobs.add(Plot.lastSubmittedJob);
+            jobs.add(PlotPartitioned.lastSubmittedJob);
         } else {
-          Plot.main(plotArgs);
+          PlotPartitioned.main(plotArgs);
           if (background)
-            jobs.add(Plot.lastSubmittedJob);
+            jobs.add(PlotPartitioned.lastSubmittedJob);
         }
       }
     }
