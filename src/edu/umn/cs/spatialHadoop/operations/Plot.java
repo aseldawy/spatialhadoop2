@@ -21,6 +21,7 @@ import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.Iterator;
 
 import javax.imageio.ImageIO;
@@ -67,6 +68,8 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
+import edu.umn.cs.spatialHadoop.nasa.GeoProjector;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
@@ -590,8 +593,8 @@ public class Plot {
         job.setInt(MaxValue, valueRange.maxValue);
         fileMBR = plotRange != null?
             plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-  //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-  //          GeoProjector.class);
+//        job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//            GeoProjector.class);
       } else {
         // Run MBR operation in synchronous mode
         OperationsParams mbrArgs = new OperationsParams(params);
@@ -655,6 +658,8 @@ public class Plot {
     String hdfDataset = (String) params.get("dataset");
     Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) params.getShape("shape", null);
     Shape plotRange = params.getShape("rect", null);
+//    params.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//              GeoProjector.class);
 
     boolean keepAspectRatio = params.is("keep-ratio", true);
     
@@ -776,6 +781,11 @@ public class Plot {
     boolean isLocal;
     if (params.get("local") == null) {
       JobConf job = new JobConf(params);
+      
+//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//              GeoProjector.class);
+      
+      
       ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
       ShapeInputFormat.addInputPath(job, inFile);
       Shape plotRange = params.getShape("rect");
@@ -783,6 +793,7 @@ public class Plot {
         job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
       }
       InputSplit[] splits = inputFormat.getSplits(job, 1);
+      System.out.println(Arrays.toString(splits));
       boolean autoLocal = splits.length <= 3;
       
       isLocal = params.is("local", autoLocal);
