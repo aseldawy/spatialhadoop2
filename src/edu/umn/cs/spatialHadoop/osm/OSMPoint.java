@@ -10,7 +10,7 @@
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and limitations under the License.
  */
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.osm;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -20,6 +20,7 @@ import java.util.Map;
 
 import org.apache.hadoop.io.Text;
 
+import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 
@@ -29,9 +30,9 @@ public class OSMPoint extends Point {
 
   @Override
   public void fromText(Text text) {
-    id = TextSerializerHelper.consumeLong(text, '\t');
-    x = TextSerializerHelper.consumeDouble(text, '\t');
-    y = TextSerializerHelper.consumeDouble(text, '\t');
+    id = TextSerializerHelper.consumeLong(text, ',');
+    x = TextSerializerHelper.consumeDouble(text, ',');
+    y = TextSerializerHelper.consumeDouble(text, ',');
     TextSerializerHelper.consumeMap(text, tags);
   }
 
