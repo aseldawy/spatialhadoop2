@@ -79,9 +79,9 @@ import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
  * @author Ahmed Eldawy
  *
  */
-public class Plot {
+public class PlotPartitioned {
   /**Logger*/
-  private static final Log LOG = LogFactory.getLog(Plot.class);
+  private static final Log LOG = LogFactory.getLog(PlotPartitioned.class);
   
   private static final String MinValue = "plot.min_value";
   private static final String MaxValue = "plot.max_value";
@@ -353,8 +353,8 @@ public class Plot {
           (this.drawMbr.getWidth() * this.drawMbr.getHeight());
       this.scale = Math.sqrt(scale2);
   
-      NASAPoint.minValue = job.getInt(Plot.MinValue, 0);
-      NASAPoint.maxValue = job.getInt(Plot.MaxValue, 65535);
+      NASAPoint.minValue = job.getInt(PlotPartitioned.MinValue, 0);
+      NASAPoint.maxValue = job.getInt(PlotPartitioned.MaxValue, 65535);
     }
   
     @Override
@@ -467,7 +467,7 @@ public class Plot {
       valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
 
-    JobConf job = new JobConf(params, Plot.class);
+    JobConf job = new JobConf(params, PlotPartitioned.class);
     job.setJobName("FastPlot");
 
     job.setMapperClass(PlotFastMap.class);
@@ -564,7 +564,7 @@ public class Plot {
         valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
       
-      JobConf job = new JobConf(params, Plot.class);
+      JobConf job = new JobConf(params, PlotPartitioned.class);
       job.setJobName("Plot");
       
       job.setMapperClass(PlotMap.class);

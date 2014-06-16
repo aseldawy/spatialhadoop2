@@ -54,7 +54,6 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
@@ -98,35 +97,24 @@ public class Sampler {
       sampleRatio = job.getFloat("ratio", 0.01f);
       random = new Random(job.getLong("seed", System.currentTimeMillis()));
       
-      try {
-        Class<? extends TextSerializable> inClass =
-            job.getClass("shape", null).asSubclass(TextSerializable.class);
-        Class<? extends TextSerializable> outClass =
-            job.getClass("outshape", null).asSubclass(TextSerializable.class);
+      TextSerializable inObj = OperationsParams.getTextSerializable(job, "shape", new Text2());
+      TextSerializable outObj = OperationsParams.getTextSerializable(job, "outshape", new Text2());
 
-        if (inClass == outClass) {
+      if (inObj.getClass() == outObj.getClass()) {
+        conversion = Conversion.None;
+      } else {
+        if (inObj instanceof Shape && outObj instanceof Point) {
+          inShape = (Shape) inObj;
+          conversion = Conversion.ShapeToPoint;
+        } else if (inObj instanceof Shape && outObj instanceof Rectangle) {
+          inShape = (Shape) inObj;
+          conversion = Conversion.ShapeToRect;
+        } else if (outObj instanceof Text) {
           conversion = Conversion.None;
         } else {
-          TextSerializable inObj = inClass.newInstance();
-          TextSerializable outObj = outClass.newInstance();
-
-          if (inObj instanceof Shape && outObj instanceof Point) {
-            inShape = (Shape) inObj;
-            conversion = Conversion.ShapeToPoint;
-          } else if (inObj instanceof Shape && outObj instanceof Rectangle) {
-            inShape = (Shape) inObj;
-            conversion = Conversion.ShapeToRect;
-          } else if (outObj instanceof Text) {
-            conversion = Conversion.None;
-          } else {
-            throw new RuntimeException("Don't know how to convert from: "+
-                inClass+" to "+outClass);
-          }
+          throw new RuntimeException("Don't know how to convert from: "+
+              inObj.getClass()+" to "+outObj.getClass());
         }
-      } catch (InstantiationException e) {
-        e.printStackTrace();
-      } catch (IllegalAccessException e) {
-        e.printStackTrace();
       }
     }
     
@@ -181,23 +169,9 @@ public class Sampler {
       }
     }
   }
-  
-  @Deprecated
-  public static int sampleWithRatio(
-      FileSystem fs, Path[] files, float ratio, long threshold, long seed,
-      final ResultCollector<TextSerializable> output, TextSerializable inObj,
-      TextSerializable outObj) throws IOException {
-    OperationsParams params = new OperationsParams();
-    params.setFloat("ratio", ratio);
-    params.setLong("size", threshold);
-    params.setLong("seed", seed);
-    params.setClass("shape", inObj.getClass(), TextSerializable.class);
-    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
-    return sampleWithRatio(files, output, params);
-  }
-  
-  public static <T extends TextSerializable> int sampleWithRatio(
-      Path[] files, final ResultCollector<T> output, OperationsParams params) throws IOException {
+
+  private static int sampleWithRatio(
+      Path[] files, final ResultCollector<? extends TextSerializable> output, OperationsParams params) throws IOException {
     FileSystem fs = files[0].getFileSystem(params);
     FileStatus inFStatus = fs.getFileStatus(files[0]);
     if (inFStatus.isDir() || inFStatus.getLen() / inFStatus.getBlockSize() > 1) {
@@ -208,62 +182,8 @@ public class Sampler {
       return sampleLocalWithRatio(files, output, params);
     }
   }  
-
-  @Deprecated
-  public static int sampleLocalWithRatio(
-      FileSystem fs, Path[] files, float ratio, long threshold, long seed,
-      final ResultCollector<TextSerializable> output, TextSerializable inObj,
-      TextSerializable outObj) throws IOException {
-    OperationsParams params = new OperationsParams();
-    params.setFloat("ratio", ratio);
-    params.setLong("size", threshold);
-    params.setLong("seed", seed);
-    params.setClass("shape", inObj.getClass(), TextSerializable.class);
-    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
-    return sampleLocalWithRatio(files, output, params);
-  }
   
-  public static <T extends TextSerializable> int sampleLocalWithRatio(
-      Path[] files, final ResultCollector<T> output, OperationsParams params) throws IOException {
-    long total_size = 0;
-    for (Path file : files) {
-      FileSystem fs = file.getFileSystem(params);
-      total_size += fs.getFileStatus(file).getLen();
-    }
-    sizeOfLastProcessedFile = total_size;
-    float ratio = params.getFloat("ratio", 0.0f);
-    params.setLong("size", (long) (total_size * ratio));
-    return sampleLocalWithSize(files, output, params);
-  }
-
-  /**
-   * Sample a ratio of the file through a MapReduce job
-   * @param fs
-   * @param files
-   * @param ratio
-   * @param maxSampleSize - Maximum size of sample in bytes
-   * @param seed - Random seed to use in randomization for repeatable tests
-   * @param output - Collects the generated output
-   * @param inObj
-   * @param outObj
-   * @return
-   * @throws IOException
-   */
-  @Deprecated
-  public static int sampleMapReduceWithRatio(
-      FileSystem fs, Path[] files, float ratio, long maxSampleSize, long seed,
-      final ResultCollector<TextSerializable> output, TextSerializable inObj,
-      TextSerializable outObj) throws IOException {
-    OperationsParams params = new OperationsParams();
-    params.setFloat("ratio", ratio);
-    params.setLong("size", maxSampleSize);
-    params.setLong("seed", seed);
-    params.setClass("shape", inObj.getClass(), TextSerializable.class);
-    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
-    return sampleMapReduceWithRatio(files, output, params);
-  }
-  
-  public static <T extends TextSerializable> int sampleMapReduceWithRatio(
+  private static <T extends TextSerializable> int sampleMapReduceWithRatio(
       Path[] files, final ResultCollector<T> output,
       OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, Sampler.class);
@@ -317,16 +237,7 @@ public class Sampler {
     long sampleSize = job.getLong("size", 0);
     final double selectRatio = sampleSize <= 0? 2.0 : (double)sampleSize / resultSize;
     long seed = job.getLong("seed", System.currentTimeMillis());
-    T outObj;
-    try {
-      Class<? extends TextSerializable> outClass = job.getClass("outshape", Text.class).asSubclass(TextSerializable.class);
-      outObj = (T) outClass.newInstance();
-    } catch (InstantiationException e1) {
-      outObj = (T) new Text2();
-    } catch (IllegalAccessException e1) {
-      outObj = (T) new Text2();
-    }
-
+    T outObj = (T) OperationsParams.getTextSerializable(job, "outshape", new Text2());
 
     // Read job result
     int result_size = 0;
@@ -391,95 +302,6 @@ public class Sampler {
   }
 
   /**
-   * Records as many records as wanted until the total size of the text
-   * serialization of sampled records exceed the given limit
-   * @param fs
-   * @param files
-   * @param total_size
-   * @param output
-   * @param inObj
-   * @return
-   * @throws IOException
-   */
-  @Deprecated
-  public static int sampleLocalWithSize(FileSystem fs, Path[] files,
-      long total_size, long seed,
-      final ResultCollector<TextSerializable> output,
-      final TextSerializable inObj, final TextSerializable outObj)
-      throws IOException {
-    OperationsParams params = new OperationsParams();
-    params.setLong("size", total_size);
-    params.setLong("seed", seed);
-    params.setClass("shape", inObj.getClass(), TextSerializable.class);
-    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
-    return sampleLocalWithSize(files, output, params);
-  }
-
-  public static <T extends TextSerializable> int sampleLocalWithSize(Path[] files,
-      final ResultCollector<T> output, OperationsParams params)
-      throws IOException {
-
-    int average_record_size = 1024; // A wild guess for record size
-    final LongWritable current_sample_size = new LongWritable();
-    int sample_count = 0;
-
-    TextSerializable inObj1, outObj1;
-    try {
-      Class<? extends TextSerializable> inClass = params.getClass("shape", TextSerializable.class).asSubclass(TextSerializable.class);
-      inObj1 = inClass.newInstance();
-    } catch (InstantiationException e) {
-      inObj1 = new Text2();
-    } catch (IllegalAccessException e) {
-      inObj1 = new Text2();
-    }
-
-    try {
-      Class<? extends TextSerializable> outClass = params.getClass("outshape", TextSerializable.class).asSubclass(TextSerializable.class);
-      outObj1 = outClass.newInstance();
-    } catch (InstantiationException e) {
-      outObj1 = new Text2();
-    } catch (IllegalAccessException e) {
-      outObj1 = new Text2();
-    }
-    // Make the objects final to be able to use in the anonymous inner class
-    final TextSerializable inObj = inObj1;
-    final T outObj = (T) outObj1;
-    final ResultCollector<TextSerializable> converter = createConverter(output, inObj, outObj);
-
-    final ResultCollector<Text2> counter = new ResultCollector<Text2>() {
-      @Override
-      public void collect(Text2 r) {
-        current_sample_size.set(current_sample_size.get() + r.getLength());
-        inObj.fromText(r);
-        converter.collect(inObj);
-      }
-    };
-    
-    long total_size = params.getLong("size", 0);
-    long seed = params.getLong("seed", System.currentTimeMillis());
-
-    while (current_sample_size.get() < total_size) {
-      int count = (int) ((total_size - current_sample_size.get()) / average_record_size);
-      if (count < 10)
-        count = 10;
-
-      OperationsParams params2 = new OperationsParams(params);
-      params2.setClass("shape", Text2.class, TextSerializable.class);
-      params2.setClass("outshape", Text2.class, TextSerializable.class);
-      params2.setInt("count", count);
-      params2.setLong("seed", seed);
-      sample_count += sampleLocalByCount(files, counter, params);
-      // Change the seed to get different sample next time.
-      // Still we need to ensure that repeating the program will generate
-      // the same value
-      seed += sample_count;
-      // Update average_records_size
-      average_record_size = (int) (current_sample_size.get() / sample_count);
-    }
-    return sample_count;
-  }
-
-  /**
    * Creates a proxy ResultCollector that takes as input objects of type T
    * and converts them to objects of type O.
    * It returns an object with a collect method that takes as input an object
@@ -508,7 +330,13 @@ public class Sampler {
       return new ResultCollector<T>() {
         @Override
         public void collect(T r) {
-          Point pt = ((Shape)r).getMBR().getCenterPoint();
+          Shape s = (Shape) r;
+          if (s == null)
+            return;
+          Rectangle mbr = s.getMBR();
+          if (mbr == null)
+            return;
+          Point pt = mbr.getCenterPoint();
           out_pt.x = pt.x;
           out_pt.y = pt.y;
           output.collect(outObj);
@@ -555,36 +383,70 @@ public class Sampler {
     }
   }; 
 
+  private static <T extends TextSerializable> int sampleLocalWithSize(Path[] files,
+      final ResultCollector<T> output, OperationsParams params)
+      throws IOException {
   
-  @Deprecated
-  public static int sampleLocalByCount(FileSystem fs, Path file, int count, long seed,
-      ResultCollector<TextSerializable> output, TextSerializable inObj,
-      TextSerializable outObj) throws IOException {
-    return sampleLocalByCount(fs, new Path[] {file}, count, seed, output, inObj, outObj);
+    int average_record_size = 1024; // A wild guess for record size
+    final LongWritable current_sample_size = new LongWritable();
+    int sample_count = 0;
+  
+    TextSerializable inObj1, outObj1;
+    inObj1 = OperationsParams.getTextSerializable(params, "shape", new Text2());
+    outObj1 = OperationsParams.getTextSerializable(params, "outshape", new Text2());
+    
+    // Make the objects final to be able to use in the anonymous inner class
+    final TextSerializable inObj = inObj1;
+    final T outObj = (T) outObj1;
+    final ResultCollector<TextSerializable> converter = createConverter(output, inObj, outObj);
+  
+    final ResultCollector<Text2> counter = new ResultCollector<Text2>() {
+      @Override
+      public void collect(Text2 r) {
+        current_sample_size.set(current_sample_size.get() + r.getLength());
+        inObj.fromText(r);
+        converter.collect(inObj);
+      }
+    };
+    
+    long total_size = params.getLong("size", 0);
+    long seed = params.getLong("seed", System.currentTimeMillis());
+  
+    while (current_sample_size.get() < total_size) {
+      int count = (int) ((total_size - current_sample_size.get()) / average_record_size);
+      if (count < 10)
+        count = 10;
+  
+      OperationsParams params2 = new OperationsParams(params);
+      params2.setClass("shape", Text2.class, TextSerializable.class);
+      params2.setClass("outshape", Text2.class, TextSerializable.class);
+      params2.setInt("count", count);
+      params2.setLong("seed", seed);
+      sample_count += sampleLocalByCount(files, counter, params2);
+      // Change the seed to get different sample next time.
+      // Still we need to ensure that repeating the program will generate
+      // the same value
+      seed += sample_count;
+      // Update average_records_size
+      average_record_size = (int) (current_sample_size.get() / sample_count);
+    }
+    return sample_count;
   }
-  
-  /**
-   * Reads a sample of the given file and returns the number of items read.
-   * 
-   * @param fs
-   * @param file
-   * @param count
-   * @return
-   * @throws IOException
-   */
-  @Deprecated
-  public static int sampleLocalByCount(FileSystem fs, Path[] files, int count,
-      long seed, ResultCollector<TextSerializable> output,
-      TextSerializable inObj, TextSerializable outObj) throws IOException {
-    OperationsParams params = new OperationsParams();
-    params.setInt("count", count);
-    params.setLong("seed", seed);
-    params.setClass("shape", inObj.getClass(), TextSerializable.class);
-    params.setClass("outshape", outObj.getClass(), TextSerializable.class);
-    return sampleLocalByCount(files, output, params);
+
+  private static <T extends TextSerializable> int sampleLocalWithRatio(
+      Path[] files, final ResultCollector<T> output, OperationsParams params) throws IOException {
+    long total_size = 0;
+    for (Path file : files) {
+      FileSystem fs = file.getFileSystem(params);
+      total_size += fs.getFileStatus(file).getLen();
+    }
+    sizeOfLastProcessedFile = total_size;
+    float ratio = params.getFloat("ratio", 0.0f);
+    params.setLong("size", (long) (total_size * ratio));
+    return sampleLocalWithSize(files, output, params);
   }
-  
-  public static <T extends TextSerializable> int sampleLocalByCount(Path[] files,
+
+  private static <T extends TextSerializable> int sampleLocalByCount(Path[] files,
       ResultCollector<T> output, OperationsParams params) throws IOException {
 
     ArrayList<Path> data_files = new ArrayList<Path>();
@@ -605,23 +467,9 @@ public class Sampler {
     files = data_files.toArray(new Path[data_files.size()]);
     
     TextSerializable inObj1, outObj1;
-    try {
-      Class<? extends TextSerializable> inClass = params.getClass("shape", TextSerializable.class).asSubclass(TextSerializable.class);
-      inObj1 = inClass.newInstance();
-    } catch (InstantiationException e) {
-      inObj1 = new Text2();
-    } catch (IllegalAccessException e) {
-      inObj1 = new Text2();
-    }
-
-    try {
-      Class<? extends TextSerializable> outClass = params.getClass("outshape", TextSerializable.class).asSubclass(TextSerializable.class);
-      outObj1 = outClass.newInstance();
-    } catch (InstantiationException e) {
-      outObj1 = new Text2();
-    } catch (IllegalAccessException e) {
-      outObj1 = new Text2();
-    }
+    inObj1 = OperationsParams.getTextSerializable(params, "shape", new Text2());
+    outObj1 = OperationsParams.getTextSerializable(params, "outshape", new Text2());
+    
     // Make the objects final to be able to use in the anonymous inner class
     final TextSerializable inObj = inObj1;
     final T outObj = (T) outObj1;
@@ -692,6 +540,21 @@ public class Sampler {
     return records_returned;
   }
   
+  public static void sample(Path[] inputFiles,
+      ResultCollector<? extends TextSerializable> output, OperationsParams params)
+      throws IOException {
+    if (params.get("size") != null) {
+      sampleLocalWithSize(inputFiles, output, params);
+    } else if (params.get("ratio") != null) {
+      sampleMapReduceWithRatio(inputFiles, output, params);
+    } else if (params.get("count") != null){
+      // The only way to sample by count is using the local sampler
+      sampleLocalByCount(inputFiles, output, params);
+    } else {
+      throw new RuntimeException("Must provide one of three options 'size', 'ratio' or 'count'");
+    }
+  }
+
   private static void printUsage() {
     System.out.println("Reads a random sample of an input file. Sample is written to stdout");
     System.out.println("Parameters (* marks required parameters):");
@@ -714,16 +577,6 @@ public class Sampler {
       System.exit(1);
     }
     
-    long size = params.getSize("size");
-    float ratio = params.getFloat("ratio", -1.0f);
-    TextSerializable stockObject = params.getShape("shape");
-    if (stockObject == null)
-      stockObject = new Text2();
-
-    TextSerializable outputShape = params.getShape("outshape");
-    if (outputShape == null)
-      outputShape = new Text2();
-    
     ResultCollector<TextSerializable> output =
     new ResultCollector<TextSerializable>() {
       @Override
@@ -731,14 +584,7 @@ public class Sampler {
         System.out.println(value.toText(new Text()));
       }
     };
-    
-    if (size != 0) {
-      sampleLocalWithSize(inputFiles, output, params);
-    } else if (ratio != -1.0) {
-      sampleMapReduceWithRatio(inputFiles, output, params);
-    } else {
-      // The only way to sample by count is using the local sampler
-      sampleLocalByCount(inputFiles, output, params);
-    }
+
+    sample(inputFiles, output, params);
   }
 }

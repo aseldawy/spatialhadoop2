@@ -20,6 +20,7 @@ import org.apache.hadoop.io.Text;
 
 import com.esri.core.geometry.ogc.OGCGeometry;
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.io.ParseException;
 import com.vividsolutions.jts.io.WKBReader;
 import com.vividsolutions.jts.io.WKBWriter;
@@ -502,9 +503,8 @@ public final class TextSerializerHelper {
       text.append(new byte[] {(byte) toAppend}, 0, 1);
   }
   
-  private static final WKTReader wktReader = new WKTReader();
-  private static final WKBWriter wkbWriter = new WKBWriter();
-  private static final WKBReader wkbReader = new WKBReader();
+  private static final WKTReader wktReader = new WKTReader(new GeometryFactory());
+  private static final WKBReader wkbReader = new WKBReader(new GeometryFactory());
   
   public static void serializeGeometry(Text text, Geometry geom, char toAppend) {
     String wkt = geom.toText();
@@ -514,8 +514,8 @@ public final class TextSerializerHelper {
       text.append(new byte[] {(byte) toAppend}, 0, 1);
   }
   
-  public static Geometry consumeGeometryJTS(Text text, char separator) {
- // Check whether this text is a Well Known Text (WKT) or a hexed string
+  public static synchronized Geometry consumeGeometryJTS(Text text, char separator) {
+    // Check whether this text is a Well Known Text (WKT) or a hexed string
     boolean wkt = false;
     byte[] bytes = text.getBytes();
     int i_shape = 0;
@@ -539,6 +539,8 @@ public final class TextSerializerHelper {
       // Look for the terminator of the shape text
       i_end = 0;
       while (i_end < text.getLength() && bytes[i_end] != '(')
+        i_end++;
+      if (i_end < text.getLength())
         i_end++;
       int nesting = 1;
       while (i_end < text.getLength() && nesting > 0) {

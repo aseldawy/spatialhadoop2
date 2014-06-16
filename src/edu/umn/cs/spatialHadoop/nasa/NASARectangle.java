@@ -117,7 +117,8 @@ public class NASARectangle extends Rectangle implements NASAShape {
         int red = (int) (NASAPoint.color1.getRed() * (1.0f - ratio) + NASAPoint.color2.getRed() * ratio);
         int green = (int) (NASAPoint.color1.getGreen() * (1.0f - ratio) + NASAPoint.color2.getGreen() * ratio);
         int blue = (int) (NASAPoint.color1.getBlue() * (1.0f - ratio) + NASAPoint.color2.getBlue() * ratio);
-        color = new Color(red, green, blue);
+        int alpha = (int) (NASAPoint.color1.getAlpha() * (1.0f - ratio) + NASAPoint.color2.getAlpha() * ratio);
+        color = new Color(red, green, blue, alpha);
       } else {
         throw new RuntimeException("Unsupported gradient type: "+NASAPoint.gradientType);
       }

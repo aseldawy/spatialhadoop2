@@ -33,16 +33,16 @@ public class MercatorProjector implements GeoProjector {
       // Use the Mercator projection to draw an image similar to Google Maps
       // http://stackoverflow.com/questions/14329691/covert-latitude-longitude-point-to-a-pixels-x-y-on-mercator-projection
       double latRad = pt.y * Math.PI / 180.0;
-      double mercN = Math.log(Math.tan(Math.PI/4-latRad/2));
+      double mercN = Math.log10(Math.tan(Math.PI/4-latRad/2));
       pt.y = -180 * mercN / Math.PI;
     } else if (shape instanceof Rectangle) {
       Rectangle rect = (Rectangle) shape;
       double latRad = rect.y1 * Math.PI / 180.0;
-      double mercN = Math.log(Math.tan(Math.PI/4-latRad/2));
+      double mercN = Math.log10(Math.tan(Math.PI/4-latRad/2));
       rect.y1 = -180 * mercN / Math.PI;
       
       latRad = rect.y2 * Math.PI / 180.0;
-      mercN = Math.log(Math.tan(Math.PI/4-latRad/2));
+      mercN = Math.log10(Math.tan(Math.PI/4-latRad/2));
       rect.y2 = -180 * mercN / Math.PI;
     } else {
       throw new RuntimeException("Cannot project shapes of type "+shape.getClass());
