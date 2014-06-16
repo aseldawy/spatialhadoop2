@@ -436,8 +436,8 @@ public class PlotPyramid {
       //fileMBR = new Rectangle(-180, -90, 180, 90);
       fileMBR = plotRange != null?
           plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-//          GeoProjector.class);
+      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+          GeoProjector.class);
     } else {
       fileMBR = FileMBR.fileMBR(inFile, params);
     }
