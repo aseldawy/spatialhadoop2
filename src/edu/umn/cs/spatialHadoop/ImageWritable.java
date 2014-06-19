@@ -40,6 +40,10 @@ public class ImageWritable implements Writable {
   public ImageWritable() {
   }
 
+  public ImageWritable(BufferedImage image) {
+    this.image = image;
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     ByteArrayOutputStream baos = new ByteArrayOutputStream();

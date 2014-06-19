@@ -96,7 +96,7 @@ public class Aggregate {
     
     @Override
     public String toString() {
-      return super.toString()+","+minValue+","+maxValue;
+      return "Value Range: "+minValue+", "+maxValue;
     }
 
     @Override
@@ -117,6 +117,13 @@ public class Aggregate {
         minValue = value.minValue;
       if (value.maxValue > maxValue)
         maxValue = value.maxValue;
+    }
+
+    public void expand(int value) {
+      if (value < minValue)
+        minValue = value;
+      if (value > maxValue)
+        maxValue = value;
     }
   }
 

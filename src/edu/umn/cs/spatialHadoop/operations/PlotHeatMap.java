@@ -13,36 +13,34 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
-import java.awt.Font;
-import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 
 import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.ArrayWritable;
-import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -50,13 +48,12 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.hadoop.util.IndexedSortable;
+import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.SimpleGraphics;
-import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -66,7 +63,6 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
@@ -81,236 +77,170 @@ public class PlotHeatMap {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(PlotHeatMap.class);
   
-  private static final String MinValue = "plot.min_value";
-  private static final String MaxValue = "plot.max_value";
-  /**The grid used to partition data across reducers*/
-  private static final String PartitionGrid = "plot.partition_grid";
-
-  /**
-   * If the processed block is already partitioned (via global index), then
-   * the output is the same as input (Identity map function). If the input
-   * partition is not partitioned (a heap file), then the given shape is output
-   * to all overlapping partitions.
-   * @author Ahmed Eldawy
-   *
-   */
-  public static class PlotMap extends MapReduceBase 
-    implements Mapper<Rectangle, Shape, IntWritable, Shape> {
+  public static class FrequencyMap implements Writable {
+    int[][] frequency;
+    private MinMax valueRange;
     
-    private GridInfo partitionGrid;
-    private IntWritable cellNumber;
-    private Shape queryRange;
-    private Rectangle fileMbr;
-    private int imageWidth, imageHeight;
-    private double scale2, scale;
-    private boolean fade;
+    private Map<Integer, BufferedImage> cachedCircles = new HashMap<Integer, BufferedImage>();
     
-    @Override
-    public void configure(JobConf job) {
-      super.configure(job);
-      partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
-      cellNumber = new IntWritable();
-      queryRange = OperationsParams.getShape(job, "rect");
-      this.fade = job.getBoolean("fade", false);
-      this.fileMbr = ImageOutputFormat.getFileMBR(job);
-      this.imageWidth = job.getInt("width", 1000);
-      this.imageHeight = job.getInt("height", 1000);
-      this.scale2 = (double)imageWidth * imageHeight /
-          (this.fileMbr.getWidth() * this.fileMbr.getHeight());
-      this.scale = Math.sqrt(this.scale2);
+    public FrequencyMap() {
     }
     
-    public void map(Rectangle cell, Shape shape,
-        OutputCollector<IntWritable, Shape> output, Reporter reporter)
-        throws IOException {
-      Rectangle shapeMbr = shape.getMBR();
-      if (shapeMbr == null)
-        return;
-      if (fade) {
-        double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
-        if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-          // This shape can be safely skipped as it is too small to be plotted
-          return;
+    public FrequencyMap(int width, int height) {
+      frequency = new int[width][height];
+    }
+    
+    public FrequencyMap(FrequencyMap other) {
+      this.frequency = new int[other.getWidth()][other.getHeight()];
+      for (int x = 0; x < this.getWidth(); x++)
+        for (int y = 0; y < this.getHeight(); y++) {
+          this.frequency[x][y] = other.frequency[x][y];
         }
-      }
-      // Skip shapes outside query range if query range is set
-      if (queryRange != null && !shapeMbr.isIntersected(queryRange))
-        return;
-      java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
-      for (int i = 0; i < overlappingCells.width; i++) {
-        int x = overlappingCells.x + i;
-        for (int j = 0; j < overlappingCells.height; j++) {
-          int y = overlappingCells.y + j;
-          cellNumber.set(y * partitionGrid.columns + x + 1);
-          output.collect(cellNumber, shape);
+    }
+
+    public void combine(FrequencyMap other) {
+      if (other.getWidth() != this.getWidth() ||
+          other.getHeight() != this.getHeight())
+        throw new RuntimeException("Incompatible frequency map sizes "+this+", "+other);
+      for (int x = 0; x < this.getWidth(); x++)
+        for (int y = 0; y < this.getHeight(); y++) {
+          this.frequency[x][y] += other.frequency[x][y];
+        }
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+      out.writeInt(this.getWidth());
+      out.writeInt(this.getHeight());
+      for (int[] col : frequency) {
+        for (int value : col) {
+          out.writeInt(value);
         }
       }
     }
-  }
-  
-  /**
-   * The reducer class draws an image for contents (shapes) in each cell info
-   * @author Ahmed Eldawy
-   *
-   */
-  public static class PlotReduce extends MapReduceBase
-      implements Reducer<IntWritable, Shape, Rectangle, ImageWritable> {
     
-    private GridInfo partitionGrid;
-    private Rectangle fileMbr;
-    private int imageWidth, imageHeight;
-    private ImageWritable sharedValue = new ImageWritable();
-    private double scale2, scale;
-    private int strokeColor;
-    private boolean fade;
-
     @Override
-    public void configure(JobConf job) {
-      System.setProperty("java.awt.headless", "true");
-      super.configure(job);
-      this.partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
-      this.fileMbr = ImageOutputFormat.getFileMBR(job);
-      this.imageWidth = job.getInt("width", 1000);
-      this.imageHeight = job.getInt("height", 1000);
-      this.strokeColor = job.getInt("color", 0);
-      this.fade = job.getBoolean("fade", false);
+    public void readFields(DataInput in) throws IOException {
+      int width = in.readInt();
+      int height = in.readInt();
+      frequency = new int[width][height];
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          frequency[x][y] = in.readInt();
+        }
+      }
+    }
+    
+    @Override
+    protected FrequencyMap clone() {
+      return new FrequencyMap(this);
+    }
+    
+    @Override
+    public String toString() {
+      return "Frequency Map:"+this.getWidth()+"x"+this.getHeight();
+    }
+    
+    private MinMax getValueRange() {
+      Map<Integer, Integer> histogram = new HashMap<Integer, Integer>();
+      MinMax minMax = new MinMax(Integer.MAX_VALUE, Integer.MIN_VALUE);
+      for (int[] col : frequency)
+        for (int value : col) {
+          if (!histogram.containsKey(value)) {
+            histogram.put(value, 1);
+          } else {
+            histogram.put(value, histogram.get(value) + 1);
+          }
+          minMax.expand(value);
+        }
+      final int[] keys = new int[histogram.size()];
+      final int[] values = new int[histogram.size()];
+      int i = 0;
+      for (Map.Entry<Integer, Integer> entry : histogram.entrySet()) {
+        keys[i] = entry.getKey();
+        values[i] = entry.getValue();
+        i++;
+      }
+      new QuickSort().sort(new IndexedSortable() {
+        @Override
+        public int compare(int i, int j) {
+          return keys[i] - keys[j];
+        }
 
-      this.scale2 = (double)imageWidth * imageHeight /
-          (this.fileMbr.getWidth() * this.fileMbr.getHeight());
-      this.scale = Math.sqrt(scale2);
-
-      NASAPoint.minValue = job.getInt(MinValue, 0);
-      NASAPoint.maxValue = job.getInt(MaxValue, 65535);
-      
-      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
-      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
-      NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+        @Override
+        public void swap(int i, int j) {
+          int t = keys[i];
+          keys[i] = keys[j];
+          keys[j] = t;
+          
+          t = values[i];
+          values[i] = values[j];
+          values[j] = t;
+        }
+        
+      }, 0, keys.length);
+      for (i = 0; i < keys.length; i++)
+        System.out.println(keys[i]+","+values[i]);
+      return minMax;
     }
 
-    @Override
-    public void reduce(IntWritable cellNumber, Iterator<Shape> values,
-        OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
-        throws IOException {
-      try {
-        CellInfo cellInfo = partitionGrid.getCell(cellNumber.get());
-        // Initialize the image
-        int image_x1 = (int) Math.floor((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y1 = (int) Math.floor((cellInfo.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-        int image_x2 = (int) Math.ceil((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        int image_y2 = (int) Math.ceil((cellInfo.y2 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
-        int tile_width = image_x2 - image_x1;
-        int tile_height = image_y2 - image_y1;
+    private int getWidth() {
+      return frequency.length;
+    }
 
-        BufferedImage image = new BufferedImage(tile_width, tile_height,
-            BufferedImage.TYPE_INT_ARGB);
+    private int getHeight() {
+      return frequency[0].length;
+    }
 
-        Graphics2D graphics;
-        try {
-          graphics = image.createGraphics();
-        } catch (Throwable e) {
-          graphics = new SimpleGraphics(image);
+    public BufferedImage toImage(MinMax valueRange, boolean skipZeros) {
+      if (valueRange == null)
+        valueRange = getValueRange();
+      LOG.info("Using the value range: "+valueRange);
+      NASAPoint.minValue = valueRange.minValue;
+      NASAPoint.maxValue = valueRange.maxValue;
+      BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
+      for (int x = 0; x < this.getWidth(); x++)
+        for (int y = 0; y < this.getHeight(); y++) {
+          if (!skipZeros || frequency[x][y] > 0) {
+            Color color = NASARectangle.calculateColor(frequency[x][y]);
+            image.setRGB(x, y, color.getRGB());
+          }
         }
-        graphics.setBackground(new Color(0, 0, 0, 0));
-        graphics.clearRect(0, 0, tile_width, tile_height);
-        Color strokeClr = new Color(strokeColor);
-        graphics.setColor(strokeClr);
-        graphics.translate(-image_x1, -image_y1);
+      return image;
+    }
 
-        while (values.hasNext()) {
-          Shape s = values.next();
-          if (fade) {
-            Rectangle shapeMBR = s.getMBR();
-            double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
-            if (areaInPixels > 1.0) {
-              graphics.setColor(strokeClr);
-            } else {
-              byte alpha = (byte) Math.round(areaInPixels * 255);
-              if (alpha == 0) {
-                // Skip this shape
-                continue;
-              } else {
-                graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
-              }
+    public void addPoint(int cx, int cy, int radius) {
+      BufferedImage circle = getCircle(radius);
+      for (int x = 0; x < circle.getWidth(); x++) {
+        for (int y = 0; y < circle.getHeight(); y++) {
+          int imgx = x - radius + cx;
+          int imgy = y - radius + cy;
+          if (imgx >= 0 && imgx < getWidth() && imgy >= 0 && imgy < getHeight()) {
+            boolean filled = (circle.getRGB(x, y) & 0xff) == 0;
+            if (filled) {
+              frequency[x - radius + cx][y - radius + cy]++;
             }
           }
-          s.draw(graphics, fileMbr, imageWidth, imageHeight, scale2);
         }
-        
+      }
+    }
+
+    public BufferedImage getCircle(int radius) {
+      BufferedImage circle = cachedCircles.get(radius);
+      if (circle == null) {
+        circle = new BufferedImage(radius * 2, radius * 2, BufferedImage.TYPE_INT_RGB);
+        Graphics2D graphics = circle.createGraphics();
+        graphics.setBackground(Color.WHITE);
+        graphics.clearRect(0, 0, radius * 2, radius * 2);
+        graphics.setColor(Color.BLACK);
+        graphics.fillArc(0, 0, radius * 2, radius * 2, 0, 360);
         graphics.dispose();
-        
-        sharedValue.setImage(image);
-        output.collect(cellInfo, sharedValue);
-      } catch (RuntimeException e) {
-        e.printStackTrace();
-        throw e;
+        cachedCircles.put(radius, circle);
       }
+      return circle;
     }
   }
-  
-  public static class PlotOutputCommitter extends FileOutputCommitter {
-    @Override
-    public void commitJob(JobContext context) throws IOException {
-      super.commitJob(context);
-      
-      JobConf job = context.getJobConf();
-      Path outFile = ImageOutputFormat.getOutputPath(job);
-      int width = job.getInt("width", 1000);
-      int height = job.getInt("height", 1000);
-      boolean vflip = job.getBoolean("vflip", false);
-      
-      // Combine all images in one file
-      // Rename output file
-      // Combine all output files into one file as we do with grid files
-      FileSystem outFs = outFile.getFileSystem(job);
-      Path temp = new Path(outFile.toUri().getPath()+"_temp");
-      outFs.rename(outFile, temp);
-      FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
-        @Override
-        public boolean accept(Path path) {
-          return path.toUri().getPath().contains("part-");
-        }
-      });
 
-      // Merge all images into one image (overlay)
-      BufferedImage finalImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-      Graphics2D graphics;
-      try {
-        graphics = finalImage.createGraphics();
-      } catch (Throwable e) {
-        graphics = new SimpleGraphics(finalImage);
-      }
-      Color bgColor = OperationsParams.getColor(job, "bgcolor", new Color(0, 0, 0, 0));
-      graphics.setBackground(bgColor);
-      graphics.clearRect(0, 0, width, height);
-
-      for (FileStatus resultFile : resultFiles) {
-        FSDataInputStream imageFile = outFs.open(resultFile.getPath());
-        BufferedImage tileImage = ImageIO.read(imageFile);
-        imageFile.close();
-
-        graphics.drawImage(tileImage, 0, 0, null);
-      }
-      graphics.dispose();
-
-      // Flip image vertically if needed
-      if (vflip) {
-        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-        tx.translate(0, -finalImage.getHeight());
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        finalImage = op.filter(finalImage, null);
-      }
-
-      // Finally, write the resulting image to the given output path
-      LOG.info("Writing final image");
-      OutputStream outputImage = outFs.create(outFile);
-      ImageIO.write(finalImage, "png", outputImage);
-      outputImage.close();
-      
-      outFs.delete(temp, true);
-    }
-  }
-  
-  
   /**
    * If the processed block is already partitioned (via global index), then
    * the output is the same as input (Identity map function). If the input
@@ -319,22 +249,18 @@ public class PlotHeatMap {
    * @author Ahmed Eldawy
    *
    */
-  public static class PlotFastMap extends MapReduceBase 
-    implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
-  
+  public static class PlotHeatMapMap extends MapReduceBase 
+    implements Mapper<Rectangle, ArrayWritable, NullWritable, FrequencyMap> {
+
     /**Only objects inside this query range are drawn*/
     private Shape queryRange;
     private int imageWidth;
     private int imageHeight;
     private Rectangle drawMbr;
-    private int strokeColor;
-    private double scale2;
     /**Used to output values*/
-    private ImageWritable sharedValue = new ImageWritable();
-    
-    /**Fade drawn shapes according to their area compared to a pixel area*/
-    private boolean fade;
-    private double scale;
+    private FrequencyMap frequencyMap;
+    /**Radius to use for smoothing the heat map*/
+    private int radius;
     
     @Override
     public void configure(JobConf job) {
@@ -344,161 +270,115 @@ public class PlotHeatMap {
       this.drawMbr = queryRange != null ? queryRange.getMBR() : ImageOutputFormat.getFileMBR(job);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
-      this.strokeColor = job.getInt("color", 0);
-      this.fade = job.getBoolean("fade", true);
-      
-      this.scale2 = (double)imageWidth * imageHeight /
-          (this.drawMbr.getWidth() * this.drawMbr.getHeight());
-      this.scale = Math.sqrt(scale2);
-  
-      NASAPoint.minValue = job.getInt(PlotHeatMap.MinValue, 0);
-      NASAPoint.maxValue = job.getInt(PlotHeatMap.MaxValue, 65535);
+      this.radius = job.getInt("radius", 5);
+      frequencyMap = new FrequencyMap(imageWidth, imageHeight);
     }
-  
+
     @Override
-    public void map(Rectangle cell, ArrayWritable value,
-        OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
+    public void map(Rectangle dummy, ArrayWritable shapesAr,
+        OutputCollector<NullWritable, FrequencyMap> output, Reporter reporter)
         throws IOException {
-      BufferedImage image = new BufferedImage(imageWidth, imageHeight,
-          BufferedImage.TYPE_INT_ARGB);
-      
-      Graphics2D graphics;
-      try {
-        graphics = image.createGraphics();
-      } catch (Throwable e) {
-        graphics = new SimpleGraphics(image);
-      }
-      graphics.setBackground(new Color(0, 0, 0, 0));
-      graphics.clearRect(0, 0, imageWidth, imageHeight);
-      Color storkeClr = new Color(strokeColor);
-      graphics.setColor(storkeClr);
-      
-      for (Shape shape : (Shape[]) value.get()) {
-        if (queryRange == null || queryRange.isIntersected(shape)) {
-          if (fade) {
-            Rectangle shapeMBR = shape.getMBR();
-            // shapeArea represents how many pixels are covered by shapeMBR
-            double shapeArea = (shapeMBR.getWidth() + shapeMBR.getHeight()) * this.scale;
-            if (shapeArea > 1.0) {
-              graphics.setColor(storkeClr);
-            } else {
-              byte alpha = (byte) Math.round(shapeArea * 255);
-              if (alpha == 0) {
-                continue;
-              } else {
-                graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
-              }
-            }
+      for (Writable w : shapesAr.get()) {
+        Shape s = (Shape) w;
+        Point center;
+        if (s instanceof Point) {
+          center = (Point) s;
+        } else if (s instanceof Rectangle) {
+          center = ((Rectangle) s).getCenterPoint();
+        } else {
+          Rectangle shapeMBR = s.getMBR();
+          if (shapeMBR == null)
+            continue;
+          center = shapeMBR.getCenterPoint();
+        }
+        int centerx = (int) Math.round((center.x - drawMbr.x1) * imageWidth / drawMbr.getWidth());
+        int centery = (int) Math.round((center.y - drawMbr.y1) * imageHeight / drawMbr.getHeight());
+        int x1 = Math.max(0, centerx - radius);
+        int y1 = Math.max(0, centery - radius);
+        int x2 = Math.min(imageWidth, centerx + radius);
+        int y2 = Math.min(imageHeight, centery + radius);
+        for (int x = x1; x < x2; x++) {
+          for (int y = y1; y < y2; y++) {
+            frequencyMap.frequency[x][y]++;
           }
-          shape.draw(graphics, drawMbr, imageWidth, imageHeight, scale2);
         }
       }
-  
-      graphics.dispose();
-      
-      sharedValue.setImage(image);
-      output.collect(drawMbr, sharedValue);
+      output.collect(NullWritable.get(), frequencyMap);
     }
     
   }
 
-  /**
-   * The reducer class combines all images into one image by overlaying all of
-   * them on top of each other.
-   * @author Ahmed Eldawy
-   *
-   */
-  public static class PlotFastReduce extends MapReduceBase
-      implements Reducer<Rectangle, ImageWritable, Rectangle, ImageWritable> {
+  public static class PlotHeatMapReduce extends MapReduceBase
+      implements Reducer<NullWritable, FrequencyMap, Rectangle, ImageWritable> {
     
+    private Rectangle drawMBR;
+    /**Range of values to do the gradient of the heat map*/
+    private MinMax valueRange;
+    private boolean skipZeros;
+
     @Override
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
+      Shape queryRange = OperationsParams.getShape(job, "rect");
+      this.drawMBR = queryRange != null ? queryRange.getMBR() : ImageOutputFormat.getFileMBR(job);
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+      this.skipZeros = job.getBoolean("skipzeros", false);
+      String valueRangeStr = job.get("valuerange");
+      if (valueRangeStr != null) {
+        String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+        this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+      }
     }
-  
+
     @Override
-    public void reduce(Rectangle rect, Iterator<ImageWritable> values,
+    public void reduce(NullWritable dummy, Iterator<FrequencyMap> frequencies,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
         throws IOException {
-      if (values.hasNext()) {
-        ImageWritable mergedImage = values.next();
-        BufferedImage image = mergedImage.getImage();
-        Graphics2D graphics;
-        try {
-          graphics = image.createGraphics();
-        } catch (Throwable e) {
-          graphics = new SimpleGraphics(image);
-        }
-        // Overlay all other images on top of it
-        while (values.hasNext()) {
-          BufferedImage img = values.next().getImage();
-          graphics.drawImage(img, 0, 0, null);
-        }
-        graphics.dispose();
-        
-        mergedImage.setImage(image);
-        output.collect(rect, mergedImage);
-      }
+      if (!frequencies.hasNext())
+        return;
+      FrequencyMap combined = frequencies.next().clone();
+      while (frequencies.hasNext())
+        combined.combine(frequencies.next());
+
+      BufferedImage image = combined.toImage(valueRange, skipZeros);
+      output.collect(drawMBR, new ImageWritable(image));
     }
   }
 
-
-  private static RunningJob plotFastMapReduce(Path inFile, Path outFile,
+  /**Last submitted Plot job*/
+  public static RunningJob lastSubmittedJob;
+  
+  private static RunningJob plotHeatMapMapReduce(Path inFile, Path outFile,
       OperationsParams params) throws IOException {
     boolean background = params.is("background");
 
     int width = params.getInt("width", 1000);
     int height = params.getInt("height", 1000);
 
-    String hdfDataset = (String) params.get("dataset");
     Shape plotRange = params.getShape("rect", null);
 
     boolean keepAspectRatio = params.is("keep-ratio", true);
 
-    String valueRangeStr = (String) params.get("valuerange");
-    MinMax valueRange;
-    if (valueRangeStr == null) {
-      valueRange = null;
-    } else {
-      String[] parts = valueRangeStr.split(",");
-      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-    }
-
     JobConf job = new JobConf(params, PlotHeatMap.class);
-    job.setJobName("FastPlot");
+    job.setJobName("Plot HeatMap");
 
-    job.setMapperClass(PlotFastMap.class);
+    job.setMapperClass(PlotHeatMapMap.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setCombinerClass(PlotFastReduce.class);
-    job.setReducerClass(PlotFastReduce.class);
+    job.setReducerClass(PlotHeatMapReduce.class);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setMapOutputKeyClass(Rectangle.class);
-    job.setMapOutputValueClass(ImageWritable.class);
+    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputValueClass(FrequencyMap.class);
 
     Rectangle fileMBR;
-    // Collects some statistics about the file to plot it correctly
-    if (hdfDataset != null) {
-      // Input is HDF
-      job.set(HDFRecordReader.DatasetName, hdfDataset);
-      job.setBoolean(HDFRecordReader.SkipFillValue, true);
-      // Determine the range of values by opening one of the HDF files
-      if (valueRange == null)
-        valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
-      job.setInt(MinValue, valueRange.minValue);
-      job.setInt(MaxValue, valueRange.maxValue);
-      fileMBR = plotRange != null?
-          plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-//          GeoProjector.class);
-    } else {
-      // Run MBR operation in synchronous mode
-      OperationsParams mbrArgs = new OperationsParams(params);
-      mbrArgs.setBoolean("background", false);
-      fileMBR = plotRange != null ? plotRange.getMBR() :
-        FileMBR.fileMBR(inFile, mbrArgs);
-    }
+    // Run MBR operation in synchronous mode
+    OperationsParams mbrArgs = new OperationsParams(params);
+    mbrArgs.setBoolean("background", false);
+    fileMBR = plotRange != null ? plotRange.getMBR() :
+      FileMBR.fileMBR(inFile, mbrArgs);
     LOG.info("File MBR: "+fileMBR);
 
     if (keepAspectRatio) {
@@ -506,7 +386,7 @@ public class PlotHeatMap {
       if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
         // Fix width and change height
         height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
-        // Make divisible by two for compatability with ffmpeg
+        // Make divisible by two for compatibility with ffmpeg
         height &= 0xfffffffe;
         job.setInt("height", height);
       } else {
@@ -523,9 +403,6 @@ public class PlotHeatMap {
 
     job.setInputFormat(ShapeArrayInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
-    // Set output committer which will stitch images together after all reducers
-    // finish
-    job.setOutputCommitter(PlotOutputCommitter.class);
 
     job.setOutputFormat(ImageOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
@@ -538,114 +415,10 @@ public class PlotHeatMap {
     }
   }
 
-  /**Last submitted Plot job*/
-  public static RunningJob lastSubmittedJob;
-  
-  private static RunningJob plotHeatMapMapReduce(Path inFile, Path outFile, OperationsParams params) throws IOException {
-      boolean background = params.is("background");
-      
-      int width = params.getInt("width", 1000);
-      int height = params.getInt("height", 1000);
-      
-      String hdfDataset = (String) params.get("dataset");
-      Shape shape = hdfDataset != null ? new NASARectangle() : params.getShape("shape", null);
-      Shape plotRange = params.getShape("rect", null);
-  
-      boolean keepAspectRatio = params.is("keep-ratio", true);
-      
-      String valueRangeStr = (String) params.get("valuerange");
-      MinMax valueRange;
-      if (valueRangeStr == null) {
-        valueRange = null;
-      } else {
-        String[] parts = valueRangeStr.split(",");
-        valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-      }
-      
-      JobConf job = new JobConf(params, PlotHeatMap.class);
-      job.setJobName("Plot");
-      
-      job.setMapperClass(PlotMap.class);
-      ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-      job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-      job.setReducerClass(PlotReduce.class);
-      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-      job.setMapOutputKeyClass(IntWritable.class);
-      job.setMapOutputValueClass(shape.getClass());
-  
-      Rectangle fileMBR;
-      // Collects some stats about the file to plot it correctly
-      if (hdfDataset != null) {
-        // Input is HDF
-        job.set(HDFRecordReader.DatasetName, hdfDataset);
-        job.setClass("shape", NASARectangle.class, Shape.class);
-        job.setBoolean(HDFRecordReader.SkipFillValue, true);
-        // Determine the range of values by opening one of the HDF files
-        if (valueRange == null)
-          valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
-        job.setInt(MinValue, valueRange.minValue);
-        job.setInt(MaxValue, valueRange.maxValue);
-        fileMBR = plotRange != null?
-            plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-  //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-  //          GeoProjector.class);
-      } else {
-        // Run MBR operation in synchronous mode
-        OperationsParams mbrArgs = new OperationsParams(params);
-        mbrArgs.setBoolean("background", false);
-        fileMBR = plotRange != null ? plotRange.getMBR() :
-          FileMBR.fileMBR(inFile, mbrArgs);
-      }
-      LOG.info("File MBR: "+fileMBR);
-      
-      if (keepAspectRatio) {
-        // Adjust width and height to maintain aspect ratio
-        if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
-          // Fix width and change height
-          height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
-          // Make divisible by two for compatibility with ffmpeg
-          height &= 0xfffffffe;
-          job.setInt("height", height);
-        } else {
-          width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
-          job.setInt("width", width);
-        }
-      }
-      
-      LOG.info("Creating an image of size "+width+"x"+height);
-      ImageOutputFormat.setFileMBR(job, fileMBR);
-      if (plotRange != null) {
-        job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-      }
-      
-      // A heap file. The map function should partition the file
-      GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
-          fileMBR.y2);
-      partitionGrid.calculateCellDimensions(
-          (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-      OperationsParams.setShape(job, PartitionGrid, partitionGrid);
-      
-      job.setInputFormat(ShapeInputFormat.class);
-      ShapeInputFormat.addInputPath(job, inFile);
-      // Set output committer which will stitch images together after all reducers
-      // finish
-      job.setOutputCommitter(PlotOutputCommitter.class);
-      
-      job.setOutputFormat(ImageOutputFormat.class);
-      TextOutputFormat.setOutputPath(job, outFile);
-      
-      if (background) {
-        JobClient jc = new JobClient(job);
-        return lastSubmittedJob = jc.submitJob(job);
-      } else {
-        return lastSubmittedJob = JobClient.runJob(job);
-      }
-    }
-
   private static <S extends Shape> void plotHeatMapLocal(Path inFile, Path outFile,
       OperationsParams params) throws IOException {
-    int width = params.getInt("width", 1000);
-    int height = params.getInt("height", 1000);
+    int imageWidth = params.getInt("width", 1000);
+    int imageHeight = params.getInt("height", 1000);
     
     Shape shape = params.getShape("shape", new Point());
     Shape plotRange = params.getShape("rect", null);
@@ -670,26 +443,26 @@ public class PlotHeatMap {
 
     boolean vflip = params.is("vflip");
 
-    Rectangle fileMbr;
+    Rectangle fileMBR;
     if (plotRange != null) {
-      fileMbr = plotRange.getMBR();
+      fileMBR = plotRange.getMBR();
     } else {
-      fileMbr = FileMBR.fileMBR(inFile, params);
+      fileMBR = FileMBR.fileMBR(inFile, params);
     }
 
     if (keepAspectRatio) {
       // Adjust width and height to maintain aspect ratio
-      if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
+      if (fileMBR.getWidth() / fileMBR.getHeight() > (double) imageWidth / imageHeight) {
         // Fix width and change height
-        height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
+        imageHeight = (int) (fileMBR.getHeight() * imageWidth / fileMBR.getWidth());
       } else {
-        width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
+        imageWidth = (int) (fileMBR.getWidth() * imageHeight / fileMBR.getHeight());
       }
     }
     
     // Create the frequency map
-    float radius = params.getFloat("radius", 2.5f);
-    int[][] frequencyMap = new int[width][height];
+    int radius = params.getInt("radius", 5);
+    FrequencyMap frequencyMap = new FrequencyMap(imageWidth, imageHeight);
 
     for (InputSplit split : splits) {
       ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params,
@@ -701,62 +474,28 @@ public class PlotHeatMap {
           continue;
         shapeBuffer = shapeBuffer.buffer(radius, radius);
         if (plotRange == null || shapeBuffer.isIntersected(plotRange)) {
-          int x1 = (int) Math.max(0, Math.round((shapeBuffer.x1 - fileMbr.x1) * width / fileMbr.getWidth()));
-          int y1 = (int) Math.max(0, Math.round((shapeBuffer.y1 - fileMbr.y1) * height / fileMbr.getHeight()));
-          int x2 = (int) Math.min(width, Math.round((shapeBuffer.x2 - fileMbr.x1) * width / fileMbr.getWidth()));
-          int y2 = (int) Math.min(height, Math.round((shapeBuffer.y2 - fileMbr.y1) * height / fileMbr.getHeight()));
-          for (int x = x1; x < x2; x++) {
-            for (int y = y1; y < y2; y++)
-              frequencyMap[x][y]++;
-          }
+          Point centerPoint = shapeBuffer.getCenterPoint();
+          int cx = (int) Math.round((centerPoint.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+          int cy = (int) Math.round((centerPoint.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+          frequencyMap.addPoint(cx, cy, radius);
         }
       }
       reader.close();
     }
     
     // Convert frequency map to an image with colors
-    String valueRangeStr = (String) params.get("valuerange");
-    MinMax valueRange;
-    if (valueRangeStr == null) {
-      // Calculate tight bounds for minimum and maximum on the fly
-      int min = Integer.MAX_VALUE, max = Integer.MIN_VALUE;
-      for (int x = 0; x < width; x++) {
-        for (int y = 0; y < height; y++) {
-          int frequency = frequencyMap[x][y];
-          if (frequency < min)
-            min = frequency;
-          if (frequency > max)
-            max = frequency;
-        }
-      }
-      valueRange = new MinMax(min, max);
-    } else {
-      String[] parts = valueRangeStr.split(",");
-      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-    }
-    NASAPoint.minValue = valueRange.minValue;
-    NASAPoint.maxValue = valueRange.maxValue;
-    
-    // Retrieve colors to gradient
     NASAPoint.setColor1(params.getColor("color1", Color.BLUE));
     NASAPoint.setColor2(params.getColor("color2", Color.RED));
     NASAPoint.gradientType = params.getGradientType("gradient", NASAPoint.GradientType.GT_HUE);
-
-    BufferedImage image = new BufferedImage(width, height,
-        BufferedImage.TYPE_INT_ARGB);
-    Graphics2D graphics = image.createGraphics();
-    Color bg_color = params.getColor("bgcolor", new Color(0, 0, 0, 0));
-    graphics.setBackground(bg_color);
-    graphics.clearRect(0, 0, width, height);
-    graphics.dispose();
-    // Write image to output
-    for (int x = 0; x < width; x++) {
-      for (int y = 0; y < height; y++) {
-        int frequency = frequencyMap[x][y];
-        Color color = NASARectangle.calculateColor(frequency);
-        image.setRGB(x, y, color.getRGB());
-      }
+    String valueRangeStr = params.get("valuerange");
+    MinMax valueRange = null;
+    if (valueRangeStr != null) {
+      String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
+
+    boolean skipZeros = params.getBoolean("skipzeros", false);
+    BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
     
     if (vflip) {
       AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
