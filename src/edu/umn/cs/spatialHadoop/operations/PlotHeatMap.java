@@ -19,7 +19,6 @@ import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
@@ -82,7 +81,6 @@ public class PlotHeatMap {
     private MinMax valueRange;
     
     private Map<Integer, BufferedImage> cachedCircles = new HashMap<Integer, BufferedImage>();
-    
     public FrequencyMap() {
     }
     
@@ -201,7 +199,7 @@ public class PlotHeatMap {
       BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
       for (int x = 0; x < this.getWidth(); x++)
         for (int y = 0; y < this.getHeight(); y++) {
-          if (!skipZeros || frequency[x][y] > 0) {
+          if (!skipZeros || frequency[x][y] > valueRange.minValue) {
             Color color = NASARectangle.calculateColor(frequency[x][y]);
             image.setRGB(x, y, color.getRGB());
           }
