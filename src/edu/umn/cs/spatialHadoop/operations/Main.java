@@ -77,6 +77,9 @@ public class Main {
       pgd.addClass("plotp", PlotPyramid.class,
           "Plots a file to a set of images used with Google-Maps-like engine");
 
+      pgd.addClass("ploth", PlotHeatMap.class,
+          "Plots a heatmap of an input file of points");
+
       pgd.addClass("hdfplot", HDFPlot.class,
           "Plots NASA datasets in the spatiotemporal range provided by user");
       
