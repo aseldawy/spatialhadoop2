@@ -78,7 +78,6 @@ public class PlotHeatMap {
   
   public static class FrequencyMap implements Writable {
     int[][] frequency;
-    private MinMax valueRange;
     
     private Map<Integer, BufferedImage> cachedCircles = new HashMap<Integer, BufferedImage>();
     public FrequencyMap() {
@@ -151,34 +150,6 @@ public class PlotHeatMap {
           }
           minMax.expand(value);
         }
-      final int[] keys = new int[histogram.size()];
-      final int[] values = new int[histogram.size()];
-      int i = 0;
-      for (Map.Entry<Integer, Integer> entry : histogram.entrySet()) {
-        keys[i] = entry.getKey();
-        values[i] = entry.getValue();
-        i++;
-      }
-      new QuickSort().sort(new IndexedSortable() {
-        @Override
-        public int compare(int i, int j) {
-          return keys[i] - keys[j];
-        }
-
-        @Override
-        public void swap(int i, int j) {
-          int t = keys[i];
-          keys[i] = keys[j];
-          keys[j] = t;
-          
-          t = values[i];
-          values[i] = values[j];
-          values[j] = t;
-        }
-        
-      }, 0, keys.length);
-      for (i = 0; i < keys.length; i++)
-        System.out.println(keys[i]+","+values[i]);
       return minMax;
     }
 
