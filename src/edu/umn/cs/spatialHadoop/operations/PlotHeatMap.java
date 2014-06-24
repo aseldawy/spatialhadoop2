@@ -19,6 +19,7 @@ import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
@@ -66,6 +67,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
+import edu.umn.cs.spatialHadoop.operations.PlotPartitioned.PlotOutputCommitter;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
@@ -127,8 +129,8 @@ public class PlotHeatMap {
       int width = in.readInt();
       int height = in.readInt();
       frequency = new int[width][height];
-      for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
+      for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++) {
           frequency[x][y] = in.readInt();
         }
       }
@@ -268,15 +270,7 @@ public class PlotHeatMap {
         }
         int centerx = (int) Math.round((center.x - drawMbr.x1) * imageWidth / drawMbr.getWidth());
         int centery = (int) Math.round((center.y - drawMbr.y1) * imageHeight / drawMbr.getHeight());
-        int x1 = Math.max(0, centerx - radius);
-        int y1 = Math.max(0, centery - radius);
-        int x2 = Math.min(imageWidth, centerx + radius);
-        int y2 = Math.min(imageHeight, centery + radius);
-        for (int x = x1; x < x2; x++) {
-          for (int y = y1; y < y2; y++) {
-            frequencyMap.frequency[x][y]++;
-          }
-        }
+        frequencyMap.addPoint(centerx, centery, radius);
       }
       output.collect(NullWritable.get(), frequencyMap);
     }
@@ -365,7 +359,7 @@ public class PlotHeatMap {
         throws IOException {
       Point center;
       if (s instanceof Point) {
-        center = (Point) s;
+        center = new Point((Point)s);
       } else if (s instanceof Rectangle) {
         center = ((Rectangle) s).getCenterPoint();
       } else {
@@ -402,6 +396,8 @@ public class PlotHeatMap {
     private GridInfo partitionGrid;
     private int imageWidth, imageHeight;
     private int radius;
+    private boolean skipZeros;
+    private MinMax valueRange;
     
     @Override
     public void configure(JobConf job) {
@@ -410,6 +406,15 @@ public class PlotHeatMap {
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
       this.radius = job.getInt("radius", 5);
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+      this.skipZeros = job.getBoolean("skipzeros", false);
+      String valueRangeStr = job.get("valuerange");
+      if (valueRangeStr != null) {
+        String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+        this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+      }
     }
 
     @Override
@@ -429,16 +434,10 @@ public class PlotHeatMap {
         Point p = points.next();
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
-        int x1 = Math.max(0, centerx - radius);
-        int y1 = Math.max(0, centery - radius);
-        int x2 = Math.min(tile_height, centerx + radius);
-        int y2 = Math.min(tile_height, centery + radius);
-        for (int x = x1; x < x2; x++) {
-          for (int y = y1; y < y2; y++) {
-            frequencyMap.frequency[x][y]++;
-          }
-        }
+        frequencyMap.addPoint(centerx, centery, radius);
       }
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
+      output.collect(cellInfo, new ImageWritable(image));
     }
   }
   
@@ -475,7 +474,9 @@ public class PlotHeatMap {
       job.setReducerClass(PlotHeatMapReduce.class);
       job.setMapOutputKeyClass(NullWritable.class);
       job.setMapOutputValueClass(FrequencyMap.class);
+      job.setInputFormat(ShapeArrayInputFormat.class);
     } else if (partition.equals("space")) {
+      job.setInputFormat(ShapeInputFormat.class);
       job.setMapperClass(PlotHeatMapPartitionMap.class);
       job.setReducerClass(PlotHeatMapPartitionReduce.class);
       job.setMapOutputKeyClass(IntWritable.class);
@@ -512,8 +513,8 @@ public class PlotHeatMap {
       job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     }
 
-    job.setInputFormat(ShapeArrayInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
+    job.setOutputCommitter(PlotOutputCommitter.class);
 
     job.setOutputFormat(ImageOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);

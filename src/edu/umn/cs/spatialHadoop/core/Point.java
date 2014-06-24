@@ -39,7 +39,16 @@ public class Point implements Shape, Comparable<Point> {
 	}
 	
 
-	public void set(double x, double y) {
+	/**
+	 * A copy constructor from any shape of type Point (or subclass of Point)
+	 * @param s
+	 */
+	public Point(Point s) {
+	  this.x = s.x;
+	  this.y = s.y;
+  }
+
+  public void set(double x, double y) {
 		this.x = x;
 		this.y = y;
 	}

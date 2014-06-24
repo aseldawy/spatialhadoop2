@@ -34,6 +34,12 @@ public class Tweet extends Point {
     super(x, y);
   }
   
+  public Tweet(Tweet tweet) {
+    this.id = tweet.id;
+    this.x = tweet.x;
+    this.y = tweet.y;
+  }
+
   @Override
   public void fromText(Text text) {
     this.id = TextSerializerHelper.consumeLong(text, ',');
@@ -59,5 +65,10 @@ public class Tweet extends Point {
   public void readFields(DataInput in) throws IOException {
     id = in.readLong();
     super.readFields(in);
+  }
+  
+  @Override
+  public Tweet clone() {
+    return new Tweet(this);
   }
 }
