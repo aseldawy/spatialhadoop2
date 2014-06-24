@@ -382,7 +382,8 @@ public final class TextSerializerHelper {
         if (i1 < text.getLength() && tagsBytes[i1] == Separators[FieldSeparator])
           i1++;
       }
-      text.set(tagsBytes, i1, text.getLength() - i1);
+      if (i1 < text.getLength())
+        text.set(tagsBytes, i1, text.getLength() - i1);
     }
   }
   

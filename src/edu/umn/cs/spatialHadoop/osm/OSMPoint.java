@@ -30,10 +30,11 @@ public class OSMPoint extends Point {
 
   @Override
   public void fromText(Text text) {
-    id = TextSerializerHelper.consumeLong(text, ',');
-    x = TextSerializerHelper.consumeDouble(text, ',');
-    y = TextSerializerHelper.consumeDouble(text, ',');
-    TextSerializerHelper.consumeMap(text, tags);
+    id = TextSerializerHelper.consumeLong(text, '\t');
+    x = TextSerializerHelper.consumeDouble(text, '\t');
+    y = TextSerializerHelper.consumeDouble(text, '\t');
+    if (text.getLength() > 0)
+      TextSerializerHelper.consumeMap(text, tags);
   }
 
   @Override
