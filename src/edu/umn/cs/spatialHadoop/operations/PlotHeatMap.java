@@ -33,6 +33,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -47,12 +48,12 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.apache.hadoop.util.IndexedSortable;
-import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -76,6 +77,11 @@ public class PlotHeatMap {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(PlotHeatMap.class);
   
+  /**
+   * Stores the frequencies in a two-dimensional matrix and produce an image out of it.
+   * @author Eldawy
+   *
+   */
   public static class FrequencyMap implements Writable {
     int[][] frequency;
     
@@ -317,6 +323,125 @@ public class PlotHeatMap {
     }
   }
 
+
+  /**The grid used to partition data across reducers*/
+  private static final String PartitionGrid = "PlotHeatMap.PartitionGrid";
+  
+  /**
+   * The map function for the plot heat map operation that uses spatial
+   * partitioning.
+   * @author Eldawy
+   *
+   */
+  public static class PlotHeatMapPartitionMap extends MapReduceBase 
+  implements Mapper<Rectangle, Shape, IntWritable, Point> {
+    
+    /**The grid used to partition the space*/
+    private GridInfo partitionGrid;
+    /**Shared output key*/
+    private IntWritable cellNumber;
+    /**The range to plot*/
+    private Shape queryRange;
+    /**Radius in data space around each point*/
+    private float radiusX, radiusY;
+    
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      this.partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
+      this.cellNumber = new IntWritable();
+      this.queryRange = OperationsParams.getShape(job, "rect");
+      
+      int imageWidth = job.getInt("width", 1000);
+      int imageHeight = job.getInt("height", 1000);
+      int radiusPx = job.getInt("radius", 5);
+      this.radiusX = (float) (radiusPx * partitionGrid.getWidth() / imageWidth);
+      this.radiusY = (float) (radiusPx * partitionGrid.getHeight() / imageHeight);
+    }
+    
+    @Override
+    public void map(Rectangle dummy, Shape s,
+        OutputCollector<IntWritable, Point> output, Reporter reporter)
+        throws IOException {
+      Point center;
+      if (s instanceof Point) {
+        center = (Point) s;
+      } else if (s instanceof Rectangle) {
+        center = ((Rectangle) s).getCenterPoint();
+      } else {
+        Rectangle shapeMBR = s.getMBR();
+        if (shapeMBR == null)
+          return;
+        center = shapeMBR.getCenterPoint();
+      }
+      Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
+      // Skip shapes outside query range if query range is set
+      if (queryRange != null && !shapeMBR.isIntersected(queryRange))
+        return;
+      // Replicate to all overlapping cells
+      java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMBR);
+      for (int i = 0; i < overlappingCells.width; i++) {
+        int x = overlappingCells.x + i;
+        for (int j = 0; j < overlappingCells.height; j++) {
+          int y = overlappingCells.y + j;
+          cellNumber.set(y * partitionGrid.columns + x + 1);
+          output.collect(cellNumber, center);
+        }
+      }
+    }
+  }
+
+  /**
+   * The reduce function of the plot heat map operations that uses
+   * spatial partitioning.
+   * @author Eldawy
+   *
+   */
+  public static class PlotHeatMapPartitionReduce extends MapReduceBase
+    implements Reducer<IntWritable, Point, Rectangle, ImageWritable> {
+    private GridInfo partitionGrid;
+    private int imageWidth, imageHeight;
+    private int radius;
+    
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      this.partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+      this.radius = job.getInt("radius", 5);
+    }
+
+    @Override
+    public void reduce(IntWritable cellNumber, Iterator<Point> points,
+        OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
+        throws IOException {
+      CellInfo cellInfo = partitionGrid.getCell(cellNumber.get());
+      // Initialize the image
+      int image_x1 = (int) Math.floor((cellInfo.x1 - partitionGrid.x1) * imageWidth / partitionGrid.getWidth());
+      int image_y1 = (int) Math.floor((cellInfo.y1 - partitionGrid.y1) * imageHeight / partitionGrid.getHeight());
+      int image_x2 = (int) Math.ceil((cellInfo.x2 - partitionGrid.x1) * imageWidth / partitionGrid.getWidth());
+      int image_y2 = (int) Math.ceil((cellInfo.y2 - partitionGrid.y1) * imageHeight / partitionGrid.getHeight());
+      int tile_width = image_x2 - image_x1;
+      int tile_height = image_y2 - image_y1;
+      FrequencyMap frequencyMap = new FrequencyMap(tile_width, tile_height);
+      while (points.hasNext()) {
+        Point p = points.next();
+        int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
+        int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
+        int x1 = Math.max(0, centerx - radius);
+        int y1 = Math.max(0, centery - radius);
+        int x2 = Math.min(tile_height, centerx + radius);
+        int y2 = Math.min(tile_height, centery + radius);
+        for (int x = x1; x < x2; x++) {
+          for (int y = y1; y < y2; y++) {
+            frequencyMap.frequency[x][y]++;
+          }
+        }
+      }
+    }
+  }
+  
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
   
@@ -333,15 +458,7 @@ public class PlotHeatMap {
 
     JobConf job = new JobConf(params, PlotHeatMap.class);
     job.setJobName("Plot HeatMap");
-
-    job.setMapperClass(PlotHeatMapMap.class);
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setReducerClass(PlotHeatMapReduce.class);
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(FrequencyMap.class);
-
+    
     Rectangle fileMBR;
     // Run MBR operation in synchronous mode
     OperationsParams mbrArgs = new OperationsParams(params);
@@ -349,6 +466,31 @@ public class PlotHeatMap {
     fileMBR = plotRange != null ? plotRange.getMBR() :
       FileMBR.fileMBR(inFile, mbrArgs);
     LOG.info("File MBR: "+fileMBR);
+
+    String partition = job.get("partition", "data").toLowerCase();
+    
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    if (partition.equals("data")) {
+      job.setMapperClass(PlotHeatMapMap.class);
+      job.setReducerClass(PlotHeatMapReduce.class);
+      job.setMapOutputKeyClass(NullWritable.class);
+      job.setMapOutputValueClass(FrequencyMap.class);
+    } else if (partition.equals("space")) {
+      job.setMapperClass(PlotHeatMapPartitionMap.class);
+      job.setReducerClass(PlotHeatMapPartitionReduce.class);
+      job.setMapOutputKeyClass(IntWritable.class);
+      job.setMapOutputValueClass(Point.class);
+
+      GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+          fileMBR.y2);
+      partitionGrid.calculateCellDimensions(
+          (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+      OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+    } else {
+      throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
+    }
+    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
 
     if (keepAspectRatio) {
       // Adjust width and height to maintain aspect ratio
