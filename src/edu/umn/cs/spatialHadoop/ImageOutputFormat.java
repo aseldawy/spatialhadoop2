@@ -103,7 +103,7 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
   }
 
   public static void setFileMBR(Configuration conf, Rectangle mbr) {
-    OperationsParams.setShape(conf, InputFileMBR, mbr);
+    OperationsParams.setShape(conf, InputFileMBR, mbr.getMBR());
   }
   
   public static Rectangle getFileMBR(Configuration conf) {
