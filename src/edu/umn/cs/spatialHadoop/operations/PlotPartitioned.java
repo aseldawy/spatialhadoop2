@@ -19,6 +19,7 @@ import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
@@ -37,6 +38,7 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -83,8 +85,6 @@ public class PlotPartitioned {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(PlotPartitioned.class);
   
-  private static final String MinValue = "plot.min_value";
-  private static final String MaxValue = "plot.max_value";
   /**The grid used to partition data across reducers*/
   private static final String PartitionGrid = "plot.partition_grid";
 
@@ -96,7 +96,7 @@ public class PlotPartitioned {
    * @author Ahmed Eldawy
    *
    */
-  public static class PlotMap extends MapReduceBase 
+  public static class PartitionPlotMap extends MapReduceBase 
     implements Mapper<Rectangle, Shape, IntWritable, Shape> {
     
     private GridInfo partitionGrid;
@@ -155,7 +155,7 @@ public class PlotPartitioned {
    * @author Ahmed Eldawy
    *
    */
-  public static class PlotReduce extends MapReduceBase
+  public static class PartitionPlotReduce extends MapReduceBase
       implements Reducer<IntWritable, Shape, Rectangle, ImageWritable> {
     
     private GridInfo partitionGrid;
@@ -181,8 +181,12 @@ public class PlotPartitioned {
           (this.fileMbr.getWidth() * this.fileMbr.getHeight());
       this.scale = Math.sqrt(scale2);
 
-      NASAPoint.minValue = job.getInt(MinValue, 0);
-      NASAPoint.maxValue = job.getInt(MaxValue, 65535);
+      String valueRangeStr = job.get("valuerange");
+      if (valueRangeStr != null) {
+        String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+        NASAPoint.minValue = Integer.parseInt(parts[0]);
+        NASAPoint.maxValue = Integer.parseInt(parts[1]);
+      }
       
       NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
       NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
@@ -240,6 +244,7 @@ public class PlotPartitioned {
         
         graphics.dispose();
         
+        ImageIO.write(image, "png", new File("image-"+cellInfo.cellId+".png"));
         sharedValue.setImage(image);
         output.collect(cellInfo, sharedValue);
       } catch (RuntimeException e) {
@@ -321,7 +326,7 @@ public class PlotPartitioned {
    * @author Ahmed Eldawy
    *
    */
-  public static class PlotFastMap extends MapReduceBase 
+  public static class FastPlotMap extends MapReduceBase 
     implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
   
     /**Only objects inside this query range are drawn*/
@@ -347,14 +352,18 @@ public class PlotPartitioned {
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
       this.strokeColor = job.getInt("color", 0);
-      this.fade = job.getBoolean("fade", true);
+      this.fade = job.getBoolean("fade", false);
       
       this.scale2 = (double)imageWidth * imageHeight /
           (this.drawMbr.getWidth() * this.drawMbr.getHeight());
       this.scale = Math.sqrt(scale2);
   
-      NASAPoint.minValue = job.getInt(PlotPartitioned.MinValue, 0);
-      NASAPoint.maxValue = job.getInt(PlotPartitioned.MaxValue, 65535);
+      String valueRangeStr = job.get("valuerange");
+      if (valueRangeStr != null) {
+        String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+        NASAPoint.minValue = Integer.parseInt(parts[0]);
+        NASAPoint.maxValue = Integer.parseInt(parts[1]);
+      }
     }
   
     @Override
@@ -410,7 +419,7 @@ public class PlotPartitioned {
    * @author Ahmed Eldawy
    *
    */
-  public static class PlotFastReduce extends MapReduceBase
+  public static class FastPlotReduce extends MapReduceBase
       implements Reducer<Rectangle, ImageWritable, Rectangle, ImageWritable> {
     
     @Override
@@ -440,103 +449,9 @@ public class PlotPartitioned {
         graphics.dispose();
         
         mergedImage.setImage(image);
+        
         output.collect(rect, mergedImage);
       }
-    }
-  }
-
-
-  private static RunningJob plotFastMapReduce(Path inFile, Path outFile,
-      OperationsParams params) throws IOException {
-    boolean background = params.is("background");
-
-    int width = params.getInt("width", 1000);
-    int height = params.getInt("height", 1000);
-
-    String hdfDataset = (String) params.get("dataset");
-    Shape plotRange = params.getShape("rect", null);
-
-    boolean keepAspectRatio = params.is("keep-ratio", true);
-
-    String valueRangeStr = (String) params.get("valuerange");
-    MinMax valueRange;
-    if (valueRangeStr == null) {
-      valueRange = null;
-    } else {
-      String[] parts = valueRangeStr.split(",");
-      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-    }
-
-    JobConf job = new JobConf(params, PlotPartitioned.class);
-    job.setJobName("FastPlot");
-
-    job.setMapperClass(PlotFastMap.class);
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-    job.setCombinerClass(PlotFastReduce.class);
-    job.setReducerClass(PlotFastReduce.class);
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setMapOutputKeyClass(Rectangle.class);
-    job.setMapOutputValueClass(ImageWritable.class);
-
-    Rectangle fileMBR;
-    // Collects some statistics about the file to plot it correctly
-    if (hdfDataset != null) {
-      // Input is HDF
-      job.set(HDFRecordReader.DatasetName, hdfDataset);
-      job.setBoolean(HDFRecordReader.SkipFillValue, true);
-      // Determine the range of values by opening one of the HDF files
-      if (valueRange == null)
-        valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
-      job.setInt(MinValue, valueRange.minValue);
-      job.setInt(MaxValue, valueRange.maxValue);
-      fileMBR = plotRange != null?
-          plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-//          GeoProjector.class);
-    } else {
-      // Run MBR operation in synchronous mode
-      OperationsParams mbrArgs = new OperationsParams(params);
-      mbrArgs.setBoolean("background", false);
-      fileMBR = plotRange != null ? plotRange.getMBR() :
-        FileMBR.fileMBR(inFile, mbrArgs);
-    }
-    LOG.info("File MBR: "+fileMBR);
-
-    if (keepAspectRatio) {
-      // Adjust width and height to maintain aspect ratio
-      if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
-        // Fix width and change height
-        height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
-        // Make divisible by two for compatability with ffmpeg
-        height &= 0xfffffffe;
-        job.setInt("height", height);
-      } else {
-        width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
-        job.setInt("width", width);
-      }
-    }
-
-    LOG.info("Creating an image of size "+width+"x"+height);
-    ImageOutputFormat.setFileMBR(job, fileMBR);
-    if (plotRange != null) {
-      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-    }
-
-    job.setInputFormat(ShapeArrayInputFormat.class);
-    ShapeInputFormat.addInputPath(job, inFile);
-    // Set output committer which will stitch images together after all reducers
-    // finish
-    job.setOutputCommitter(PlotOutputCommitter.class);
-
-    job.setOutputFormat(ImageOutputFormat.class);
-    TextOutputFormat.setOutputPath(job, outFile);
-
-    if (background) {
-      JobClient jc = new JobClient(job);
-      return lastSubmittedJob = jc.submitJob(job);
-    } else {
-      return lastSubmittedJob = JobClient.runJob(job);
     }
   }
 
@@ -567,26 +482,18 @@ public class PlotPartitioned {
       JobConf job = new JobConf(params, PlotPartitioned.class);
       job.setJobName("Plot");
       
-      job.setMapperClass(PlotMap.class);
-      ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-      job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-      job.setReducerClass(PlotReduce.class);
-      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-      job.setMapOutputKeyClass(IntWritable.class);
-      job.setMapOutputValueClass(shape.getClass());
-  
+      
       Rectangle fileMBR;
       // Collects some stats about the file to plot it correctly
       if (hdfDataset != null) {
         // Input is HDF
         job.set(HDFRecordReader.DatasetName, hdfDataset);
-        job.setClass("shape", NASARectangle.class, Shape.class);
-        job.setBoolean(HDFRecordReader.SkipFillValue, true);
+        if (job.get("shape") == null)
+          job.setClass("shape", NASARectangle.class, Shape.class);
         // Determine the range of values by opening one of the HDF files
         if (valueRange == null)
           valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
-        job.setInt(MinValue, valueRange.minValue);
-        job.setInt(MaxValue, valueRange.maxValue);
+        job.set("valuerange", valueRange.minValue+".."+valueRange.maxValue);
         fileMBR = plotRange != null?
             plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
   //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
@@ -614,21 +521,40 @@ public class PlotPartitioned {
         }
       }
       
+      String partition = job.get("partition", "data").toLowerCase();
+      ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+      if (partition.equals("space")) {
+        job.setMapperClass(PartitionPlotMap.class);
+        job.setReducerClass(PartitionPlotReduce.class);
+        job.setMapOutputKeyClass(IntWritable.class);
+        job.setMapOutputValueClass(shape.getClass());
+        
+        GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+            fileMBR.y2);
+        partitionGrid.calculateCellDimensions(
+            (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+        OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+        job.setInputFormat(ShapeInputFormat.class);
+      } else if (partition.equals("data")) {
+        job.setMapperClass(FastPlotMap.class);
+        job.setCombinerClass(FastPlotReduce.class);
+        job.setReducerClass(FastPlotReduce.class);
+        job.setMapOutputKeyClass(Rectangle.class);
+        job.setMapOutputValueClass(ImageWritable.class);
+        job.setInputFormat(ShapeArrayInputFormat.class);
+      } else {
+        throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
+      }
+      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+      job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
+      
       LOG.info("Creating an image of size "+width+"x"+height);
       ImageOutputFormat.setFileMBR(job, fileMBR);
       if (plotRange != null) {
         job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
       }
       
-      // A heap file. The map function should partition the file
-      GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
-          fileMBR.y2);
-      partitionGrid.calculateCellDimensions(
-          (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-      OperationsParams.setShape(job, PartitionGrid, partitionGrid);
-      
-      job.setInputFormat(ShapeInputFormat.class);
-      ShapeInputFormat.addInputPath(job, inFile);
+      FileInputFormat.addInputPath(job, inFile);
       // Set output committer which will stitch images together after all reducers
       // finish
       job.setOutputCommitter(PlotOutputCommitter.class);
@@ -792,8 +718,6 @@ public class PlotPartitioned {
     if (isLocal) {
       plotLocal(inFile, outFile, params);
       return null;
-    } else if (params.is("fast")){
-      return plotFastMapReduce(inFile, outFile, params);
     } else {
       return plotMapReduce(inFile, outFile, params);
     }
@@ -814,14 +738,12 @@ public class PlotPartitioned {
     g.setBackground(Color.BLACK);
     g.clearRect(0, 0, width, height);
     
-    
-    // TODO fix this part to work according to color1, color2 and gradient type
-//    for (int y = 0; y < height; y++) {
-//      float hue = y * NASAPoint.MaxHue / height;
-//      int color = Color.HSBtoRGB(hue, 0.5f, 1.0f);
-//      g.setColor(new Color(color));
-//      g.drawRect(width * 3 / 4, y, width / 4, 1);
-//    }
+    // fix this part to work according to color1, color2 and gradient type
+    for (int y = 0; y < height; y++) {
+      Color color = NASARectangle.calculateColor(y);
+      g.setColor(color);
+      g.drawRect(width * 3 / 4, y, width / 4, 1);
+    }
     
     int fontSize = 24;
     g.setFont(new Font("Arial", Font.BOLD, fontSize));
@@ -930,9 +852,7 @@ public class PlotPartitioned {
     System.out.println("width:<w> - Maximum width of the image (1000)");
     System.out.println("height:<h> - Maximum height of the image (1000)");
     System.out.println("color:<c> - Main color used to draw the picture (black)");
-    System.out.println("-borders: For globally indexed files, draws the borders of partitions");
-    System.out.println("-showblockcount: For globally indexed files, draws the borders of partitions");
-    System.out.println("-showrecordcount: Show number of records in each partition");
+    System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     

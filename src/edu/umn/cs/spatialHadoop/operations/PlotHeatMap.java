@@ -467,7 +467,6 @@ public class PlotHeatMap {
     LOG.info("File MBR: "+fileMBR);
 
     String partition = job.get("partition", "data").toLowerCase();
-    
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     if (partition.equals("data")) {
       job.setMapperClass(PlotHeatMapMap.class);
