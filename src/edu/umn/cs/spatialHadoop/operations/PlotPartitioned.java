@@ -60,6 +60,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -88,6 +89,11 @@ public class PlotPartitioned {
   /**The grid used to partition data across reducers*/
   private static final String PartitionGrid = "plot.partition_grid";
 
+  /**Sample ratio to use when adaptive sample is turned on*/
+  private static final String AdaptiveSampleRatio = "Plot.AdaptiveSampleRatio";
+
+  private static final String AdaptiveSampleFactor = "Plot.AdaptiveSample.Factor";
+
   /**
    * If the processed block is already partitioned (via global index), then
    * the output is the same as input (Identity map function). If the input
@@ -105,21 +111,28 @@ public class PlotPartitioned {
     private Rectangle fileMbr;
     private int imageWidth, imageHeight;
     private double scale2, scale;
-    private boolean fade;
+    private boolean gradualFade;
+    private boolean adaptiveSample;
+    private float adaptiveSampleRatio;
     
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
-      cellNumber = new IntWritable();
-      queryRange = OperationsParams.getShape(job, "rect");
-      this.fade = job.getBoolean("fade", false);
+      this.partitionGrid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
+      this.cellNumber = new IntWritable();
+      this.queryRange = OperationsParams.getShape(job, "rect");
+      this.gradualFade = job.getBoolean("fade", false);
+      this.adaptiveSample = job.getBoolean("sample", false);
       this.fileMbr = ImageOutputFormat.getFileMBR(job);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
       this.scale2 = (double)imageWidth * imageHeight /
           (this.fileMbr.getWidth() * this.fileMbr.getHeight());
       this.scale = Math.sqrt(this.scale2);
+      if (this.adaptiveSample) {
+        // Calculate the sample ratio
+        this.adaptiveSampleRatio = job.getFloat(AdaptiveSampleRatio, 0.01f);
+      }
     }
     
     public void map(Rectangle cell, Shape shape,
@@ -128,13 +141,19 @@ public class PlotPartitioned {
       Rectangle shapeMbr = shape.getMBR();
       if (shapeMbr == null)
         return;
-      if (fade) {
+      // Check if this shape can be skipped using the gradual fade option
+      if (gradualFade && !(shape instanceof Point)) {
         double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
         if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
           // This shape can be safely skipped as it is too small to be plotted
           return;
         }
       }
+      if (adaptiveSample && shape instanceof Point) {
+        if (Math.random() > adaptiveSampleRatio)
+          return;
+      }
+      
       // Skip shapes outside query range if query range is set
       if (queryRange != null && !shapeMbr.isIntersected(queryRange))
         return;
@@ -244,7 +263,6 @@ public class PlotPartitioned {
         
         graphics.dispose();
         
-        ImageIO.write(image, "png", new File("image-"+cellInfo.cellId+".png"));
         sharedValue.setImage(image);
         output.collect(cellInfo, sharedValue);
       } catch (RuntimeException e) {
@@ -482,7 +500,6 @@ public class PlotPartitioned {
       JobConf job = new JobConf(params, PlotPartitioned.class);
       job.setJobName("Plot");
       
-      
       Rectangle fileMBR;
       // Collects some stats about the file to plot it correctly
       if (hdfDataset != null) {
@@ -506,6 +523,16 @@ public class PlotPartitioned {
           FileMBR.fileMBR(inFile, mbrArgs);
       }
       LOG.info("File MBR: "+fileMBR);
+      
+      if (job.getBoolean("sample", false)) {
+        // Need to set the sample ratio
+        int imageWidth = job.getInt("width", 1000);
+        int imageHeight = job.getInt("height", 1000);
+        long recordCount = FileMBR.fileMBR(inFile, params).recordCount;
+        float sampleRatio = params.getFloat(AdaptiveSampleFactor, 1.0f) *
+            imageWidth * imageHeight / recordCount;
+        job.setFloat(AdaptiveSampleRatio, sampleRatio);
+      }
       
       if (keepAspectRatio) {
         // Adjust width and height to maintain aspect ratio
@@ -855,7 +882,8 @@ public class PlotPartitioned {
     System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
-    
+    System.out.println("-fade: Use the gradual fade option");
+    System.out.println("-sample: Use the daptive sample option");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
   

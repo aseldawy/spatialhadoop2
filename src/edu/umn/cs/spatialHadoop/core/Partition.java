@@ -19,33 +19,55 @@ import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
 
+import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+
 public class Partition extends CellInfo {
   /**Name of the file that contains the data*/
   public String filename;
+  
+  /**Total number of records in this partition*/
+  public long recordCount;
+  
+  /**Total size of data in this partition in bytes (uncompressed)*/
+  public long size;
   
   public Partition() {}
   
   public Partition(String filename, CellInfo cell) {
     this.filename = filename;
-    this.set(cell);
+    super.set(cell);
   }
   
+  public Partition(Partition other) {
+    this.filename = other.filename;
+    this.recordCount = other.recordCount;
+    this.size = other.size;
+    super.set((CellInfo)other);
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);
     out.writeUTF(filename);
+    out.writeLong(recordCount);
+    out.writeLong(size);
   }
   
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
     filename = in.readUTF();
+    this.recordCount = in.readLong();
+    this.size = in.readLong();
   }
   
   @Override
   public Text toText(Text text) {
     super.toText(text);
-    byte[] temp = (","+filename).getBytes();
+    text.append(new byte[] {','}, 0, 1);
+    TextSerializerHelper.serializeLong(recordCount, text, ',');
+    TextSerializerHelper.serializeLong(size, text, ',');
+    byte[] temp = (filename == null? "" : filename).getBytes();
     text.append(temp, 0, temp.length);
     return text;
   }
@@ -53,13 +75,15 @@ public class Partition extends CellInfo {
   @Override
   public void fromText(Text text) {
     super.fromText(text);
-    // Skip the comma and read filename
-    filename = new String(text.getBytes(), 1, text.getLength() - 1);
+    text.set(text.getBytes(), 1, text.getLength() - 1); // Skip comma
+    this.recordCount = TextSerializerHelper.consumeLong(text, ',');
+    this.size = TextSerializerHelper.consumeLong(text, ',');
+    filename = text.toString();
   }
   
   @Override
   public Partition clone() {
-    return new Partition(filename, this);
+    return new Partition(this);
   }
   
   @Override
@@ -70,6 +94,13 @@ public class Partition extends CellInfo {
   @Override
   public boolean equals(Object obj) {
     return this.filename.equals(((Partition)obj).filename);
+  }
+  
+  public void expand(Partition p) {
+    super.expand(p);
+    // accumulate size
+    this.size += p.size;
+    this.recordCount += p.recordCount;
   }
   
   @Override

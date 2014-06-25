@@ -62,4 +62,10 @@
   <description>Implementation for HTTP file system</description>
 </property>
 
+<property>
+  <name>Plot.AdaptiveSample.Factor</name>
+  <value>1</value>
+  <description>Factor to be multiplied by adaptive sample ratio to increase quality</description>
+</property>
+
 </configuration>
