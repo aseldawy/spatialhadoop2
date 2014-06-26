@@ -71,6 +71,19 @@
     	</manifest>
   	</jar>
   </target>
+	
+	<target name="emr-jar" depends="dist"
+	    description="Creates a JAR file that can run on Amazon EMR">
+		<zip destfile="${dist}/spatialhadoop-${version}-emr.jar">
+      <zipgroupfileset dir="lib">
+        <include name="esri-geometry-api-*.jar"/>
+        <exclude name="*sources.jar"/>
+        <exclude name="*javadoc.jar"/>
+        <include name="jts-*.jar"/>
+    	</zipgroupfileset>
+			<zipgroupfileset dir="${dist}" includes="spatialhadoop-${version}.jar"/>
+		</zip>
+	</target>
 
   <target name="package" depends="dist"
       description="create a package files for the distribution">
