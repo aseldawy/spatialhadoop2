@@ -275,21 +275,6 @@ public class PlotHeatMap {
     }
     
   }
-  
-  public static class PlotHeatMapCombine extends MapReduceBase
-    implements Reducer<NullWritable, FrequencyMap, NullWritable, FrequencyMap> {
-    @Override
-    public void reduce(NullWritable key, Iterator<FrequencyMap> frequencies,
-        OutputCollector<NullWritable, FrequencyMap> output, Reporter reporter)
-        throws IOException {
-      if (!frequencies.hasNext())
-        return;
-      FrequencyMap combined = frequencies.next().clone();
-      while (frequencies.hasNext())
-        combined.combine(frequencies.next());
-      output.collect(key, combined);
-    }
-  }
 
   public static class PlotHeatMapReduce extends MapReduceBase
       implements Reducer<NullWritable, FrequencyMap, Rectangle, ImageWritable> {
@@ -484,7 +469,7 @@ public class PlotHeatMap {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     if (partition.equals("data")) {
       job.setMapperClass(PlotHeatMapMap.class);
-      job.setCombinerClass(PlotHeatMapCombine.class);
+      // A combiner is not useful here because each mapper outputs one record
       job.setReducerClass(PlotHeatMapReduce.class);
       job.setMapOutputKeyClass(NullWritable.class);
       job.setMapOutputValueClass(FrequencyMap.class);
