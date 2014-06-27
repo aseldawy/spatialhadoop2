@@ -543,10 +543,10 @@ public class Sampler {
   public static void sample(Path[] inputFiles,
       ResultCollector<? extends TextSerializable> output, OperationsParams params)
       throws IOException {
-    if (params.get("size") != null) {
-      sampleLocalWithSize(inputFiles, output, params);
-    } else if (params.get("ratio") != null) {
+    if (params.get("ratio") != null) {
       sampleMapReduceWithRatio(inputFiles, output, params);
+    } else if (params.get("size") != null) {
+      sampleLocalWithSize(inputFiles, output, params);
     } else if (params.get("count") != null){
       // The only way to sample by count is using the local sampler
       sampleLocalByCount(inputFiles, output, params);
