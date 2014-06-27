@@ -19,7 +19,6 @@ import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
@@ -276,6 +275,21 @@ public class PlotHeatMap {
     }
     
   }
+  
+  public static class PlotHeatMapCombine extends MapReduceBase
+    implements Reducer<NullWritable, FrequencyMap, NullWritable, FrequencyMap> {
+    @Override
+    public void reduce(NullWritable key, Iterator<FrequencyMap> frequencies,
+        OutputCollector<NullWritable, FrequencyMap> output, Reporter reporter)
+        throws IOException {
+      if (!frequencies.hasNext())
+        return;
+      FrequencyMap combined = frequencies.next().clone();
+      while (frequencies.hasNext())
+        combined.combine(frequencies.next());
+      output.collect(key, combined);
+    }
+  }
 
   public static class PlotHeatMapReduce extends MapReduceBase
       implements Reducer<NullWritable, FrequencyMap, Rectangle, ImageWritable> {
@@ -470,6 +484,7 @@ public class PlotHeatMap {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     if (partition.equals("data")) {
       job.setMapperClass(PlotHeatMapMap.class);
+      job.setCombinerClass(PlotHeatMapCombine.class);
       job.setReducerClass(PlotHeatMapReduce.class);
       job.setMapOutputKeyClass(NullWritable.class);
       job.setMapOutputValueClass(FrequencyMap.class);
