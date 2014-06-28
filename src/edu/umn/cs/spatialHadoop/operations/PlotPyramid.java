@@ -318,46 +318,39 @@ public class PlotPyramid {
     @Override
     public void commitJob(JobContext context) throws IOException {
       super.commitJob(context);
-      
+
       JobConf job = context.getJobConf();
       Path outPath = PyramidOutputFormat.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
 
-      // Collect all output folders
-      FileStatus[] reducesOut = outFs.listStatus(outPath, SpatialSite.NonHiddenFileFilter);
-      
-      if (reducesOut.length == 0) {
-        LOG.warn("No output files were written by reducers");
-      } else {
-        // Write a default empty image to be displayed for non-generated tiles
-        int tileWidth = job.getInt("tilewidth", 256);
-        int tileHeight = job.getInt("tileheight", 256);
-        BufferedImage emptyImg = new BufferedImage(tileWidth, tileHeight, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = new SimpleGraphics(emptyImg);
-        g.setBackground(new Color(0,0,0,0));
-        g.clearRect(0, 0, tileWidth, tileHeight);
-        g.dispose();
-        
-        OutputStream out = outFs.create(new Path(outPath, "default.png"));
-        ImageIO.write(emptyImg, "png", out);
-        out.close();
-        
-        // Add an HTML file that visualizes the result using Google Maps
-        int numLevels = job.getInt("numlevels", 7);
-        LineReader templateFileReader = new LineReader(getClass().getResourceAsStream("/zoom_view.html"));
-        PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath, "index.html")));
-        Text line = new Text();
-        while (templateFileReader.readLine(line) > 0) {
-          String lineStr = line.toString();
-          lineStr = lineStr.replace("#{TILE_WIDTH}", Integer.toString(tileWidth));
-          lineStr = lineStr.replace("#{TILE_HEIGHT}", Integer.toString(tileHeight));
-          lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(numLevels-1));
-          
-          htmlOut.println(lineStr);
-        }
-        templateFileReader.close();
-        htmlOut.close();
+      // Write a default empty image to be displayed for non-generated tiles
+      int tileWidth = job.getInt("tilewidth", 256);
+      int tileHeight = job.getInt("tileheight", 256);
+      BufferedImage emptyImg = new BufferedImage(tileWidth, tileHeight, BufferedImage.TYPE_INT_ARGB);
+      Graphics2D g = new SimpleGraphics(emptyImg);
+      g.setBackground(new Color(0,0,0,0));
+      g.clearRect(0, 0, tileWidth, tileHeight);
+      g.dispose();
+
+      OutputStream out = outFs.create(new Path(outPath, "default.png"));
+      ImageIO.write(emptyImg, "png", out);
+      out.close();
+
+      // Add an HTML file that visualizes the result using Google Maps
+      int numLevels = job.getInt("numlevels", 7);
+      LineReader templateFileReader = new LineReader(getClass().getResourceAsStream("/zoom_view.html"));
+      PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath, "index.html")));
+      Text line = new Text();
+      while (templateFileReader.readLine(line) > 0) {
+        String lineStr = line.toString();
+        lineStr = lineStr.replace("#{TILE_WIDTH}", Integer.toString(tileWidth));
+        lineStr = lineStr.replace("#{TILE_HEIGHT}", Integer.toString(tileHeight));
+        lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(numLevels-1));
+
+        htmlOut.println(lineStr);
       }
+      templateFileReader.close();
+      htmlOut.close();
     }
   }
 

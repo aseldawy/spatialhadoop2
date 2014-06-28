@@ -24,7 +24,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.apache.pig.impl.builtin.SampleLoader;
 
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
@@ -70,14 +69,20 @@ public class OperationsParams extends Configuration {
   
   public OperationsParams() {
   }
-  
+
   public OperationsParams(GenericOptionsParser parser) {
+    this(parser, true);
+  }
+
+  public OperationsParams(GenericOptionsParser parser, boolean autodetectShape) {
     super(parser.getConfiguration());
     initialize(parser.getRemainingArgs());
-    TextSerializable shape = getShape("shape");
-    if (shape != null) {
-      // In case this class is in a third part jar file, add it to path
-      SpatialSite.addClassToPath(this, shape.getClass());
+    if (autodetectShape) {
+      TextSerializable shape = getShape("shape");
+      if (shape != null) {
+        // In case this class is in a third part jar file, add it to path
+        SpatialSite.addClassToPath(this, shape.getClass());
+      }
     }
   }
 

@@ -101,6 +101,9 @@ public class Main {
       pgd.addClass("closestpair", ClosestPair.class,
           "Computes the closest pair of point of an input set of points");
 
+      pgd.addClass("distcp", DistributedCopy.class,
+          "Copies a directory or file using a MapReduce job");
+      
       pgd.driver(args);
       
       // Success
