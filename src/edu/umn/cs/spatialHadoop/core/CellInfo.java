@@ -123,7 +123,7 @@ public class CellInfo extends Rectangle {
   
   @Override
   public void fromText(Text text) {
-    this.cellId = TextSerializerHelper.consumeLong(text, ',');
+    this.cellId = TextSerializerHelper.consumeInt(text, ',');
     super.fromText(text);
   }
 }
