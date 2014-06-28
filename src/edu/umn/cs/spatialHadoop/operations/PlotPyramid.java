@@ -35,7 +35,6 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -59,10 +58,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.nasa.GeoProjector;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
-import edu.umn.cs.spatialHadoop.nasa.MercatorProjector;
-import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
@@ -164,9 +160,9 @@ public class PlotPyramid {
     /**Used as a key for output*/
     private TileIndex key;
     private int tileWidth, tileHeight;
-    private InputSplit currentSplit;
     /**The probability of replicating a point to level i*/
-    private double[] levelProb;
+    private float[] levelProb;
+    private boolean adaptiveSampling;
     
     @Override
     public void configure(JobConf job) {
@@ -179,45 +175,29 @@ public class PlotPyramid {
       this.key = new TileIndex();
       this.tileWidth = job.getInt("tilewidth", 256);
       this.tileHeight = job.getInt("tileheight", 256);
-      this.currentSplit = null;
-      this.levelProb = new double[this.numLevels];
+      this.adaptiveSampling = job.getBoolean("sample", false);
+      this.levelProb = new float[this.numLevels];
+      this.levelProb[0] = job.getFloat(PlotPartitioned.AdaptiveSampleRatio, 0.1f);
+      for (int level = 1; level < numLevels; level++) {
+        this.levelProb[level] = this.levelProb[level - 1] * 4;
+      }
     }
     
     public void map(Rectangle cell, Shape shape,
         OutputCollector<TileIndex, Shape> output, Reporter reporter)
         throws IOException {
-      if (currentSplit != reporter.getInputSplit()) {
-        this.currentSplit = reporter.getInputSplit();
-        if (cell instanceof NASADataset) {
-          // Calculate the ratio of replicating a point to each level
-          NASADataset dataset = (NASADataset) cell;
-          this.levelProb[0] = 1.0 *
-              // Number of pixels in one tile
-              (double) tileWidth * tileHeight /
-              // Area of a tile at level 0
-              (bottomGrid.getWidth() * bottomGrid.getHeight()) /(
-              // Number of points in file
-              (double) dataset.resolution * dataset.resolution /
-              // Area of file
-              (dataset.getWidth() * dataset.getHeight())
-              );
-          for (int level = 1; level < numLevels; level++) {
-            this.levelProb[level] = this.levelProb[level - 1] * 4;
-          }
-        }
-      }
       Rectangle shapeMBR = shape.getMBR();
       if (shapeMBR == null)
         return;
       
       int min_level = 0;
-//      if (cell instanceof NASADataset) {
-//        // Special handling for NASA data
-//        double p = Math.random();
-//        // Skip levels that do not satisfy the probability
-//        while (min_level < numLevels && p > levelProb[min_level])
-//          min_level++;
-//      }
+      if (adaptiveSampling) {
+        // Special handling for NASA data
+        double p = Math.random();
+        // Skip levels that do not satisfy the probability
+        while (min_level < numLevels && p > levelProb[min_level])
+          min_level++;
+      }
       
       java.awt.Rectangle overlappingCells =
           bottomGrid.getOverlappingCells(shapeMBR);
@@ -363,7 +343,7 @@ public class PlotPyramid {
         out.close();
         
         // Add an HTML file that visualizes the result using Google Maps
-        int numLevels = job.getInt("numlevel", 7);
+        int numLevels = job.getInt("numlevels", 7);
         LineReader templateFileReader = new LineReader(getClass().getResourceAsStream("/zoom_view.html"));
         PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath, "index.html")));
         Text line = new Text();
@@ -419,6 +399,16 @@ public class PlotPyramid {
     job.setMapOutputKeyClass(TileIndex.class);
     job.setMapOutputValueClass(shape.getClass());
     job.setInt("color", color.getRGB());
+    
+    if (job.getBoolean("sample", false)) {
+      // Enable adaptive sampling
+      int imageWidthRoot = job.getInt("tilewidth", 256);
+      int imageHeightRoot = job.getInt("tileheight", 256);
+      long recordCount = FileMBR.fileMBR(inFile, params).recordCount;
+      float sampleRatio = params.getFloat(PlotPartitioned.AdaptiveSampleFactor, 1.0f) *
+          imageWidthRoot * imageHeightRoot / recordCount;
+      job.setFloat(PlotPartitioned.AdaptiveSampleRatio, sampleRatio);
+    }
 
     job.setReducerClass(PlotReduce.class);
     
@@ -509,7 +499,10 @@ public class PlotPyramid {
     }
     Path inFile = cla.getInputPath();
     Path outFile = cla.getOutputPath();
+    long t1 = System.currentTimeMillis();
     plot(inFile, outFile, cla);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for plot pyramid "+(t2-t1)+" millis");
   }
 
 }

@@ -53,7 +53,9 @@ import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -225,7 +227,7 @@ public class PlotHeatMap {
    * @author Ahmed Eldawy
    *
    */
-  public static class PlotHeatMapMap extends MapReduceBase 
+  public static class DataPartitionMap extends MapReduceBase 
     implements Mapper<Rectangle, ArrayWritable, NullWritable, FrequencyMap> {
 
     /**Only objects inside this query range are drawn*/
@@ -275,23 +277,8 @@ public class PlotHeatMap {
     }
     
   }
-  
-  public static class PlotHeatMapCombine extends MapReduceBase
-    implements Reducer<NullWritable, FrequencyMap, NullWritable, FrequencyMap> {
-    @Override
-    public void reduce(NullWritable key, Iterator<FrequencyMap> frequencies,
-        OutputCollector<NullWritable, FrequencyMap> output, Reporter reporter)
-        throws IOException {
-      if (!frequencies.hasNext())
-        return;
-      FrequencyMap combined = frequencies.next().clone();
-      while (frequencies.hasNext())
-        combined.combine(frequencies.next());
-      output.collect(key, combined);
-    }
-  }
 
-  public static class PlotHeatMapReduce extends MapReduceBase
+  public static class DataPartitionReduce extends MapReduceBase
       implements Reducer<NullWritable, FrequencyMap, Rectangle, ImageWritable> {
     
     private Rectangle drawMBR;
@@ -341,7 +328,7 @@ public class PlotHeatMap {
    * @author Eldawy
    *
    */
-  public static class PlotHeatMapPartitionMap extends MapReduceBase 
+  public static class GridPartitionMap extends MapReduceBase 
   implements Mapper<Rectangle, Shape, IntWritable, Point> {
     
     /**The grid used to partition the space*/
@@ -405,7 +392,7 @@ public class PlotHeatMap {
    * @author Eldawy
    *
    */
-  public static class PlotHeatMapPartitionReduce extends MapReduceBase
+  public static class GridPartitionReduce extends MapReduceBase
     implements Reducer<IntWritable, Point, Rectangle, ImageWritable> {
     private GridInfo partitionGrid;
     private int imageWidth, imageHeight;
@@ -455,6 +442,144 @@ public class PlotHeatMap {
     }
   }
   
+  /**
+   * The map function for the plot heat map operation that uses spatial
+   * partitioning.
+   * @author Eldawy
+   *
+   */
+  public static class SkewedPartitionMap extends MapReduceBase 
+    implements Mapper<Rectangle, Shape, IntWritable, Point> {
+    
+    /**The grid used to partition the space*/
+    private CellInfo[] cells;
+    /**Shared output key*/
+    private IntWritable cellNumber = new IntWritable();
+    /**The range to plot*/
+    private Shape queryRange;
+    /**Radius in data space around each point*/
+    private float radiusX, radiusY;
+    
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      try {
+        this.cells = SpatialSite.getCells(job);
+      } catch (IOException e) {
+        throw new RuntimeException("Cannot get cells for the job", e);
+      }
+      this.queryRange = OperationsParams.getShape(job, "rect");
+      
+      int imageWidth = job.getInt("width", 1000);
+      int imageHeight = job.getInt("height", 1000);
+      int radiusPx = job.getInt("radius", 5);
+      
+      Rectangle fileMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
+      for (CellInfo cell : cells) {
+        fileMBR.expand(cell);
+      }
+      this.radiusX = (float) (radiusPx * fileMBR.getWidth() / imageWidth);
+      this.radiusY = (float) (radiusPx * fileMBR.getHeight() / imageHeight);
+    }
+    
+    @Override
+    public void map(Rectangle dummy, Shape s,
+        OutputCollector<IntWritable, Point> output, Reporter reporter)
+        throws IOException {
+      Point center;
+      if (s instanceof Point) {
+        center = new Point((Point)s);
+      } else if (s instanceof Rectangle) {
+        center = ((Rectangle) s).getCenterPoint();
+      } else {
+        Rectangle shapeMBR = s.getMBR();
+        if (shapeMBR == null)
+          return;
+        center = shapeMBR.getCenterPoint();
+      }
+      Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
+      // Skip shapes outside query range if query range is set
+      if (queryRange != null && !shapeMBR.isIntersected(queryRange))
+        return;
+      for (CellInfo cell : cells) {
+        if (cell.isIntersected(shapeMBR)) {
+          cellNumber.set(cell.cellId);
+          output.collect(cellNumber, center);
+        }
+      }
+    }
+  }
+
+  public static class SkewedPartitionReduce extends MapReduceBase
+  implements Reducer<IntWritable, Point, Rectangle, ImageWritable> {
+    private CellInfo[] cells;
+  private int imageWidth, imageHeight;
+  private int radius;
+  private boolean skipZeros;
+  private MinMax valueRange;
+  private Rectangle fileMBR;
+  
+  @Override
+  public void configure(JobConf job) {
+    super.configure(job);
+    try {
+      this.cells = SpatialSite.getCells(job);
+    } catch (IOException e) {
+      throw new RuntimeException("Cannot get cells for the job", e);
+    }
+    this.imageWidth = job.getInt("width", 1000);
+    this.imageHeight = job.getInt("height", 1000);
+    this.radius = job.getInt("radius", 5);
+    NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
+    NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+    NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+    this.skipZeros = job.getBoolean("skipzeros", false);
+    String valueRangeStr = job.get("valuerange");
+    if (valueRangeStr != null) {
+      String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+      this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+    }
+    this.fileMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
+    for (CellInfo cell : cells) {
+      fileMBR.expand(cell);
+    }
+
+  }
+
+  @Override
+  public void reduce(IntWritable cellNumber, Iterator<Point> points,
+      OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
+      throws IOException {
+    CellInfo cellInfo = null;
+    int iCell = 0;
+    while (iCell < cells.length && cells[iCell].cellId != cellNumber.get())
+      iCell++;
+    if (iCell >= cells.length)
+      throw new RuntimeException("Cannot find cell: "+cellNumber);
+    cellInfo = cells[iCell];
+    
+    // Initialize the image
+    int image_x1 = (int) Math.floor((cellInfo.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int image_y1 = (int) Math.floor((cellInfo.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int image_x2 = (int) Math.ceil((cellInfo.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int image_y2 = (int) Math.ceil((cellInfo.y2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int tile_width = image_x2 - image_x1;
+    int tile_height = image_y2 - image_y1;
+    FrequencyMap frequencyMap = new FrequencyMap(tile_width, tile_height);
+    while (points.hasNext()) {
+      Point p = points.next();
+      int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
+      int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
+      frequencyMap.addPoint(centerx, centery, radius);
+    }
+    BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
+    output.collect(cellInfo, new ImageWritable(image));
+  }
+}
+
+  
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
   
@@ -483,24 +608,37 @@ public class PlotHeatMap {
     String partition = job.get("partition", "data").toLowerCase();
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     if (partition.equals("data")) {
-      job.setMapperClass(PlotHeatMapMap.class);
-      job.setCombinerClass(PlotHeatMapCombine.class);
-      job.setReducerClass(PlotHeatMapReduce.class);
+      job.setMapperClass(DataPartitionMap.class);
+      // A combiner is not useful here because each mapper outputs one record
+      job.setReducerClass(DataPartitionReduce.class);
       job.setMapOutputKeyClass(NullWritable.class);
       job.setMapOutputValueClass(FrequencyMap.class);
       job.setInputFormat(ShapeArrayInputFormat.class);
     } else if (partition.equals("space")) {
+      FileSystem inFs = inFile.getFileSystem(job);
+      GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inFile);
       job.setInputFormat(ShapeInputFormat.class);
-      job.setMapperClass(PlotHeatMapPartitionMap.class);
-      job.setReducerClass(PlotHeatMapPartitionReduce.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(Point.class);
-
-      GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
-          fileMBR.y2);
-      partitionGrid.calculateCellDimensions(
-          (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-      OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+      if (gIndex == null || gIndex.size() == 1) {
+        // Input file is not indexed. Use grid partitioning
+        // A special case of a global index of one cell indicates
+        // a non-indexed file with a cached MBR
+        job.setMapperClass(GridPartitionMap.class);
+        job.setReducerClass(GridPartitionReduce.class);
+        job.setMapOutputValueClass(Point.class);
+        
+        GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+            fileMBR.y2);
+        partitionGrid.calculateCellDimensions(
+            (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+        OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+      } else {
+        // Input file is already partitioned. Use the same partitioning
+        job.setMapperClass(SkewedPartitionMap.class);
+        job.setReducerClass(SkewedPartitionReduce.class);
+        SpatialSite.setCells(job, SpatialSite.cellsOf(gIndex));
+      }
     } else {
       throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
     }

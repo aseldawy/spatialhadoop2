@@ -385,26 +385,10 @@ public class SpatialSite {
    * @throws IOException
    */
   public static CellInfo[] cellsOf(FileSystem fs, Path path) throws IOException {
-    GlobalIndex<Partition> gindex = getGlobalIndex(fs, path);
-    if (gindex == null)
+    GlobalIndex<Partition> gIndex = getGlobalIndex(fs, path);
+    if (gIndex == null)
       return null;
-    
-    // Find all partitions of the given file. If two partitions have the same
-    // cell ID, it indicates that they are two blocks of the same cell. This
-    // means they represent one partition and should be merged together.
-    // They might have different MBRs as each block has its own MBR according
-    // to the data stored in it.
-    Map<Long, CellInfo> cells = new HashMap<Long, CellInfo>();
-    for (Partition p : gindex) {
-      CellInfo cell = cells.get(p.cellId);
-      if (cell == null) {
-        cells.put(p.cellId, cell = new CellInfo(p));
-      } else {
-        cell.expand(p);
-      }
-    }
-    return cells.values().toArray(new CellInfo[cells.size()]);
-
+    return cellsOf(gIndex);
   }
   
   /**
@@ -525,6 +509,32 @@ public class SpatialSite {
       }
     }
     return type;
+  }
+
+  /**
+   * Finds the partitioning info used in the given global index. If each cell
+   * is represented as one partition, the MBRs of these partitions are returned.
+   * If one cell is stored in multiple partitions (i.e., multiple files),
+   * their MBRs are combined to produce one MBR for this cell.
+   * @param gIndex
+   * @return
+   */
+  public static CellInfo[] cellsOf(GlobalIndex<Partition> gIndex) {
+    // Find all partitions of the given file. If two partitions have the same
+    // cell ID, it indicates that they are two blocks of the same cell. This
+    // means they represent one partition and should be merged together.
+    // They might have different MBRs as each block has its own MBR according
+    // to the data stored in it.
+    Map<Integer, CellInfo> cells = new HashMap<Integer, CellInfo>();
+    for (Partition p : gIndex) {
+      CellInfo cell = cells.get(p.cellId);
+      if (cell == null) {
+        cells.put(p.cellId, cell = new CellInfo(p));
+      } else {
+        cell.expand(p);
+      }
+    }
+    return cells.values().toArray(new CellInfo[cells.size()]);
   }
 
 }

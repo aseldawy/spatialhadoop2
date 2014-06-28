@@ -58,7 +58,9 @@ import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -78,6 +80,19 @@ import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
  * Draws an image of all shapes in an input file.
+ * 
+ * This operation has three implementations.
+ * 1) Fast Plot. This operation uses data partitioning to draw an image for each
+ *   split and then overlay images on top of each other to produce final result.
+ *   To use this method, you need to set the parameter "partition:data"
+ * 2) Partitioned Plot. This implementation uses space partitioning to
+ *   partition the data and then plots an image for each partition. After that,
+ *   it stitches these images together to produce the final picture.
+ *   To use this method, set the parameter "partition:space"
+ * 3) If the data is already spatially partitioned using an R+-tree or
+ *   Grid file, and "partition:space" is provided, this algorithm uses the
+ *   existing partitioning to draw an image for each partition and then combine
+ *   the results back in one machine by stitching them.
  * @author Ahmed Eldawy
  *
  */
@@ -89,9 +104,9 @@ public class PlotPartitioned {
   private static final String PartitionGrid = "plot.partition_grid";
 
   /**Sample ratio to use when adaptive sample is turned on*/
-  private static final String AdaptiveSampleRatio = "Plot.AdaptiveSampleRatio";
-
-  private static final String AdaptiveSampleFactor = "Plot.AdaptiveSample.Factor";
+  public static final String AdaptiveSampleRatio = "Plot.AdaptiveSampleRatio";
+  /**Base sample factor used to increase probability if needed (defaults to 1)*/
+  public static final String AdaptiveSampleFactor = "Plot.AdaptiveSample.Factor";
 
   /**
    * If the processed block is already partitioned (via global index), then
@@ -101,7 +116,7 @@ public class PlotPartitioned {
    * @author Ahmed Eldawy
    *
    */
-  public static class PartitionPlotMap extends MapReduceBase 
+  public static class GridPartitionPlotMap extends MapReduceBase 
     implements Mapper<Rectangle, Shape, IntWritable, Shape> {
     
     private GridInfo partitionGrid;
@@ -173,7 +188,7 @@ public class PlotPartitioned {
    * @author Ahmed Eldawy
    *
    */
-  public static class PartitionPlotReduce extends MapReduceBase
+  public static class GridPartitionPlotReduce extends MapReduceBase
       implements Reducer<IntWritable, Shape, Rectangle, ImageWritable> {
     
     private GridInfo partitionGrid;
@@ -271,6 +286,95 @@ public class PlotPartitioned {
     }
   }
   
+  /**
+   * If the processed block is already partitioned (via global index), then
+   * the output is the same as input (Identity map function). If the input
+   * partition is not partitioned (a heap file), then the given shape is output
+   * to all overlapping partitions.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class AlreadyPartitionedPlotMap extends MapReduceBase 
+    implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
+
+    private Rectangle fileMBR;
+    private int imageWidth, imageHeight;
+    private ImageWritable sharedValue = new ImageWritable();
+    private double scale2, scale;
+    private int strokeColor;
+    private boolean fade;
+
+    @Override
+    public void configure(JobConf job) {
+      System.setProperty("java.awt.headless", "true");
+      super.configure(job);
+      this.fileMBR = ImageOutputFormat.getFileMBR(job);
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+      this.strokeColor = job.getInt("color", 0);
+      this.fade = job.getBoolean("fade", false);
+
+      this.scale2 = (double)imageWidth * imageHeight /
+          (this.fileMBR.getWidth() * this.fileMBR.getHeight());
+      this.scale = Math.sqrt(scale2);
+
+      String valueRangeStr = job.get("valuerange");
+      if (valueRangeStr != null) {
+        String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+        NASAPoint.minValue = Integer.parseInt(parts[0]);
+        NASAPoint.maxValue = Integer.parseInt(parts[1]);
+      }
+      
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+    }
+    
+    @Override
+    public void map(Rectangle key, ArrayWritable value,
+        OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
+        throws IOException {
+      // Initialize the image
+      int image_x1 = (int) Math.floor((key.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+      int image_y1 = (int) Math.floor((key.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+      int image_x2 = (int) Math.ceil((key.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+      int image_y2 = (int) Math.ceil((key.y2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+      int tile_width = image_x2 - image_x1;
+      int tile_height = image_y2 - image_y1;
+
+      // Initialize the image
+      BufferedImage image = new BufferedImage(tile_width, tile_height, BufferedImage.TYPE_INT_ARGB);
+      Graphics2D graphics = image.createGraphics();
+      graphics.setBackground(new Color(0, 0, 0, 0));
+      graphics.clearRect(0, 0, tile_width, tile_height);
+      Color strokeClr = new Color(strokeColor);
+      graphics.setColor(strokeClr);
+      graphics.translate(-image_x1, -image_y1);
+
+      for (Shape s : (Shape[]) value.get()) {
+        if (fade) {
+          Rectangle shapeMBR = s.getMBR();
+          double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+          if (areaInPixels > 1.0) {
+            graphics.setColor(strokeClr);
+          } else {
+            byte alpha = (byte) Math.round(areaInPixels * 255);
+            if (alpha == 0) {
+              // Skip this shape
+              continue;
+            } else {
+              graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+            }
+          }
+        }
+        s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
+      }
+      graphics.dispose();
+      sharedValue.setImage(image);
+      output.collect(key.getMBR(), sharedValue);
+    }
+  }
+
   public static class PlotOutputCommitter extends FileOutputCommitter {
     @Override
     public void commitJob(JobContext context) throws IOException {
@@ -427,7 +531,6 @@ public class PlotPartitioned {
       sharedValue.setImage(image);
       output.collect(drawMbr, sharedValue);
     }
-    
   }
 
   /**
@@ -549,19 +652,36 @@ public class PlotPartitioned {
       
       String partition = job.get("partition", "data").toLowerCase();
       ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+      job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
+      
+      FileSystem inFs = inFile.getFileSystem(params);
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, inFile);
+      
       if (partition.equals("space")) {
-        job.setMapperClass(PartitionPlotMap.class);
-        job.setReducerClass(PartitionPlotReduce.class);
-        job.setMapOutputKeyClass(IntWritable.class);
-        job.setMapOutputValueClass(shape.getClass());
-        
-        GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
-            fileMBR.y2);
-        partitionGrid.calculateCellDimensions(
-            (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-        OperationsParams.setShape(job, PartitionGrid, partitionGrid);
-        job.setInputFormat(ShapeInputFormat.class);
+        if (gindex != null && gindex.isReplicated()) {
+          LOG.info("Partitioned plot with an already partitioned file");
+          job.setMapperClass(AlreadyPartitionedPlotMap.class);
+          job.setNumMapTasks(0); // No reducer for this job
+          job.setInputFormat(ShapeArrayInputFormat.class);
+          job.setMapOutputKeyClass(Rectangle.class);
+          job.setMapOutputValueClass(ImageWritable.class);
+        } else {
+          LOG.info("Partition a file then plot");
+          job.setMapperClass(GridPartitionPlotMap.class);
+          job.setReducerClass(GridPartitionPlotReduce.class);
+          job.setMapOutputKeyClass(IntWritable.class);
+          job.setMapOutputValueClass(shape.getClass());
+          
+          GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+              fileMBR.y2);
+          partitionGrid.calculateCellDimensions(
+              (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+          OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+          job.setInputFormat(ShapeInputFormat.class);
+        }
       } else if (partition.equals("data")) {
+        LOG.info("Plot using data partitioning");
         job.setMapperClass(FastPlotMap.class);
         job.setCombinerClass(FastPlotReduce.class);
         job.setReducerClass(FastPlotReduce.class);
@@ -571,8 +691,6 @@ public class PlotPartitioned {
       } else {
         throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
       }
-      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-      job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
       
       LOG.info("Creating an image of size "+width+"x"+height);
       ImageOutputFormat.setFileMBR(job, fileMBR);

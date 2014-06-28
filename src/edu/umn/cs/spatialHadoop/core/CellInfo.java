@@ -35,7 +35,7 @@ public class CellInfo extends Rectangle {
    * A unique ID for this cell in a file. This must be set initially when
    * cells for a file are created. It cannot be guessed from cell dimensions.
    */
-  public long cellId;
+  public int cellId;
 
   /**
    * Loads a cell serialized to the given stream
@@ -54,12 +54,12 @@ public class CellInfo extends Rectangle {
     super();
   }
 
-  public CellInfo(long id, double x1, double y1, double x2, double y2) {
+  public CellInfo(int id, double x1, double y1, double x2, double y2) {
     super(x1, y1, x2, y2);
     this.cellId = id;
   }
 
-  public CellInfo(long id, Rectangle cellInfo) {
+  public CellInfo(int id, Rectangle cellInfo) {
     this(id, cellInfo.x1, cellInfo.y1, cellInfo.x2, cellInfo.y2);
     if (id == 0)
       throw new RuntimeException("Invalid cell id: "+id);
@@ -105,19 +105,19 @@ public class CellInfo extends Rectangle {
   
   @Override
   public void write(DataOutput out) throws IOException {
-    out.writeLong(cellId);
+    out.writeInt(cellId);
     super.write(out);
   }
   
   @Override
   public void readFields(DataInput in) throws IOException {
-    this.cellId = in.readLong();
+    this.cellId = in.readInt();
     super.readFields(in);
   }
 
   @Override
   public Text toText(Text text) {
-    TextSerializerHelper.serializeLong(cellId, text, ',');
+    TextSerializerHelper.serializeInt(cellId, text, ',');
     return super.toText(text);
   }
   
