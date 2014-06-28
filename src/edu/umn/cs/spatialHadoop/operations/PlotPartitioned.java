@@ -104,9 +104,9 @@ public class PlotPartitioned {
   private static final String PartitionGrid = "plot.partition_grid";
 
   /**Sample ratio to use when adaptive sample is turned on*/
-  private static final String AdaptiveSampleRatio = "Plot.AdaptiveSampleRatio";
-
-  private static final String AdaptiveSampleFactor = "Plot.AdaptiveSample.Factor";
+  public static final String AdaptiveSampleRatio = "Plot.AdaptiveSampleRatio";
+  /**Base sample factor used to increase probability if needed (defaults to 1)*/
+  public static final String AdaptiveSampleFactor = "Plot.AdaptiveSample.Factor";
 
   /**
    * If the processed block is already partitioned (via global index), then
