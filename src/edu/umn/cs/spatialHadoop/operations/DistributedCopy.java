@@ -48,10 +48,10 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.Progressable;
-import org.apache.pig.data.WritableByteArray;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
+import edu.umn.cs.spatialHadoop.util.WritableByteArray;
 
 /**
  * Copy file using a distributed MapReduce job. Unlike the shell command
@@ -65,6 +65,11 @@ public class DistributedCopy {
   /**Logger for DistributedCopy*/
   private static final Log LOG = LogFactory.getLog(DistributedCopy.class);
   
+  /**
+   * Holds information about a block in a file with a specific index.
+   * @author Ahmed Eldawy
+   *
+   */
   public static class FileBlockIndex implements WritableComparable<FileBlockIndex> {
     public Path path;
     public int index;
@@ -316,7 +321,7 @@ public class DistributedCopy {
       public void write(FileBlockIndex key, WritableByteArray value)
           throws IOException {
         FSDataOutputStream outFs = getOrCreateOutputStream(key);
-        if (value.size() == 0) {
+        if (value.getLength() == 0) {
           // This indicates an end of block
           outFs.close();
           cachedStreams.remove(key);
