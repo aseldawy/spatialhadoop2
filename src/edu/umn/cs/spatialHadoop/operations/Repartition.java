@@ -151,7 +151,7 @@ public class Repartition {
         cellInfos = SpatialSite.getCells(job);
         super.configure(job);
       } catch (IOException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Error loading cells", e);
       }
     }
     
@@ -552,7 +552,6 @@ public class Repartition {
       Path outFile, OperationsParams params) throws IOException {
     String sindex = params.get("sindex");
     long blockSize = params.getSize("blocksize");
-    Shape shape = params.getShape("shape");
 
     FileSystem inFs = inFile.getFileSystem(new Configuration());
     FileSystem outFs = outFile.getFileSystem(new Configuration());
