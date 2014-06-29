@@ -119,8 +119,18 @@ public class PlotHeatMap {
       out.writeInt(this.getWidth());
       out.writeInt(this.getHeight());
       for (int[] col : frequency) {
-        for (int value : col) {
-          out.writeInt(value);
+        int y1 = 0;
+        while (y1 < col.length) {
+          int y2 = y1;
+          while (y2 < col.length && col[y2] == col[y1])
+            y2++;
+          if (y2 == y1) {
+            out.writeInt(-col[y1]);
+          } else {
+            out.writeInt(y2 - y1);
+            out.writeInt(col[y1]);
+          }
+          y1 = y2 + 1;
         }
       }
     }
@@ -131,8 +141,21 @@ public class PlotHeatMap {
       int height = in.readInt();
       frequency = new int[width][height];
       for (int x = 0; x < width; x++) {
-        for (int y = 0; y < height; y++) {
-          frequency[x][y] = in.readInt();
+        int y = 0;
+        while (y < height) {
+          int v = in.readInt();
+          if (v < 0) {
+            frequency[x][y] = -v;
+            y++;
+          } else {
+            int cnt = v;
+            v = in.readInt();
+            int y2 = y + cnt;
+            while (y < y2) {
+              frequency[x][y] = v;
+              y++;
+            }
+          }
         }
       }
     }
@@ -832,6 +855,7 @@ public class PlotHeatMap {
       printUsage();
       System.exit(1);
     }
+    
     
     Path inFile = params.getInputPath();
     Path outFile = params.getOutputPath();
