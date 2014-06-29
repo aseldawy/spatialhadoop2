@@ -241,7 +241,21 @@ public class FileMBR {
       return null;
     } else {
       lastSubmittedJob = JobClient.runJob(job);
-      return fileMBRCached(file, params);
+      FileStatus[] outFiles = outFs.listStatus(outputPath,
+          SpatialSite.NonHiddenFileFilter);
+      Partition mbr = new Partition();
+      mbr.set(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
+      OperationsParams localMBRParams = new OperationsParams(params);
+      localMBRParams.setBoolean("local", true);
+      localMBRParams.setClass("shape", Partition.class, Shape.class);
+      for (FileStatus outFile : outFiles) {
+        if (outFile.isDir())
+          continue;
+        Partition p = FileMBR.fileMBRLocal(outFile.getPath(), localMBRParams);
+        mbr.expand(p);
+      }
+      return mbr;
     }
   }
 

@@ -145,7 +145,7 @@ public class PlotHeatMap {
         int y = 0;
         while (y < height) {
           int v = in.readInt();
-          if (v < 0) {
+          if (v <= 0) {
             frequency[x][y] = -v;
             y++;
           } else {
