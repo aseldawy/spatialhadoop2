@@ -18,7 +18,11 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
@@ -124,13 +128,13 @@ public class PlotHeatMap {
           int y2 = y1;
           while (y2 < col.length && col[y2] == col[y1])
             y2++;
-          if (y2 == y1) {
+          if (y2 - y1 == 1) {
             out.writeInt(-col[y1]);
           } else {
             out.writeInt(y2 - y1);
             out.writeInt(col[y1]);
           }
-          y1 = y2 + 1;
+          y1 = y2;
         }
       }
     }
@@ -163,6 +167,22 @@ public class PlotHeatMap {
     @Override
     protected FrequencyMap clone() {
       return new FrequencyMap(this);
+    }
+    
+    @Override
+    public boolean equals(Object obj) {
+      FrequencyMap other = (FrequencyMap) obj;
+      if (this.getWidth() != other.getWidth())
+        return false;
+      if (this.getHeight() != other.getHeight())
+        return false;
+      for (int x = 0; x < this.getWidth(); x++) {
+        for (int y = 0; y < this.getHeight(); y++) {
+          if (this.frequency[x][y] != other.frequency[x][y])
+            return false;
+        }
+      }
+      return true;
     }
     
     @Override
@@ -855,7 +875,6 @@ public class PlotHeatMap {
       printUsage();
       System.exit(1);
     }
-    
     
     Path inFile = params.getInputPath();
     Path outFile = params.getOutputPath();
