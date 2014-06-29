@@ -46,13 +46,14 @@ public class WritableByteArray implements Writable {
   @Override
   public void readFields(DataInput in) throws IOException {
     this.length = in.readInt();
-    this.buffer = new byte[length];
-    in.readFully(buffer);
+    if (this.buffer.length < this.length)
+      this.buffer = new byte[length];
+    in.readFully(buffer, 0, this.length);
   }
 
   public void set(byte[] b, int start, int end) {
-    if (b.length < end - start)
-      b = new byte[(end - start) * 2];
+    if (buffer.length < end - start)
+      buffer = new byte[(end - start) * 2];
     if (b != buffer || start != 0)
       System.arraycopy(b, start, buffer, 0, end - start);
     this.length = end - start;
@@ -71,7 +72,7 @@ public class WritableByteArray implements Writable {
   }
 
   public byte[] getData() {
-    return getBuffer();
+    return buffer;
   }
 
 }

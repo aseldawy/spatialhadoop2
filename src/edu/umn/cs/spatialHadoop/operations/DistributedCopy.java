@@ -445,6 +445,7 @@ public class DistributedCopy {
   private static void distributedCopy(Path inputPath, Path outputPath,
       OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, DistributedCopy.class);
+    job.setJobName("distcp3");
     // Set input
     job.setInputFormat(BlockInputFormat.class);
     BlockInputFormat.addInputPath(job, inputPath);
