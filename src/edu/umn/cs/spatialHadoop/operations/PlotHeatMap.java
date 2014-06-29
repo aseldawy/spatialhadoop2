@@ -18,11 +18,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
@@ -148,7 +144,7 @@ public class PlotHeatMap {
         int y = 0;
         while (y < height) {
           int v = in.readInt();
-          if (v < 0) {
+          if (v <= 0) {
             frequency[x][y] = -v;
             y++;
           } else {
