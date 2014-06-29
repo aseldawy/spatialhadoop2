@@ -173,7 +173,8 @@ public class DistributedCopy {
     /**Last position to read from input file*/
     private long end;
 
-    public BlockRecordReader(InputSplit split, JobConf job, Reporter reporter) throws IOException {
+    public BlockRecordReader(InputSplit split, JobConf job, Reporter reporter)
+        throws IOException {
       FileBlockSplit fsplit = (FileBlockSplit) split;
       buffer = new byte[1024 * 1024];
       this.key = new FileBlockIndex(fsplit.getPath(), fsplit.getIndex());
@@ -183,6 +184,7 @@ public class DistributedCopy {
       in = inFs.open(inPath);
       in.seek(this.start = fsplit.getStart());
       this.end = fsplit.getStart() + fsplit.getLength();
+      reporter.setStatus("Copying "+inPath+"["+start+","+end+")");
     }
     
     @Override
@@ -417,10 +419,11 @@ public class DistributedCopy {
           outFs.delete(dirToConcat.getPath(), true);
           outFs.rename(tmpPath, dirToConcat.getPath());
         } else if (!filesToConcat.isEmpty()) {
-          Path concatPath = dirToConcat.getPath().suffix("_tmp");
+          Path concatPath = filesToConcat.remove(0);
           try {
             outFs.concat(concatPath, filesToConcat.toArray(new Path[filesToConcat.size()]));
           } catch (UnsupportedOperationException e) {
+            concatPath = dirToConcat.getPath().suffix("_off");
             FSDataOutputStream concatenated = outFs.create(concatPath);
             byte[] buffer = new byte[1024*1024];
             for (Path fileToContact : filesToConcat) {
@@ -434,8 +437,10 @@ public class DistributedCopy {
             }
             concatenated.close();
           }
+          Path tmpPath = dirToConcat.getPath().suffix("_tmp");
+          outFs.rename(concatPath, tmpPath);
           outFs.delete(dirToConcat.getPath(), true);
-          outFs.rename(concatPath, dirToConcat.getPath());
+          outFs.rename(tmpPath, dirToConcat.getPath());
         }
       }
     }
