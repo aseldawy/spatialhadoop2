@@ -99,7 +99,7 @@ import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 public class GeometricPlot {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(GeometricPlot.class);
-  
+
   /**The grid used to partition data across reducers*/
   private static final String PartitionGrid = "plot.partition_grid";
 
@@ -116,9 +116,9 @@ public class GeometricPlot {
    * @author Ahmed Eldawy
    *
    */
-  public static class GridPartitionPlotMap extends MapReduceBase 
-    implements Mapper<Rectangle, Shape, IntWritable, Shape> {
-    
+  public static class GridPartitionMap extends MapReduceBase 
+  implements Mapper<Rectangle, Shape, IntWritable, Shape> {
+
     private GridInfo partitionGrid;
     private IntWritable cellNumber;
     private Shape queryRange;
@@ -128,7 +128,7 @@ public class GeometricPlot {
     private boolean gradualFade;
     private boolean adaptiveSample;
     private float adaptiveSampleRatio;
-    
+
     @Override
     public void configure(JobConf job) {
       super.configure(job);
@@ -148,10 +148,10 @@ public class GeometricPlot {
         this.adaptiveSampleRatio = job.getFloat(AdaptiveSampleRatio, 0.01f);
       }
     }
-    
+
     public void map(Rectangle cell, Shape shape,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
-        throws IOException {
+            throws IOException {
       Rectangle shapeMbr = shape.getMBR();
       if (shapeMbr == null)
         return;
@@ -167,7 +167,7 @@ public class GeometricPlot {
         if (Math.random() > adaptiveSampleRatio)
           return;
       }
-      
+
       // Skip shapes outside query range if query range is set
       if (queryRange != null && !shapeMbr.isIntersected(queryRange))
         return;
@@ -182,15 +182,15 @@ public class GeometricPlot {
       }
     }
   }
-  
+
   /**
    * The reducer class draws an image for contents (shapes) in each cell info
    * @author Ahmed Eldawy
    *
    */
-  public static class GridPartitionPlotReduce extends MapReduceBase
-      implements Reducer<IntWritable, Shape, Rectangle, ImageWritable> {
-    
+  public static class GridPartitionReduce extends MapReduceBase
+  implements Reducer<IntWritable, Shape, Rectangle, ImageWritable> {
+
     private GridInfo partitionGrid;
     private Rectangle fileMbr;
     private int imageWidth, imageHeight;
@@ -220,7 +220,7 @@ public class GeometricPlot {
         NASAPoint.minValue = Integer.parseInt(parts[0]);
         NASAPoint.maxValue = Integer.parseInt(parts[1]);
       }
-      
+
       NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
       NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
       NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
@@ -229,7 +229,7 @@ public class GeometricPlot {
     @Override
     public void reduce(IntWritable cellNumber, Iterator<Shape> values,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
-        throws IOException {
+            throws IOException {
       try {
         CellInfo cellInfo = partitionGrid.getCell(cellNumber.get());
         // Initialize the image
@@ -274,9 +274,198 @@ public class GeometricPlot {
           }
           s.draw(graphics, fileMbr, imageWidth, imageHeight, scale2);
         }
-        
+
         graphics.dispose();
-        
+
+        sharedValue.setImage(image);
+        output.collect(cellInfo, sharedValue);
+      } catch (RuntimeException e) {
+        e.printStackTrace();
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Partitions the data according to cells configured in the job.
+   * Automatically prunes records that will not make it to the final image
+   * based on gradual fade and adaptive sampling features.
+   * @author Ahmed Eldawy
+   */
+  public static class SkewedPartitionMap extends MapReduceBase implements
+  Mapper<Rectangle, Shape, IntWritable, Shape> {
+
+    /**The cells used to partition the space*/
+    private CellInfo[] cells;
+    private IntWritable cellNumber;
+    private Shape queryRange;
+    private Rectangle fileMbr;
+    private int imageWidth, imageHeight;
+    private double scale2, scale;
+    private boolean gradualFade;
+    private boolean adaptiveSample;
+    private float adaptiveSampleRatio;
+
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      try {
+        this.cells = SpatialSite.getCells(job);
+      } catch (IOException e) {
+        throw new RuntimeException("Cannot get cells for the job", e);
+      }
+      this.cellNumber = new IntWritable();
+      this.queryRange = OperationsParams.getShape(job, "rect");
+      this.gradualFade = job.getBoolean("fade", false);
+      this.adaptiveSample = job.getBoolean("sample", false);
+      this.fileMbr = ImageOutputFormat.getFileMBR(job);
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+      this.scale2 = (double)imageWidth * imageHeight /
+          (this.fileMbr.getWidth() * this.fileMbr.getHeight());
+      this.scale = Math.sqrt(this.scale2);
+      if (this.adaptiveSample) {
+        // Calculate the sample ratio
+        this.adaptiveSampleRatio = job.getFloat(AdaptiveSampleRatio, 0.01f);
+      }
+    }
+
+    public void map(Rectangle dummy, Shape shape,
+        OutputCollector<IntWritable, Shape> output, Reporter reporter)
+            throws IOException {
+      Rectangle shapeMBR = shape.getMBR();
+      if (shapeMBR == null)
+        return;
+      // Check if this shape can be skipped using the gradual fade option
+      if (gradualFade && !(shape instanceof Point)) {
+        double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+        if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+          // This shape can be safely skipped as it is too small to be plotted
+          return;
+        }
+      }
+      if (adaptiveSample && shape instanceof Point) {
+        if (Math.random() > adaptiveSampleRatio)
+          return;
+      }
+
+      // Skip shapes outside query range if query range is set
+      if (queryRange != null && !shapeMBR.isIntersected(queryRange))
+        return;
+      for (CellInfo cell : cells) {
+        if (cell.isIntersected(shapeMBR)) {
+          cellNumber.set(cell.cellId);
+          output.collect(cellNumber, shape);
+        }
+      }
+    }
+  }
+
+
+  /**
+   * Draws an image for each cell in cells configured in the job.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class SkewedPartitionReduce extends MapReduceBase
+  implements Reducer<IntWritable, Shape, Rectangle, ImageWritable> {
+
+    private CellInfo[] cells;
+    private Rectangle fileMbr;
+    private int imageWidth, imageHeight;
+    private ImageWritable sharedValue = new ImageWritable();
+    private double scale2, scale;
+    private int strokeColor;
+    private boolean fade;
+
+    @Override
+    public void configure(JobConf job) {
+      System.setProperty("java.awt.headless", "true");
+      super.configure(job);
+      try {
+        this.cells = SpatialSite.getCells(job);
+      } catch (IOException e) {
+        throw new RuntimeException("Cannot get cells for the job", e);
+      }
+      this.fileMbr = ImageOutputFormat.getFileMBR(job);
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+      this.strokeColor = job.getInt("color", 0);
+      this.fade = job.getBoolean("fade", false);
+
+      this.scale2 = (double)imageWidth * imageHeight /
+          (this.fileMbr.getWidth() * this.fileMbr.getHeight());
+      this.scale = Math.sqrt(scale2);
+
+      String valueRangeStr = job.get("valuerange");
+      if (valueRangeStr != null) {
+        String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+        NASAPoint.minValue = Integer.parseInt(parts[0]);
+        NASAPoint.maxValue = Integer.parseInt(parts[1]);
+      }
+
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+    }
+
+    @Override
+    public void reduce(IntWritable cellNumber, Iterator<Shape> values,
+        OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
+            throws IOException {
+      try {
+        CellInfo cellInfo = null;
+        int iCell = 0;
+        while (iCell < cells.length && cells[iCell].cellId != cellNumber.get())
+          iCell++;
+        if (iCell >= cells.length)
+          throw new RuntimeException("Cannot find cell: "+cellNumber);
+        cellInfo = cells[iCell];
+        // Initialize the image
+        int image_x1 = (int) Math.floor((cellInfo.x1 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        int image_y1 = (int) Math.floor((cellInfo.y1 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int image_x2 = (int) Math.ceil((cellInfo.x2 - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        int image_y2 = (int) Math.ceil((cellInfo.y2 - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        int tile_width = image_x2 - image_x1;
+        int tile_height = image_y2 - image_y1;
+
+        BufferedImage image = new BufferedImage(tile_width, tile_height,
+            BufferedImage.TYPE_INT_ARGB);
+
+        Graphics2D graphics;
+        try {
+          graphics = image.createGraphics();
+        } catch (Throwable e) {
+          graphics = new SimpleGraphics(image);
+        }
+        graphics.setBackground(new Color(0, 0, 0, 0));
+        graphics.clearRect(0, 0, tile_width, tile_height);
+        Color strokeClr = new Color(strokeColor);
+        graphics.setColor(strokeClr);
+        graphics.translate(-image_x1, -image_y1);
+
+        while (values.hasNext()) {
+          Shape s = values.next();
+          if (fade) {
+            Rectangle shapeMBR = s.getMBR();
+            double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+            if (areaInPixels > 1.0) {
+              graphics.setColor(strokeClr);
+            } else {
+              byte alpha = (byte) Math.round(areaInPixels * 255);
+              if (alpha == 0) {
+                // Skip this shape
+                continue;
+              } else {
+                graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+              }
+            }
+          }
+          s.draw(graphics, fileMbr, imageWidth, imageHeight, scale2);
+        }
+
+        graphics.dispose();
+
         sharedValue.setImage(image);
         output.collect(cellInfo, sharedValue);
       } catch (RuntimeException e) {
@@ -294,8 +483,8 @@ public class GeometricPlot {
    * @author Ahmed Eldawy
    *
    */
-  public static class AlreadyPartitionedPlotMap extends MapReduceBase 
-    implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
+  public static class AlreadyPartitionedMap extends MapReduceBase 
+  implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
 
     private Rectangle fileMBR;
     private int imageWidth, imageHeight;
@@ -324,16 +513,16 @@ public class GeometricPlot {
         NASAPoint.minValue = Integer.parseInt(parts[0]);
         NASAPoint.maxValue = Integer.parseInt(parts[1]);
       }
-      
+
       NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
       NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
       NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
     }
-    
+
     @Override
     public void map(Rectangle key, ArrayWritable value,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
-        throws IOException {
+            throws IOException {
       // Initialize the image
       int image_x1 = (int) Math.floor((key.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
       int image_y1 = (int) Math.floor((key.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
@@ -379,13 +568,13 @@ public class GeometricPlot {
     @Override
     public void commitJob(JobContext context) throws IOException {
       super.commitJob(context);
-      
+
       JobConf job = context.getJobConf();
       Path outFile = ImageOutputFormat.getOutputPath(job);
       int width = job.getInt("width", 1000);
       int height = job.getInt("height", 1000);
       boolean vflip = job.getBoolean("vflip", false);
-      
+
       // Combine all images in one file
       // Rename output file
       // Combine all output files into one file as we do with grid files
@@ -433,12 +622,12 @@ public class GeometricPlot {
       OutputStream outputImage = outFs.create(outFile);
       ImageIO.write(finalImage, "png", outputImage);
       outputImage.close();
-      
+
       outFs.delete(temp, true);
     }
   }
-  
-  
+
+
   /**
    * If the processed block is already partitioned (via global index), then
    * the output is the same as input (Identity map function). If the input
@@ -448,8 +637,8 @@ public class GeometricPlot {
    *
    */
   public static class FastPlotMap extends MapReduceBase 
-    implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
-  
+  implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
+
     /**Only objects inside this query range are drawn*/
     private Shape queryRange;
     private int imageWidth;
@@ -459,11 +648,11 @@ public class GeometricPlot {
     private double scale2;
     /**Used to output values*/
     private ImageWritable sharedValue = new ImageWritable();
-    
+
     /**Fade drawn shapes according to their area compared to a pixel area*/
     private boolean fade;
     private double scale;
-    
+
     @Override
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
@@ -474,11 +663,11 @@ public class GeometricPlot {
       this.imageHeight = job.getInt("height", 1000);
       this.strokeColor = job.getInt("color", 0);
       this.fade = job.getBoolean("fade", false);
-      
+
       this.scale2 = (double)imageWidth * imageHeight /
           (this.drawMbr.getWidth() * this.drawMbr.getHeight());
       this.scale = Math.sqrt(scale2);
-  
+
       String valueRangeStr = job.get("valuerange");
       if (valueRangeStr != null) {
         String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
@@ -486,14 +675,14 @@ public class GeometricPlot {
         NASAPoint.maxValue = Integer.parseInt(parts[1]);
       }
     }
-  
+
     @Override
     public void map(Rectangle cell, ArrayWritable value,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
-        throws IOException {
+            throws IOException {
       BufferedImage image = new BufferedImage(imageWidth, imageHeight,
           BufferedImage.TYPE_INT_ARGB);
-      
+
       Graphics2D graphics;
       try {
         graphics = image.createGraphics();
@@ -504,7 +693,7 @@ public class GeometricPlot {
       graphics.clearRect(0, 0, imageWidth, imageHeight);
       Color storkeClr = new Color(strokeColor);
       graphics.setColor(storkeClr);
-      
+
       for (Shape shape : (Shape[]) value.get()) {
         if (queryRange == null || queryRange.isIntersected(shape)) {
           if (fade) {
@@ -525,9 +714,9 @@ public class GeometricPlot {
           shape.draw(graphics, drawMbr, imageWidth, imageHeight, scale2);
         }
       }
-  
+
       graphics.dispose();
-      
+
       sharedValue.setImage(image);
       output.collect(drawMbr, sharedValue);
     }
@@ -540,18 +729,18 @@ public class GeometricPlot {
    *
    */
   public static class FastPlotReduce extends MapReduceBase
-      implements Reducer<Rectangle, ImageWritable, Rectangle, ImageWritable> {
-    
+  implements Reducer<Rectangle, ImageWritable, Rectangle, ImageWritable> {
+
     @Override
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
     }
-  
+
     @Override
     public void reduce(Rectangle rect, Iterator<ImageWritable> values,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
-        throws IOException {
+            throws IOException {
       if (values.hasNext()) {
         ImageWritable mergedImage = values.next();
         BufferedImage image = mergedImage.getImage();
@@ -567,9 +756,9 @@ public class GeometricPlot {
           graphics.drawImage(img, 0, 0, null);
         }
         graphics.dispose();
-        
+
         mergedImage.setImage(image);
-        
+
         output.collect(rect, mergedImage);
       }
     }
@@ -577,156 +766,19 @@ public class GeometricPlot {
 
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
-  
-  private static RunningJob plotMapReduce(Path inFile, Path outFile, OperationsParams params) throws IOException {
-      boolean background = params.is("background");
-      
-      int width = params.getInt("width", 1000);
-      int height = params.getInt("height", 1000);
-      
-      String hdfDataset = (String) params.get("dataset");
-      Shape shape = hdfDataset != null ? new NASARectangle() : params.getShape("shape", null);
-      Shape plotRange = params.getShape("rect", null);
-  
-      boolean keepAspectRatio = params.is("keep-ratio", true);
-      
-      String valueRangeStr = (String) params.get("valuerange");
-      MinMax valueRange;
-      if (valueRangeStr == null) {
-        valueRange = null;
-      } else {
-        String[] parts = valueRangeStr.split(",");
-        valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-      }
-      
-      JobConf job = new JobConf(params, GeometricPlot.class);
-      job.setJobName("Plot");
-      
-      Rectangle fileMBR;
-      // Collects some stats about the file to plot it correctly
-      if (hdfDataset != null) {
-        // Input is HDF
-        job.set(HDFRecordReader.DatasetName, hdfDataset);
-        if (job.get("shape") == null)
-          job.setClass("shape", NASARectangle.class, Shape.class);
-        // Determine the range of values by opening one of the HDF files
-        if (valueRange == null)
-          valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
-        job.set("valuerange", valueRange.minValue+".."+valueRange.maxValue);
-        fileMBR = plotRange != null?
-            plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-  //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-  //          GeoProjector.class);
-      } else {
-        // Run MBR operation in synchronous mode
-        OperationsParams mbrArgs = new OperationsParams(params);
-        mbrArgs.setBoolean("background", false);
-        fileMBR = plotRange != null ? plotRange.getMBR() :
-          FileMBR.fileMBR(inFile, mbrArgs);
-      }
-      LOG.info("File MBR: "+fileMBR);
-      
-      if (job.getBoolean("sample", false)) {
-        // Need to set the sample ratio
-        int imageWidth = job.getInt("width", 1000);
-        int imageHeight = job.getInt("height", 1000);
-        long recordCount = FileMBR.fileMBR(inFile, params).recordCount;
-        float sampleRatio = params.getFloat(AdaptiveSampleFactor, 1.0f) *
-            imageWidth * imageHeight / recordCount;
-        job.setFloat(AdaptiveSampleRatio, sampleRatio);
-      }
-      
-      if (keepAspectRatio) {
-        // Adjust width and height to maintain aspect ratio
-        if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
-          // Fix width and change height
-          height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
-          // Make divisible by two for compatibility with ffmpeg
-          height &= 0xfffffffe;
-          job.setInt("height", height);
-        } else {
-          width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
-          job.setInt("width", width);
-        }
-      }
-      
-      String partition = job.get("partition", "data").toLowerCase();
-      ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-      job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-      
-      FileSystem inFs = inFile.getFileSystem(params);
-      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, inFile);
-      
-      if (partition.equals("space")) {
-        if (gindex != null && gindex.isReplicated()) {
-          LOG.info("Partitioned plot with an already partitioned file");
-          job.setMapperClass(AlreadyPartitionedPlotMap.class);
-          job.setNumMapTasks(0); // No reducer for this job
-          job.setInputFormat(ShapeArrayInputFormat.class);
-          job.setMapOutputKeyClass(Rectangle.class);
-          job.setMapOutputValueClass(ImageWritable.class);
-        } else {
-          LOG.info("Partition a file then plot");
-          job.setMapperClass(GridPartitionPlotMap.class);
-          job.setReducerClass(GridPartitionPlotReduce.class);
-          job.setMapOutputKeyClass(IntWritable.class);
-          job.setMapOutputValueClass(shape.getClass());
-          
-          GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
-              fileMBR.y2);
-          partitionGrid.calculateCellDimensions(
-              (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-          OperationsParams.setShape(job, PartitionGrid, partitionGrid);
-          job.setInputFormat(ShapeInputFormat.class);
-        }
-      } else if (partition.equals("data")) {
-        LOG.info("Plot using data partitioning");
-        job.setMapperClass(FastPlotMap.class);
-        job.setCombinerClass(FastPlotReduce.class);
-        job.setReducerClass(FastPlotReduce.class);
-        job.setMapOutputKeyClass(Rectangle.class);
-        job.setMapOutputValueClass(ImageWritable.class);
-        job.setInputFormat(ShapeArrayInputFormat.class);
-      } else {
-        throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
-      }
-      
-      LOG.info("Creating an image of size "+width+"x"+height);
-      ImageOutputFormat.setFileMBR(job, fileMBR);
-      if (plotRange != null) {
-        job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-      }
-      
-      FileInputFormat.addInputPath(job, inFile);
-      // Set output committer which will stitch images together after all reducers
-      // finish
-      job.setOutputCommitter(PlotOutputCommitter.class);
-      
-      job.setOutputFormat(ImageOutputFormat.class);
-      TextOutputFormat.setOutputPath(job, outFile);
-      
-      if (background) {
-        JobClient jc = new JobClient(job);
-        return lastSubmittedJob = jc.submitJob(job);
-      } else {
-        return lastSubmittedJob = JobClient.runJob(job);
-      }
-    }
 
-  private static <S extends Shape> void plotLocal(Path inFile, Path outFile,
-      OperationsParams params) throws IOException {
+  private static RunningJob plotMapReduce(Path inFile, Path outFile, OperationsParams params) throws IOException {
+    boolean background = params.is("background");
+
     int width = params.getInt("width", 1000);
     int height = params.getInt("height", 1000);
-    
-    Color color = params.getColor("color", Color.BLACK);
 
     String hdfDataset = (String) params.get("dataset");
-    Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) params.getShape("shape", null);
+    Shape shape = hdfDataset != null ? new NASARectangle() : params.getShape("shape", null);
     Shape plotRange = params.getShape("rect", null);
 
     boolean keepAspectRatio = params.is("keep-ratio", true);
-    
+
     String valueRangeStr = (String) params.get("valuerange");
     MinMax valueRange;
     if (valueRangeStr == null) {
@@ -735,7 +787,156 @@ public class GeometricPlot {
       String[] parts = valueRangeStr.split(",");
       valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
     }
-    
+
+    JobConf job = new JobConf(params, GeometricPlot.class);
+    job.setJobName("Plot");
+
+    Rectangle fileMBR;
+    // Collects some stats about the file to plot it correctly
+    if (hdfDataset != null) {
+      // Input is HDF
+      job.set(HDFRecordReader.DatasetName, hdfDataset);
+      if (job.get("shape") == null)
+        job.setClass("shape", NASARectangle.class, Shape.class);
+      // Determine the range of values by opening one of the HDF files
+      if (valueRange == null)
+        valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
+      job.set("valuerange", valueRange.minValue+".."+valueRange.maxValue);
+      fileMBR = plotRange != null?
+          plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
+          //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+          //          GeoProjector.class);
+    } else {
+      // Run MBR operation in synchronous mode
+      OperationsParams mbrArgs = new OperationsParams(params);
+      mbrArgs.setBoolean("background", false);
+      fileMBR = plotRange != null ? plotRange.getMBR() :
+        FileMBR.fileMBR(inFile, mbrArgs);
+    }
+    LOG.info("File MBR: "+fileMBR);
+
+    if (job.getBoolean("sample", false)) {
+      // Need to set the sample ratio
+      int imageWidth = job.getInt("width", 1000);
+      int imageHeight = job.getInt("height", 1000);
+      long recordCount = FileMBR.fileMBR(inFile, params).recordCount;
+      float sampleRatio = params.getFloat(AdaptiveSampleFactor, 1.0f) *
+          imageWidth * imageHeight / recordCount;
+      job.setFloat(AdaptiveSampleRatio, sampleRatio);
+    }
+
+    if (keepAspectRatio) {
+      // Adjust width and height to maintain aspect ratio
+      if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
+        // Fix width and change height
+        height = (int) (fileMBR.getHeight() * width / fileMBR.getWidth());
+        // Make divisible by two for compatibility with ffmpeg
+        height &= 0xfffffffe;
+        job.setInt("height", height);
+      } else {
+        width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
+        job.setInt("width", width);
+      }
+    }
+
+    String partition = job.get("partition", "data").toLowerCase();
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
+
+    FileSystem inFs = inFile.getFileSystem(params);
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, inFile);
+
+    if (partition.equals("space") || partition.equals("grid")) {
+      if (gindex != null && gindex.isReplicated()) {
+        LOG.info("Partitioned plot with an already partitioned file");
+        job.setMapperClass(AlreadyPartitionedMap.class);
+        job.setNumMapTasks(0); // No reducer for this job
+        job.setInputFormat(ShapeArrayInputFormat.class);
+        job.setMapOutputKeyClass(Rectangle.class);
+        job.setMapOutputValueClass(ImageWritable.class);
+      } else if (partition.equals("grid")) {
+        LOG.info("Grid partition a file then plot");
+        job.setMapperClass(GridPartitionMap.class);
+        job.setReducerClass(GridPartitionReduce.class);
+        job.setMapOutputKeyClass(IntWritable.class);
+        job.setMapOutputValueClass(shape.getClass());
+
+        GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+            fileMBR.y2);
+        partitionGrid.calculateCellDimensions(
+            (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+        OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+        job.setInputFormat(ShapeInputFormat.class);
+      } else if (partition.equals("space")) {
+        // Use Skewed partitioning
+        LOG.info("Use skewed partitioning then plot");
+        job.setMapperClass(SkewedPartitionMap.class);
+        job.setReducerClass(SkewedPartitionReduce.class);
+        job.setMapOutputKeyClass(IntWritable.class);
+        job.setMapOutputValueClass(shape.getClass());
+        
+        // Pack in rectangles using an RTree
+        CellInfo[] cellInfos = Repartition.packInRectangles(inFile, outFile, params, fileMBR);
+        SpatialSite.setCells(job, cellInfos);
+        job.setInputFormat(ShapeInputFormat.class);
+      }
+    } else if (partition.equals("data")) {
+      LOG.info("Plot using data partitioning");
+      job.setMapperClass(FastPlotMap.class);
+      job.setCombinerClass(FastPlotReduce.class);
+      job.setReducerClass(FastPlotReduce.class);
+      job.setMapOutputKeyClass(Rectangle.class);
+      job.setMapOutputValueClass(ImageWritable.class);
+      job.setInputFormat(ShapeArrayInputFormat.class);
+    } else {
+      throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
+    }
+
+    LOG.info("Creating an image of size "+width+"x"+height);
+    ImageOutputFormat.setFileMBR(job, fileMBR);
+    if (plotRange != null) {
+      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+    }
+
+    FileInputFormat.addInputPath(job, inFile);
+    // Set output committer which will stitch images together after all reducers
+    // finish
+    job.setOutputCommitter(PlotOutputCommitter.class);
+
+    job.setOutputFormat(ImageOutputFormat.class);
+    TextOutputFormat.setOutputPath(job, outFile);
+
+    if (background) {
+      JobClient jc = new JobClient(job);
+      return lastSubmittedJob = jc.submitJob(job);
+    } else {
+      return lastSubmittedJob = JobClient.runJob(job);
+    }
+  }
+
+  private static <S extends Shape> void plotLocal(Path inFile, Path outFile,
+      OperationsParams params) throws IOException {
+    int width = params.getInt("width", 1000);
+    int height = params.getInt("height", 1000);
+
+    Color color = params.getColor("color", Color.BLACK);
+
+    String hdfDataset = (String) params.get("dataset");
+    Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) params.getShape("shape", null);
+    Shape plotRange = params.getShape("rect", null);
+
+    boolean keepAspectRatio = params.is("keep-ratio", true);
+
+    String valueRangeStr = (String) params.get("valuerange");
+    MinMax valueRange;
+    if (valueRangeStr == null) {
+      valueRange = null;
+    } else {
+      String[] parts = valueRangeStr.split(",");
+      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+    }
+
     InputSplit[] splits;
     FileSystem inFs = inFile.getFileSystem(params);
     FileStatus inFStatus = inFs.getFileStatus(inFile);
@@ -773,7 +974,7 @@ public class GeometricPlot {
         width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
       }
     }
-    
+
     if (hdfDataset != null) {
       // Collects some stats about the HDF file
       if (valueRange == null)
@@ -784,7 +985,7 @@ public class GeometricPlot {
       NASAPoint.setColor2(params.getColor("color2", Color.RED));
       NASAPoint.gradientType = params.getGradientType("gradient", NASAPoint.GradientType.GT_HUE);
     }
-    
+
     double scale2 = (double) width * height
         / (fileMbr.getWidth() * fileMbr.getHeight());
 
@@ -803,7 +1004,7 @@ public class GeometricPlot {
         RecordReader<NASADataset, NASAShape> reader = new HDFRecordReader(params,
             (FileSplit)split, hdfDataset, true);
         NASADataset dataset = reader.createKey();
-        
+
         while (reader.next(dataset, (NASAShape)shape)) {
           if (plotRange == null || shape.isIntersected(shape)) {
             shape.draw(graphics, fileMbr, width, height, 0.0);
@@ -853,12 +1054,12 @@ public class GeometricPlot {
       }
       InputSplit[] splits = inputFormat.getSplits(job, 1);
       boolean autoLocal = splits.length <= 3;
-      
+
       isLocal = params.is("local", autoLocal);
     } else {
       isLocal = params.is("local");
     }
-    
+
     if (isLocal) {
       plotLocal(inFile, outFile, params);
       return null;
@@ -881,35 +1082,35 @@ public class GeometricPlot {
     Graphics2D g = image.createGraphics();
     g.setBackground(Color.BLACK);
     g.clearRect(0, 0, width, height);
-    
+
     // fix this part to work according to color1, color2 and gradient type
     for (int y = 0; y < height; y++) {
       Color color = NASARectangle.calculateColor(y);
       g.setColor(color);
       g.drawRect(width * 3 / 4, y, width / 4, 1);
     }
-    
+
     int fontSize = 24;
     g.setFont(new Font("Arial", Font.BOLD, fontSize));
     int step = (valueRange.maxValue - valueRange.minValue) * fontSize * 10 / height;
     step = (int) Math.pow(10, Math.round(Math.log10(step)));
     int min_value = valueRange.minValue / step * step;
     int max_value = valueRange.maxValue / step * step;
-  
+
     for (int value = min_value; value <= max_value; value += step) {
       int y = fontSize + (height - fontSize) - value * (height - fontSize) / (valueRange.maxValue - valueRange.minValue);
       g.setColor(Color.WHITE);
       g.drawString(String.valueOf(value), 5, y);
     }
-    
+
     g.dispose();
-    
+
     FileSystem fs = output.getFileSystem(new Configuration());
     FSDataOutputStream outStream = fs.create(output, true);
     ImageIO.write(image, "png", outStream);
     outStream.close();
   }
-  
+
   /**
    * Combines images of different datasets into one image that is displayed
    * to users.
@@ -941,7 +1142,7 @@ public class GeometricPlot {
     }
     result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
 
-      
+
     for (Path file : files) {
       FileSystem fs = file.getFileSystem(conf);
       if (fs.getFileStatus(file).isDir()) {
@@ -964,7 +1165,7 @@ public class GeometricPlot {
         graphics.drawImage(image, (int) mbr.x1, (int) mbr.y1,
             (int) mbr.getWidth(), (int) mbr.getHeight(), null);
         graphics.dispose();
-        
+
         if (includeBoundaries) {
           // Plot also the image of the boundaries
           // Retrieve the image of the dataset boundaries
@@ -982,11 +1183,11 @@ public class GeometricPlot {
         }
       }
     }
-    
+
     return result;
   }
-  
-  
+
+
   private static void printUsage() {
     System.out.println("Plots all shapes to an image");
     System.out.println("Parameters: (* marks required parameters)");
@@ -1003,7 +1204,7 @@ public class GeometricPlot {
     System.out.println("-sample: Use the daptive sample option");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
-  
+
   /**
    * @param args
    * @throws IOException 
@@ -1015,7 +1216,7 @@ public class GeometricPlot {
       printUsage();
       System.exit(1);
     }
-    
+
     Path inFile = params.getInputPath();
     Path outFile = params.getOutputPath();
 

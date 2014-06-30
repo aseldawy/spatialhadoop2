@@ -491,7 +491,7 @@ public class HeatMapPlot {
   public static class SkewedPartitionMap extends MapReduceBase 
     implements Mapper<Rectangle, Shape, IntWritable, Point> {
     
-    /**The grid used to partition the space*/
+    /**The cells used to partition the space*/
     private CellInfo[] cells;
     /**Shared output key*/
     private IntWritable cellNumber = new IntWritable();
@@ -554,69 +554,69 @@ public class HeatMapPlot {
   public static class SkewedPartitionReduce extends MapReduceBase
   implements Reducer<IntWritable, Point, Rectangle, ImageWritable> {
     private CellInfo[] cells;
-  private int imageWidth, imageHeight;
-  private int radius;
-  private boolean skipZeros;
-  private MinMax valueRange;
-  private Rectangle fileMBR;
-  
-  @Override
-  public void configure(JobConf job) {
-    super.configure(job);
-    try {
-      this.cells = SpatialSite.getCells(job);
-    } catch (IOException e) {
-      throw new RuntimeException("Cannot get cells for the job", e);
-    }
-    this.imageWidth = job.getInt("width", 1000);
-    this.imageHeight = job.getInt("height", 1000);
-    this.radius = job.getInt("radius", 5);
-    NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
-    NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
-    NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
-    this.skipZeros = job.getBoolean("skipzeros", false);
-    String valueRangeStr = job.get("valuerange");
-    if (valueRangeStr != null) {
-      String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
-      this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-    }
-    this.fileMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-        -Double.MAX_VALUE, -Double.MAX_VALUE);
-    for (CellInfo cell : cells) {
-      fileMBR.expand(cell);
+    private int imageWidth, imageHeight;
+    private int radius;
+    private boolean skipZeros;
+    private MinMax valueRange;
+    private Rectangle fileMBR;
+
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      try {
+        this.cells = SpatialSite.getCells(job);
+      } catch (IOException e) {
+        throw new RuntimeException("Cannot get cells for the job", e);
+      }
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+      this.radius = job.getInt("radius", 5);
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+      this.skipZeros = job.getBoolean("skipzeros", false);
+      String valueRangeStr = job.get("valuerange");
+      if (valueRangeStr != null) {
+        String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
+        this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+      }
+      this.fileMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
+      for (CellInfo cell : cells) {
+        fileMBR.expand(cell);
+      }
+
     }
 
-  }
+    @Override
+    public void reduce(IntWritable cellNumber, Iterator<Point> points,
+        OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
+            throws IOException {
+      CellInfo cellInfo = null;
+      int iCell = 0;
+      while (iCell < cells.length && cells[iCell].cellId != cellNumber.get())
+        iCell++;
+      if (iCell >= cells.length)
+        throw new RuntimeException("Cannot find cell: "+cellNumber);
+      cellInfo = cells[iCell];
 
-  @Override
-  public void reduce(IntWritable cellNumber, Iterator<Point> points,
-      OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
-      throws IOException {
-    CellInfo cellInfo = null;
-    int iCell = 0;
-    while (iCell < cells.length && cells[iCell].cellId != cellNumber.get())
-      iCell++;
-    if (iCell >= cells.length)
-      throw new RuntimeException("Cannot find cell: "+cellNumber);
-    cellInfo = cells[iCell];
-    
-    // Initialize the image
-    int image_x1 = (int) Math.floor((cellInfo.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int image_y1 = (int) Math.floor((cellInfo.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
-    int image_x2 = (int) Math.ceil((cellInfo.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int image_y2 = (int) Math.ceil((cellInfo.y2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
-    int tile_width = image_x2 - image_x1;
-    int tile_height = image_y2 - image_y1;
-    FrequencyMap frequencyMap = new FrequencyMap(tile_width, tile_height);
-    while (points.hasNext()) {
-      Point p = points.next();
-      int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
-      int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
-      frequencyMap.addPoint(centerx, centery, radius);
+      // Initialize the image
+      int image_x1 = (int) Math.floor((cellInfo.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+      int image_y1 = (int) Math.floor((cellInfo.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+      int image_x2 = (int) Math.ceil((cellInfo.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+      int image_y2 = (int) Math.ceil((cellInfo.y2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+      int tile_width = image_x2 - image_x1;
+      int tile_height = image_y2 - image_y1;
+      FrequencyMap frequencyMap = new FrequencyMap(tile_width, tile_height);
+      while (points.hasNext()) {
+        Point p = points.next();
+        int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
+        int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
+        frequencyMap.addPoint(centerx, centery, radius);
+      }
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
+      output.collect(cellInfo, new ImageWritable(image));
     }
-    BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
-    output.collect(cellInfo, new ImageWritable(image));
-  }
 }
 
   

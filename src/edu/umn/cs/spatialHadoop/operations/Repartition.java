@@ -468,15 +468,22 @@ public class Repartition {
     
     JobClient.runJob(job);
   }
-
+  
   public static <S extends Shape> CellInfo[] packInRectangles(Path inFile,
       Path outFile, OperationsParams params)
       throws IOException {
-    return packInRectangles(new Path[] { inFile }, outFile, params);
+    return packInRectangles(new Path[] { inFile }, outFile, params, null);
   }
-  
+
+
+  public static <S extends Shape> CellInfo[] packInRectangles(Path inFile,
+      Path outFile, OperationsParams params, Rectangle fileMBR)
+      throws IOException {
+    return packInRectangles(new Path[] { inFile }, outFile, params, fileMBR);
+  }
+
   public static CellInfo[] packInRectangles(Path[] files,
-      Path outFile, OperationsParams params)
+      Path outFile, OperationsParams params, Rectangle fileMBR)
       throws IOException {
     final Vector<Point> sample = new Vector<Point>();
     
@@ -503,16 +510,23 @@ public class Repartition {
 
     // Compute an approximate MBR to determine the desired number of rows
     // and columns
-    Rectangle approxMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
-        -Double.MAX_VALUE, -Double.MAX_VALUE);
-    for (Point pt : sample) {
-      approxMBR.expand(pt);
+    Rectangle approxMBR;
+    if (fileMBR == null) {
+      approxMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
+      for (Point pt : sample)
+        approxMBR.expand(pt);
+    } else {
+      approxMBR = fileMBR;
     }
+    GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     FileSystem outFs = outFile.getFileSystem(params);
     long blocksize = outFs.getDefaultBlockSize(outFile);
-    GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
-    gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
+    if (fileMBR == null)
+      gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
+    else
+      gridInfo.set(fileMBR);
     
     Rectangle[] rectangles = RTree.packInRectangles(gridInfo,
             sample.toArray(new Point[sample.size()]));
