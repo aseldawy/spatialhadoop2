@@ -68,7 +68,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
-import edu.umn.cs.spatialHadoop.operations.PlotPartitioned.PlotOutputCommitter;
+import edu.umn.cs.spatialHadoop.operations.GeometricPlot.PlotOutputCommitter;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
@@ -76,9 +76,9 @@ import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
  * @author Ahmed Eldawy
  *
  */
-public class PlotHeatMap {
+public class HeatMapPlot {
   /**Logger*/
-  private static final Log LOG = LogFactory.getLog(PlotHeatMap.class);
+  private static final Log LOG = LogFactory.getLog(HeatMapPlot.class);
   
   /**
    * Stores the frequencies in a two-dimensional matrix and produce an image out of it.
@@ -634,7 +634,7 @@ public class PlotHeatMap {
 
     boolean keepAspectRatio = params.is("keep-ratio", true);
 
-    JobConf job = new JobConf(params, PlotHeatMap.class);
+    JobConf job = new JobConf(params, HeatMapPlot.class);
     job.setJobName("Plot HeatMap");
     
     Rectangle fileMBR;

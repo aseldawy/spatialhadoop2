@@ -26,7 +26,7 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 
-import edu.umn.cs.spatialHadoop.operations.PlotPyramid.TileIndex;
+import edu.umn.cs.spatialHadoop.operations.PyramidPlot.TileIndex;
 
 /**
  * An output format that is used to plot ImageWritable to PNG image.

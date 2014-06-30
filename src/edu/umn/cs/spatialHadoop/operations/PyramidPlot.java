@@ -74,9 +74,9 @@ import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
  * @author Ahmed Eldawy
  *
  */
-public class PlotPyramid {
+public class PyramidPlot {
   /**Logger*/
-  private static final Log LOG = LogFactory.getLog(PlotPyramid.class);
+  private static final Log LOG = LogFactory.getLog(PyramidPlot.class);
   
   /**Minimal Bounding Rectangle of input file*/
   private static final String InputMBR = "PlotPyramid.InputMBR";
@@ -177,7 +177,7 @@ public class PlotPyramid {
       this.tileHeight = job.getInt("tileheight", 256);
       this.adaptiveSampling = job.getBoolean("sample", false);
       this.levelProb = new float[this.numLevels];
-      this.levelProb[0] = job.getFloat(PlotPartitioned.AdaptiveSampleRatio, 0.1f);
+      this.levelProb[0] = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
       for (int level = 1; level < numLevels; level++) {
         this.levelProb[level] = this.levelProb[level - 1] * 4;
       }
@@ -382,7 +382,7 @@ public class PlotPyramid {
     boolean keepAspectRatio = params.is("keep-ratio", true);
     boolean background = params.is("background");
     
-    JobConf job = new JobConf(params, PlotPyramid.class);
+    JobConf job = new JobConf(params, PyramidPlot.class);
     job.setJobName("PlotPyramid");
     
     job.setMapperClass(PlotMap.class);
@@ -398,9 +398,9 @@ public class PlotPyramid {
       int imageWidthRoot = job.getInt("tilewidth", 256);
       int imageHeightRoot = job.getInt("tileheight", 256);
       long recordCount = FileMBR.fileMBR(inFile, params).recordCount;
-      float sampleRatio = params.getFloat(PlotPartitioned.AdaptiveSampleFactor, 1.0f) *
+      float sampleRatio = params.getFloat(GeometricPlot.AdaptiveSampleFactor, 1.0f) *
           imageWidthRoot * imageHeightRoot / recordCount;
-      job.setFloat(PlotPartitioned.AdaptiveSampleRatio, sampleRatio);
+      job.setFloat(GeometricPlot.AdaptiveSampleRatio, sampleRatio);
     }
 
     job.setReducerClass(PlotReduce.class);

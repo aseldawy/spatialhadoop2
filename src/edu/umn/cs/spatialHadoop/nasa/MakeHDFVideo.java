@@ -41,7 +41,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
-import edu.umn.cs.spatialHadoop.operations.PlotPartitioned;
+import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
 
 /**
  * Create a video from a range of HDF files. It works in the following steps:
@@ -175,7 +175,7 @@ public class MakeHDFVideo {
       MinMax scaleRange = new MinMax();
       scaleRange.minValue = Integer.parseInt(parts[0]);
       scaleRange.maxValue = Integer.parseInt(parts[1]);
-      PlotPartitioned.drawScale(new Path(output, "scale.png"), scaleRange, 64, imageHeight);
+      GeometricPlot.drawScale(new Path(output, "scale.png"), scaleRange, 64, imageHeight);
     }
     
     InputStream logoInputStream = MakeHDFVideo.class.getResourceAsStream("/gistic_logo.png");
@@ -236,7 +236,7 @@ public class MakeHDFVideo {
       vargs.add("-no-keep-ratio");
       vargs.add(new Path(output, "overlay.png").toString());
       vargs.add("shape:"+OSMPolygon.class.getName());
-      PlotPartitioned.main(vargs.toArray(new String[vargs.size()]));
+      GeometricPlot.main(vargs.toArray(new String[vargs.size()]));
     }
 
     String video_command;

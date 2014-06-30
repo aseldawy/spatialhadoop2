@@ -96,9 +96,9 @@ import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
  * @author Ahmed Eldawy
  *
  */
-public class PlotPartitioned {
+public class GeometricPlot {
   /**Logger*/
-  private static final Log LOG = LogFactory.getLog(PlotPartitioned.class);
+  private static final Log LOG = LogFactory.getLog(GeometricPlot.class);
   
   /**The grid used to partition data across reducers*/
   private static final String PartitionGrid = "plot.partition_grid";
@@ -599,7 +599,7 @@ public class PlotPartitioned {
         valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
       
-      JobConf job = new JobConf(params, PlotPartitioned.class);
+      JobConf job = new JobConf(params, GeometricPlot.class);
       job.setJobName("Plot");
       
       Rectangle fileMBR;

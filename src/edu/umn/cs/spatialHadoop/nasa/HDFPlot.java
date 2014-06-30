@@ -40,8 +40,8 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.operations.Aggregate;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
-import edu.umn.cs.spatialHadoop.operations.PlotPartitioned;
-import edu.umn.cs.spatialHadoop.operations.PlotPyramid;
+import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
+import edu.umn.cs.spatialHadoop.operations.PyramidPlot;
 
 /**
  * Plots all datasets from NASA satisfying the following criteria:
@@ -264,13 +264,13 @@ public class HDFPlot {
           plotArgs[vargs.size() + 2] =
             "valuerange:"+valueRange.minValue+","+valueRange.maxValue;
         if (pyramid) {
-          PlotPyramid.main(plotArgs);
+          PyramidPlot.main(plotArgs);
           if (background)
-            jobs.add(PlotPartitioned.lastSubmittedJob);
+            jobs.add(GeometricPlot.lastSubmittedJob);
         } else {
-          PlotPartitioned.main(plotArgs);
+          GeometricPlot.main(plotArgs);
           if (background)
-            jobs.add(PlotPartitioned.lastSubmittedJob);
+            jobs.add(GeometricPlot.lastSubmittedJob);
         }
       }
     }
