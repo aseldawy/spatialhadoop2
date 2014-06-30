@@ -648,32 +648,44 @@ public class HeatMapPlot {
     String partition = job.get("partition", "data").toLowerCase();
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     if (partition.equals("data")) {
+      LOG.info("Plot using data partitioning");
       job.setMapperClass(DataPartitionMap.class);
       // A combiner is not useful here because each mapper outputs one record
       job.setReducerClass(DataPartitionReduce.class);
       job.setMapOutputKeyClass(NullWritable.class);
       job.setMapOutputValueClass(FrequencyMap.class);
       job.setInputFormat(ShapeArrayInputFormat.class);
-    } else if (partition.equals("space")) {
+    } else if (partition.equals("space") || partition.equals("grid")) {
       FileSystem inFs = inFile.getFileSystem(job);
       GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inFile);
       job.setInputFormat(ShapeInputFormat.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(Point.class);
       if (gIndex == null || gIndex.size() == 1) {
-        // Input file is not indexed. Use grid partitioning
+        // Input file is not indexed. Use grid or skewed partitioning
         // A special case of a global index of one cell indicates
         // a non-indexed file with a cached MBR
-        job.setMapperClass(GridPartitionMap.class);
-        job.setReducerClass(GridPartitionReduce.class);
-        job.setMapOutputValueClass(Point.class);
-        
-        GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
-            fileMBR.y2);
-        partitionGrid.calculateCellDimensions(
-            (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-        OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+        if (partition.equals("grid")) {
+          LOG.info("Grid partition a file then plot");
+          job.setMapperClass(GridPartitionMap.class);
+          job.setReducerClass(GridPartitionReduce.class);
+          
+          GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+              fileMBR.y2);
+          partitionGrid.calculateCellDimensions(
+              (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+          OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+        } else {
+          LOG.info("Use skewed partitioning then plot");
+          job.setMapperClass(SkewedPartitionMap.class);
+          job.setReducerClass(SkewedPartitionReduce.class);
+          // Pack in rectangles using an RTree
+          CellInfo[] cellInfos = Repartition.packInRectangles(inFile, outFile, params, fileMBR);
+          SpatialSite.setCells(job, cellInfos);
+          job.setInputFormat(ShapeInputFormat.class);
+        }
       } else {
+        LOG.info("Partitioned plot with an already partitioned file");
         // Input file is already partitioned. Use the same partitioning
         job.setMapperClass(SkewedPartitionMap.class);
         job.setReducerClass(SkewedPartitionReduce.class);
