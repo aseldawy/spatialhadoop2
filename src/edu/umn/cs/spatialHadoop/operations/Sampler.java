@@ -13,7 +13,6 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -29,10 +28,6 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.compress.CodecPool;
-import org.apache.hadoop.io.compress.CompressionCodec;
-import org.apache.hadoop.io.compress.CompressionCodecFactory;
-import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
@@ -47,7 +42,6 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -235,53 +229,25 @@ public class Sampler {
     // Note that any number greater than or equal to one will cause all
     // elements to be returned
     long sampleSize = job.getLong("size", 0);
-    final double selectRatio = sampleSize <= 0? 2.0 : (double)sampleSize / resultSize;
-    long seed = job.getLong("seed", System.currentTimeMillis());
-    T outObj = (T) OperationsParams.getTextSerializable(job, "outshape", new Text2());
+    float selectRatio = sampleSize <= 0? 2.0f : (float)sampleSize / resultSize;
 
     // Read job result
     int result_size = 0;
     if (output != null) {
+      OperationsParams params2 = new OperationsParams(params);
+      params2.setFloat("ratio", selectRatio);
+      params2.setClass("shape", Text2.class, TextSerializable.class);
+      params2.setClass("outshape", Text2.class, TextSerializable.class);
       if (selectRatio > 0.1) {
-        // Returning a (big) subset of the records extracted by the MR job
-        Random rand = new Random(seed);
-        if (selectRatio >= 1.0)
-          LOG.info("Returning all "+resultCount+" records");
-        else
-          LOG.info("Returning "+selectRatio+" of "+resultCount+" records");
-        Text line = new Text();
-        FileStatus[] results = outFs.listStatus(outputPath);
-
-        for (FileStatus fileStatus : results) {
-          if (fileStatus.getLen() > 0 && fileStatus.getPath().getName().startsWith("part-")) {
-            InputStream in = outFs.open(fileStatus.getPath());
-            // See if we need a decompression coded
-            CompressionCodec codec = new CompressionCodecFactory(job).getCodec(fileStatus.getPath());
-            Decompressor decompressor = null;
-            if (codec != null) {
-              decompressor = CodecPool.getDecompressor(codec);
-              in = codec.createInputStream(in, decompressor);
-            }
-
-            LineReader lineReader = new LineReader(in);
-            try {
-              while (lineReader.readLine(line) > 0) {
-                if (rand.nextDouble() < selectRatio) {
-                  if (output != null) {
-                    outObj.fromText(line);
-                    output.collect(outObj);
-                  }
-                  result_size++;
-                }
-              }
-            } catch (RuntimeException e) {
-              e.printStackTrace();
-            }
-            lineReader.close();
-            if (decompressor != null)
-              CodecPool.returnDecompressor(decompressor);
-          }
-        }
+        LOG.info("Local return "+selectRatio+" of "+resultCount+" records");
+        // Keep a copy of sizeOfLastProcessedFile because we don't want it changed
+        long tempSize = sizeOfLastProcessedFile;
+        // Return a (small) ratio of the result using a MapReduce job
+        // In this case, the files are very big and we need just a small ratio
+        // of them. It is better to do it in parallel
+        result_size = sampleLocalWithRatio(new Path[] { outputPath},
+            output, params2);
+        sizeOfLastProcessedFile = tempSize;
       } else {
         LOG.info("MapReduce return "+selectRatio+" of "+resultCount+" records");
         // Keep a copy of sizeOfLastProcessedFile because we don't want it changed
@@ -290,12 +256,11 @@ public class Sampler {
         // In this case, the files are very big and we need just a small ratio
         // of them. It is better to do it in parallel
         result_size = sampleMapReduceWithRatio(new Path[] { outputPath},
-            output, params);
+            output, params2);
         sizeOfLastProcessedFile = tempSize;
       }
     }
 
-    
     outFs.delete(outputPath, true);
     
     return result_size;
@@ -544,7 +509,10 @@ public class Sampler {
       ResultCollector<? extends TextSerializable> output, OperationsParams params)
       throws IOException {
     if (params.get("ratio") != null) {
-      sampleMapReduceWithRatio(inputFiles, output, params);
+      if (params.getBoolean("local", false))
+        sampleLocalWithRatio(inputFiles, output, params);
+      else
+        sampleMapReduceWithRatio(inputFiles, output, params);
     } else if (params.get("size") != null) {
       sampleLocalWithSize(inputFiles, output, params);
     } else if (params.get("count") != null){

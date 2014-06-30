@@ -352,6 +352,8 @@ public class OperationsParams extends Configuration {
       shape = new OGCJTSShape();
     } else if (shapeTypeI.startsWith("nasa")) {
       shape = new NASAPoint();
+    } else if (shapeTypeI.startsWith("text")) {
+      shape = new Text2();
     } else {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
@@ -514,6 +516,7 @@ public class OperationsParams extends Configuration {
       sampleParams.setInt("count", sampleCount);
       sampleParams.setClass("shape", Text2.class, TextSerializable.class);
       sampleParams.setClass("outshape", Text2.class, TextSerializable.class);
+      sampleParams.setBoolean("local", true);
       Sampler.sample(this.getInputPaths(), new ResultCollector<Text2>() {
         @Override
         public void collect(Text2 line) {
