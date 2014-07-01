@@ -58,6 +58,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
@@ -178,8 +179,10 @@ public class PyramidPlot {
     /**Used as a key for output*/
     private TileIndex key;
     /**The probability of replicating a point to level i*/
-    private float[] levelProb;
+    private double[] levelProb;
+    private double[] scale;
     private boolean adaptiveSampling;
+    private boolean gradualFade;
     
     @Override
     public void configure(JobConf job) {
@@ -191,10 +194,18 @@ public class PyramidPlot {
           (int) Math.round(Math.pow(2, numLevels - 1));
       this.key = new TileIndex();
       this.adaptiveSampling = job.getBoolean("sample", false);
-      this.levelProb = new float[this.numLevels];
+      this.levelProb = new double[this.numLevels];
+      this.scale = new double[numLevels];
+      int tileWidth = job.getInt("tilewidth", 256);
+      int tileHeight = job.getInt("tileheight", 256);
+      this.scale[0] = Math.sqrt((double)tileWidth * tileHeight /
+          (inputMBR.getWidth() * inputMBR.getHeight()));
       this.levelProb[0] = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
-      for (int level = 1; level < numLevels; level++)
+      for (int level = 1; level < numLevels; level++) {
         this.levelProb[level] = this.levelProb[level - 1] * 4;
+        this.scale[level] = this.scale[level - 1] * (1 << level);
+      }
+      this.gradualFade = job.getBoolean("fade", false);
     }
     
     public void map(Rectangle cell, Shape shape,
@@ -205,7 +216,7 @@ public class PyramidPlot {
         return;
       
       int min_level = 0;
-      if (adaptiveSampling) {
+      if (adaptiveSampling && shape instanceof Point) {
         // Special handling for NASA data
         double p = Math.random();
         // Skip levels that do not satisfy the probability
@@ -216,6 +227,14 @@ public class PyramidPlot {
       java.awt.Rectangle overlappingCells =
           bottomGrid.getOverlappingCells(shapeMBR);
       for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
+        if (gradualFade && !(shape instanceof Point)) {
+          double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
+          if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+            // This shape can be safely skipped as it is too small to be plotted
+            return;
+          }
+        }
+
         for (int i = 0; i < overlappingCells.width; i++) {
           key.x = i + overlappingCells.x;
           for (int j = 0; j < overlappingCells.height; j++) {
@@ -338,10 +357,13 @@ public class PyramidPlot {
     private int tileHeight;
     /**Scale^2 at each level of the pyramid*/
     private double scale2[];
+    private double scale[];
 
     private Rectangle fileMBR;
 
     private Color strokeColor;
+
+    private boolean gradualFade;
 
     @Override
     public void configure(JobConf job) {
@@ -358,16 +380,20 @@ public class PyramidPlot {
       this.adaptiveSampling = job.getBoolean("sample", false);
       this.levelProb = new float[this.numLevels];
       this.scale2 = new double[numLevels];
+      this.scale = new double[numLevels];
       this.levelProb[0] = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
       // Size of the whole file in pixels at the f
       this.scale2[0] = (double)tileWidth * tileHeight /
           (fileMBR.getWidth() * fileMBR.getHeight());
+      this.scale[0] = Math.sqrt(scale2[0]);
       for (int level = 1; level < numLevels; level++) {
         this.levelProb[level] = this.levelProb[level - 1] * 4;
         this.scale2[level] = this.scale2[level - 1] *
             (1 << level) * (1 << level);
+        this.scale[level] = this.scale[level - 1] * (1 << level);
       }
       this.strokeColor = new Color(job.getInt("color", 0));
+      this.gradualFade = job.getBoolean("fade", false);
     }
     
     @Override
@@ -392,6 +418,13 @@ public class PyramidPlot {
         java.awt.Rectangle overlappingCells =
             bottomGrid.getOverlappingCells(shapeMBR);
         for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
+          if (gradualFade && !(shape instanceof Point)) {
+            double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
+            if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+              // This shape can be safely skipped as it is too small to be plotted
+              return;
+            }
+          }
           for (int i = 0; i < overlappingCells.width; i++) {
             key.x = i + overlappingCells.x;
             for (int j = 0; j < overlappingCells.height; j++) {
@@ -605,14 +638,18 @@ public class PyramidPlot {
 
     float[] levelProb = new float[numLevels];
     double[] scale2 = new double[numLevels];
+    double[] scale = new double[numLevels];
     levelProb[0] = params.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
     // Size of the whole file in pixels at the f
+    
     scale2[0] = (double)tileWidth * tileHeight /
         (fileMBR.getWidth() * fileMBR.getHeight());
+    scale[0] = Math.sqrt(scale2[0]);
     for (int level = 1; level < numLevels; level++) {
       levelProb[level] = levelProb[level - 1] * 4;
       scale2[level] = scale2[level - 1] *
           (1 << level) * (1 << level);
+      scale[level] = scale[level - 1] * (1 << level);
     }
 
     Map<TileIndex, BufferedImage> tileImages =
@@ -627,6 +664,7 @@ public class PyramidPlot {
         (int) Math.round(Math.pow(2, numLevels - 1));
     
     TileIndex tileIndex = new TileIndex();
+    boolean gradualFade = !(shape instanceof Point) && params.getBoolean("fade", false);
     
     for (InputSplit split : splits) {
       ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params,
@@ -648,6 +686,14 @@ public class PyramidPlot {
           java.awt.Rectangle overlappingCells =
               bottomGrid.getOverlappingCells(shapeMBR);
           for (tileIndex.level = numLevels - 1; tileIndex.level >= min_level; tileIndex.level--) {
+            if (gradualFade && !(shape instanceof Point)) {
+              double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[tileIndex.level];
+              if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+                // This shape can be safely skipped as it is too small to be plotted
+                return;
+              }
+            }
+
             for (int i = 0; i < overlappingCells.width; i++) {
               tileIndex.x = i + overlappingCells.x;
               for (int j = 0; j < overlappingCells.height; j++) {
@@ -770,7 +816,7 @@ public class PyramidPlot {
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
     
-    if (job.getBoolean("sample", false)) {
+    if (shape instanceof Point && job.getBoolean("sample", false)) {
       // Enable adaptive sampling
       int imageWidthRoot = job.getInt("tilewidth", 256);
       int imageHeightRoot = job.getInt("tileheight", 256);

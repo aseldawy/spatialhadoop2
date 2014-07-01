@@ -279,6 +279,8 @@ public class HeatMapPlot {
     private FrequencyMap frequencyMap;
     /**Radius to use for smoothing the heat map*/
     private int radius;
+    private boolean adaptiveSample;
+    private float adaptiveSampleRatio;
     
     @Override
     public void configure(JobConf job) {
@@ -290,6 +292,11 @@ public class HeatMapPlot {
       this.imageHeight = job.getInt("height", 1000);
       this.radius = job.getInt("radius", 5);
       frequencyMap = new FrequencyMap(imageWidth, imageHeight);
+      this.adaptiveSample = job.getBoolean("sample", false);
+      if (this.adaptiveSample) {
+        // Calculate the sample ratio
+        this.adaptiveSampleRatio = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.01f);
+      }
     }
 
     @Override
@@ -298,6 +305,9 @@ public class HeatMapPlot {
         throws IOException {
       for (Writable w : shapesAr.get()) {
         Shape s = (Shape) w;
+        if (adaptiveSample && s instanceof Point
+            && Math.random() > adaptiveSampleRatio)
+            return;
         Point center;
         if (s instanceof Point) {
           center = (Point) s;
@@ -379,6 +389,8 @@ public class HeatMapPlot {
     private Shape queryRange;
     /**Radius in data space around each point*/
     private float radiusX, radiusY;
+    private boolean adaptiveSample;
+    private float adaptiveSampleRatio;
     
     @Override
     public void configure(JobConf job) {
@@ -392,12 +404,20 @@ public class HeatMapPlot {
       int radiusPx = job.getInt("radius", 5);
       this.radiusX = (float) (radiusPx * partitionGrid.getWidth() / imageWidth);
       this.radiusY = (float) (radiusPx * partitionGrid.getHeight() / imageHeight);
+      if (this.adaptiveSample) {
+        // Calculate the sample ratio
+        this.adaptiveSampleRatio = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.01f);
+      }
     }
     
     @Override
     public void map(Rectangle dummy, Shape s,
         OutputCollector<IntWritable, Point> output, Reporter reporter)
         throws IOException {
+      if (adaptiveSample && s instanceof Point
+          && Math.random() > adaptiveSampleRatio)
+          return;
+
       Point center;
       if (s instanceof Point) {
         center = new Point((Point)s);
@@ -499,6 +519,8 @@ public class HeatMapPlot {
     private Shape queryRange;
     /**Radius in data space around each point*/
     private float radiusX, radiusY;
+    private boolean adaptiveSample;
+    private float adaptiveSampleRatio;
     
     @Override
     public void configure(JobConf job) {
@@ -521,12 +543,20 @@ public class HeatMapPlot {
       }
       this.radiusX = (float) (radiusPx * fileMBR.getWidth() / imageWidth);
       this.radiusY = (float) (radiusPx * fileMBR.getHeight() / imageHeight);
+      if (this.adaptiveSample) {
+        // Calculate the sample ratio
+        this.adaptiveSampleRatio = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.01f);
+      }
     }
     
     @Override
     public void map(Rectangle dummy, Shape s,
         OutputCollector<IntWritable, Point> output, Reporter reporter)
         throws IOException {
+      if (adaptiveSample && s instanceof Point
+          && Math.random() > adaptiveSampleRatio)
+          return;
+
       Point center;
       if (s instanceof Point) {
         center = new Point((Point)s);
@@ -709,6 +739,16 @@ public class HeatMapPlot {
         width = (int) (fileMBR.getWidth() * height / fileMBR.getHeight());
         job.setInt("width", width);
       }
+    }
+    
+    if (job.getBoolean("sample", false)) {
+      // Need to set the sample ratio
+      int imageWidth = job.getInt("width", 1000);
+      int imageHeight = job.getInt("height", 1000);
+      long recordCount = FileMBR.fileMBR(inFile, params).recordCount;
+      float sampleRatio = params.getFloat(GeometricPlot.AdaptiveSampleFactor, 1.0f) *
+          imageWidth * imageHeight / recordCount;
+      job.setFloat(GeometricPlot.AdaptiveSampleRatio, sampleRatio);
     }
 
     LOG.info("Creating an image of size "+width+"x"+height);

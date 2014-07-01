@@ -136,13 +136,13 @@ public class GeometricPlot {
       this.cellNumber = new IntWritable();
       this.queryRange = OperationsParams.getShape(job, "rect");
       this.gradualFade = job.getBoolean("fade", false);
-      this.adaptiveSample = job.getBoolean("sample", false);
       this.fileMbr = ImageOutputFormat.getFileMBR(job);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
       this.scale2 = (double)imageWidth * imageHeight /
           (this.fileMbr.getWidth() * this.fileMbr.getHeight());
       this.scale = Math.sqrt(this.scale2);
+      this.adaptiveSample = job.getBoolean("sample", false);
       if (this.adaptiveSample) {
         // Calculate the sample ratio
         this.adaptiveSampleRatio = job.getFloat(AdaptiveSampleRatio, 0.01f);
@@ -492,6 +492,8 @@ public class GeometricPlot {
     private double scale2, scale;
     private int strokeColor;
     private boolean fade;
+    private boolean adaptiveSample;
+    private float adaptiveSampleRatio;
 
     @Override
     public void configure(JobConf job) {
@@ -517,6 +519,12 @@ public class GeometricPlot {
       NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
       NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
       NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+      
+      this.adaptiveSample = job.getBoolean("sample", false);
+      if (this.adaptiveSample) {
+        // Calculate the sample ratio
+        this.adaptiveSampleRatio = job.getFloat(AdaptiveSampleRatio, 0.01f);
+      }
     }
 
     @Override
@@ -555,6 +563,10 @@ public class GeometricPlot {
               graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
             }
           }
+        }
+        if (adaptiveSample && s instanceof Point) {
+          if (Math.random() > adaptiveSampleRatio)
+            return;
         }
         s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
       }
@@ -652,6 +664,8 @@ public class GeometricPlot {
     /**Fade drawn shapes according to their area compared to a pixel area*/
     private boolean fade;
     private double scale;
+    private boolean adaptiveSample;
+    private float adaptiveSampleRatio;
 
     @Override
     public void configure(JobConf job) {
@@ -673,6 +687,12 @@ public class GeometricPlot {
         String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
         NASAPoint.minValue = Integer.parseInt(parts[0]);
         NASAPoint.maxValue = Integer.parseInt(parts[1]);
+      }
+      
+      this.adaptiveSample = job.getBoolean("sample", false);
+      if (this.adaptiveSample) {
+        // Calculate the sample ratio
+        this.adaptiveSampleRatio = job.getFloat(AdaptiveSampleRatio, 0.01f);
       }
     }
 
@@ -710,6 +730,10 @@ public class GeometricPlot {
                 graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
               }
             }
+          }
+          if (adaptiveSample && shape instanceof Point) {
+            if (Math.random() > adaptiveSampleRatio)
+              return;
           }
           shape.draw(graphics, drawMbr, imageWidth, imageHeight, scale2);
         }
@@ -815,7 +839,7 @@ public class GeometricPlot {
     }
     LOG.info("File MBR: "+fileMBR);
 
-    if (job.getBoolean("sample", false)) {
+    if (shape instanceof Point && job.getBoolean("sample", false)) {
       // Need to set the sample ratio
       int imageWidth = job.getInt("width", 1000);
       int imageHeight = job.getInt("height", 1000);
@@ -824,7 +848,7 @@ public class GeometricPlot {
           imageWidth * imageHeight / recordCount;
       job.setFloat(AdaptiveSampleRatio, sampleRatio);
     }
-
+    
     if (keepAspectRatio) {
       // Adjust width and height to maintain aspect ratio
       if (fileMBR.getWidth() / fileMBR.getHeight() > (double) width / height) {
@@ -920,7 +944,8 @@ public class GeometricPlot {
     int width = params.getInt("width", 1000);
     int height = params.getInt("height", 1000);
 
-    Color color = params.getColor("color", Color.BLACK);
+    Color strokeColor = params.getColor("color", Color.BLACK);
+    int color = strokeColor.getRGB();
 
     String hdfDataset = (String) params.get("dataset");
     Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) params.getShape("shape", null);
@@ -974,6 +999,17 @@ public class GeometricPlot {
         width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
       }
     }
+    
+    boolean adaptiveSample = shape instanceof Point && params.getBoolean("sample", false);
+    float adaptiveSampleRatio = 0.0f;
+    if (adaptiveSample) {
+      // Calculate the sample ratio
+      long recordCount = FileMBR.fileMBR(inFile, params).recordCount;
+      adaptiveSampleRatio = params.getFloat(AdaptiveSampleFactor, 1.0f) *
+          width * height / recordCount;
+    }
+    
+    boolean gradualFade = !(shape instanceof Point) && params.getBoolean("fade", false);
 
     if (hdfDataset != null) {
       // Collects some stats about the HDF file
@@ -988,6 +1024,7 @@ public class GeometricPlot {
 
     double scale2 = (double) width * height
         / (fileMbr.getWidth() * fileMbr.getHeight());
+    double scale = Math.sqrt(scale2);
 
     // Create an image
     BufferedImage image = new BufferedImage(width, height,
@@ -996,7 +1033,7 @@ public class GeometricPlot {
     Color bg_color = params.getColor("bgcolor", new Color(0, 0, 0, 0));
     graphics.setBackground(bg_color);
     graphics.clearRect(0, 0, width, height);
-    graphics.setColor(color);
+    graphics.setColor(strokeColor);
 
     for (InputSplit split : splits) {
       if (hdfDataset != null) {
@@ -1006,20 +1043,37 @@ public class GeometricPlot {
         NASADataset dataset = reader.createKey();
 
         while (reader.next(dataset, (NASAShape)shape)) {
+          // Skip with a fixed ratio if adaptive sample is set
+          if (adaptiveSample && Math.random() > adaptiveSampleRatio)
+            continue;
           if (plotRange == null || shape.isIntersected(shape)) {
             shape.draw(graphics, fileMbr, width, height, 0.0);
           }
         }
         reader.close();
       } else {
-        ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params,
+        RecordReader<Rectangle, Shape> reader = new ShapeRecordReader<Shape>(params,
             (FileSplit)split);
         Rectangle cell = reader.createKey();
         while (reader.next(cell, shape)) {
+          // Skip with a fixed ratio if adaptive sample is set
+          if (adaptiveSample && Math.random() > adaptiveSampleRatio)
+            continue;
           Rectangle shapeMBR = shape.getMBR();
           if (shapeMBR != null) {
-            if (plotRange == null || shapeMBR.isIntersected(plotRange))
+            if (plotRange == null || shapeMBR.isIntersected(plotRange)) {
+              if (gradualFade) {
+                double sizeInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+                if (sizeInPixels < 1.0 && Math.round(sizeInPixels * 255) < 1.0) {
+                  // This shape can be safely skipped as it is too small to be plotted
+                  return;
+                } else {
+                  float alpha = (float) sizeInPixels;
+                  graphics.setColor(new Color(((int)alpha << 24) | color, true));
+                }
+              }
               shape.draw(graphics, fileMbr, width, height, scale2);
+            }
           }
         }
         reader.close();
