@@ -54,7 +54,7 @@ public class PyramidOutputFormat extends FileOutputFormat<TileIndex, ImageWritab
     @Override
     public void write(TileIndex tileIndex, ImageWritable value) throws IOException {
       progress.progress();
-      Path imagePath = getImageFile(tileIndex);
+      Path imagePath = new Path(out, tileIndex.getImageFileName());
 
       BufferedImage image = value.getImage();
       if (vflip) {
@@ -70,16 +70,12 @@ public class PyramidOutputFormat extends FileOutputFormat<TileIndex, ImageWritab
       output.close();
     }
 
-    private Path getImageFile(TileIndex tileIndex) {
-      String filename = "tile_"+tileIndex.level+"_"+tileIndex.x+"-"+tileIndex.y+".png";
-      return new Path(out, filename);
-    }
 
     @Override
     public void close(Reporter reporter) throws IOException {
     }
   }
-
+  
   @Override
   public RecordWriter<TileIndex, ImageWritable> getRecordWriter(
       FileSystem ignored, JobConf job, String name, Progressable progress)

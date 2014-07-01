@@ -14,6 +14,8 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -28,6 +30,8 @@ import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
@@ -35,6 +39,8 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
+import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -58,10 +64,12 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
+import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
@@ -147,6 +155,10 @@ public class PyramidPlot {
     @Override
     public TileIndex clone() {
       return new TileIndex(this.level, this.x, this.y);
+    }
+
+    public String getImageFileName() {
+      return "tile_"+this.level+"_"+this.x+"-"+this.y+".png";
     }
   }
   
@@ -345,12 +357,10 @@ public class PyramidPlot {
       this.key = new TileIndex();
       this.adaptiveSampling = job.getBoolean("sample", false);
       this.levelProb = new float[this.numLevels];
+      this.scale2 = new double[numLevels];
       this.levelProb[0] = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
       // Size of the whole file in pixels at the f
-      int imageWidth = tileWidth;
-      int imageHeight = tileHeight;
-      this.scale2 = new double[numLevels];
-      this.scale2[0] = (double)imageWidth * imageHeight /
+      this.scale2[0] = (double)tileWidth * tileHeight /
           (fileMBR.getWidth() * fileMBR.getHeight());
       for (int level = 1; level < numLevels; level++) {
         this.levelProb[level] = this.levelProb[level - 1] * 4;
@@ -517,6 +527,198 @@ public class PyramidPlot {
       htmlOut.close();
     }
   }
+  
+  private static void plotLocal(Path inFile, Path outFile,
+      OperationsParams params) throws IOException {
+    int tileWidth = params.getInt("tilewidth", 256);
+    int tileHeight = params.getInt("tileheight", 256);
+
+    Color strokeColor = params.getColor("color", Color.BLACK);
+
+    String hdfDataset = (String) params.get("dataset");
+    Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) params.getShape("shape", null);
+    Shape plotRange = params.getShape("rect", null);
+
+    String valueRangeStr = (String) params.get("valuerange");
+    MinMax valueRange;
+    if (valueRangeStr == null) {
+      valueRange = null;
+    } else {
+      String[] parts = valueRangeStr.split(",");
+      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+    }
+
+    InputSplit[] splits;
+    FileSystem inFs = inFile.getFileSystem(params);
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    if (inFStatus != null && !inFStatus.isDir()) {
+      // One file, retrieve it immediately.
+      // This is useful if the input is a hidden file which is automatically
+      // skipped by FileInputFormat. We need to plot a hidden file for the case
+      // of plotting partition boundaries of a spatial index
+      splits = new InputSplit[] {new FileSplit(inFile, 0, inFStatus.getLen(), new String[0])};
+    } else {
+      JobConf job = new JobConf(params);
+      ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+      ShapeInputFormat.addInputPath(job, inFile);
+      splits = inputFormat.getSplits(job, 1);
+    }
+
+    boolean vflip = params.is("vflip");
+
+    Rectangle fileMBR;
+    if (plotRange != null) {
+      fileMBR = plotRange.getMBR();
+    } else if (hdfDataset != null) {
+      // Plotting a NASA file
+      fileMBR = new Rectangle(-180, -90, 180, 90);
+    } else {
+      fileMBR = FileMBR.fileMBR(inFile, params);
+    }
+
+    boolean keepAspectRatio = params.is("keep-ratio", true);
+    if (keepAspectRatio) {
+      // Adjust width and height to maintain aspect ratio
+      if (fileMBR.getWidth() > fileMBR.getHeight()) {
+        fileMBR.y1 -= (fileMBR.getWidth() - fileMBR.getHeight()) / 2;
+        fileMBR.y2 = fileMBR.y1 + fileMBR.getWidth();
+      } else {
+        fileMBR.x1 -= (fileMBR.getHeight() - fileMBR.getWidth() / 2);
+        fileMBR.x2 = fileMBR.x1 + fileMBR.getHeight();
+      }
+    }
+
+    if (hdfDataset != null) {
+      // Collects some stats about the HDF file
+      if (valueRange == null)
+        valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
+      NASAPoint.minValue = valueRange.minValue;
+      NASAPoint.maxValue = valueRange.maxValue;
+      NASAPoint.setColor1(params.getColor("color1", Color.BLUE));
+      NASAPoint.setColor2(params.getColor("color2", Color.RED));
+      NASAPoint.gradientType = params.getGradientType("gradient", NASAPoint.GradientType.GT_HUE);
+    }
+    
+    boolean adaptiveSampling = params.getBoolean("sample", false);
+    
+    int numLevels = params.getInt("numlevels", 7);
+
+    float[] levelProb = new float[numLevels];
+    double[] scale2 = new double[numLevels];
+    levelProb[0] = params.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
+    // Size of the whole file in pixels at the f
+    scale2[0] = (double)tileWidth * tileHeight /
+        (fileMBR.getWidth() * fileMBR.getHeight());
+    for (int level = 1; level < numLevels; level++) {
+      levelProb[level] = levelProb[level - 1] * 4;
+      scale2[level] = scale2[level - 1] *
+          (1 << level) * (1 << level);
+    }
+
+    Map<TileIndex, BufferedImage> tileImages =
+        new HashMap<PyramidPlot.TileIndex, BufferedImage>();
+    
+    Map<TileIndex, Graphics2D> tileGraphics =
+        new HashMap<PyramidPlot.TileIndex, Graphics2D>();
+    
+    GridInfo bottomGrid = new GridInfo(fileMBR.x1, fileMBR.y1,
+        fileMBR.x2, fileMBR.y2);
+    bottomGrid.rows = bottomGrid.columns =
+        (int) Math.round(Math.pow(2, numLevels - 1));
+    
+    TileIndex tileIndex = new TileIndex();
+    
+    for (InputSplit split : splits) {
+      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params,
+          (FileSplit)split);
+      Rectangle cell = reader.createKey();
+      while (reader.next(cell, shape)) {
+        Rectangle shapeMBR = shape.getMBR();
+        if (shapeMBR != null) {
+          int min_level = 0;
+          
+          if (adaptiveSampling) {
+            // Special handling for NASA data
+            double p = Math.random();
+            // Skip levels that do not satisfy the probability
+            while (min_level < numLevels && p > levelProb[min_level])
+              min_level++;
+          }
+          
+          java.awt.Rectangle overlappingCells =
+              bottomGrid.getOverlappingCells(shapeMBR);
+          for (tileIndex.level = numLevels - 1; tileIndex.level >= min_level; tileIndex.level--) {
+            for (int i = 0; i < overlappingCells.width; i++) {
+              tileIndex.x = i + overlappingCells.x;
+              for (int j = 0; j < overlappingCells.height; j++) {
+                tileIndex.y = j + overlappingCells.y;
+                // Draw in image associated with this tile
+                Graphics2D g;
+                {
+                  g = tileGraphics.get(tileIndex);
+                  if (g == null) {
+                    TileIndex key = tileIndex.clone();
+                    BufferedImage image = new BufferedImage(tileWidth, tileHeight,
+                        BufferedImage.TYPE_INT_ARGB);
+                    if (tileImages.put(key, image) != null)
+                      throw new RuntimeException("Error! Image is already there but graphics is not "+tileIndex);
+                    
+                    Color bg_color = new Color(0,0,0,0);
+
+                    try {
+                      g = image.createGraphics();
+                    } catch (Throwable e) {
+                      g = new SimpleGraphics(image);
+                    }
+                    g.setBackground(bg_color);
+                    g.clearRect(0, 0, tileWidth, tileHeight);
+                    g.setColor(strokeColor);
+                    // Coordinates of this tile in image coordinates
+                    g.translate(-(tileWidth * tileIndex.x), -(tileHeight * tileIndex.y));
+
+                    tileGraphics.put(key, g);
+                  }
+                }
+                
+                shape.draw(g, fileMBR, tileWidth * (1 << tileIndex.level),
+                    tileHeight * (1 << tileIndex.level), scale2[tileIndex.level]);
+              }
+            }
+            // Shrink overlapping cells to match the upper level
+            int updatedX1 = overlappingCells.x / 2;
+            int updatedY1 = overlappingCells.y / 2;
+            int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
+            int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
+            overlappingCells.x = updatedX1;
+            overlappingCells.y = updatedY1;
+            overlappingCells.width = updatedX2 - updatedX1 + 1;
+            overlappingCells.height = updatedY2 - updatedY1 + 1;
+          }
+        }
+      }
+      reader.close();
+    }
+    // Write image to output
+    for (Map.Entry<TileIndex, Graphics2D> tileGraph : tileGraphics.entrySet()) {
+      tileGraph.getValue().dispose();
+    }
+    FileSystem outFS = outFile.getFileSystem(params);
+    for (Map.Entry<TileIndex, BufferedImage> tileImage : tileImages.entrySet()) {
+      tileIndex = tileImage.getKey();
+      BufferedImage image = tileImage.getValue();
+      if (vflip) {
+        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+        tx.translate(0, -image.getHeight());
+        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+        image = op.filter(image, null);
+        tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
+      }
+      Path imagePath = new Path(outFile, tileIndex.getImageFileName());
+      FSDataOutputStream outStream = outFS.create(imagePath);
+      ImageIO.write(image, "png", outStream);
+      outStream.close();
+    }
+  }
 
   /**Last submitted job of type PlotPyramid*/
   public static RunningJob lastSubmittedJob;
@@ -543,7 +745,6 @@ public class PyramidPlot {
     Shape shape = hdfDataset != null ? new NASARectangle() : params.getShape("shape");
     Shape plotRange = params.getShape("rect");
 
-    boolean keepAspectRatio = params.is("keep-ratio", true);
     boolean background = params.is("background");
     
     JobConf job = new JobConf(params, PyramidPlot.class);
@@ -599,6 +800,7 @@ public class PyramidPlot {
       fileMBR = FileMBR.fileMBR(inFile, params);
     }
     
+    boolean keepAspectRatio = params.is("keep-ratio", true);
     if (keepAspectRatio) {
       // Expand input file to a rectangle for compatibility with the pyramid
       // structure
@@ -634,7 +836,11 @@ public class PyramidPlot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, OperationsParams params)
           throws IOException {
-    plotMapReduce(inFile, outFile, params);
+    if (params.getBoolean("local", false)) {
+      plotLocal(inFile, outFile, params);
+    } else {
+      plotMapReduce(inFile, outFile, params);
+    }
   }
 
   
