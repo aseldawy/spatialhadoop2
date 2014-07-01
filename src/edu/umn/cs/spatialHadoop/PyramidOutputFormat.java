@@ -12,6 +12,8 @@
  */
 package edu.umn.cs.spatialHadoop;
 
+import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -36,6 +38,7 @@ import edu.umn.cs.spatialHadoop.operations.PyramidPlot.TileIndex;
 public class PyramidOutputFormat extends FileOutputFormat<TileIndex, ImageWritable> {
   /**Used to indicate the progress*/
   private Progressable progress;
+  private boolean vflip;
   
   class ImageRecordWriter implements RecordWriter<TileIndex, ImageWritable> {
 
@@ -54,6 +57,14 @@ public class PyramidOutputFormat extends FileOutputFormat<TileIndex, ImageWritab
       Path imagePath = getImageFile(tileIndex);
 
       BufferedImage image = value.getImage();
+      if (vflip) {
+        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+        tx.translate(0, -image.getHeight());
+        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+        image = op.filter(image, null);
+        tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
+      }
+
       OutputStream output = outFs.create(imagePath);
       ImageIO.write(image, "png", output);
       output.close();
@@ -74,6 +85,7 @@ public class PyramidOutputFormat extends FileOutputFormat<TileIndex, ImageWritab
       FileSystem ignored, JobConf job, String name, Progressable progress)
       throws IOException {
     this.progress = progress;
+    this.vflip = job.getBoolean("vflip", false);
     Path file = FileOutputFormat.getTaskOutputPath(job, name).getParent();
     FileSystem fs = file.getFileSystem(job);
 

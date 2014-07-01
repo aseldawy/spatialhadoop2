@@ -636,7 +636,7 @@ public class GeometricPlot {
    * @author Ahmed Eldawy
    *
    */
-  public static class FastPlotMap extends MapReduceBase 
+  public static class DataPartitionMap extends MapReduceBase 
   implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
 
     /**Only objects inside this query range are drawn*/
@@ -728,7 +728,7 @@ public class GeometricPlot {
    * @author Ahmed Eldawy
    *
    */
-  public static class FastPlotReduce extends MapReduceBase
+  public static class DataPartitionReduce extends MapReduceBase
   implements Reducer<Rectangle, ImageWritable, Rectangle, ImageWritable> {
 
     @Override
@@ -883,9 +883,9 @@ public class GeometricPlot {
       }
     } else if (partition.equals("data")) {
       LOG.info("Plot using data partitioning");
-      job.setMapperClass(FastPlotMap.class);
-      job.setCombinerClass(FastPlotReduce.class);
-      job.setReducerClass(FastPlotReduce.class);
+      job.setMapperClass(DataPartitionMap.class);
+      job.setCombinerClass(DataPartitionReduce.class);
+      job.setReducerClass(DataPartitionReduce.class);
       job.setMapOutputKeyClass(Rectangle.class);
       job.setMapOutputValueClass(ImageWritable.class);
       job.setInputFormat(ShapeArrayInputFormat.class);

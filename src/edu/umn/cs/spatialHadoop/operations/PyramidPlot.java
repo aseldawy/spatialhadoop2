@@ -14,23 +14,23 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 
 import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -56,6 +56,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -142,6 +143,11 @@ public class PyramidPlot {
       TileIndex b = (TileIndex) obj;
       return this.level == b.level && this.x == b.x && this.y == b.y;
     }
+    
+    @Override
+    public TileIndex clone() {
+      return new TileIndex(this.level, this.x, this.y);
+    }
   }
   
   /**
@@ -150,7 +156,7 @@ public class PyramidPlot {
    * levels up to the top of the pyramid. 
    * @author Ahmed Eldawy
    */
-  public static class PlotMap extends MapReduceBase 
+  public static class SpacePartitionMap extends MapReduceBase 
     implements Mapper<Rectangle, Shape, TileIndex, Shape> {
 
     /**Number of levels in the pyramid*/
@@ -159,7 +165,6 @@ public class PyramidPlot {
     private GridInfo bottomGrid;
     /**Used as a key for output*/
     private TileIndex key;
-    private int tileWidth, tileHeight;
     /**The probability of replicating a point to level i*/
     private float[] levelProb;
     private boolean adaptiveSampling;
@@ -173,14 +178,11 @@ public class PyramidPlot {
       this.bottomGrid.rows = bottomGrid.columns =
           (int) Math.round(Math.pow(2, numLevels - 1));
       this.key = new TileIndex();
-      this.tileWidth = job.getInt("tilewidth", 256);
-      this.tileHeight = job.getInt("tileheight", 256);
       this.adaptiveSampling = job.getBoolean("sample", false);
       this.levelProb = new float[this.numLevels];
       this.levelProb[0] = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
-      for (int level = 1; level < numLevels; level++) {
+      for (int level = 1; level < numLevels; level++)
         this.levelProb[level] = this.levelProb[level - 1] * 4;
-      }
     }
     
     public void map(Rectangle cell, Shape shape,
@@ -228,14 +230,13 @@ public class PyramidPlot {
    * @author Ahmed Eldawy
    *
    */
-  public static class PlotReduce extends MapReduceBase
+  public static class SpacePartitionReduce extends MapReduceBase
       implements Reducer<TileIndex, Shape, TileIndex, ImageWritable> {
     
     private Rectangle fileMBR;
     private int tileWidth, tileHeight;
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
-    private boolean vflip;
     private Color strokeColor;
 
     @Override
@@ -245,7 +246,6 @@ public class PyramidPlot {
       fileMBR = SpatialSite.getRectangle(job, InputMBR);
       tileWidth = job.getInt("tilewidth", 256);
       tileHeight = job.getInt("tileheight", 256);
-      this.vflip = job.getBoolean("vflip", false);
       this.strokeColor = new Color(job.getInt("color", 0));
       NASAPoint.minValue = job.getInt(MinValue, 0);
       NASAPoint.maxValue = job.getInt(MaxValue, 65535);
@@ -290,14 +290,6 @@ public class PyramidPlot {
         
         graphics.dispose();
         
-        if (vflip) {
-          AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-          tx.translate(0, -image.getHeight());
-          AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-          image = op.filter(image, null);
-          tileIndex = new TileIndex(tileIndex.level, tileIndex.x, ((1 << tileIndex.level) - 1) - tileIndex.y);
-        }
-        
         sharedValue.setImage(image);
         output.collect(tileIndex, sharedValue);
       } catch (RuntimeException e) {
@@ -305,8 +297,180 @@ public class PyramidPlot {
         throw e;
       }
     }
-
   }
+  
+  public static class DataPartitionMap extends MapReduceBase 
+    implements Mapper<Rectangle, ArrayWritable, TileIndex, ImageWritable> {
+
+    /**The image of each tile that has data*/
+    private Map<TileIndex, BufferedImage> tileImages =
+        new HashMap<PyramidPlot.TileIndex, BufferedImage>();
+    
+    /**The graphics of each image created in the pyramid*/
+    private Map<TileIndex, Graphics2D> tileGraphics =
+        new HashMap<PyramidPlot.TileIndex, Graphics2D>();
+
+    /**Number of levels in the pyramid*/
+    private int numLevels;
+    /**The grid at the bottom level of the pyramid*/
+    private GridInfo bottomGrid;
+    /**Used as a key for output*/
+    private TileIndex key;
+    /**The probability of replicating a point to level i*/
+    private float[] levelProb;
+    /**Whether to use adaptive sampling with points or not*/
+    private boolean adaptiveSampling;
+    /**Width of each tile in pixels*/
+    private int tileWidth;
+    /**Height of each tile in pixels*/
+    private int tileHeight;
+    /**Scale^2 at each level of the pyramid*/
+    private double scale2[];
+
+    private Rectangle fileMBR;
+
+    private Color strokeColor;
+
+    @Override
+    public void configure(JobConf job) {
+      System.setProperty("java.awt.headless", "true");
+      super.configure(job);
+      this.tileWidth = job.getInt("tilewidth", 256);
+      this.tileHeight = job.getInt("tileheight", 256);
+      this.numLevels = job.getInt("numlevels", 1);
+      this.fileMBR = SpatialSite.getRectangle(job, InputMBR);
+      this.bottomGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2, fileMBR.y2);
+      this.bottomGrid.rows = bottomGrid.columns =
+          (int) Math.round(Math.pow(2, numLevels - 1));
+      this.key = new TileIndex();
+      this.adaptiveSampling = job.getBoolean("sample", false);
+      this.levelProb = new float[this.numLevels];
+      this.levelProb[0] = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
+      // Size of the whole file in pixels at the f
+      int imageWidth = tileWidth;
+      int imageHeight = tileHeight;
+      this.scale2 = new double[numLevels];
+      this.scale2[0] = (double)imageWidth * imageHeight /
+          (fileMBR.getWidth() * fileMBR.getHeight());
+      for (int level = 1; level < numLevels; level++) {
+        this.levelProb[level] = this.levelProb[level - 1] * 4;
+        this.scale2[level] = this.scale2[level - 1] *
+            (1 << level) * (1 << level);
+      }
+      this.strokeColor = new Color(job.getInt("color", 0));
+    }
+    
+    @Override
+    public void map(Rectangle d, ArrayWritable value,
+        OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
+        throws IOException {
+      for (Shape shape : (Shape[])value.get()) {
+        Rectangle shapeMBR = shape.getMBR();
+        if (shapeMBR == null)
+          return;
+        
+        int min_level = 0;
+        
+        if (adaptiveSampling) {
+          // Special handling for NASA data
+          double p = Math.random();
+          // Skip levels that do not satisfy the probability
+          while (min_level < numLevels && p > levelProb[min_level])
+            min_level++;
+        }
+        
+        java.awt.Rectangle overlappingCells =
+            bottomGrid.getOverlappingCells(shapeMBR);
+        for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
+          for (int i = 0; i < overlappingCells.width; i++) {
+            key.x = i + overlappingCells.x;
+            for (int j = 0; j < overlappingCells.height; j++) {
+              key.y = j + overlappingCells.y;
+              // Draw in image associated with this tile
+              Graphics2D g = getGraphics(key);
+              shape.draw(g, fileMBR, tileWidth * (1 << key.level),
+                  tileHeight * (1 << key.level), scale2[key.level]);
+            }
+          }
+          // Shrink overlapping cells to match the upper level
+          int updatedX1 = overlappingCells.x / 2;
+          int updatedY1 = overlappingCells.y / 2;
+          int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
+          int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
+          overlappingCells.x = updatedX1;
+          overlappingCells.y = updatedY1;
+          overlappingCells.width = updatedX2 - updatedX1 + 1;
+          overlappingCells.height = updatedY2 - updatedY1 + 1;
+        }
+      }
+      for (Map.Entry<TileIndex, Graphics2D> tileGraph : tileGraphics.entrySet()) {
+        tileGraph.getValue().dispose();
+      }
+      ImageWritable outValue = new ImageWritable();
+      for (Map.Entry<TileIndex, BufferedImage> tileImage : tileImages.entrySet()) {
+        outValue.setImage(tileImage.getValue());
+        output.collect(tileImage.getKey(), outValue);
+      }
+    }
+
+    private Graphics2D getGraphics(TileIndex tileIndex) {
+      Graphics2D g = tileGraphics.get(tileIndex);
+      if (g == null) {
+        TileIndex key = tileIndex.clone();
+        BufferedImage image = new BufferedImage(tileWidth, tileHeight,
+            BufferedImage.TYPE_INT_ARGB);
+        if (tileImages.put(key, image) != null)
+          throw new RuntimeException("Error! Image is already there but graphics is not "+tileIndex);
+        
+        Color bg_color = new Color(0,0,0,0);
+
+        try {
+          g = image.createGraphics();
+        } catch (Throwable e) {
+          g = new SimpleGraphics(image);
+        }
+        g.setBackground(bg_color);
+        g.clearRect(0, 0, tileWidth, tileHeight);
+        g.setColor(strokeColor);
+        // Coordinates of this tile in image coordinates
+        g.translate(-(tileWidth * tileIndex.x), -(tileHeight * tileIndex.y));
+
+        tileGraphics.put(key, g);
+      }
+      return g;
+    }
+  }
+  
+  public static class DataPartitionReduce extends MapReduceBase
+    implements Reducer<TileIndex, ImageWritable, TileIndex, ImageWritable> {
+
+    @Override
+    public void reduce(TileIndex cellIndex, Iterator<ImageWritable> images,
+        OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
+        throws IOException {
+      if (images.hasNext()) {
+        ImageWritable mergedImage = images.next();
+        BufferedImage image = mergedImage.getImage();
+        Graphics2D graphics;
+        try {
+          graphics = image.createGraphics();
+        } catch (Throwable e) {
+          graphics = new SimpleGraphics(image);
+        }
+        // Overlay all other images on top of it
+        while (images.hasNext()) {
+          BufferedImage img = images.next().getImage();
+          graphics.drawImage(img, 0, 0, null);
+        }
+        graphics.dispose();
+
+        mergedImage.setImage(image);
+
+        output.collect(cellIndex, mergedImage);
+      }
+    }
+  }
+
   
   /**
    * Finalizes the job by combining all images of all reduces jobs into one
@@ -371,7 +535,7 @@ public class PyramidPlot {
    * @param numLevels - Number of zoom levels to plot
    * @throws IOException
    */
-  public static <S extends Shape> RunningJob plotMapReduce(Path inFile,
+  private static <S extends Shape> RunningJob plotMapReduce(Path inFile,
       Path outFile, OperationsParams params) throws IOException {
     Color color = params.getColor("color", Color.BLACK);
     
@@ -385,13 +549,25 @@ public class PyramidPlot {
     JobConf job = new JobConf(params, PyramidPlot.class);
     job.setJobName("PlotPyramid");
     
-    job.setMapperClass(PlotMap.class);
+    String partition = job.get("partition", "space").toLowerCase();
+    if (partition.equals("space")) {
+      job.setMapperClass(SpacePartitionMap.class);
+      job.setReducerClass(SpacePartitionReduce.class);
+      job.setMapOutputKeyClass(TileIndex.class);
+      job.setMapOutputValueClass(shape.getClass());
+      job.setInputFormat(ShapeInputFormat.class);
+    } else {
+      job.setMapperClass(DataPartitionMap.class);
+      job.setReducerClass(DataPartitionReduce.class);
+      job.setMapOutputKeyClass(TileIndex.class);
+      job.setMapOutputValueClass(ImageWritable.class);
+      job.setInputFormat(ShapeArrayInputFormat.class);
+    }
+
+    job.setInt("color", color.getRGB());
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setMapOutputKeyClass(TileIndex.class);
-    job.setMapOutputValueClass(shape.getClass());
-    job.setInt("color", color.getRGB());
     
     if (job.getBoolean("sample", false)) {
       // Enable adaptive sampling
@@ -403,7 +579,6 @@ public class PyramidPlot {
       job.setFloat(GeometricPlot.AdaptiveSampleRatio, sampleRatio);
     }
 
-    job.setReducerClass(PlotReduce.class);
     
     Rectangle fileMBR;
     if (hdfDataset != null) {
@@ -439,7 +614,6 @@ public class PyramidPlot {
     SpatialSite.setRectangle(job, InputMBR, fileMBR);
     
     // Set input and output
-    job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     if (plotRange != null) {
       job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
@@ -458,9 +632,9 @@ public class PyramidPlot {
 
   }
   
-  public static <S extends Shape> void plot(Path inFile, Path outFile, OperationsParams cla)
+  public static <S extends Shape> void plot(Path inFile, Path outFile, OperationsParams params)
           throws IOException {
-    plotMapReduce(inFile, outFile, cla);
+    plotMapReduce(inFile, outFile, params);
   }
 
   

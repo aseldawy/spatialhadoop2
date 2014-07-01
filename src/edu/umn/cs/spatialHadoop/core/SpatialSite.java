@@ -461,7 +461,7 @@ public class SpatialSite {
    * @param rect
    */
   public static void setRectangle(Configuration conf, String name, Rectangle rect) {
-    conf.set(name, rect.toText(new Text()).toString());
+    conf.set(name, rect.getMBR().toText(new Text()).toString());
   }
   
   /**
