@@ -1066,10 +1066,10 @@ public class GeometricPlot {
                 double sizeInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
                 if (sizeInPixels < 1.0 && Math.round(sizeInPixels * 255) < 1.0) {
                   // This shape can be safely skipped as it is too small to be plotted
-                  return;
+                  continue;
                 } else {
-                  float alpha = (float) sizeInPixels;
-                  graphics.setColor(new Color(((int)alpha << 24) | color, true));
+                  int alpha = (int)Math.round(sizeInPixels * 255);
+                  graphics.setColor(new Color((alpha << 24) | color, true));
                 }
               }
               shape.draw(graphics, fileMbr, width, height, scale2);
