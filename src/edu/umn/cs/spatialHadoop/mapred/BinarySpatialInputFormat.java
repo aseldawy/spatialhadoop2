@@ -31,7 +31,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 import org.apache.hadoop.net.NetworkTopology;
 
-import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;

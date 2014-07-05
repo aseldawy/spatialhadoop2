@@ -174,7 +174,7 @@ def test_spatial_join
     raise "DJ results with one heap file and one #{sindex} file" unless array_equal?(dj_one_side_results, bnlj_results)
 
     # Try one indexed file with a heap file (direct file not a directory struct)
-    heap_file_name = `hadoop fs -ls #{heap_file2}`.grep(/data/).first.split.grep(/data/)
+    heap_file_name = `hadoop fs -ls #{heap_file2}`.lines.grep(/data/).first.split.grep(/data/).first
     spatial_join('dj', indexed_file1, heap_file_name, "dj_#{sindex}_heap")
     dj_one_side_results = `hadoop fs -cat dj_#{sindex}_heap/par* | sort`.lines.to_a
     raise "DJ results with one heap file and one #{sindex} file" unless array_equal?(dj_one_side_results, sjmr_heap_results)
@@ -238,9 +238,9 @@ end
 
 # Main
 if $0 == __FILE__
-  #test_range_query
-  #test_knn
-  #test_spatial_join
+  test_range_query
+  test_knn
+  test_spatial_join
   test_custom_class
   test_plot
 end

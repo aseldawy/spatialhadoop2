@@ -20,7 +20,6 @@ import java.io.IOException;
 import org.apache.hadoop.io.Text;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 public class Partition extends CellInfo {
   /**Name of the file that contains the data*/

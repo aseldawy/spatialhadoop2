@@ -31,18 +31,18 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
-import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
-import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -52,6 +52,7 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
+import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
@@ -235,31 +236,49 @@ public class Sampler {
 
     // Read job result
     int result_size = 0;
-    if (output != null) {
-      OperationsParams params2 = new OperationsParams(params);
-      params2.setFloat("ratio", selectRatio);
-      params2.set("shape", params.get("outshape"));
-      params2.set("outshape", params.get("outshape"));
-      if (selectRatio > 0.1) {
-        LOG.info("Local return "+selectRatio+" of "+resultCount+" records");
-        // Keep a copy of sizeOfLastProcessedFile because we don't want it changed
-        long tempSize = sizeOfLastProcessedFile;
-        // Return a (small) ratio of the result using a MapReduce job
-        // In this case, the files are very big and we need just a small ratio
-        // of them. It is better to do it in parallel
-        result_size = sampleLocalWithRatio(new Path[] { outputPath},
-            output, params2);
-        sizeOfLastProcessedFile = tempSize;
-      } else {
-        LOG.info("MapReduce return "+selectRatio+" of "+resultCount+" records");
-        // Keep a copy of sizeOfLastProcessedFile because we don't want it changed
-        long tempSize = sizeOfLastProcessedFile;
-        // Return a (small) ratio of the result using a MapReduce job
-        // In this case, the files are very big and we need just a small ratio
-        // of them. It is better to do it in parallel
-        result_size = sampleMapReduceWithRatio(new Path[] { outputPath},
-            output, params2);
-        sizeOfLastProcessedFile = tempSize;
+    if (selectRatio > 1.0f) {
+      // Return all records from the output
+      ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
+      ShapeLineInputFormat.addInputPath(job, outputPath);
+      InputSplit[] splits = inputFormat.getSplits(job, 1);
+      for (InputSplit split : splits) {
+        RecordReader<Rectangle, Text> reader = inputFormat.getRecordReader(split, job, null);
+        Rectangle key = reader.createKey();
+        Text value = reader.createValue();
+        T outObj = (T) OperationsParams.getTextSerializable(params, "outshape", new Text2());
+        while (reader.next(key, value)) {
+          outObj.fromText(value);
+          output.collect(outObj);
+        }
+        reader.close();
+      }
+    } else {
+      if (output != null) {
+        OperationsParams params2 = new OperationsParams(params);
+        params2.setFloat("ratio", selectRatio);
+        params2.set("shape", params.get("outshape"));
+        params2.set("outshape", params.get("outshape"));
+        if (selectRatio > 0.1) {
+          LOG.info("Local return "+selectRatio+" of "+resultCount+" records");
+          // Keep a copy of sizeOfLastProcessedFile because we don't want it changed
+          long tempSize = sizeOfLastProcessedFile;
+          // Return a (small) ratio of the result using a MapReduce job
+          // In this case, the files are very big and we need just a small ratio
+          // of them. It is better to do it in parallel
+          result_size = sampleLocalWithRatio(new Path[] { outputPath},
+              output, params2);
+          sizeOfLastProcessedFile = tempSize;
+        } else {
+          LOG.info("MapReduce return "+selectRatio+" of "+resultCount+" records");
+          // Keep a copy of sizeOfLastProcessedFile because we don't want it changed
+          long tempSize = sizeOfLastProcessedFile;
+          // Return a (small) ratio of the result using a MapReduce job
+          // In this case, the files are very big and we need just a small ratio
+          // of them. It is better to do it in parallel
+          result_size = sampleMapReduceWithRatio(new Path[] { outputPath},
+              output, params2);
+          sizeOfLastProcessedFile = tempSize;
+        }
       }
     }
 
@@ -419,7 +438,7 @@ public class Sampler {
       }
     }
     sizeOfLastProcessedFile = total_size;
-    float ratio = params.getFloat("ratio", 0.0f);
+    float ratio = params.getFloat("ratio", 0.1f);
     params.setLong("size", (long) (total_size * ratio));
     return sampleLocalWithSize(files, output, params);
   }

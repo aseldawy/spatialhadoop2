@@ -38,10 +38,10 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
+import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
  * Create a video from a range of HDF files. It works in the following steps:

@@ -28,7 +28,6 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
-import edu.umn.cs.spatialHadoop.core.OSMPolygon;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -41,6 +40,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
+import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 
 /**

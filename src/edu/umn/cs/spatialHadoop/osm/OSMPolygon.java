@@ -10,7 +10,7 @@
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and limitations under the License.
  */
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.osm;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -23,6 +23,8 @@ import org.apache.hadoop.io.WritableComparable;
 
 import com.vividsolutions.jts.geom.Geometry;
 
+import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 public class OSMPolygon extends OGCJTSShape implements WritableComparable<OSMPolygon> {
