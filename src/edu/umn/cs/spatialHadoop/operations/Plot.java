@@ -495,8 +495,8 @@ public class Plot {
       job.setInt(MaxValue, valueRange.maxValue);
       fileMBR = plotRange != null?
           plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-          GeoProjector.class);
+//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//          GeoProjector.class);
     } else {
       // Run MBR operation in synchronous mode
       OperationsParams mbrArgs = new OperationsParams(params);
@@ -593,8 +593,8 @@ public class Plot {
         job.setInt(MaxValue, valueRange.maxValue);
         fileMBR = plotRange != null?
             plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-        job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-            GeoProjector.class);
+//        job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//            GeoProjector.class);
       } else {
         // Run MBR operation in synchronous mode
         OperationsParams mbrArgs = new OperationsParams(params);
@@ -658,8 +658,8 @@ public class Plot {
     String hdfDataset = (String) params.get("dataset");
     Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) params.getShape("shape", null);
     Shape plotRange = params.getShape("rect", null);
-    params.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-              GeoProjector.class);
+//    params.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//              GeoProjector.class);
 
     boolean keepAspectRatio = params.is("keep-ratio", true);
     
@@ -782,8 +782,8 @@ public class Plot {
     if (params.get("local") == null) {
       JobConf job = new JobConf(params);
       
-      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-              GeoProjector.class);
+//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//              GeoProjector.class);
       
       
       ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
