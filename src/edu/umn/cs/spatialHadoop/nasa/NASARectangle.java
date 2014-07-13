@@ -97,6 +97,18 @@ public class NASARectangle extends Rectangle implements NASAShape {
       int imageHeight, double scale) {
     g.setColor(calculateColor(this.value));
     super.draw(g, fileMBR, imageWidth, imageHeight, scale);
+  
+    char[] textTemperature=(this.value+"").toCharArray();
+    g.setColor(Color.black);
+    
+    int s_x1 = (int) Math.round((this.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int s_y1 = (int) Math.round((this.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int s_x2 = (int) Math.round((this.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int s_y2 = (int) Math.round((this.y2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    
+    
+    g.drawChars(textTemperature, 0, textTemperature.length,(int)(s_x1),(int) (s_y1));
+
   }
 
   public static Color calculateColor(int value) {

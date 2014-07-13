@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.pig.impl.builtin.SampleLoader;
+import org.hamcrest.core.IsInstanceOf;
 
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
@@ -335,7 +336,8 @@ public class OperationsParams extends Configuration {
     } else if (shapeTypeI.startsWith("ogc")) {
       shape = new OGCESRIShape();
     } else if (shapeTypeI.startsWith("nasa")) {
-      shape = new NASAPoint();
+    	int date = conf.getInt("date",0);
+      shape = new NASAPoint(date);
     } else {
       // Use the shapeType as a class name and try to instantiate it dynamically
       try {
@@ -375,7 +377,9 @@ public class OperationsParams extends Configuration {
       if (strSeparator != null)
         csvShape.setSeparator(strSeparator.charAt(0));
     }
-      
+      if(shape instanceof NASAPoint){
+    	  ((NASAPoint)shape).date = conf.getInt("date",	 0);
+      }
     return shape;
   }
 
