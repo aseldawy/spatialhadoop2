@@ -64,9 +64,6 @@ class StockQuadTree {
   /** The row-wise position of each value in the sorted values */
   int[] r;
   
-  /** The Z-order for each value in the sorted values */
-  int[] z;
-
   /** The ID of each node */
   int[] nodesID;
   
@@ -83,7 +80,7 @@ class StockQuadTree {
   StockQuadTree(int resolution) {
     this.resolution = resolution;
     this.r = new int[resolution * resolution];
-    this.z = new int[resolution * resolution];
+    final int[] z = new int[resolution * resolution];
     // The list of all nodes
     Vector<Node> nodes = new Vector<Node>();
     
@@ -92,7 +89,6 @@ class StockQuadTree {
       short x = (short) (i % resolution);
       short y = (short) (i / resolution);
       int zorder = AggregateQuadTree.computeZOrder(x, y);
-      //System.out.println("zorder of ("+x+","+y+") = "+zorder);
       z[i] = zorder;
       r[i] = i;
     }
@@ -124,7 +120,7 @@ class StockQuadTree {
     // Maximum number of values per node. Set it to a very small number to
     // construct as many levels as possible. Notice that when quad trees
     // are aggregated, a single value might become 366 values in the same pos.
-    final int capacity = 5;
+    final int capacity = 100;
     Node root = new Node();
     root.startPosition = 0;
     root.endPosition = z.length;
@@ -202,6 +198,39 @@ class StockQuadTree {
     if ((x & 0xC0000000) == 0) {n = n + 2; x = x << 2;}
     if ((x & 0x80000000) == 0) {n = n + 1;}
     return 32 - n;
+  }
+  
+  /**
+   * Returns the position of the node with the given ID by searching for it
+   * in the sorted list of IDs. If the node is found, its index in the array
+   * is returned, otherwise, a negative number is returned to indicate that
+   * the node is not found.
+   * @param node_id
+   * @return
+   */
+  private int getNodePosition(int node_id) {
+    return Arrays.binarySearch(nodesID, node_id);
+  }
+  
+  /**
+   * Retrieves the minimal bounding rectangle of the node with the given ID.
+   * Fills in the given rectangle with the MBR if the node is found and returns
+   * true, otherwise, it leaves the given mbr unchanged and returns false;
+   * @param node_id
+   * @param mbr
+   * @return
+   */
+  public boolean getNodeMBR(int node_id, java.awt.Rectangle mbr) {
+    int pos = getNodePosition(node_id);
+    if (pos < 0)
+      return false; // Node not found
+    mbr.x = this.r[this.nodesStartPosition[pos]] % resolution;
+    mbr.y = this.r[this.nodesStartPosition[pos]] / resolution;
+    int x2 = (this.r[this.nodesEndPosition[pos] - 1]) % resolution;
+    mbr.width = x2 - mbr.x + 1;
+    int y2 = (this.r[this.nodesEndPosition[pos] - 1]) / resolution;
+    mbr.height = y2 - mbr.y + 1;
+    return true;
   }
 }
 
@@ -328,14 +357,24 @@ public class AggregateQuadTree {
   }
 
   public static void main(String[] args) throws IOException {
+    long t1, t2;
+    t1 = System.currentTimeMillis();
+    StockQuadTree sqt = new StockQuadTree(1200);
+    t2 = System.currentTimeMillis();
+    System.out.println("Elapsed time "+(t2-t1)+" millis");
+    Rectangle mbr = new Rectangle();
+    System.out.println("MBR "+sqt.getNodeMBR(1, mbr));
+    System.out.println(mbr);
+    
     // Test construction of aggregate quad trees
     DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test.quad")));
     short[] values = new short[1200 * 1200];
-    long t1 = System.currentTimeMillis();
+    t1 = System.currentTimeMillis();
     new AggregateQuadTree(values, out);
-    long t2 = System.currentTimeMillis();
+    t2 = System.currentTimeMillis();
     out.close();
     System.out.println("Elapsed time "+(t2-t1)+" millis");
+    
   }
 }
 
