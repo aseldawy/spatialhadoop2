@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.nasa;
 
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
@@ -23,11 +24,15 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Stack;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
@@ -201,18 +206,6 @@ class StockQuadTree {
   }
   
   /**
-   * Returns the position of the node with the given ID by searching for it
-   * in the sorted list of IDs. If the node is found, its index in the array
-   * is returned, otherwise, a negative number is returned to indicate that
-   * the node is not found.
-   * @param node_id
-   * @return
-   */
-  private int getNodePosition(int node_id) {
-    return Arrays.binarySearch(nodesID, node_id);
-  }
-  
-  /**
    * Retrieves the minimal bounding rectangle of the node with the given ID.
    * Fills in the given rectangle with the MBR if the node is found and returns
    * true, otherwise, it leaves the given mbr unchanged and returns false;
@@ -220,17 +213,24 @@ class StockQuadTree {
    * @param mbr
    * @return
    */
-  public boolean getNodeMBR(int node_id, java.awt.Rectangle mbr) {
-    int pos = getNodePosition(node_id);
-    if (pos < 0)
-      return false; // Node not found
-    mbr.x = this.r[this.nodesStartPosition[pos]] % resolution;
-    mbr.y = this.r[this.nodesStartPosition[pos]] / resolution;
-    int x2 = (this.r[this.nodesEndPosition[pos] - 1]) % resolution;
+  public void getNodeMBR(int node_pos, java.awt.Rectangle mbr) {
+    mbr.x = this.r[this.nodesStartPosition[node_pos]] % resolution;
+    mbr.y = this.r[this.nodesStartPosition[node_pos]] / resolution;
+    int x2 = (this.r[this.nodesEndPosition[node_pos] - 1]) % resolution;
     mbr.width = x2 - mbr.x + 1;
-    int y2 = (this.r[this.nodesEndPosition[pos] - 1]) / resolution;
+    int y2 = (this.r[this.nodesEndPosition[node_pos] - 1]) / resolution;
     mbr.height = y2 - mbr.y + 1;
-    return true;
+  }
+
+  /**
+   * Retrieves the coordinates of a record in the original unindexed
+   * two-dimensional array.
+   * @param record_pos
+   * @param record_coords
+   */
+  public void getRecordCoords(int record_pos, Point record_coords) {
+    record_coords.x = this.r[record_pos] % resolution;
+    record_coords.y = this.r[record_pos] / resolution;
   }
 }
 
@@ -334,9 +334,77 @@ public class AggregateQuadTree {
     }
   }
   
-  void selectionQuery(FSDataInputStream in, Rectangle r) {
-    // Compute the Z-value of the two end points of the range
-    
+  /**
+   * Perform a selection query that retrieves all points in the given range.
+   * The range is specified in the two-dimensional array positions.
+   * @param in
+   * @param r
+   * @return number of matched records
+   * @throws IOException 
+   */
+  public static int selectionQuery(FSDataInputStream in, Rectangle query_mbr) throws IOException {
+    int numOfResults = 0;
+    int resolution = in.readInt();
+    int cardinality = in.readInt();
+    Vector<Integer> selectedStarts = new Vector<Integer>();
+    Vector<Integer> selectedEnds = new Vector<Integer>();
+    StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
+    // Nodes to be searched. Contains node positions in the array of nodes
+    Stack<Integer> nodes_2b_searched = new Stack<Integer>();
+    nodes_2b_searched.add(0); // Root node (ID=1)
+    Rectangle node_mbr = new Rectangle();
+    while (!nodes_2b_searched.isEmpty()) {
+      int node_pos = nodes_2b_searched.pop();
+      stockQuadTree.getNodeMBR(node_pos, node_mbr);
+      if (query_mbr.contains(node_mbr)) {
+        // Add this node to the selection list and stop this branch
+        if (!selectedEnds.isEmpty()
+            && selectedEnds.lastElement() == stockQuadTree.nodesStartPosition[node_pos]) {
+          // Merge with an adjacent range
+          selectedEnds.set(selectedEnds.size() - 1, stockQuadTree.nodesEndPosition[node_pos]);
+        } else {
+          // add a new range
+          selectedStarts.add(stockQuadTree.nodesStartPosition[node_pos]);
+          selectedEnds.add(stockQuadTree.nodesEndPosition[node_pos]);
+        }
+        numOfResults += stockQuadTree.nodesEndPosition[node_pos]
+            - stockQuadTree.nodesStartPosition[node_pos];
+      } else if (query_mbr.intersects(node_mbr)) {
+        int first_child_id = stockQuadTree.nodesID[node_pos] * 4 + 0;
+        int first_child_pos = Arrays.binarySearch(stockQuadTree.nodesID, first_child_id);
+        if (first_child_pos < 0) {
+          // No children. Hit a leaf node
+          // Scan and add matching points only
+          java.awt.Point record_coords = new Point();
+          for (int record_pos = stockQuadTree.nodesStartPosition[node_pos];
+              record_pos < stockQuadTree.nodesEndPosition[node_pos]; record_pos++) {
+            stockQuadTree.getRecordCoords(record_pos, record_coords);
+            if (query_mbr.contains(record_coords)) {
+              // matched a record.
+              if (!selectedEnds.isEmpty()
+                  && selectedEnds.lastElement() == record_pos) {
+                // Merge with an adjacent range
+                selectedEnds.set(selectedEnds.size() - 1, record_pos + 1);
+              } else {
+                // Add a new range of unit width
+                selectedStarts.add(record_pos);
+                selectedEnds.add(record_pos+1);
+              }
+              numOfResults++;
+            }
+          }
+        } else {
+          // Non-leaf node. Add all children to the list of nodes to search
+          nodes_2b_searched.add(first_child_pos+3);
+          nodes_2b_searched.add(first_child_pos+2);
+          nodes_2b_searched.add(first_child_pos+1);
+          nodes_2b_searched.add(first_child_pos+0);
+        }
+      }
+    }
+    System.out.println("Found "+selectedStarts.size()+" ranges");
+    // TODO: return all values in the selected ranges
+    return numOfResults;
   }
   
   /**
@@ -358,15 +426,7 @@ public class AggregateQuadTree {
 
   public static void main(String[] args) throws IOException {
     long t1, t2;
-    t1 = System.currentTimeMillis();
-    StockQuadTree sqt = new StockQuadTree(1200);
-    t2 = System.currentTimeMillis();
-    System.out.println("Elapsed time "+(t2-t1)+" millis");
-    Rectangle mbr = new Rectangle();
-    System.out.println("MBR "+sqt.getNodeMBR(1, mbr));
-    System.out.println(mbr);
-    
-    // Test construction of aggregate quad trees
+
     DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test.quad")));
     short[] values = new short[1200 * 1200];
     t1 = System.currentTimeMillis();
@@ -374,7 +434,12 @@ public class AggregateQuadTree {
     t2 = System.currentTimeMillis();
     out.close();
     System.out.println("Elapsed time "+(t2-t1)+" millis");
-    
+
+    FSDataInputStream in = FileSystem.getLocal(new Configuration()).open(new Path("test.quad"));
+    t1 = System.currentTimeMillis();
+    int resultSize = AggregateQuadTree.selectionQuery(in, new Rectangle(12, 0, 774, 3));
+    t2 = System.currentTimeMillis();
+    System.out.println("Found "+resultSize+" results in "+(t2-t1)+" millis");
   }
 }
 
