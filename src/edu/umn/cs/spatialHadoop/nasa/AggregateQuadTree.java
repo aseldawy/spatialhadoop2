@@ -36,6 +36,8 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
+import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+
 /**
  * A structure that stores all lookup tables needed to construct and work
  * with a quad tree.
@@ -342,10 +344,12 @@ public class AggregateQuadTree {
    * @return number of matched records
    * @throws IOException 
    */
-  public static int selectionQuery(FSDataInputStream in, Rectangle query_mbr) throws IOException {
+  public static int selectionQuery(FSDataInputStream in, Rectangle query_mbr,
+      ResultCollector2<Point, Short> output) throws IOException {
     int numOfResults = 0;
     int resolution = in.readInt();
     int cardinality = in.readInt();
+    long start = in.getPos();
     Vector<Integer> selectedStarts = new Vector<Integer>();
     Vector<Integer> selectedEnds = new Vector<Integer>();
     StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
@@ -395,6 +399,7 @@ public class AggregateQuadTree {
           }
         } else {
           // Non-leaf node. Add all children to the list of nodes to search
+          // Add in reverse order to the stack so that results come in sorted order
           nodes_2b_searched.add(first_child_pos+3);
           nodes_2b_searched.add(first_child_pos+2);
           nodes_2b_searched.add(first_child_pos+1);
@@ -402,8 +407,25 @@ public class AggregateQuadTree {
         }
       }
     }
-    System.out.println("Found "+selectedStarts.size()+" ranges");
-    // TODO: return all values in the selected ranges
+    if (output != null) {
+      Point resultCoords = new Point();
+      // Return all values in the selected ranges
+      for (int iRange = 0; iRange < selectedStarts.size(); iRange++) {
+        int treeStart = selectedStarts.get(iRange);
+        int treeEnd = selectedEnds.get(iRange);
+        long fileStart = start + selectedStarts.get(iRange) * cardinality * 2;
+        in.seek(fileStart);
+        for (int treePos = treeStart; treePos < treeEnd; treePos++) {
+          // Retrieve the coords for the point at treePos
+          stockQuadTree.getRecordCoords(treePos, resultCoords);
+          // Read all entries at current position
+          for (int iValue = 0; iValue < cardinality; iValue++) {
+            short value = in.readShort();
+            output.collect(resultCoords, value);
+          }
+        }
+      }
+    }
     return numOfResults;
   }
   
@@ -429,6 +451,11 @@ public class AggregateQuadTree {
 
     DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test.quad")));
     short[] values = new short[1200 * 1200];
+    for (int i = 0; i < values.length; i++) {
+      short x = (short) (i % 1200);
+      short y = (short) (i / 1200);
+      values[i] = (short) (x * 10000 + y);
+    }
     t1 = System.currentTimeMillis();
     new AggregateQuadTree(values, out);
     t2 = System.currentTimeMillis();
@@ -437,7 +464,12 @@ public class AggregateQuadTree {
 
     FSDataInputStream in = FileSystem.getLocal(new Configuration()).open(new Path("test.quad"));
     t1 = System.currentTimeMillis();
-    int resultSize = AggregateQuadTree.selectionQuery(in, new Rectangle(12, 0, 774, 3));
+    int resultSize = AggregateQuadTree.selectionQuery(in, new Rectangle(0, 0, 5, 3), new ResultCollector2<Point, Short>() {
+      @Override
+      public void collect(Point p, Short v) {
+        System.out.println("Point "+p+", value "+v);
+      }
+    });
     t2 = System.currentTimeMillis();
     System.out.println("Found "+resultSize+" results in "+(t2-t1)+" millis");
   }
