@@ -15,6 +15,9 @@ package edu.umn.cs.spatialHadoop.nasa;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.io.BufferedOutputStream;
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -33,6 +36,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
@@ -260,6 +264,53 @@ public class AggregateQuadTree {
     return stockTree;
   }
   
+  public static class Node implements Writable {
+    public short min = Short.MAX_VALUE, max = Short.MIN_VALUE;
+    public int sum = 0, count = 0;
+    
+    /**
+     * Accumulate the values of another node
+     * @param other
+     */
+    public void accumulate(Node other) {
+      if (other.min < this.min)
+        this.min = other.min;
+      if (other.max > this.max)
+        this.max = other.max;
+      this.sum += other.sum;
+      this.count += other.count;
+    }
+    
+    /**
+     * Accumulate a single value
+     * @param value
+     */
+    public void accumulate(short value) {
+      if (value < this.min)
+        this.min = value;
+      if (value > this.max)
+        this.max = value;
+      this.sum += value;
+      this.count++;
+    }
+
+    @Override
+    public void readFields(DataInput in) throws IOException {
+      this.min = in.readShort();
+      this.max = in.readShort();
+      this.sum = in.readInt();
+      this.count = in.readInt();
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+      out.writeShort(min);
+      out.writeShort(max);
+      out.writeInt(sum);
+      out.writeInt(count);
+    }
+  }
+  
   /**
    * Construct an actual aggregate quad tree out of a two-dimensional array
    * of values.
@@ -270,24 +321,28 @@ public class AggregateQuadTree {
   public AggregateQuadTree(short[] values, DataOutputStream out) throws IOException {
     int length = Array.getLength(values);
     int resolution = (int) Math.round(Math.sqrt(length));
+
+    // Write tree header
+    out.writeInt(resolution); // resolution
+    out.writeInt(1); // cardinality
+
+    // Fetch the stock quad tree of the associated resolution
     StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
-    // Sort values by their respective Z-Order values
+    // Sort values by their respective Z-Order values in linear time
     short[] sortedValues = new short[length];
     for (int i = 0; i < length; i++)
       sortedValues[i] = values[stockQuadTree.r[i]];
-    
-    short[] min = new short[stockQuadTree.nodesID.length];
-    short[] max = new short[stockQuadTree.nodesID.length];
-    int[] sum = new int[stockQuadTree.nodesID.length];
-    int[] count = new int[stockQuadTree.nodesID.length];
+
+    // Write all sorted values
+    for (short v : sortedValues)
+      out.writeShort(v);
+
     // Compute aggregate values for all nodes in the tree
     // Go in reverse ID order to ensure children are computed before parents
+    Node[] nodes = new Node[stockQuadTree.nodesID.length];
     for (int iNode = stockQuadTree.nodesID.length - 1; iNode >= 0 ; iNode--) {
       // Initialize all aggregate values
-      min[iNode] = Short.MAX_VALUE;
-      max[iNode] = Short.MIN_VALUE;
-      count[iNode] = 0;
-      sum[iNode] = 0;
+      nodes[iNode] = new Node();
       
       int firstChildId = stockQuadTree.nodesID[iNode] * 4;
       int firstChildPos = Arrays.binarySearch(stockQuadTree.nodesID, firstChildId);
@@ -302,37 +357,74 @@ public class AggregateQuadTree {
           } else {
             throw new RuntimeException("Cannot handle values of type "+val.getClass());
           }
-          if (value < min[iNode])
-            min[iNode] = value;
-          if (value > max[iNode])
-            max[iNode] = value;
-          count[iNode]++;
-          sum[iNode] += value;
+          nodes[iNode].accumulate(value);
         }
       } else {
         // Compute from the four children
         for (int iChild = 0; iChild < 4; iChild++) {
           int childPos = firstChildPos + iChild;
-          if (min[childPos] < min[iNode])
-            min[childPos] = min[iNode];
-          if (max[childPos] > max[iNode])
-            max[iNode] = max[childPos];
-          count[iNode] += count[childPos];
-          sum[iNode] += sum[childPos];
+          nodes[iNode].accumulate(nodes[childPos]);
+        }
+      }
+    }
+
+    // Write nodes to file in sorted order
+    for (int iNode = 0; iNode < nodes.length; iNode++)
+      nodes[iNode].write(out);
+  }
+  
+  /**
+   * Merges multiple trees of the same spatial resolution into one tree of
+   * lower temporal resolution (larger time) and the same spatial resolution.
+   * @param inTrees
+   * @param outTree
+   * @throws IOException 
+   */
+  public static void mergeTrees(DataInputStream[] inTrees, DataOutputStream outTree)
+      throws IOException {
+    // Write the spatial resolution of the output as the same of all input trees
+    int resolution = inTrees[0].readInt();
+    for (int iTree = 1; iTree < inTrees.length; iTree++) {
+      int iResolution = inTrees[iTree].readInt();
+      if (resolution != iResolution)
+        throw new RuntimeException("Tree #0 has a resolution of "+resolution
+            +" not compatible with resolution"+iResolution+" of Tree #"+iTree);
+    }
+    outTree.writeInt(resolution);
+    
+    // Sum up the cardinality of all input trees
+    int cardinality = 0;
+    int cardinalities[] = new int[inTrees.length];
+    for (int iTree = 0; iTree < inTrees.length; iTree++)
+      cardinality += (cardinalities[iTree] = inTrees[iTree].readInt());
+    outTree.writeInt(cardinality);
+    
+    // Merge sorted values in all input trees
+    byte[] buffer = new byte[1024*1024];
+    int size = resolution * resolution;
+    while (size-- > 0) {
+      for (int iTree = 0; iTree < inTrees.length; iTree++) {
+        int sizeToRead = 2 * cardinalities[iTree]; // sizeof(short) * c
+        while (sizeToRead > 0) {
+          int bytesRead = inTrees[iTree].read(buffer, 0,
+              Math.min(sizeToRead, buffer.length));
+          outTree.write(buffer, 0, bytesRead);
+          sizeToRead -= bytesRead;
         }
       }
     }
     
-    // Write the constructed quad tree to output
-    out.writeInt(resolution); // resolution
-    out.writeInt(1); // cardinality
-    for (short v : sortedValues)
-      out.writeShort(v);
-    for (int iNode = 0; iNode < min.length; iNode++) {
-      out.writeShort(min[iNode]);
-      out.writeShort(max[iNode]);
-      out.writeInt(count[iNode]);
-      out.writeInt(sum[iNode]);
+    // Merge aggregate values of all nodes
+    Node treeNode = new Node();
+    StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
+    int numOfNodes = stockQuadTree.nodesID.length;
+    for (int iNode = 0; iNode < numOfNodes; iNode++) {
+      Node outputNode = new Node();
+      for (int iTree = 0; iTree < inTrees.length; iTree++) {
+        treeNode.readFields(inTrees[iTree]);
+        outputNode.accumulate(treeNode);
+      }
+      outputNode.write(outTree);
     }
   }
   
@@ -449,19 +541,33 @@ public class AggregateQuadTree {
   public static void main(String[] args) throws IOException {
     long t1, t2;
 
-    DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test.quad")));
     short[] values = new short[1200 * 1200];
     for (int i = 0; i < values.length; i++) {
       short x = (short) (i % 1200);
       short y = (short) (i / 1200);
       values[i] = (short) (x * 10000 + y);
     }
+
+    DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test.quad")));
     t1 = System.currentTimeMillis();
     new AggregateQuadTree(values, out);
     t2 = System.currentTimeMillis();
     out.close();
     System.out.println("Elapsed time "+(t2-t1)+" millis");
+    
+    DataInputStream[] inTrees = new DataInputStream[30];
+    for (int iTree = 0; iTree < inTrees.length; iTree++)
+      inTrees[iTree] = FileSystem.getLocal(new Configuration()).open(new Path("test.quad"));
+    out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test-merged.quad")));
 
+    t1 = System.currentTimeMillis();
+    AggregateQuadTree.mergeTrees(inTrees,  out);
+    t2 = System.currentTimeMillis();
+    System.out.println("Merged "+ inTrees.length +" trees in "+(t2-t1)+" millis");
+    out.close();
+    for (int iTree = 0; iTree < inTrees.length; iTree++) 
+      inTrees[iTree].close();
+    
     FSDataInputStream in = FileSystem.getLocal(new Configuration()).open(new Path("test.quad"));
     t1 = System.currentTimeMillis();
     int resultSize = AggregateQuadTree.selectionQuery(in, new Rectangle(0, 0, 5, 3), new ResultCollector2<Point, Short>() {
