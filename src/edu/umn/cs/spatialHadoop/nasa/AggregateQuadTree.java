@@ -311,6 +311,10 @@ public class AggregateQuadTree {
     }
   }
   
+  private static final int TreeHeaderSize = 4 + 4;
+  private static final int ValueSize = 2;
+  private static final int NodeSize = 2 + 2 + 4 + 4;
+  
   /**
    * Construct an actual aggregate quad tree out of a two-dimensional array
    * of values.
@@ -371,6 +375,37 @@ public class AggregateQuadTree {
     // Write nodes to file in sorted order
     for (int iNode = 0; iNode < nodes.length; iNode++)
       nodes[iNode].write(out);
+  }
+  
+  /**
+   * Returns the position of the values section relative to the beginning of the
+   * tree in the file. To get the absolute position of the values section, you
+   * will need to add tree start position in the file. To get the absolute
+   * position of a specific value, you need to add (value_pos * ValueSize) to
+   * the absolute position of the values section, where value_pos is the
+   * position of the value you want to read in the list of all values sorted by
+   * their respective Z-order in the file.
+   * 
+   * @param resolution
+   * @return
+   */
+  private static long getValuesStartOffset() {
+    return TreeHeaderSize;
+  }
+  
+  /**
+   * Returns the position of the nodes section in the tree file relative to the
+   * beginning of file. To get the absolute position you need to add the start
+   * position of the tree in the file. To get the absolute position of a
+   * specific node, you need to add (node_pos * NodeSize) to the absolute
+   * position of the nodes section.
+   * @param cardinality 
+   * 
+   * @param node_pos
+   * @return
+   */
+  private static long getNodesStartOffset(int resolution, int cardinality) {
+    return TreeHeaderSize + resolution * resolution * cardinality * ValueSize;
   }
   
   /**
@@ -438,10 +473,10 @@ public class AggregateQuadTree {
    */
   public static int selectionQuery(FSDataInputStream in, Rectangle query_mbr,
       ResultCollector2<Point, Short> output) throws IOException {
+    long treeStartPosition = in.getPos();
     int numOfResults = 0;
     int resolution = in.readInt();
     int cardinality = in.readInt();
-    long start = in.getPos();
     Vector<Integer> selectedStarts = new Vector<Integer>();
     Vector<Integer> selectedEnds = new Vector<Integer>();
     StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
@@ -501,12 +536,14 @@ public class AggregateQuadTree {
     }
     if (output != null) {
       Point resultCoords = new Point();
+      long dataStartPosition = treeStartPosition + getValuesStartOffset();
       // Return all values in the selected ranges
       for (int iRange = 0; iRange < selectedStarts.size(); iRange++) {
         int treeStart = selectedStarts.get(iRange);
         int treeEnd = selectedEnds.get(iRange);
-        long fileStart = start + selectedStarts.get(iRange) * cardinality * 2;
-        in.seek(fileStart);
+        long startPosition = dataStartPosition
+            + selectedStarts.get(iRange) * cardinality * 2;
+        in.seek(startPosition);
         for (int treePos = treeStart; treePos < treeEnd; treePos++) {
           // Retrieve the coords for the point at treePos
           stockQuadTree.getRecordCoords(treePos, resultCoords);
@@ -519,6 +556,104 @@ public class AggregateQuadTree {
       }
     }
     return numOfResults;
+  }
+  
+  
+  /**
+   * Perform a selection query that retrieves all points in the given range.
+   * The range is specified in the two-dimensional array positions.
+   * @param in
+   * @param r
+   * @return number of matched records
+   * @throws IOException 
+   */
+  public static Node aggregateQuery(FSDataInputStream in, Rectangle query_mbr) throws IOException {
+    long treeStartPosition = in.getPos();
+    Node result = new Node();
+    int numOfSelectedRecords = 0;
+    int resolution = in.readInt();
+    int cardinality = in.readInt();
+    Vector<Integer> selectedNodesPos = new Vector<Integer>();
+    Vector<Integer> selectedStarts = new Vector<Integer>();
+    Vector<Integer> selectedEnds = new Vector<Integer>();
+    StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
+    // Nodes to be searched. Contains node positions in the array of nodes
+    Stack<Integer> nodes_2b_searched = new Stack<Integer>();
+    nodes_2b_searched.add(0); // Root node (ID=1)
+    Rectangle node_mbr = new Rectangle();
+    while (!nodes_2b_searched.isEmpty()) {
+      int node_pos = nodes_2b_searched.pop();
+      stockQuadTree.getNodeMBR(node_pos, node_mbr);
+      if (query_mbr.contains(node_mbr)) {
+        // Add this node to the selection list and stop this branch
+        selectedNodesPos.add(node_pos);
+      } else if (query_mbr.intersects(node_mbr)) {
+        int first_child_id = stockQuadTree.nodesID[node_pos] * 4 + 0;
+        int first_child_pos = Arrays.binarySearch(stockQuadTree.nodesID, first_child_id);
+        if (first_child_pos < 0) {
+          // No children. Hit a leaf node
+          // Scan and add matching points only
+          java.awt.Point record_coords = new Point();
+          for (int record_pos = stockQuadTree.nodesStartPosition[node_pos];
+              record_pos < stockQuadTree.nodesEndPosition[node_pos]; record_pos++) {
+            stockQuadTree.getRecordCoords(record_pos, record_coords);
+            if (query_mbr.contains(record_coords)) {
+              // matched a record.
+              if (!selectedEnds.isEmpty()
+                  && selectedEnds.lastElement() == record_pos) {
+                // Merge with an adjacent range
+                selectedEnds.set(selectedEnds.size() - 1, record_pos + 1);
+              } else {
+                // Add a new range of unit width
+                selectedStarts.add(record_pos);
+                selectedEnds.add(record_pos+1);
+              }
+              numOfSelectedRecords++;
+            }
+          }
+        } else {
+          // Non-leaf node. Add all children to the list of nodes to search
+          // Add in reverse order to the stack so that results come in sorted order
+          nodes_2b_searched.add(first_child_pos+3);
+          nodes_2b_searched.add(first_child_pos+2);
+          nodes_2b_searched.add(first_child_pos+1);
+          nodes_2b_searched.add(first_child_pos+0);
+        }
+      }
+    }
+    LOG.info("Aggregate query selected "+selectedNodesPos.size()
+        +" nodes and "+numOfSelectedRecords+" records");
+    // Result 1: Accumulate all values
+    long dataStartPosition = getValuesStartOffset();
+    Point resultCoords = new Point();
+    // Return all values in the selected ranges
+    for (int iRange = 0; iRange < selectedStarts.size(); iRange++) {
+      int treeStart = selectedStarts.get(iRange);
+      int treeEnd = selectedEnds.get(iRange);
+      long startPosition = dataStartPosition
+          + selectedStarts.get(iRange) * cardinality * 2;
+      in.seek(startPosition);
+      for (int treePos = treeStart; treePos < treeEnd; treePos++) {
+        // Retrieve the coords for the point at treePos
+        stockQuadTree.getRecordCoords(treePos, resultCoords);
+        // Read all entries at current position
+        for (int iValue = 0; iValue < cardinality; iValue++) {
+          short value = in.readShort();
+          result.accumulate(value);
+        }
+      }
+    }
+    
+    // Result 2: Accumulate all nodes
+    long nodesStartPosition = treeStartPosition + getNodesStartOffset(resolution, cardinality);
+    Node selectedNode = new Node();
+    for (int node_pos : selectedNodesPos) {
+      long nodePosition = nodesStartPosition + node_pos * NodeSize;
+      in.seek(nodePosition);
+      selectedNode.readFields(in);
+      result.accumulate(selectedNode);
+    }
+    return result;
   }
   
   /**
@@ -555,7 +690,7 @@ public class AggregateQuadTree {
     out.close();
     System.out.println("Elapsed time "+(t2-t1)+" millis");
     
-    DataInputStream[] inTrees = new DataInputStream[30];
+    DataInputStream[] inTrees = new DataInputStream[365];
     for (int iTree = 0; iTree < inTrees.length; iTree++)
       inTrees[iTree] = FileSystem.getLocal(new Configuration()).open(new Path("test.quad"));
     out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test-merged.quad")));
@@ -567,8 +702,8 @@ public class AggregateQuadTree {
     out.close();
     for (int iTree = 0; iTree < inTrees.length; iTree++) 
       inTrees[iTree].close();
-    
-    FSDataInputStream in = FileSystem.getLocal(new Configuration()).open(new Path("test.quad"));
+
+    FSDataInputStream in = FileSystem.getLocal(new Configuration()).open(new Path("test-merged.quad"));
     t1 = System.currentTimeMillis();
     int resultSize = AggregateQuadTree.selectionQuery(in, new Rectangle(0, 0, 5, 3), new ResultCollector2<Point, Short>() {
       @Override
