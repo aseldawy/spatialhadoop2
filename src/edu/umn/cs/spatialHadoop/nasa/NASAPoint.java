@@ -5,7 +5,6 @@ import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Date;
 
 import org.apache.hadoop.io.Text;
 
@@ -21,23 +20,14 @@ public class NASAPoint extends Point implements NASAShape {
   public int value;
   
   /** date of the given point*/
-  public int date;
+  public long timestamp;
   
-  public NASAPoint() {
-//	  date=0;
-  }
-  public NASAPoint(int date) {
-	  this.date=date;
-  }
-//  public NASAPoint(double x, double y, int value) {
-//    super(x, y);
-//    this.value = value;
-//  }
+  public NASAPoint() {}
   
-  public NASAPoint(double x, double y, int value, int date) {
-	    super(x, y);
-	    this.value = value;
-	    this.date = date;
+  public NASAPoint(double x, double y, int value, long timestamp) {
+    super(x, y);
+    this.value = value;
+    this.timestamp = timestamp;
   }
 
   public int getValue() {
@@ -52,14 +42,14 @@ public class NASAPoint extends Point implements NASAShape {
   public void write(DataOutput out) throws IOException {
     super.write(out);
     out.writeInt(value);
-    out.writeInt(date);
+    out.writeLong(timestamp);
   }
   
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
     this.value = in.readInt();
-    this.date = in.readInt();
+    this.timestamp = in.readLong();
   }
   
   @Override
@@ -68,7 +58,7 @@ public class NASAPoint extends Point implements NASAShape {
     text.append(Separator, 0, Separator.length);
     TextSerializerHelper.serializeInt(value, text, ',');
     
-    TextSerializerHelper.serializeInt(date, text, '\0');
+    TextSerializerHelper.serializeLong(timestamp, text, '\0');
 
     return text;
   }
@@ -79,7 +69,7 @@ public class NASAPoint extends Point implements NASAShape {
     byte[] bytes = text.getBytes();
     text.set(bytes, 1, text.getLength() - 1);
     value = TextSerializerHelper.consumeInt(text, ',');
-    date = TextSerializerHelper.consumeInt(text, '\0');
+    timestamp = TextSerializerHelper.consumeLong(text, '\0');
   }
   
   @Override
@@ -115,5 +105,15 @@ public class NASAPoint extends Point implements NASAShape {
       int imageHeight, double scale) {
     g.setColor(NASARectangle.calculateColor(this.value));
     super.draw(g, fileMBR, imageWidth, imageHeight, scale);
+  }
+
+  @Override
+  public void setTimestamp(long t) {
+    this.timestamp = t;
+  }
+
+  @Override
+  public long getTimestamp() {
+    return this.timestamp;
   }
 }

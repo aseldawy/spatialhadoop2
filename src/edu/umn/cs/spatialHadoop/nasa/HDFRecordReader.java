@@ -698,6 +698,7 @@ private Object interpolate(Object value1, Object value2,
       }
       if (projector != null)
         projector.project(shape);
+      shape.setTimestamp(key.time);
       
       // Read next value
       Object value = Array.get(dataArray, position);

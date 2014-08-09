@@ -24,4 +24,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 public interface NASAShape extends Shape {
   public void setValue(int v);
   public int getValue();
+  
+  public void setTimestamp(long t);
+  public long getTimestamp();
 }

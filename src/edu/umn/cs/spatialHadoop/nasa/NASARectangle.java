@@ -34,6 +34,8 @@ public class NASARectangle extends Rectangle implements NASAShape {
   
   /**Value stored at this point*/
   public int value;
+  
+  public long timestamp;
 
   public NASARectangle() {
   }
@@ -63,19 +65,22 @@ public class NASARectangle extends Rectangle implements NASAShape {
   public void write(DataOutput out) throws IOException {
     super.write(out);
     out.writeInt(value);
+    out.writeLong(timestamp);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
     value = in.readInt();
+    this.timestamp = in.readLong();
   }
   
   @Override
   public Text toText(Text text) {
     super.toText(text);
     text.append(Separator, 0, Separator.length);
-    TextSerializerHelper.serializeInt(value, text, '\0');
+    TextSerializerHelper.serializeInt(value, text, ',');
+    TextSerializerHelper.serializeLong(timestamp, text, '\0');
     return text;
   }
   
@@ -84,7 +89,8 @@ public class NASARectangle extends Rectangle implements NASAShape {
     super.fromText(text);
     byte[] bytes = text.getBytes();
     text.set(bytes, 1, text.getLength() - 1);
-    value = TextSerializerHelper.consumeInt(text, '\0');
+    value = TextSerializerHelper.consumeInt(text, ',');
+    timestamp = TextSerializerHelper.consumeLong(text, '\0');
   }
   
   @Override
@@ -103,9 +109,6 @@ public class NASARectangle extends Rectangle implements NASAShape {
     
     int s_x1 = (int) Math.round((this.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
     int s_y1 = (int) Math.round((this.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
-    int s_x2 = (int) Math.round((this.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int s_y2 = (int) Math.round((this.y2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
-    
     
     g.drawChars(textTemperature, 0, textTemperature.length,(int)(s_x1),(int) (s_y1));
 
@@ -136,5 +139,15 @@ public class NASARectangle extends Rectangle implements NASAShape {
       }
     }
     return color;
+  }
+  
+  @Override
+  public void setTimestamp(long t) {
+    this.timestamp = t;
+  }
+
+  @Override
+  public long getTimestamp() {
+    return this.timestamp;
   }
 }

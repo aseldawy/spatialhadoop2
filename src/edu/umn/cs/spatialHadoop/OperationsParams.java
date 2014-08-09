@@ -351,8 +351,7 @@ public class OperationsParams extends Configuration {
     } else if (shapeTypeI.startsWith("wkt")) {
       shape = new OGCJTSShape();
     } else if (shapeTypeI.startsWith("nasa")) {
-      int date = conf.getInt("date",0);
-      shape = new NASAPoint(date);
+      shape = new NASAPoint();
     } else if (shapeTypeI.startsWith("text")) {
       shape = new Text2();
     } else {
@@ -394,9 +393,6 @@ public class OperationsParams extends Configuration {
       if (strSeparator != null)
         csvShape.setSeparator(strSeparator.charAt(0));
     }
-      if(shape instanceof NASAPoint){
-    	  ((NASAPoint)shape).date = conf.getInt("date",	 0);
-      }
     return shape;
   }
 
