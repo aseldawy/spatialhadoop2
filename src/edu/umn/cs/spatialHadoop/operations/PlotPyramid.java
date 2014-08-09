@@ -415,8 +415,7 @@ public class PlotPyramid {
     job.setMapperClass(PlotMap.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
-//    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
-    job.setNumReduceTasks(10);
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
     job.setMapOutputKeyClass(TileIndex.class);
     job.setMapOutputValueClass(shape.getClass());
     job.setInt("color", color.getRGB());
@@ -436,8 +435,8 @@ public class PlotPyramid {
       //fileMBR = new Rectangle(-180, -90, 180, 90);
       fileMBR = plotRange != null?
           plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
-      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
-          GeoProjector.class);
+//      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
+//          GeoProjector.class);
     } else {
       fileMBR = FileMBR.fileMBR(inFile, params);
     }
