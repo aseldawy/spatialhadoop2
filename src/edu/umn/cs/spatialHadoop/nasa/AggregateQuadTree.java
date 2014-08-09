@@ -510,7 +510,7 @@ public class AggregateQuadTree {
     int size = resolution * resolution;
     while (size-- > 0) {
       for (int iTree = 0; iTree < inTrees.length; iTree++) {
-        int sizeToRead = 2 * cardinalities[iTree]; // sizeof(short) * c
+        int sizeToRead = ValueSize * cardinalities[iTree]; // sizeof(short) * c
         while (sizeToRead > 0) {
           int bytesRead = inTrees[iTree].read(buffer, 0,
               Math.min(sizeToRead, buffer.length));
