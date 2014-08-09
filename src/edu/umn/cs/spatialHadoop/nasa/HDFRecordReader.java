@@ -12,10 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.nasa;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.lang.reflect.Array;
 import java.util.List;
 import java.util.Stack;
@@ -31,10 +28,8 @@ import ncsa.hdf.object.HObject;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.FileSplit;
@@ -44,6 +39,7 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * Reads a specific dataset from an HDF file. Upon instantiation, the portion
@@ -141,7 +137,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
     try {
       // HDF library can only deal with local files. So, we need to copy the file
       // to a local temporary directory before using the HDF Java library
-      String localFile = copyFileSplit(job, split);
+      String localFile = FileUtil.copyFileSplit(job, split);
 
       // retrieve an instance of H4File
       FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
@@ -155,39 +151,11 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
       Group root =
           (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
 
-      // Search for the datset of interest in file
-      Stack<Group> groups2bSearched = new Stack<Group>();
-      groups2bSearched.add(root);
-
-      Dataset firstDataset = null;
-      Dataset matchDataset = null;
-
-      while (!groups2bSearched.isEmpty()) {
-        Group top = groups2bSearched.pop();
-        List<HObject> memberList = top.getMemberList();
-
-        for (HObject member : memberList) {
-          if (member instanceof Group) {
-            groups2bSearched.add((Group) member);
-          } else if (member instanceof Dataset) {
-            if (firstDataset == null)
-              firstDataset = (Dataset) member;
-            if (member.getName().equalsIgnoreCase(datasetName)) {
-              matchDataset = (Dataset) member;
-              break;
-            }
-          }
-        }
-      }
-
-      if (matchDataset == null) {
-        LOG.warn("Dataset "+datasetName+" not found in file "+split.getPath());
-        // Just work on the first dataset to ensure we return some data
-        matchDataset = firstDataset;
-      }
+      Dataset matchDataset = findDataset(root, datasetName, true);
 
       nasaDataset = new NASADataset(root);
       nasaDataset.datasetName = datasetName;
+      @SuppressWarnings("unchecked")
       List<Attribute> attrs = matchDataset.getMetadata();
       String fillValueStr = null;
       for (Attribute attr : attrs) {
@@ -197,6 +165,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
           nasaDataset.minValue = Integer.parseInt(Array.get(attr.getValue(), 0).toString());
           nasaDataset.maxValue = Integer.parseInt(Array.get(attr.getValue(), 1).toString());
           if (nasaDataset.maxValue < 0) {
+            // Convert unsigned to signed
             nasaDataset.maxValue += 65536;
           }
         }
@@ -211,10 +180,6 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
       }
 
       dataArray = matchDataset.read();
-      dataArrayTemp = matchDataset.read();
-      if(dataArray==dataArrayTemp){
-    	  throw new Exception("Object reference equals !... HDFRecordReader"); // TODO remove this line 
-      }
       
       // Recover holes if asked by user
       if (job.getBoolean("recoverholes", false)) {
@@ -233,7 +198,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
           if (wmFile.length == 0) {
             LOG.warn("Could not find water mask for tile '"+tileIdentifier+"'");
           } else {
-            localFile = copyFile(job, wmFile[0]);
+            localFile = FileUtil.copyFile(job, wmFile[0]);
             FileFormat wmHDFFile = fileFormat.createInstance(localFile, FileFormat.READ);
             wmHDFFile.open();
             
@@ -241,26 +206,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
                 (Group)((DefaultMutableTreeNode)wmHDFFile.getRootNode()).getUserObject();
             
             // Search for the datset of interest in file
-            groups2bSearched = new Stack<Group>();
-            groups2bSearched.add(root);
-
-            matchDataset = null;
-
-            while (!groups2bSearched.isEmpty()) {
-              Group top = groups2bSearched.pop();
-              List<HObject> memberList = top.getMemberList();
-
-              for (HObject member : memberList) {
-                if (member instanceof Group) {
-                  groups2bSearched.add((Group) member);
-                } else if (member instanceof Dataset) {
-                  if (member.getName().equals("water_mask")) {
-                    matchDataset = (Dataset) member;
-                    break;
-                  }
-                }
-              }
-            }
+            matchDataset = findDataset(root, "water_mask", false);
 
             if (matchDataset == null) {
               LOG.warn("Water mask dataset "+datasetName+" not found in file "+split.getPath());
@@ -292,6 +238,47 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
     } catch (Exception e) {
       throw new RuntimeException("Error reading HDF file '"+split.getPath()+"'", e);
     }
+  }
+
+  /**
+   * @param split
+   * @param datasetName
+   * @param root
+   * @param matchAny
+   * @return
+   */
+  public static Dataset findDataset(Group root, String datasetName, boolean matchAny) {
+    // Search for the datset of interest in file
+    Stack<Group> groups2bSearched = new Stack<Group>();
+    groups2bSearched.add(root);
+
+    Dataset firstDataset = null;
+    Dataset matchDataset = null;
+
+    while (!groups2bSearched.isEmpty()) {
+      Group top = groups2bSearched.pop();
+      List<HObject> memberList = top.getMemberList();
+
+      for (HObject member : memberList) {
+        if (member instanceof Group) {
+          groups2bSearched.add((Group) member);
+        } else if (member instanceof Dataset) {
+          if (firstDataset == null)
+            firstDataset = (Dataset) member;
+          if (member.getName().equalsIgnoreCase(datasetName)) {
+            matchDataset = (Dataset) member;
+            break;
+          }
+        }
+      }
+    }
+
+    if (matchDataset == null && matchAny) {
+      LOG.warn("Dataset "+datasetName+" not found in file");
+      // Just work on the first dataset to ensure we return some data
+      matchDataset = firstDataset;
+    }
+    return matchDataset;
   }
 
 
@@ -504,51 +491,6 @@ private Object interpolate(Object value1, Object value2,
     if (wm_sum < (size * size) / 2)
       return true;
     return false;
-  }
-
-  private String copyFile(Configuration job, FileStatus fileStatus) throws IOException {
-    return copyFileSplit(job, new FileSplit(fileStatus.getPath(), 0, fileStatus.getLen(), new String[0]));
-  }
-
-  /**
-   * Copies a part of a file from a remote file system (e.g., HDFS) to a local
-   * file. Returns a path to a local temporary file.
-   * @param conf
-   * @param split
-   * @return
-   * @throws IOException 
-   */
-  static String copyFileSplit(Configuration conf, FileSplit split) throws IOException {
-    FileSystem fs = split.getPath().getFileSystem(conf);
-
-    // Special case of a local file. Skip copying the file
-    if (fs instanceof LocalFileSystem && split.getStart() == 0)
-      return split.getPath().toUri().getPath();
-
-    // Length of input file. We do not depend on split.length because it is not
-    // set by input format for performance reason. Setting it in the input
-    // format would cost a lot of time because it runs on the client machine
-    // while the record reader runs on slave nodes in parallel
-    long length = fs.getFileStatus(split.getPath()).getLen();
-
-    FSDataInputStream in = fs.open(split.getPath());
-    in.seek(split.getStart());
-    
-    // Prepare output file for write
-    File tempFile = File.createTempFile(split.getPath().getName(), "hdf");
-    OutputStream out = new FileOutputStream(tempFile);
-    
-    // A buffer used between source and destination
-    byte[] buffer = new byte[1024*1024];
-    while (length > 0) {
-      int numBytesRead = in.read(buffer, 0, (int)Math.min(length, buffer.length));
-      out.write(buffer, 0, numBytesRead);
-      length -= numBytesRead;
-    }
-    
-    in.close();
-    out.close();
-    return tempFile.getAbsolutePath();
   }
 
   @Override
