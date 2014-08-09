@@ -38,6 +38,8 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.util.Progressable;
 
+import edu.umn.cs.spatialHadoop.util.FileUtil;
+
 /**
  * A {@link FileSystem} that is able to open HTTP files. Note that certain
  * features are not supported by the HTTP scheme by design. First, it is
@@ -302,7 +304,7 @@ public class HTTPFileSystem extends FileSystem {
       Path localCopy = new Path(".", hdfFile.getPath().getName());
       if (!localFS.exists(localCopy)) {
         LOG.info("Copying "+hdfFile.getPath().getName()+" with size "+hdfFile.getLen());
-        String copiedFile = HDFRecordReader.copyFileSplit(conf, new FileSplit(hdfFile.getPath(), 0, hdfFile.getLen(), new String[0]));
+        String copiedFile = FileUtil.copyFileSplit(conf, new FileSplit(hdfFile.getPath(), 0, hdfFile.getLen(), new String[0]));
         localFS.rename(new Path(copiedFile), localCopy);
         LOG.info(" ... done ("+count+"/"+hdfFiles.length+")!");
       }

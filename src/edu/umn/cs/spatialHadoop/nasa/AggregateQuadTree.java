@@ -30,10 +30,17 @@ import java.util.Queue;
 import java.util.Stack;
 import java.util.Vector;
 
+import javax.swing.tree.DefaultMutableTreeNode;
+
+import ncsa.hdf.object.Dataset;
+import ncsa.hdf.object.FileFormat;
+import ncsa.hdf.object.Group;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Writable;
@@ -41,6 +48,7 @@ import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * A structure that stores all lookup tables needed to construct and work
@@ -316,13 +324,50 @@ public class AggregateQuadTree {
   private static final int NodeSize = 2 + 2 + 4 + 4;
   
   /**
-   * Construct an actual aggregate quad tree out of a two-dimensional array
+   * Constructs an aggregate quad tree for an input HDF file on a selected
+   * dataset identified by its name in the file.
+   * @param inFile
+   * @param datasetIndex
+   * @param outFile
+   * @throws Exception 
+   */
+  public static void build(Configuration conf, Path inFile, String datasetName,
+      Path outFile) throws Exception {
+    String localFile = FileUtil.copyFile(conf, inFile);
+    // retrieve an instance of H4File format
+    FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
+
+    FileFormat hdfFile = fileFormat.createInstance(localFile, FileFormat.READ);
+
+    // open the file and retrieve the file structure
+    hdfFile.open();
+    
+    Group root =
+        (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
+    Dataset matchedDataset = HDFRecordReader.findDataset(root, datasetName, false);
+    if (matchedDataset != null) {
+      Object values = matchedDataset.read();
+      if (values instanceof short[]) {
+        FileSystem outFs = outFile.getFileSystem(conf);
+        FSDataOutputStream out = outFs.create(outFile, false);
+        build((short[])values, out);
+        out.close();
+      } else {
+        throw new RuntimeException("Indexing of values of type "
+            + "'" + Array.get(values, 0).getClass()+"' is not supported");
+      }
+    }
+    hdfFile.close();
+  }
+  
+  /**
+   * Constructs an aggregate quad tree out of a two-dimensional array
    * of values.
    * @param values
    * @param out - the output stream to write the constructed quad tree to
    * @throws IOException 
    */
-  public AggregateQuadTree(short[] values, DataOutputStream out) throws IOException {
+  public static void build(short[] values, DataOutputStream out) throws IOException {
     int length = Array.getLength(values);
     int resolution = (int) Math.round(Math.sqrt(length));
 
@@ -407,6 +452,32 @@ public class AggregateQuadTree {
   private static long getNodesStartOffset(int resolution, int cardinality) {
     return TreeHeaderSize + resolution * resolution * cardinality * ValueSize;
   }
+
+  /**
+   * Merges a list of aggregate trees (in the same order) and writes an output tree
+   * that combines all input trees. Input trees must have been built using on of the
+   * {@link #build} methods. The merged tree can be further merged using this method.
+   * @param conf
+   * @param inFiles
+   * @param outFile
+   * @throws IOException
+   */
+  public static void merge(Configuration conf, Path[] inFiles, Path outFile) throws IOException {
+    DataInputStream[] inTrees = new DataInputStream[inFiles.length];
+    for (int i = 0; i < inFiles.length; i++) {
+      FileSystem inFs = inFiles[i].getFileSystem(conf);
+      inTrees[i] = inFs.open(inFiles[i]);
+    }
+    
+    FileSystem outFs = outFile.getFileSystem(conf);
+    DataOutputStream outTree = outFs.create(outFile, false);
+    
+    merge(inTrees, outTree);
+    
+    for (int i = 0; i < inFiles.length; i++)
+      inTrees[i].close();
+    outTree.close();
+  }
   
   /**
    * Merges multiple trees of the same spatial resolution into one tree of
@@ -415,7 +486,7 @@ public class AggregateQuadTree {
    * @param outTree
    * @throws IOException 
    */
-  public static void mergeTrees(DataInputStream[] inTrees, DataOutputStream outTree)
+  public static void merge(DataInputStream[] inTrees, DataOutputStream outTree)
       throws IOException {
     // Write the spatial resolution of the output as the same of all input trees
     int resolution = inTrees[0].readInt();
@@ -673,8 +744,35 @@ public class AggregateQuadTree {
     return morton;
   }
 
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IllegalArgumentException, Exception {
     long t1, t2;
+    
+    AggregateQuadTree.getOrCreateStockQuadTree(1200);
+    t1 = System.currentTimeMillis();
+    AggregateQuadTree.build(new Configuration(), new Path("MYD11A1.A2014219.h21v06.005.2014220235833.hdf"), "LST_Day_1km", new Path("indexed.hdf"));
+    t2 = System.currentTimeMillis();
+    System.out.println("Elapsed time "+(t2-t1)+" millis");
+    
+    Path[] inFiles = new Path[10];
+    for (int i = 0; i < inFiles.length; i++)
+      inFiles[i] = new Path("indexed.hdf");
+    t1 = System.currentTimeMillis();
+    merge(new Configuration(), inFiles, new Path("merged.hdf"));
+    t2 = System.currentTimeMillis();
+    System.out.println("Elapsed time for merge "+(t2-t1)+" millis");
+
+    inFiles = new Path[10];
+    for (int i = 0; i < inFiles.length; i++)
+      inFiles[i] = new Path("merged.hdf");
+    t1 = System.currentTimeMillis();
+    merge(new Configuration(), inFiles, new Path("further-merged.hdf"));
+    t2 = System.currentTimeMillis();
+    System.out.println("Elapsed time for merge "+(t2-t1)+" millis");
+
+    
+    if (true)
+      return;
+    
 
     short[] values = new short[1200 * 1200];
     for (int i = 0; i < values.length; i++) {
@@ -685,9 +783,9 @@ public class AggregateQuadTree {
 
     DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test.quad")));
     t1 = System.currentTimeMillis();
-    new AggregateQuadTree(values, out);
-    t2 = System.currentTimeMillis();
+    AggregateQuadTree.build(values, out);
     out.close();
+    t2 = System.currentTimeMillis();
     System.out.println("Elapsed time "+(t2-t1)+" millis");
     
     DataInputStream[] inTrees = new DataInputStream[365];
@@ -696,7 +794,7 @@ public class AggregateQuadTree {
     out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test-merged.quad")));
 
     t1 = System.currentTimeMillis();
-    AggregateQuadTree.mergeTrees(inTrees,  out);
+    AggregateQuadTree.merge(inTrees,  out);
     t2 = System.currentTimeMillis();
     System.out.println("Merged "+ inTrees.length +" trees in "+(t2-t1)+" millis");
     out.close();
