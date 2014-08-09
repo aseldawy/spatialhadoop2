@@ -5,6 +5,7 @@ import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Date;
 
 import org.apache.hadoop.io.Text;
 
@@ -19,12 +20,24 @@ public class NASAPoint extends Point implements NASAShape {
   /**Value stored at this point*/
   public int value;
   
+  /** date of the given point*/
+  public int date;
+  
   public NASAPoint() {
+//	  date=0;
   }
-
-  public NASAPoint(double x, double y, int value) {
-    super(x, y);
-    this.value = value;
+  public NASAPoint(int date) {
+	  this.date=date;
+  }
+//  public NASAPoint(double x, double y, int value) {
+//    super(x, y);
+//    this.value = value;
+//  }
+  
+  public NASAPoint(double x, double y, int value, int date) {
+	    super(x, y);
+	    this.value = value;
+	    this.date = date;
   }
 
   public int getValue() {
@@ -39,19 +52,24 @@ public class NASAPoint extends Point implements NASAShape {
   public void write(DataOutput out) throws IOException {
     super.write(out);
     out.writeInt(value);
+    out.writeInt(date);
   }
   
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
     this.value = in.readInt();
+    this.date = in.readInt();
   }
   
   @Override
   public Text toText(Text text) {
     super.toText(text);
     text.append(Separator, 0, Separator.length);
-    TextSerializerHelper.serializeInt(value, text, '\0');
+    TextSerializerHelper.serializeInt(value, text, ',');
+    
+    TextSerializerHelper.serializeInt(date, text, '\0');
+
     return text;
   }
   
@@ -60,7 +78,8 @@ public class NASAPoint extends Point implements NASAShape {
     super.fromText(text);
     byte[] bytes = text.getBytes();
     text.set(bytes, 1, text.getLength() - 1);
-    value = TextSerializerHelper.consumeInt(text, '\0');
+    value = TextSerializerHelper.consumeInt(text, ',');
+    date = TextSerializerHelper.consumeInt(text, '\0');
   }
   
   @Override

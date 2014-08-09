@@ -43,7 +43,7 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
  *
  */
 public class HDFToText {
-  
+  public static int date;
   public static class HDFToTextMap extends MapReduceBase implements
       Mapper<NASADataset, NASAShape, Rectangle, NASAShape> {
 
@@ -145,6 +145,8 @@ public class HDFToText {
       return;
     }
     boolean skipFillValue = cla.is("skipfillvalue", true);
+    date = cla.getInt("date", 0);
+    
 
     HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
   }

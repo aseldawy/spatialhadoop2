@@ -41,6 +41,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
+
 /**
  * Reads a specific dataset from an HDF file. Upon instantiation, the portion
  * of the HDF file being read is copied to a local directory. After that, the
@@ -114,6 +115,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
     try {
       Class<? extends GeoProjector> projectorClass =
           job.getClass(ProjectorClass, null, GeoProjector.class);
+//    	Class<? extends GeoProjector> projectorClass =  MercatorProjector.class;
       if (projectorClass != null)
         this.projector = projectorClass.newInstance();
     } catch (InstantiationException e) {
@@ -138,7 +140,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
       // HDF library can only deal with local files. So, we need to copy the file
       // to a local temporary directory before using the HDF Java library
       String localFile = FileUtil.copyFileSplit(job, split);
-
+      
       // retrieve an instance of H4File
       FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
 
@@ -217,9 +219,83 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
               corner_case_x=0;
               corner_case_y=0;
               coverHoles(water_mask);
-              
+              System.out.println(corner_case_x+" , "+corner_case_y);
               if(corner_case_x==nasaDataset.resolution&&corner_case_y==nasaDataset.resolution){
-            	  // TODO all data set is empty.. don't do anything
+            	  // TODO all data set is empty.. check surrounding datasets. 
+            	  System.out.println("corner case");
+            	  Object[] surroundingDataSet = new Object[4];
+            	  int[] dh=new int[]{0,0,-1,1};
+            	  int[] dv=new int[]{1,-1,0,0};
+            	  for (int i = 0; i < dv.length; i++) {
+            		  int h,v;
+            		  h=nasaDataset.h+dh[i];
+            		  v=nasaDataset.v+dv[i];
+            		  surroundingDataSet[i]=ReadDataSet(h,v,split, job, datasetName);
+            		  System.out.println(surroundingDataSet[i]);
+            	  }
+            	  
+					if(surroundingDataSet[0]!=null){ // h, v+1 the down cell .. copy the up row to the down row
+						System.out.println("h , v+1 ");
+						
+						int offset=(nasaDataset.resolution*nasaDataset.resolution)-nasaDataset.resolution;
+						for (int index = 0; index < nasaDataset.resolution; index++) {
+							Object value = null;
+							int i=0;
+							
+							while(i<nasaDataset.resolution&&( notFillValue(value=Array.get(surroundingDataSet[0],index+(i*nasaDataset.resolution))) ))i++;
+							
+							Array.set(dataArray, offset+index, value);
+						}
+					}
+					
+					if(surroundingDataSet[1]!=null){ // h, v-1 the up cell .. copy the down row to the up row
+						System.out.println("h , v-1 ");
+
+						int offset=(nasaDataset.resolution*nasaDataset.resolution)-nasaDataset.resolution;
+						for (int index = 0; index < nasaDataset.resolution; index++) {
+							Object value = null;
+							int i=0;
+							while(i<nasaDataset.resolution&&(notFillValue( value=Array.get(surroundingDataSet[1],offset+index-(i*nasaDataset.resolution)))))i++;
+							
+							Array.set(dataArray, index, value );
+						}
+					}
+					
+					if(surroundingDataSet[2]!=null){ // h-1, v the left cell .. copy the right column to left column
+						System.out.println("h-1 , v ");
+
+						
+						int offset=nasaDataset.resolution;
+						for (int index = 0; index < nasaDataset.resolution; index++) {
+							Object value = null;
+							int i=1;
+							while(i<nasaDataset.resolution&&(notFillValue( value=Array.get(surroundingDataSet[2],(offset*index)+offset-i))))i++;
+							Array.set(dataArray, offset*index,value);
+						}
+					}
+					
+					if(surroundingDataSet[3]!=null){ // h+1, v the right cell .. copy the left column to the right column
+						System.out.println("h+1 , v ");
+
+						
+						int offset=nasaDataset.resolution;
+						for (int index = 0; index < nasaDataset.resolution; index++) {
+							Object value =null;
+							int i=0;
+							while(i<nasaDataset.resolution && notFillValue(value=Array.get(surroundingDataSet[3],offset*index+i)))i++;
+							Array.set(dataArray, (offset*index)+offset-1, value);
+						}
+					}
+					
+            	  for (int i = 0; i < nasaDataset.resolution*nasaDataset.resolution; i++) {
+					Array.set(dataArrayTemp, i, Array.get(dataArray, i));
+            	  }
+            	  
+
+            	  
+            	  coverHoles(water_mask);
+            	  
+            	  coverHoles(water_mask);
               }
               else{
             	  coverHoles(water_mask);
@@ -282,7 +358,92 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
   }
 
 
-  private void coverHoles(byte[] water_mask) {
+  private boolean notFillValue(Object object) {
+	// TODO Auto-generated method stub
+	  if (object instanceof Integer) {
+	      return (Integer)object==fillValue;
+	    } else if (object instanceof Short) {
+	    	return (Short)object==fillValue;
+	    } else {
+	      throw new RuntimeException("Values of type "+object.getClass()+" is not supported yet");
+	    }
+}
+
+private Object ReadDataSet(int h, int v, FileSplit split, Configuration job,String datasetName) throws OutOfMemoryError, Exception {
+	// TODO Auto-generated method stub
+	  String localFile = null;
+      FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
+	  Group root;
+	  Stack<Group> groups2bSearched;
+	  Dataset matchDataset;
+	  
+	  
+	  Path wmPath = split.getPath().getParent();
+      final String tileIdentifier = String.format("h%02dv%02d", h, v);
+      FileSystem wmFs = wmPath.getFileSystem(job);
+      FileStatus[] wmFile = wmFs.listStatus(wmPath, new PathFilter() {
+        @Override
+        public boolean accept(Path path) {
+          return path.getName().contains(tileIdentifier);
+          
+        }});
+      if (wmFile.length == 0) {
+        LOG.warn("Could not find dataset for tile '"+tileIdentifier+"'");
+        wmFile = wmFs.listStatus(wmPath.getParent(), new PathFilter() {
+            @Override
+            public boolean accept(Path path) {
+              return path.getName().contains(tileIdentifier);
+              
+            }});
+        if(wmFile.length==0){
+        	 LOG.warn("Could not find dataset for tile '"+tileIdentifier+"'");
+        	 return null;
+        }
+        localFile=FileUtil.copyFile(job, wmFile[0]);
+        
+      } else {
+        localFile = FileUtil.copyFile(job, wmFile[0]);
+      }
+        FileFormat wmHDFFile = fileFormat.createInstance(localFile, FileFormat.READ);
+        wmHDFFile.open();
+        
+        root =
+            (Group)((DefaultMutableTreeNode)wmHDFFile.getRootNode()).getUserObject();
+        
+        // Search for the datset of interest in file
+        groups2bSearched = new Stack<Group>();
+        groups2bSearched.add(root);
+
+        matchDataset = null;
+
+        while (!groups2bSearched.isEmpty()) {
+          Group top = groups2bSearched.pop();
+          List<HObject> memberList = top.getMemberList();
+
+          for (HObject member : memberList) {
+            if (member instanceof Group) {
+              groups2bSearched.add((Group) member);
+            } else if (member instanceof Dataset) {
+              if (member.getName().equalsIgnoreCase(datasetName)) {
+                matchDataset = (Dataset) member;
+                break;
+              }
+            }
+          }
+        }
+
+        if (matchDataset == null) {
+//          LOG.warn("Water mask dataset "+datasetName+" not found in file "+split.getPath());
+        } else {
+        	
+         return matchDataset.read();
+         
+        }
+      
+      return null;
+}
+
+private void coverHoles(byte[] water_mask) {
 	// TODO Auto-generated method stub
 	  for (int y = 0; y < nasaDataset.resolution; y++) {
           // First empty point in current run
