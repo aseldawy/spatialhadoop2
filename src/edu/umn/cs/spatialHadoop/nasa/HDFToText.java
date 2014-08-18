@@ -92,8 +92,7 @@ public class HDFToText {
     // Run the job
     RunningJob lastSubmittedJob = JobClient.runJob(job);
     Counters counters = lastSubmittedJob.getCounters();
-    Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
-    final long resultCount = outputRecordCounter.getValue();
+    final long resultCount = counters.getCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
     
     return resultCount;
   }

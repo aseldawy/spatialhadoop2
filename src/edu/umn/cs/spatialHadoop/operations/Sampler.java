@@ -216,17 +216,14 @@ public class Sampler {
     RunningJob run_job = JobClient.runJob(job);
     
     Counters counters = run_job.getCounters();
-    Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
-    final long resultCount = outputRecordCounter.getValue();
-    
-    Counter outputSizeConter = counters.findCounter(Task.Counter.MAP_OUTPUT_BYTES);
-    final long resultSize = outputSizeConter.getValue();
+    final long resultCount = counters.getCounter(Task.Counter.MAP_OUTPUT_RECORDS);
+
+    final long resultSize = counters.getCounter(Task.Counter.MAP_OUTPUT_BYTES);
     
     LOG.info("resultSize: "+resultSize);
     LOG.info("resultCount: "+resultCount);
 
-    Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
-    Sampler.sizeOfLastProcessedFile = inputBytesCounter.getValue();
+    Sampler.sizeOfLastProcessedFile = counters.getCounter(Task.Counter.MAP_INPUT_BYTES);
 
     // Ratio of records to return from output based on the threshold
     // Note that any number greater than or equal to one will cause all

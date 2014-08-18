@@ -347,8 +347,7 @@ public class SJMR {
     // Start the job
     RunningJob runningJob = JobClient.runJob(job);
     Counters counters = runningJob.getCounters();
-    Counter outputRecordCounter = counters.findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
-    final long resultCount = outputRecordCounter.getValue();
+    final long resultCount = counters.getCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
 
     return resultCount;
   }

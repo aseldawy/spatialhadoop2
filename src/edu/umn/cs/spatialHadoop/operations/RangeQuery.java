@@ -295,9 +295,8 @@ public class RangeQuery {
     if (!background) {
       RunningJob runningJob = JobClient.runJob(job);
       Counters counters = runningJob.getCounters();
-      Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
-      final long resultCount = outputRecordCounter.getValue();
-      
+      final long resultCount = counters.getCounter(Task.Counter.MAP_OUTPUT_RECORDS);
+
       // If outputPath not set by user, automatically delete it
       if (outFile == null)
         outFs.delete(outputPath, true);

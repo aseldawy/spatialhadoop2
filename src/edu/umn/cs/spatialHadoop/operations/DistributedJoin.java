@@ -540,13 +540,12 @@ public class DistributedJoin {
       LOG.info("Submit job in sync mode");
       RunningJob runningJob = JobClient.runJob(job);
       Counters counters = runningJob.getCounters();
-      Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
-      final long resultCount = outputRecordCounter.getValue();
+      final long resultCount = counters.getCounter(Task.Counter.MAP_OUTPUT_RECORDS);
       
       // Output number of running map tasks
-      Counter mapTaskCountCounter = counters
-          .findCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
-      System.out.println("Number of map tasks "+mapTaskCountCounter.getValue());
+      long mapTaskCountCounter = counters
+          .getCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
+      System.out.println("Number of map tasks "+mapTaskCountCounter);
       
       // Delete output directory if not explicitly set by user
       if (userOutputPath == null)
