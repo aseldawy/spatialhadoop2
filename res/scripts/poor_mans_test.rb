@@ -23,7 +23,7 @@ def system_check(cmd)
   raise "Error running '#{cmd}'" unless success 
 end
 
-ExtraConfigParams = "-D dfs.block.size=#{64*1024}"
+ExtraConfigParams = "-D dfs.block.size=#{1024*1024}"
 
 def generate_file(prefix, shape)
   filename = "#{prefix}.#{shape}"

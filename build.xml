@@ -125,12 +125,6 @@
     </tar>
   </target>
 
-	<target name="install" depends="package"
-	    description="Install SpatialHadoop on an existing Hadoop installation">
-	  <!-- Extract the constructed package file (tar) in the destination directory -->
-		<untar src="${dist}/package/spatialhadoop-${version}.tar.gz"
-           dest="${hadoop.dir}" compression="gzip"/>
-  </target>
 
 	<!-- Build targets for Hadoop 2 -->
 
@@ -173,13 +167,37 @@
       <tarfileset dir="lib/hdflib" prefix="share/hadoop/common/lib/"/>
     </tar>
 	</target>
+	
+	<!-- Check whether the target hadoop.dir is of version 1 or 2 -->
+	<condition property="hadoop1">
+  	<available file="${hadoop.dir}/conf/hadoop-env.sh"/>
+	</condition>
+	
+	<condition property="hadoop2">
+	  <available file="${hadoop.dir}/etc/hadoop/hadoop-env.sh"/>
+	</condition>
+	
+	<target name="install1" depends="package" if="hadoop1"
+	    description="Install SpatialHadoop on an existing Hadoop installation">
+		<echo message="Installing on a Hadoop 1.x installation"/>
+	  <!-- Extract the constructed package file (tar) in the destination directory -->
+		<untar src="${dist}/package/spatialhadoop-${version}.tar.gz"
+           dest="${hadoop.dir}" compression="gzip"/>
+  </target>
 
-  <target name="install2" depends="package2"
+  <target name="install2" depends="package2" if="hadoop2"
     description="Install SpatialHadoop on an existing Hadoop 2 installation">
+  	<echo message="Installing on a Hadoop 2.x installation"/>
     <!-- Extract the constructed package file (tar) in the destination directory -->
     <untar src="${dist}/package/spatialhadoop-${version}-2.tar.gz"
-           dest="${hadoop2.dir}" compression="gzip"/>
+           dest="${hadoop.dir}" compression="gzip"/>
   </target>
+	
+	<target name="install" depends="install1,install2">
+		<!-- Set executable permissions explicitly as untar does not support it -->
+    <!-- See https://issues.apache.org/bugzilla/show_bug.cgi?id=36361 -->
+    <chmod file="${hadoop.dir}/bin/shadoop" perm="755"/>
+	</target>
 
 	<target name="clean" description="clean up" >
     <!-- Delete the ${build} and ${dist} directory trees -->
