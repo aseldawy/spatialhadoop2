@@ -200,9 +200,13 @@ public class OperationsParams extends Configuration {
     
     return true;
   }
+  
+  public boolean checkInputOutput() throws IOException {
+    return checkInputOutput(false);
+  }
 
   /**
-   * Makes standard checks for input and output files. It is assumed that all
+   * Makes standard checks for input and output files. It is assumes that all
    * files are input files while the last one is the output file. First,
    * it checks that there is at least one input file. Then, it checks that every
    * input file exists. After that, it checks for output file, if it exists and
@@ -210,7 +214,7 @@ public class OperationsParams extends Configuration {
    * @return <code>true</code> if all checks pass. <code>false</code> otherwise.
    * @throws IOException 
    */
-  public boolean checkInputOutput() throws IOException {
+  public boolean checkInputOutput(boolean outputRequired) throws IOException {
     Path[] inputPaths = getInputPaths();
     if (inputPaths.length == 0) {
       LOG.error("No input files");
@@ -226,6 +230,10 @@ public class OperationsParams extends Configuration {
       }
     }
     Path outputPath = getOutputPath();
+    if (outputPath == null && outputRequired) {
+      LOG.error("Output path is missing");
+      return false;
+    }
     if (outputPath != null) {
       FileSystem fs = outputPath.getFileSystem(this);
       if (fs.exists(outputPath)) {
