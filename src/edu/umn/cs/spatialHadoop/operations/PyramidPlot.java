@@ -882,7 +882,7 @@ public class PyramidPlot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, OperationsParams params)
           throws IOException {
-    if (params.getBoolean("local", false)) {
+    if (params.isLocal(true)) {
       plotLocal(inFile, outFile, params);
     } else {
       plotMapReduce(inFile, outFile, params);

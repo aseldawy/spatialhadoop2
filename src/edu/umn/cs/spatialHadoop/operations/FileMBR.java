@@ -352,19 +352,12 @@ public class FileMBR {
       return null; 
     }
     
-    JobConf job = new JobConf(params, FileMBR.class);
-    FileInputFormat.addInputPath(job, file);
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-
-    boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
-    boolean isLocal = params.is("local", autoLocal);
-    
-    if (!isLocal) {
-      // Process with MapReduce
-      return fileMBRMapReduce(file, params);
-    } else {
+    if (params.isLocal(true)) {
       // Process without MapReduce
       return fileMBRLocal(file, params);
+    } else {
+      // Process with MapReduce
+      return fileMBRMapReduce(file, params);
     }
   }
 

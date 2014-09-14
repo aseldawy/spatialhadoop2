@@ -23,6 +23,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.FileInputFormat;
+import org.apache.hadoop.mapred.InputSplit;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
@@ -37,8 +40,11 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
+import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
@@ -57,6 +63,11 @@ public class OperationsParams extends Configuration {
   
   /**Separator between shape type and value*/
   public static final String ShapeValueSeparator = "//";
+
+  /**Maximum number of splits to handle by a local algorithm*/
+  private static final int MaxSplitsForLocalProcessing = 3;
+
+  private static final long MaxSizeForLocalProcessing = 200 * 1024 * 1024;
 
   /**All detected input paths*/
   private Path[] allPaths;
@@ -95,6 +106,11 @@ public class OperationsParams extends Configuration {
   public OperationsParams(Configuration params, String ... additionalArgs) {
     super(params);
     initialize(additionalArgs);
+  }
+  
+  public OperationsParams(OperationsParams params) {
+    super(params);
+    this.allPaths = params.allPaths.clone();
   }
 
   public void initialize(String... args) {
@@ -534,7 +550,7 @@ public class OperationsParams extends Configuration {
           sampleLines.add(line.toString());
         }
       }, sampleParams);
-      
+
       // Collect some stats about the sample to help detecting shape type
       final String Separators[] = {",", "\t"};
       int[] numOfSplits = {0, 0}; // Number of splits with each separator
@@ -548,7 +564,7 @@ public class OperationsParams extends Configuration {
         for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
           String separator = Separators[iSeparator];
           String[] parts = sampleLine.split(separator);
-          
+
           if (numOfSplits[iSeparator] == 0)
             numOfSplits[iSeparator] = parts.length;
           else if (numOfSplits[iSeparator] != parts.length)
@@ -578,7 +594,7 @@ public class OperationsParams extends Configuration {
         if (!allNumbersWithAnySeparator)
           allNumbersInAllSample = false;
       }
-      
+
       if (numOfSplits[0] != -1 && allNumbersInAllSample) {
         // Each line is comma separated and all values are numbers
         if (numOfSplits[0] == 2) {
@@ -612,6 +628,61 @@ public class OperationsParams extends Configuration {
       LOG.info("Autodetected shape '"+autoDetectedShape+"' for input '"+sampleLines.get(0)+"'");
       this.set("shape", autoDetectedShape);
       return true;
+    }
+  }
+  
+  /**
+   * Checks whether the operation should work in local or MapReduce mode. If the
+   * configuration explicitly specifies whether to run in local or MapReduce
+   * mode, the specified option is returned. Otherwise, if the autoDetect
+   * parameter is set to true, it automatically detects whether to use local or
+   * MapReduce based on the input size. If autoDetect is set to false and
+   * nothing is explicitly specified, it automatically returns
+   * <code>false</code> to indicate it should work in MapReduce.
+   * 
+   * @param autoDetect
+   * @return <code>true</code> to run in local mode, <code>false</code> to run
+   *         in MapReduce mode.
+   */
+  public boolean isLocal(boolean autoDetect) {
+    final boolean LocalProcessing = true;
+    final boolean MapReduceProcessing = false;
+    
+    // If any of the input files are hidden, use local processing
+    Path[] input = this.getInputPaths();
+    for (Path inputFile : input) {
+      if (!SpatialSite.NonHiddenFileFilter.accept(inputFile))
+        return LocalProcessing;
+    }
+    
+    JobConf job = new JobConf(this);
+    Shape plotRange = this.getShape("rect");
+    if (plotRange != null)
+      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+
+
+    if (job.get("local") != null)
+      return job.getBoolean("local", false);
+    
+    if (input.length > MaxSplitsForLocalProcessing)
+      return MapReduceProcessing;
+    
+    FileInputFormat.setInputPaths(job, input);
+    ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
+    try {
+      InputSplit[] splits = inputFormat.getSplits(job, 1);
+      if (splits.length > MaxSplitsForLocalProcessing)
+        return MapReduceProcessing;
+
+      long totalSize = 0;
+      for (InputSplit split : splits)
+        totalSize += split.getLength();
+      if (totalSize > MaxSizeForLocalProcessing)
+        return MapReduceProcessing;
+      return LocalProcessing;
+    } catch (IOException e) {
+      LOG.warn("Cannot get splits for input");
+      return MapReduceProcessing;
     }
   }
 }

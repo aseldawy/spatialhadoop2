@@ -62,8 +62,8 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
@@ -776,7 +776,7 @@ public class HeatMapPlot {
     int imageWidth = params.getInt("width", 1000);
     int imageHeight = params.getInt("height", 1000);
     
-    Shape shape = params.getShape("shape", new Point());
+    //Shape shape = params.getShape("shape", new Point());
     Shape plotRange = params.getShape("rect", null);
 
     boolean keepAspectRatio = params.is("keep-ratio", true);
@@ -820,24 +820,30 @@ public class HeatMapPlot {
     int radius = params.getInt("radius", 5);
     FrequencyMap frequencyMap = new FrequencyMap(imageWidth, imageHeight);
 
+    long t1 = System.currentTimeMillis();
     for (InputSplit split : splits) {
-      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params,
-          (FileSplit)split);
+      ShapeArrayRecordReader reader = new ShapeArrayRecordReader(params, (FileSplit)split);
       Rectangle cell = reader.createKey();
-      while (reader.next(cell, shape)) {
-        Rectangle shapeBuffer = shape.getMBR();
-        if (shapeBuffer == null)
-          continue;
-        shapeBuffer = shapeBuffer.buffer(radius, radius);
-        if (plotRange == null || shapeBuffer.isIntersected(plotRange)) {
-          Point centerPoint = shapeBuffer.getCenterPoint();
-          int cx = (int) Math.round((centerPoint.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-          int cy = (int) Math.round((centerPoint.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
-          frequencyMap.addPoint(cx, cy, radius);
+      ArrayWritable shapes = reader.createValue();
+      while (reader.next(cell, shapes)) {
+        for (Writable w : shapes.get()) {
+          Shape shape = (Shape) w;
+          Rectangle shapeBuffer = shape.getMBR();
+          if (shapeBuffer == null)
+            continue;
+          shapeBuffer = shapeBuffer.buffer(radius, radius);
+          if (plotRange == null || shapeBuffer.isIntersected(plotRange)) {
+            Point centerPoint = shapeBuffer.getCenterPoint();
+            int cx = (int) Math.round((centerPoint.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+            int cy = (int) Math.round((centerPoint.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+            frequencyMap.addPoint(cx, cy, radius);
+          }
         }
       }
       reader.close();
     }
+    long t2 = System.currentTimeMillis();
+    System.out.println("total time in millis "+(t2-t1));
     
     // Convert frequency map to an image with colors
     NASAPoint.setColor1(params.getColor("color1", Color.BLUE));
@@ -867,26 +873,7 @@ public class HeatMapPlot {
   }
 
   public static RunningJob plotHeatMap(Path inFile, Path outFile, OperationsParams params) throws IOException {
-    // Determine the size of input which needs to be processed in order to determine
-    // whether to plot the file locally or using MapReduce
-    boolean isLocal;
-    if (params.get("local") == null) {
-      JobConf job = new JobConf(params);
-      ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-      ShapeInputFormat.addInputPath(job, inFile);
-      Shape plotRange = params.getShape("rect");
-      if (plotRange != null) {
-        job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-      }
-      InputSplit[] splits = inputFormat.getSplits(job, 1);
-      boolean autoLocal = splits.length <= 3;
-      
-      isLocal = params.is("local", autoLocal);
-    } else {
-      isLocal = params.is("local");
-    }
-    
-    if (isLocal) {
+    if (params.isLocal(true)) {
       plotHeatMapLocal(inFile, outFile, params);
       return null;
     } else {
@@ -909,6 +896,7 @@ public class HeatMapPlot {
     System.out.println("gradient:<hue|color> - Method to change gradient from color1 to color2");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
+    System.out.println("-skipzeros: Leave empty areas (frequency < min) transparent");
     
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }

@@ -1095,26 +1095,7 @@ public class GeometricPlot {
   }
 
   public static RunningJob plot(Path inFile, Path outFile, OperationsParams params) throws IOException {
-    // Determine the size of input which needs to be processed in order to determine
-    // whether to plot the file locally or using MapReduce
-    boolean isLocal;
-    if (params.get("local") == null) {
-      JobConf job = new JobConf(params);
-      ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-      ShapeInputFormat.addInputPath(job, inFile);
-      Shape plotRange = params.getShape("rect");
-      if (plotRange != null) {
-        job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-      }
-      InputSplit[] splits = inputFormat.getSplits(job, 1);
-      boolean autoLocal = splits.length <= 3;
-
-      isLocal = params.is("local", autoLocal);
-    } else {
-      isLocal = params.is("local");
-    }
-
-    if (isLocal) {
+    if (params.isLocal(true)) {
       plotLocal(inFile, outFile, params);
       return null;
     } else {

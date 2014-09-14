@@ -20,6 +20,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
@@ -50,6 +51,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
@@ -316,7 +318,7 @@ public class RangeQuery {
     // Cache query MBR to use with duplicate avoidance
     Rectangle queryMbr = query.getMBR();
     JobConf job = new JobConf(params);
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+    ShapeArrayInputFormat inputFormat = new ShapeArrayInputFormat();
     ShapeInputFormat.addInputPath(job, inFile);
     job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     InputSplit[] splits = inputFormat.getSplits(job, 1);
@@ -327,25 +329,29 @@ public class RangeQuery {
     long resultCount = 0; // Number of items in result
     
     for (InputSplit split : splits) {
-      RecordReader<Rectangle, Shape> reader =
+      RecordReader<Rectangle, ArrayWritable> reader =
           inputFormat.getRecordReader(split, job, null);
       Rectangle cellMbr = (Rectangle) reader.createKey();
-      Shape shape = (Shape) reader.createValue();
-      while (reader.next(cellMbr, shape)) {
-        Rectangle shapeMbr = shape.getMBR();
-        if (shapeMbr.isIntersected(queryMbr) && shape.isIntersected(query)) {
-          boolean report_result;
-          if (cellMbr.isValid()) {
-            // Check for duplicate avoidance
-            double reference_x = Math.max(queryMbr.x1, shapeMbr.x1);
-            double reference_y = Math.max(queryMbr.y1, shapeMbr.y1);
-            report_result = cellMbr.contains(reference_x, reference_y);
-          } else {
-            report_result = true;
-          }
-          if (report_result) {
-            resultCount++;
-            outStream.println(shape.toText(new Text()));
+      ArrayWritable values = reader.createValue();
+      while (reader.next(cellMbr, values)) {
+        Shape[] shapes = (Shape[]) values.get();
+        for (Shape shape : shapes) {
+          Rectangle shapeMbr = shape.getMBR();
+          if (shapeMbr != null && shapeMbr.isIntersected(queryMbr)
+              && shape.isIntersected(query)) {
+            boolean report_result;
+            if (cellMbr.isValid()) {
+              // Check for duplicate avoidance
+              double reference_x = Math.max(queryMbr.x1, shapeMbr.x1);
+              double reference_y = Math.max(queryMbr.y1, shapeMbr.y1);
+              report_result = cellMbr.contains(reference_x, reference_y);
+            } else {
+              report_result = true;
+            }
+            if (report_result) {
+              resultCount++;
+              outStream.println(shape.toText(new Text()));
+            }
           }
         }
       }
@@ -364,23 +370,12 @@ public class RangeQuery {
    */
   public static<S extends Shape> long rangeQuery(Path inFile, Path outFile,
       Shape query, OperationsParams params) throws IOException {
-    // Determine the size of input which needs to be processed in order to determine
-    // whether to plot the file locally or using MapReduce
-    JobConf job = new JobConf(params);
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-    ShapeInputFormat.addInputPath(job, inFile);
-    job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-    InputSplit[] splits = inputFormat.getSplits(job, 1);
-    boolean autoLocal = splits.length <= 3;
-    
-    boolean isLocal = params.is("local", autoLocal);
-    
-    if (!isLocal) {
-      // Either a directory of file or a large file
-      return rangeQueryMapReduce(inFile, outFile, query, params);
-    } else {
+    if (params.isLocal(true)) {
       // A single small file, process it without MapReduce
       return rangeQueryLocal(inFile, outFile, query, params);
+    } else {
+      // Either a directory of file or a large file
+      return rangeQueryMapReduce(inFile, outFile, query, params);
     }
   }
   
