@@ -506,18 +506,22 @@ public class OperationsParams extends Configuration {
 
   /**
    * Auto detect shape type based on input format
-   * @throws IOException 
+   * 
+   * @return <code>true</code> if a shape is already present in the
+   *         configuration or it is auto detected from input files.
+   *         <code>false</code> if it was not set and could not be detected.
    */
   public boolean autoDetectShape() {
     String autoDetectedShape = null;
     final Vector<String> sampleLines = new Vector<String>();
+    if (this.get("shape") != null)
+      return true; // A shape is already configured
+    if (this.getInputPaths().length == 0)
+      return false; // No shape is configured and no input to detected
     try {
-      if (this.get("shape") != null)
-        return false;
-      if (this.getInputPaths().length == 0)
-        return false;
       // Read a random sample from the input
-      // We read a sample instead of one line for consistency
+      // We read a sample instead of one line to make sure
+      // the auto detected shape is consistent in many lines
       final int sampleCount = 10;
       OperationsParams sampleParams = new OperationsParams(this);
       sampleParams.setInt("count", sampleCount);
@@ -602,11 +606,12 @@ public class OperationsParams extends Configuration {
     } catch (IOException e) {
     }
     if (autoDetectedShape == null) {
-      LOG.info("Could not autodetect shape for input '"+sampleLines.get(0)+"'");
+      LOG.warn("Could not autodetect shape for input '"+sampleLines.get(0)+"'");
+      return false;
     } else {
       LOG.info("Autodetected shape '"+autoDetectedShape+"' for input '"+sampleLines.get(0)+"'");
       this.set("shape", autoDetectedShape);
+      return true;
     }
-    return autoDetectedShape != null;
   }
 }
