@@ -117,7 +117,7 @@ public class GeometricPlot {
    *
    */
   public static class GridPartitionMap extends MapReduceBase 
-  implements Mapper<Rectangle, Shape, IntWritable, Shape> {
+  implements Mapper<Rectangle, ArrayWritable, IntWritable, Shape> {
 
     private GridInfo partitionGrid;
     private IntWritable cellNumber;
@@ -149,36 +149,39 @@ public class GeometricPlot {
       }
     }
 
-    public void map(Rectangle cell, Shape shape,
+    public void map(Rectangle cell, ArrayWritable value,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
             throws IOException {
-      Rectangle shapeMbr = shape.getMBR();
-      if (shapeMbr == null)
-        return;
-      // Check if this shape can be skipped using the gradual fade option
-      if (gradualFade && !(shape instanceof Point)) {
-        double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
-        if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-          // This shape can be safely skipped as it is too small to be plotted
-          return;
-        }
-      }
-      if (adaptiveSample && shape instanceof Point) {
-        if (Math.random() > adaptiveSampleRatio)
-          return;
-      }
+      
+      for(Shape shape : (Shape[]) value.get()) {
+    	  Rectangle shapeMbr = shape.getMBR();
+    	  if (shapeMbr == null)
+    		  return;
+    	  // Check if this shape can be skipped using the gradual fade option
+    	  if (gradualFade && !(shape instanceof Point)) {
+    		  double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
+    		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+    			  // This shape can be safely skipped as it is too small to be plotted
+    			  return;
+    		  }
+    	  }
+    	  if (adaptiveSample && shape instanceof Point) {
+    		  if (Math.random() > adaptiveSampleRatio)
+    			  return;
+    	  }
 
-      // Skip shapes outside query range if query range is set
-      if (queryRange != null && !shapeMbr.isIntersected(queryRange))
-        return;
-      java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
-      for (int i = 0; i < overlappingCells.width; i++) {
-        int x = overlappingCells.x + i;
-        for (int j = 0; j < overlappingCells.height; j++) {
-          int y = overlappingCells.y + j;
-          cellNumber.set(y * partitionGrid.columns + x + 1);
-          output.collect(cellNumber, shape);
-        }
+    	  // Skip shapes outside query range if query range is set
+    	  if (queryRange != null && !shapeMbr.isIntersected(queryRange))
+    		  return;
+    	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
+    	  for (int i = 0; i < overlappingCells.width; i++) {
+    		  int x = overlappingCells.x + i;
+    		  for (int j = 0; j < overlappingCells.height; j++) {
+    			  int y = overlappingCells.y + j;
+    			  cellNumber.set(y * partitionGrid.columns + x + 1);
+    			  output.collect(cellNumber, shape);
+    		  }
+    	  }
       }
     }
   }
@@ -293,7 +296,7 @@ public class GeometricPlot {
    * @author Ahmed Eldawy
    */
   public static class SkewedPartitionMap extends MapReduceBase implements
-  Mapper<Rectangle, Shape, IntWritable, Shape> {
+  Mapper<Rectangle, ArrayWritable, IntWritable, Shape> {
 
     /**The cells used to partition the space*/
     private CellInfo[] cells;
@@ -330,33 +333,36 @@ public class GeometricPlot {
       }
     }
 
-    public void map(Rectangle dummy, Shape shape,
+    public void map(Rectangle dummy, ArrayWritable value,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
             throws IOException {
-      Rectangle shapeMBR = shape.getMBR();
-      if (shapeMBR == null)
-        return;
-      // Check if this shape can be skipped using the gradual fade option
-      if (gradualFade && !(shape instanceof Point)) {
-        double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
-        if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-          // This shape can be safely skipped as it is too small to be plotted
-          return;
-        }
-      }
-      if (adaptiveSample && shape instanceof Point) {
-        if (Math.random() > adaptiveSampleRatio)
-          return;
-      }
+      
+      for(Shape shape : (Shape[]) value.get()) {
+    	  Rectangle shapeMBR = shape.getMBR();
+    	  if (shapeMBR == null)
+    		  return;
+    	  // Check if this shape can be skipped using the gradual fade option
+    	  if (gradualFade && !(shape instanceof Point)) {
+    		  double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+    		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+    			  // This shape can be safely skipped as it is too small to be plotted
+    			  return;
+    		  }
+    	  }
+    	  if (adaptiveSample && shape instanceof Point) {
+    		  if (Math.random() > adaptiveSampleRatio)
+    			  return;
+    	  }
 
-      // Skip shapes outside query range if query range is set
-      if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-        return;
-      for (CellInfo cell : cells) {
-        if (cell.isIntersected(shapeMBR)) {
-          cellNumber.set(cell.cellId);
-          output.collect(cellNumber, shape);
-        }
+    	  // Skip shapes outside query range if query range is set
+    	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
+    		  return;
+    	  for (CellInfo cell : cells) {
+    		  if (cell.isIntersected(shapeMBR)) {
+    			  cellNumber.set(cell.cellId);
+    			  output.collect(cellNumber, shape);
+    		  }
+    	  }
       }
     }
   }
@@ -891,7 +897,7 @@ public class GeometricPlot {
         partitionGrid.calculateCellDimensions(
             (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
         OperationsParams.setShape(job, PartitionGrid, partitionGrid);
-        job.setInputFormat(ShapeInputFormat.class);
+        job.setInputFormat(ShapeArrayInputFormat.class);
       } else if (partition.equals("space")) {
         // Use Skewed partitioning
         LOG.info("Use skewed partitioning then plot");
@@ -903,7 +909,7 @@ public class GeometricPlot {
         // Pack in rectangles using an RTree
         CellInfo[] cellInfos = Repartition.packInRectangles(inFile, outFile, params, fileMBR);
         SpatialSite.setCells(job, cellInfos);
-        job.setInputFormat(ShapeInputFormat.class);
+        job.setInputFormat(ShapeArrayInputFormat.class);
       }
     } else if (partition.equals("data")) {
       LOG.info("Plot using data partitioning");

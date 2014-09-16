@@ -170,7 +170,7 @@ public class PyramidPlot {
    * @author Ahmed Eldawy
    */
   public static class SpacePartitionMap extends MapReduceBase 
-    implements Mapper<Rectangle, Shape, TileIndex, Shape> {
+    implements Mapper<Rectangle, ArrayWritable, TileIndex, Shape> {
 
     /**Number of levels in the pyramid*/
     private int numLevels;
@@ -208,50 +208,53 @@ public class PyramidPlot {
       this.gradualFade = job.getBoolean("fade", false);
     }
     
-    public void map(Rectangle cell, Shape shape,
+    public void map(Rectangle cell, ArrayWritable value,
         OutputCollector<TileIndex, Shape> output, Reporter reporter)
         throws IOException {
-      Rectangle shapeMBR = shape.getMBR();
-      if (shapeMBR == null)
-        return;
       
-      int min_level = 0;
-      if (adaptiveSampling && shape instanceof Point) {
-        // Special handling for NASA data
-        double p = Math.random();
-        // Skip levels that do not satisfy the probability
-        while (min_level < numLevels && p > levelProb[min_level])
-          min_level++;
-      }
+      for(Shape shape : (Shape[]) value.get()) {
+    	  Rectangle shapeMBR = shape.getMBR();
+    	  if (shapeMBR == null)
+    		  return;
       
-      java.awt.Rectangle overlappingCells =
-          bottomGrid.getOverlappingCells(shapeMBR);
-      for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
-        if (gradualFade && !(shape instanceof Point)) {
-          double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
-          if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-            // This shape can be safely skipped as it is too small to be plotted
-            return;
-          }
-        }
+    	  int min_level = 0;
+    	  if (adaptiveSampling && shape instanceof Point) {
+    		  // Special handling for NASA data
+    		  double p = Math.random();
+    		  // Skip levels that do not satisfy the probability
+    		  while (min_level < numLevels && p > levelProb[min_level])
+    			  min_level++;
+    	  }
+      
+    	  java.awt.Rectangle overlappingCells =
+    			  bottomGrid.getOverlappingCells(shapeMBR);
+    	  for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
+    		  if (gradualFade && !(shape instanceof Point)) {
+    			  double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
+    			  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+    				  // This shape can be safely skipped as it is too small to be plotted
+    				  return;
+    			  }
+    		  }
 
-        for (int i = 0; i < overlappingCells.width; i++) {
-          key.x = i + overlappingCells.x;
-          for (int j = 0; j < overlappingCells.height; j++) {
-            key.y = j + overlappingCells.y;
-            // Replicate to the cell at (x + i, y + j) on the current level
-            output.collect(key, shape);
-          }
-        }
-        // Shrink overlapping cells to match the upper level
-        int updatedX1 = overlappingCells.x / 2;
-        int updatedY1 = overlappingCells.y / 2;
-        int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
-        int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
-        overlappingCells.x = updatedX1;
-        overlappingCells.y = updatedY1;
-        overlappingCells.width = updatedX2 - updatedX1 + 1;
-        overlappingCells.height = updatedY2 - updatedY1 + 1;
+    		  for (int i = 0; i < overlappingCells.width; i++) {
+    			  key.x = i + overlappingCells.x;
+    			  for (int j = 0; j < overlappingCells.height; j++) {
+    				  key.y = j + overlappingCells.y;
+    				  // Replicate to the cell at (x + i, y + j) on the current level
+    				  output.collect(key, shape);
+    			  }	
+    		  }
+    		  // Shrink overlapping cells to match the upper level
+    		  int updatedX1 = overlappingCells.x / 2;
+    		  int updatedY1 = overlappingCells.y / 2;
+    		  int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
+    		  int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
+    		  overlappingCells.x = updatedX1;
+    		  overlappingCells.y = updatedY1;
+    		  overlappingCells.width = updatedX2 - updatedX1 + 1;
+    		  overlappingCells.height = updatedY2 - updatedY1 + 1;
+    	  }
       }
     }
   }
@@ -802,7 +805,7 @@ public class PyramidPlot {
       job.setReducerClass(SpacePartitionReduce.class);
       job.setMapOutputKeyClass(TileIndex.class);
       job.setMapOutputValueClass(shape.getClass());
-      job.setInputFormat(ShapeInputFormat.class);
+      job.setInputFormat(ShapeArrayInputFormat.class);
     } else {
       job.setMapperClass(DataPartitionMap.class);
       job.setReducerClass(DataPartitionReduce.class);
