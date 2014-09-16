@@ -44,6 +44,7 @@ import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -871,6 +872,13 @@ public class PyramidPlot {
     TextOutputFormat.setOutputPath(job, outFile);
     job.setOutputCommitter(PlotPyramidOutputCommitter.class);
     
+    if (OperationsParams.isLocal(job, inFile)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
+    
     if (background) {
       JobClient jc = new JobClient(job);
       return lastSubmittedJob = jc.submitJob(job);
@@ -882,13 +890,8 @@ public class PyramidPlot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, OperationsParams params)
           throws IOException {
-    if (params.isLocal(true)) {
-      plotLocal(inFile, outFile, params);
-    } else {
-      plotMapReduce(inFile, outFile, params);
-    }
+    plotMapReduce(inFile, outFile, params);
   }
-
   
   private static void printUsage() {
     System.out.println("Plots a file to a set of images that form a pyramid to be used by Google Maps or a similar engine");

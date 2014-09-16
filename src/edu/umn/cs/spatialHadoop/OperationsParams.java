@@ -40,14 +40,11 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
-import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
-import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
-
 
 /**
  * A class that encapsulates all parameters sent for an operations implemented
@@ -65,7 +62,8 @@ public class OperationsParams extends Configuration {
   public static final String ShapeValueSeparator = "//";
 
   /**Maximum number of splits to handle by a local algorithm*/
-  private static final int MaxSplitsForLocalProcessing = 3;
+  private static final int MaxSplitsForLocalProcessing =
+      Runtime.getRuntime().availableProcessors();
 
   private static final long MaxSizeForLocalProcessing = 200 * 1024 * 1024;
 
@@ -633,39 +631,31 @@ public class OperationsParams extends Configuration {
   
   /**
    * Checks whether the operation should work in local or MapReduce mode. If the
-   * configuration explicitly specifies whether to run in local or MapReduce
-   * mode, the specified option is returned. Otherwise, if the autoDetect
-   * parameter is set to true, it automatically detects whether to use local or
-   * MapReduce based on the input size. If autoDetect is set to false and
-   * nothing is explicitly specified, it automatically returns
-   * <code>false</code> to indicate it should work in MapReduce.
+   * job explicitly specifies whether to run in local or MapReduce mode, the
+   * specified option is returned. Otherwise, it automatically detects whether
+   * to use local or MapReduce based on the input size.
    * 
-   * @param autoDetect
    * @return <code>true</code> to run in local mode, <code>false</code> to run
    *         in MapReduce mode.
    */
-  public boolean isLocal(boolean autoDetect) {
+  public static boolean isLocal(JobConf job, Path ... input) {
     final boolean LocalProcessing = true;
     final boolean MapReduceProcessing = false;
     
+    // Whatever is explicitly set has the highest prioerity
+    if (job.get("local") != null)
+      return job.getBoolean("local", false);
+    
     // If any of the input files are hidden, use local processing
-    Path[] input = this.getInputPaths();
     for (Path inputFile : input) {
       if (!SpatialSite.NonHiddenFileFilter.accept(inputFile))
         return LocalProcessing;
     }
-    
-    JobConf job = new JobConf(this);
-    Shape plotRange = this.getShape("rect");
-    if (plotRange != null)
-      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-
-
-    if (job.get("local") != null)
-      return job.getBoolean("local", false);
-    
-    if (input.length > MaxSplitsForLocalProcessing)
+        
+    if (input.length > MaxSplitsForLocalProcessing) {
+      LOG.info("Too many files. Using MapReduce");
       return MapReduceProcessing;
+    }
     
     FileInputFormat.setInputPaths(job, input);
     ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
@@ -677,8 +667,11 @@ public class OperationsParams extends Configuration {
       long totalSize = 0;
       for (InputSplit split : splits)
         totalSize += split.getLength();
-      if (totalSize > MaxSizeForLocalProcessing)
+      if (totalSize > MaxSizeForLocalProcessing) {
+        LOG.info("Input size is too large. Using MapReduce");
         return MapReduceProcessing;
+      }
+      LOG.info("Input size is small enough to use local machine");
       return LocalProcessing;
     } catch (IOException e) {
       LOG.warn("Cannot get splits for input");

@@ -14,22 +14,16 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-import javax.imageio.ImageIO;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
@@ -37,10 +31,9 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -62,7 +55,6 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
@@ -763,121 +755,18 @@ public class HeatMapPlot {
     job.setOutputFormat(ImageOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
 
+    if (OperationsParams.isLocal(job, inFile)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
+    
     if (background) {
       JobClient jc = new JobClient(job);
       return lastSubmittedJob = jc.submitJob(job);
     } else {
       return lastSubmittedJob = JobClient.runJob(job);
-    }
-  }
-
-  private static <S extends Shape> void plotHeatMapLocal(Path inFile, Path outFile,
-      OperationsParams params) throws IOException {
-    int imageWidth = params.getInt("width", 1000);
-    int imageHeight = params.getInt("height", 1000);
-    
-    //Shape shape = params.getShape("shape", new Point());
-    Shape plotRange = params.getShape("rect", null);
-
-    boolean keepAspectRatio = params.is("keep-ratio", true);
-    
-    InputSplit[] splits;
-    FileSystem inFs = inFile.getFileSystem(params);
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus != null && !inFStatus.isDir()) {
-      // One file, retrieve it immediately.
-      // This is useful if the input is a hidden file which is automatically
-      // skipped by FileInputFormat. We need to plot a hidden file for the case
-      // of plotting partition boundaries of a spatial index
-      splits = new InputSplit[] {new FileSplit(inFile, 0, inFStatus.getLen(), new String[0])};
-    } else {
-      JobConf job = new JobConf(params);
-      ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-      ShapeInputFormat.addInputPath(job, inFile);
-      splits = inputFormat.getSplits(job, 1);
-    }
-
-    boolean vflip = params.is("vflip");
-
-    Rectangle fileMBR;
-    if (plotRange != null) {
-      fileMBR = plotRange.getMBR();
-    } else {
-      fileMBR = FileMBR.fileMBR(inFile, params);
-    }
-
-    if (keepAspectRatio) {
-      // Adjust width and height to maintain aspect ratio
-      if (fileMBR.getWidth() / fileMBR.getHeight() > (double) imageWidth / imageHeight) {
-        // Fix width and change height
-        imageHeight = (int) (fileMBR.getHeight() * imageWidth / fileMBR.getWidth());
-      } else {
-        imageWidth = (int) (fileMBR.getWidth() * imageHeight / fileMBR.getHeight());
-      }
-    }
-    
-    // Create the frequency map
-    int radius = params.getInt("radius", 5);
-    FrequencyMap frequencyMap = new FrequencyMap(imageWidth, imageHeight);
-
-    long t1 = System.currentTimeMillis();
-    for (InputSplit split : splits) {
-      ShapeArrayRecordReader reader = new ShapeArrayRecordReader(params, (FileSplit)split);
-      Rectangle cell = reader.createKey();
-      ArrayWritable shapes = reader.createValue();
-      while (reader.next(cell, shapes)) {
-        for (Writable w : shapes.get()) {
-          Shape shape = (Shape) w;
-          Rectangle shapeBuffer = shape.getMBR();
-          if (shapeBuffer == null)
-            continue;
-          shapeBuffer = shapeBuffer.buffer(radius, radius);
-          if (plotRange == null || shapeBuffer.isIntersected(plotRange)) {
-            Point centerPoint = shapeBuffer.getCenterPoint();
-            int cx = (int) Math.round((centerPoint.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-            int cy = (int) Math.round((centerPoint.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
-            frequencyMap.addPoint(cx, cy, radius);
-          }
-        }
-      }
-      reader.close();
-    }
-    long t2 = System.currentTimeMillis();
-    System.out.println("total time in millis "+(t2-t1));
-    
-    // Convert frequency map to an image with colors
-    NASAPoint.setColor1(params.getColor("color1", Color.BLUE));
-    NASAPoint.setColor2(params.getColor("color2", Color.RED));
-    NASAPoint.gradientType = params.getGradientType("gradient", NASAPoint.GradientType.GT_HUE);
-    String valueRangeStr = params.get("valuerange");
-    MinMax valueRange = null;
-    if (valueRangeStr != null) {
-      String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
-      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-    }
-
-    boolean skipZeros = params.getBoolean("skipzeros", false);
-    BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
-    
-    if (vflip) {
-      AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-      tx.translate(0, -image.getHeight());
-      AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-      image = op.filter(image, null);
-    }
-    FileSystem outFs = outFile.getFileSystem(params);
-    OutputStream out = outFs.create(outFile, true);
-    ImageIO.write(image, "png", out);
-    out.close();
-
-  }
-
-  public static RunningJob plotHeatMap(Path inFile, Path outFile, OperationsParams params) throws IOException {
-    if (params.isLocal(true)) {
-      plotHeatMapLocal(inFile, outFile, params);
-      return null;
-    } else {
-      return plotHeatMapMapReduce(inFile, outFile, params);
     }
   }
 
@@ -917,7 +806,7 @@ public class HeatMapPlot {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    plotHeatMap(inFile, outFile, params);
+    plotHeatMapMapReduce(inFile, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot heat map finished in "+(t2-t1)+" millis");
   }

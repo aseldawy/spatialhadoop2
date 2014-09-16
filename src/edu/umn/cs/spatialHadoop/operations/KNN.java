@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.io.IntWritable;
@@ -68,6 +69,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
@@ -179,13 +181,15 @@ public class KNN {
      * @param reporter
      * @throws IOException
      */
-    public void map(Rectangle cell, S shape,
+    public void map(Rectangle cell, ArrayWritable shapes,
         OutputCollector<NullWritable, TextWithDistance> output,
         Reporter reporter) throws IOException {
-      outputValue.distance = shape.distanceTo(queryPoint.x, queryPoint.y);
-      outputValue.text.clear();
-      shape.toText(outputValue.text);
-      output.collect(Dummy, outputValue);
+      for (Shape shape : (Shape[])shapes.get()) {
+        outputValue.distance = shape.distanceTo(queryPoint.x, queryPoint.y);
+        outputValue.text.clear();
+        shape.toText(outputValue.text);
+        output.collect(Dummy, outputValue);
+      }
     }
 
     /**
@@ -216,7 +220,7 @@ public class KNN {
   }
   
   public static class Map1<S extends Shape> extends KNNMap<S>
-    implements Mapper<Rectangle, S, NullWritable, TextWithDistance> {}
+    implements Mapper<Rectangle, ArrayWritable, NullWritable, TextWithDistance> {}
 
   public static class Map2<S extends Shape> extends KNNMap<S>
     implements Mapper<Rectangle, RTree<S>, NullWritable, TextWithDistance> {}
@@ -336,9 +340,9 @@ public class KNN {
       job.setMapperClass(Map1.class);
       // Combiner is needed for heap blocks
       job.setCombinerClass(KNNReduce.class);
-      job.setInputFormat(ShapeInputFormat.class);
+      job.setInputFormat(ShapeArrayInputFormat.class);
     }
-    ShapeInputFormat.setInputPaths(job, inputPath);
+    ShapeArrayInputFormat.setInputPaths(job, inputPath);
     
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);

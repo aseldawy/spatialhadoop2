@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -292,7 +293,14 @@ public class RangeQuery {
     
     ShapeInputFormat.setInputPaths(job, inFile);
     TextOutputFormat.setOutputPath(job, outputPath);
-    
+
+    if (OperationsParams.isLocal(job, inFile)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
+
     // Submit the job
     if (!background) {
       RunningJob runningJob = JobClient.runJob(job);
@@ -312,54 +320,6 @@ public class RangeQuery {
     }
   }
   
-
-  private static long rangeQueryLocal(Path inFile, Path outFile,
-      Shape query, OperationsParams params) throws IOException {
-    // Cache query MBR to use with duplicate avoidance
-    Rectangle queryMbr = query.getMBR();
-    JobConf job = new JobConf(params);
-    ShapeArrayInputFormat inputFormat = new ShapeArrayInputFormat();
-    ShapeInputFormat.addInputPath(job, inFile);
-    job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
-    InputSplit[] splits = inputFormat.getSplits(job, 1);
-    
-    // Prepare output
-    FileSystem outFs = outFile.getFileSystem(params);
-    PrintStream outStream = new PrintStream(outFs.create(outFile));
-    long resultCount = 0; // Number of items in result
-    
-    for (InputSplit split : splits) {
-      RecordReader<Rectangle, ArrayWritable> reader =
-          inputFormat.getRecordReader(split, job, null);
-      Rectangle cellMbr = (Rectangle) reader.createKey();
-      ArrayWritable values = reader.createValue();
-      while (reader.next(cellMbr, values)) {
-        Shape[] shapes = (Shape[]) values.get();
-        for (Shape shape : shapes) {
-          Rectangle shapeMbr = shape.getMBR();
-          if (shapeMbr != null && shapeMbr.isIntersected(queryMbr)
-              && shape.isIntersected(query)) {
-            boolean report_result;
-            if (cellMbr.isValid()) {
-              // Check for duplicate avoidance
-              double reference_x = Math.max(queryMbr.x1, shapeMbr.x1);
-              double reference_y = Math.max(queryMbr.y1, shapeMbr.y1);
-              report_result = cellMbr.contains(reference_x, reference_y);
-            } else {
-              report_result = true;
-            }
-            if (report_result) {
-              resultCount++;
-              outStream.println(shape.toText(new Text()));
-            }
-          }
-        }
-      }
-      reader.close();
-    }
-    return resultCount;
-  }
-  
   /**
    * Performs a range query against the given file
    * @param input
@@ -370,13 +330,8 @@ public class RangeQuery {
    */
   public static<S extends Shape> long rangeQuery(Path inFile, Path outFile,
       Shape query, OperationsParams params) throws IOException {
-    if (params.isLocal(true)) {
-      // A single small file, process it without MapReduce
-      return rangeQueryLocal(inFile, outFile, query, params);
-    } else {
-      // Either a directory of file or a large file
-      return rangeQueryMapReduce(inFile, outFile, query, params);
-    }
+    // Either a directory of file or a large file
+    return rangeQueryMapReduce(inFile, outFile, query, params);
   }
   
   private static void printUsage() {
