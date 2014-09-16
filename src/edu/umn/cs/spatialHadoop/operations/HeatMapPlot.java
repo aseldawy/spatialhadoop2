@@ -371,7 +371,7 @@ public class HeatMapPlot {
    *
    */
   public static class GridPartitionMap extends MapReduceBase 
-  implements Mapper<Rectangle, Shape, IntWritable, Point> {
+  implements Mapper<Rectangle, ArrayWritable, IntWritable, Point> {
     
     /**The grid used to partition the space*/
     private GridInfo partitionGrid;
@@ -403,37 +403,40 @@ public class HeatMapPlot {
     }
     
     @Override
-    public void map(Rectangle dummy, Shape s,
+    public void map(Rectangle dummy, ArrayWritable value,
         OutputCollector<IntWritable, Point> output, Reporter reporter)
         throws IOException {
-      if (adaptiveSample && s instanceof Point
-          && Math.random() > adaptiveSampleRatio)
-          return;
+    	
+      for(Shape s : (Shape[]) value.get()) {
+    	  if (adaptiveSample && s instanceof Point
+    			  && Math.random() > adaptiveSampleRatio)
+    		  return;
 
-      Point center;
-      if (s instanceof Point) {
-        center = new Point((Point)s);
-      } else if (s instanceof Rectangle) {
-        center = ((Rectangle) s).getCenterPoint();
-      } else {
-        Rectangle shapeMBR = s.getMBR();
-        if (shapeMBR == null)
-          return;
-        center = shapeMBR.getCenterPoint();
-      }
-      Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
-      // Skip shapes outside query range if query range is set
-      if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-        return;
-      // Replicate to all overlapping cells
-      java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMBR);
-      for (int i = 0; i < overlappingCells.width; i++) {
-        int x = overlappingCells.x + i;
-        for (int j = 0; j < overlappingCells.height; j++) {
-          int y = overlappingCells.y + j;
-          cellNumber.set(y * partitionGrid.columns + x + 1);
-          output.collect(cellNumber, center);
-        }
+    	  Point center;
+    	  if (s instanceof Point) {
+    		  center = new Point((Point)s);
+    	  } else if (s instanceof Rectangle) {
+    		  center = ((Rectangle) s).getCenterPoint();
+    	  } else {
+    		  Rectangle shapeMBR = s.getMBR();
+    		  if (shapeMBR == null)
+    			  return;
+    		  center = shapeMBR.getCenterPoint();
+    	  }
+    	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
+    	  // Skip shapes outside query range if query range is set
+    	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
+    		  return;
+    	  // Replicate to all overlapping cells
+    	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMBR);
+    	  for (int i = 0; i < overlappingCells.width; i++) {
+    		  int x = overlappingCells.x + i;
+    		  for (int j = 0; j < overlappingCells.height; j++) {
+    			  int y = overlappingCells.y + j;
+    			  cellNumber.set(y * partitionGrid.columns + x + 1);
+    			  output.collect(cellNumber, center);
+    		  }
+    	  }
       }
     }
   }
@@ -501,7 +504,7 @@ public class HeatMapPlot {
    *
    */
   public static class SkewedPartitionMap extends MapReduceBase 
-    implements Mapper<Rectangle, Shape, IntWritable, Point> {
+    implements Mapper<Rectangle, ArrayWritable, IntWritable, Point> {
     
     /**The cells used to partition the space*/
     private CellInfo[] cells;
@@ -542,33 +545,36 @@ public class HeatMapPlot {
     }
     
     @Override
-    public void map(Rectangle dummy, Shape s,
+    public void map(Rectangle dummy, ArrayWritable value,
         OutputCollector<IntWritable, Point> output, Reporter reporter)
         throws IOException {
-      if (adaptiveSample && s instanceof Point
-          && Math.random() > adaptiveSampleRatio)
-          return;
+    	
+      for(Shape s : (Shape[]) value.get()) {
+    	  if (adaptiveSample && s instanceof Point
+    			  && Math.random() > adaptiveSampleRatio)
+    		  return;
 
-      Point center;
-      if (s instanceof Point) {
-        center = new Point((Point)s);
-      } else if (s instanceof Rectangle) {
-        center = ((Rectangle) s).getCenterPoint();
-      } else {
-        Rectangle shapeMBR = s.getMBR();
-        if (shapeMBR == null)
-          return;
-        center = shapeMBR.getCenterPoint();
-      }
-      Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
-      // Skip shapes outside query range if query range is set
-      if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-        return;
-      for (CellInfo cell : cells) {
-        if (cell.isIntersected(shapeMBR)) {
-          cellNumber.set(cell.cellId);
-          output.collect(cellNumber, center);
-        }
+    	  Point center;
+    	  if (s instanceof Point) {
+    		  center = new Point((Point)s);
+    	  } else if (s instanceof Rectangle) {
+    		  center = ((Rectangle) s).getCenterPoint();
+    	  } else {
+    		  Rectangle shapeMBR = s.getMBR();
+    		  if (shapeMBR == null)
+    			  return;
+    		  center = shapeMBR.getCenterPoint();
+    	  }
+    	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
+    	  // Skip shapes outside query range if query range is set
+    	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
+    		  return;
+    	  for (CellInfo cell : cells) {
+    		  if (cell.isIntersected(shapeMBR)) {
+    			  cellNumber.set(cell.cellId);
+    			  output.collect(cellNumber, center);
+    		  }
+    	  }
       }
     }
   }
@@ -680,7 +686,7 @@ public class HeatMapPlot {
     } else if (partition.equals("space") || partition.equals("grid")) {
       FileSystem inFs = inFile.getFileSystem(job);
       GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inFile);
-      job.setInputFormat(ShapeInputFormat.class);
+      job.setInputFormat(ShapeArrayInputFormat.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(Point.class);
       if (gIndex == null || gIndex.size() == 1) {
@@ -704,7 +710,7 @@ public class HeatMapPlot {
           // Pack in rectangles using an RTree
           CellInfo[] cellInfos = Repartition.packInRectangles(inFile, outFile, params, fileMBR);
           SpatialSite.setCells(job, cellInfos);
-          job.setInputFormat(ShapeInputFormat.class);
+          job.setInputFormat(ShapeArrayInputFormat.class);
         }
       } else {
         LOG.info("Partitioned plot with an already partitioned file");
