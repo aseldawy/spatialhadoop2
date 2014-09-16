@@ -1,5 +1,7 @@
-bin/*
-lib/*.jar
-dist/*
+bin1/*
+bin2/*
+lib/ivy/**/*.jar
+dist1/*
 dist2/*
-/bin
+/bin1
+/bin2
