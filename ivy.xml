@@ -1,22 +1,28 @@
 <ivy-module version="1.0">
     <info organisation="org.apache" module="dependee"/>
-    <dependencies>
-        <dependency org="org.apache.hadoop" name="hadoop-core" rev="1.2.1"/>
-        <!--
-        <dependency org="org.apache.hadoop" name="hadoop-common" rev="2.2.0"/>
-        <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="2.2.0"/>
-        <dependency org="org.apache.hadoop" name="hadoop-streaming" rev="2.2.0"/>
-        -->
+	<configurations>
+  	<conf name="common" description="Common libraries to all versions"/>
+  	<conf name="hadoop1" description="Hadoop 1.x libraries"/>
+  	<conf name="hadoop2" description="Hadoop 2.x libraries"/>
+	</configurations>
+    
+  <dependencies>
+    <dependency org="org.apache.hadoop" name="hadoop-core" rev="1.2.1" conf="hadoop1->default"/>
+    
+    <dependency org="org.apache.hadoop" name="hadoop-common" rev="2.4.0" conf="hadoop2->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="2.4.0" conf="hadoop2->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-common" rev="2.4.0" conf="hadoop2->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-core" rev="2.4.0" conf="hadoop2->default"/>
+    <!--dependency org="org.apache.hadoop" name="hadoop-streaming" rev="2.4.0" conf="hadoop2->default"/-->
         
-            
-        <dependency org="commons-logging" name="commons-logging" rev="1.1.1"/>
-        <dependency org="com.vividsolutions" name="jts" rev="1.8"/>
-        <dependency org="com.esri.geometry" name="esri-geometry-api" rev="1.1.1"/>
-        <dependency org="org.apache.pig" name="pig" rev="0.12.0"/>
-        
-        <!-- canceled as we use our custom version which includes the patch of bug PIG 3373 -->
-        <!-- dependency org="org.apache.pig" name="piggybank" rev="0.12.0"/ -->
-        <!-- disabled because it supports HDF5 only while we need HDF 4 -->
-        <!-- dependency org="org.hdfgroup" name="hdf-java" rev="2.6.1"/ -->
-    </dependencies>
+    <dependency org="commons-logging" name="commons-logging" rev="1.1.1" conf="common->default"/>
+    <dependency org="com.vividsolutions" name="jts" rev="1.8" conf="common->default"/>
+    <dependency org="com.esri.geometry" name="esri-geometry-api" rev="1.1.1" conf="common->default"/>
+    <dependency org="org.apache.pig" name="pig" rev="0.12.0" conf="common->default"/>
+    
+    <!-- canceled as we use our custom version which includes the patch of bug PIG 3373 -->
+    <!-- dependency org="org.apache.pig" name="piggybank" rev="0.12.0"/ -->
+    <!-- disabled because it supports HDF5 only while we need HDF 4 -->
+    <!-- dependency org="org.hdfgroup" name="hdf-java" rev="2.6.1"/ -->
+  </dependencies>
 </ivy-module>
