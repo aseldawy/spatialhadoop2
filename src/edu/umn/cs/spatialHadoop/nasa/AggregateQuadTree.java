@@ -25,6 +25,7 @@ import java.lang.reflect.Array;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Stack;
@@ -32,6 +33,7 @@ import java.util.Vector;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 
+import ncsa.hdf.object.Attribute;
 import ncsa.hdf.object.Dataset;
 import ncsa.hdf.object.FileFormat;
 import ncsa.hdf.object.Group;
@@ -346,11 +348,18 @@ public class AggregateQuadTree {
         (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
     Dataset matchedDataset = HDFRecordReader.findDataset(root, datasetName, false);
     if (matchedDataset != null) {
+      List<Attribute> metadata = matchedDataset.getMetadata();
+      short fillValue = 0;
+      for (Attribute attr : metadata) {
+        if (attr.getName().equals("_FillValue")) {
+          fillValue = Short.parseShort(Array.get(attr.getValue(), 0).toString());
+        }
+      }
       Object values = matchedDataset.read();
       if (values instanceof short[]) {
         FileSystem outFs = outFile.getFileSystem(conf);
         FSDataOutputStream out = outFs.create(outFile, false);
-        build((short[])values, out);
+        build((short[])values, fillValue, out);
         out.close();
       } else {
         throw new RuntimeException("Indexing of values of type "
@@ -367,7 +376,7 @@ public class AggregateQuadTree {
    * @param out - the output stream to write the constructed quad tree to
    * @throws IOException 
    */
-  public static void build(short[] values, DataOutputStream out) throws IOException {
+  public static void build(short[] values, short fillValue, DataOutputStream out) throws IOException {
     int length = Array.getLength(values);
     int resolution = (int) Math.round(Math.sqrt(length));
 
@@ -406,7 +415,8 @@ public class AggregateQuadTree {
           } else {
             throw new RuntimeException("Cannot handle values of type "+val.getClass());
           }
-          nodes[iNode].accumulate(value);
+          if (value != fillValue)
+            nodes[iNode].accumulate(value);
         }
       } else {
         // Compute from the four children
@@ -783,7 +793,7 @@ public class AggregateQuadTree {
 
     DataOutputStream out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream("test.quad")));
     t1 = System.currentTimeMillis();
-    AggregateQuadTree.build(values, out);
+    AggregateQuadTree.build(values, (short)0, out);
     out.close();
     t2 = System.currentTimeMillis();
     System.out.println("Elapsed time "+(t2-t1)+" millis");
