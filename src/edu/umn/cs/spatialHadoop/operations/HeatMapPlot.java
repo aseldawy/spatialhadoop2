@@ -307,7 +307,7 @@ public class HeatMapPlot {
         Shape s = (Shape) w;
         if (adaptiveSample && s instanceof Point
             && Math.random() > adaptiveSampleRatio)
-            return;
+            continue;
         Point center;
         if (s instanceof Point) {
           center = (Point) s;
@@ -418,7 +418,7 @@ public class HeatMapPlot {
       for(Shape s : (Shape[]) value.get()) {
     	  if (adaptiveSample && s instanceof Point
     			  && Math.random() > adaptiveSampleRatio)
-    		  return;
+    		  continue;
 
     	  Point center;
     	  if (s instanceof Point) {
@@ -428,13 +428,13 @@ public class HeatMapPlot {
     	  } else {
     		  Rectangle shapeMBR = s.getMBR();
     		  if (shapeMBR == null)
-    			  return;
+    			  continue;
     		  center = shapeMBR.getCenterPoint();
     	  }
     	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
     	  // Skip shapes outside query range if query range is set
     	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-    		  return;
+    		  continue;
     	  // Replicate to all overlapping cells
     	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMBR);
     	  for (int i = 0; i < overlappingCells.width; i++) {
@@ -560,7 +560,7 @@ public class HeatMapPlot {
       for(Shape s : (Shape[]) value.get()) {
     	  if (adaptiveSample && s instanceof Point
     			  && Math.random() > adaptiveSampleRatio)
-    		  return;
+    		  continue;
 
     	  Point center;
     	  if (s instanceof Point) {
@@ -570,13 +570,13 @@ public class HeatMapPlot {
     	  } else {
     		  Rectangle shapeMBR = s.getMBR();
     		  if (shapeMBR == null)
-    			  return;
+    			  continue;
     		  center = shapeMBR.getCenterPoint();
     	  }
     	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
     	  // Skip shapes outside query range if query range is set
     	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-    		  return;
+    		  continue;
     	  for (CellInfo cell : cells) {
     		  if (cell.isIntersected(shapeMBR)) {
     			  cellNumber.set(cell.cellId);

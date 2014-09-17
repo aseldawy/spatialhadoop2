@@ -156,23 +156,23 @@ public class GeometricPlot {
       for(Shape shape : (Shape[]) value.get()) {
     	  Rectangle shapeMbr = shape.getMBR();
     	  if (shapeMbr == null)
-    		  return;
+    		  continue;
     	  // Check if this shape can be skipped using the gradual fade option
     	  if (gradualFade && !(shape instanceof Point)) {
     		  double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
     		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
     			  // This shape can be safely skipped as it is too small to be plotted
-    			  return;
+    			  continue;
     		  }
     	  }
     	  if (adaptiveSample && shape instanceof Point) {
     		  if (Math.random() > adaptiveSampleRatio)
-    			  return;
+    			  continue;
     	  }
 
     	  // Skip shapes outside query range if query range is set
     	  if (queryRange != null && !shapeMbr.isIntersected(queryRange))
-    		  return;
+    		  continue;
     	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
     	  for (int i = 0; i < overlappingCells.width; i++) {
     		  int x = overlappingCells.x + i;
@@ -340,23 +340,23 @@ public class GeometricPlot {
       for(Shape shape : (Shape[]) value.get()) {
     	  Rectangle shapeMBR = shape.getMBR();
     	  if (shapeMBR == null)
-    		  return;
+    		  continue;
     	  // Check if this shape can be skipped using the gradual fade option
     	  if (gradualFade && !(shape instanceof Point)) {
     		  double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
     		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
     			  // This shape can be safely skipped as it is too small to be plotted
-    			  return;
+    			  continue;
     		  }
     	  }
     	  if (adaptiveSample && shape instanceof Point) {
     		  if (Math.random() > adaptiveSampleRatio)
-    			  return;
+    			  continue;
     	  }
 
     	  // Skip shapes outside query range if query range is set
     	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-    		  return;
+    		  continue;
     	  for (CellInfo cell : cells) {
     		  if (cell.isIntersected(shapeMBR)) {
     			  cellNumber.set(cell.cellId);
