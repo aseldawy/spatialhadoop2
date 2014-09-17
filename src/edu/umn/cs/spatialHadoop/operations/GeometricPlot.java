@@ -724,17 +724,19 @@ public class GeometricPlot {
         if (queryRange == null || queryRange.isIntersected(shape)) {
           if (fade) {
             Rectangle shapeMBR = shape.getMBR();
-            // shapeArea represents how many pixels are covered by shapeMBR
-            double shapeArea = (shapeMBR.getWidth() + shapeMBR.getHeight()) * this.scale;
-            if (shapeArea > 1.0) {
-              graphics.setColor(storkeClr);
-            } else {
-              byte alpha = (byte) Math.round(shapeArea * 255);
-              if (alpha == 0) {
-                continue;
-              } else {
-                graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
-              }
+            if(shapeMBR != null) {
+            	 // shapeArea represents how many pixels are covered by shapeMBR
+                double shapeArea = (shapeMBR.getWidth() + shapeMBR.getHeight()) * this.scale;
+                if (shapeArea > 1.0) {
+                  graphics.setColor(storkeClr);
+                } else {
+                  byte alpha = (byte) Math.round(shapeArea * 255);
+                  if (alpha == 0) {
+                    continue;
+                  } else {
+                    graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+                  }
+                }
             }
           }
           if (adaptiveSample && shape instanceof Point) {
@@ -820,6 +822,11 @@ public class GeometricPlot {
 
     JobConf job = new JobConf(params, GeometricPlot.class);
     job.setJobName("Plot");
+    
+    // Get the color and assign it.
+    Color strokeColor = params.getColor("color", Color.BLACK);
+    int color = strokeColor.getRGB();
+    job.setInt("color", color);
 
     Rectangle fileMBR;
     // Collects some stats about the file to plot it correctly
