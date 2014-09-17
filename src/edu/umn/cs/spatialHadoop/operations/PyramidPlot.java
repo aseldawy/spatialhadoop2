@@ -216,7 +216,7 @@ public class PyramidPlot {
       for(Shape shape : (Shape[]) value.get()) {
     	  Rectangle shapeMBR = shape.getMBR();
     	  if (shapeMBR == null)
-    		  return;
+    		  continue;
       
     	  int min_level = 0;
     	  if (adaptiveSampling && shape instanceof Point) {
@@ -234,7 +234,7 @@ public class PyramidPlot {
     			  double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
     			  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
     				  // This shape can be safely skipped as it is too small to be plotted
-    				  return;
+    				  continue;
     			  }
     		  }
 
@@ -407,7 +407,7 @@ public class PyramidPlot {
       for (Shape shape : (Shape[])value.get()) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
-          return;
+          continue;
         
         int min_level = 0;
         
@@ -426,7 +426,7 @@ public class PyramidPlot {
             double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
             if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
               // This shape can be safely skipped as it is too small to be plotted
-              return;
+              continue;
             }
           }
           for (int i = 0; i < overlappingCells.width; i++) {
