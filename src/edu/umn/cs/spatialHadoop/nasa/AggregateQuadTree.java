@@ -43,6 +43,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Writable;
@@ -198,8 +199,6 @@ class StockQuadTree {
       nodesStartPosition[i] = node.startPosition;
       nodesEndPosition[i] = node.endPosition;
     }
-    System.out.println("number of nodes in "+resolution+" is "+nodes.size());
-    System.out.println("Max ID in "+resolution+" is "+maxId);
   }
   
   /**
@@ -276,7 +275,8 @@ public class AggregateQuadTree {
   
   public static class Node implements Writable {
     public short min = Short.MAX_VALUE, max = Short.MIN_VALUE;
-    public int sum = 0, count = 0;
+    public long sum = 0;
+    public long count = 0;
     
     /**
      * Accumulate the values of another node
@@ -308,22 +308,31 @@ public class AggregateQuadTree {
     public void readFields(DataInput in) throws IOException {
       this.min = in.readShort();
       this.max = in.readShort();
-      this.sum = in.readInt();
-      this.count = in.readInt();
+      this.sum = in.readLong();
+      this.count = in.readLong();
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
       out.writeShort(min);
       out.writeShort(max);
-      out.writeInt(sum);
-      out.writeInt(count);
+      out.writeLong(sum);
+      out.writeLong(count);
+    }
+    
+    @Override
+    public String toString() {
+      return String.format("Sum: %d, Count: %d, Min: %d, Max: %d, Avg: %g",
+          sum, count, min, max, (double)sum / count);
     }
   }
   
-  private static final int TreeHeaderSize = 4 + 4;
+  /**Tree header size, resolution + fillValue + cardinality*/
+  private static final int TreeHeaderSize = 4 + 2 + 4;
+  /**Value size: short*/
   private static final int ValueSize = 2;
-  private static final int NodeSize = 2 + 2 + 4 + 4;
+  /**Node size: min + max + sum + count*/
+  private static final int NodeSize = 2 + 2 + 8 + 8;
   
   /**
    * Constructs an aggregate quad tree for an input HDF file on a selected
@@ -370,11 +379,12 @@ public class AggregateQuadTree {
   }
   
   /**
-   * Constructs an aggregate quad tree out of a two-dimensional array
-   * of values.
+   * Constructs an aggregate quad tree out of a two-dimensional array of values.
+   * 
    * @param values
-   * @param out - the output stream to write the constructed quad tree to
-   * @throws IOException 
+   * @param out
+   *          - the output stream to write the constructed quad tree to
+   * @throws IOException
    */
   public static void build(short[] values, short fillValue, DataOutputStream out) throws IOException {
     int length = Array.getLength(values);
@@ -382,6 +392,7 @@ public class AggregateQuadTree {
 
     // Write tree header
     out.writeInt(resolution); // resolution
+    out.writeShort(fillValue);
     out.writeInt(1); // cardinality
 
     // Fetch the stock quad tree of the associated resolution
@@ -557,6 +568,7 @@ public class AggregateQuadTree {
     long treeStartPosition = in.getPos();
     int numOfResults = 0;
     int resolution = in.readInt();
+    short fillValue = in.readShort();
     int cardinality = in.readInt();
     Vector<Integer> selectedStarts = new Vector<Integer>();
     Vector<Integer> selectedEnds = new Vector<Integer>();
@@ -631,7 +643,9 @@ public class AggregateQuadTree {
           // Read all entries at current position
           for (int iValue = 0; iValue < cardinality; iValue++) {
             short value = in.readShort();
-            output.collect(resultCoords, value);
+            if (value != fillValue) {
+              output.collect(resultCoords, value);
+            }
           }
         }
       }
@@ -639,6 +653,17 @@ public class AggregateQuadTree {
     return numOfResults;
   }
   
+  
+  public static Node aggregateQuery(FileSystem fs, Path p, Rectangle query_mbr) throws IOException {
+    FSDataInputStream inStream = null;
+    try {
+      inStream = fs.open(p);
+      return aggregateQuery(inStream, query_mbr);
+    } finally {
+      if (inStream != null)
+        inStream.close();
+    }
+  }
   
   /**
    * Perform a selection query that retrieves all points in the given range.
@@ -653,6 +678,7 @@ public class AggregateQuadTree {
     Node result = new Node();
     int numOfSelectedRecords = 0;
     int resolution = in.readInt();
+    short fillValue = in.readShort();
     int cardinality = in.readInt();
     Vector<Integer> selectedNodesPos = new Vector<Integer>();
     Vector<Integer> selectedStarts = new Vector<Integer>();
@@ -720,7 +746,8 @@ public class AggregateQuadTree {
         // Read all entries at current position
         for (int iValue = 0; iValue < cardinality; iValue++) {
           short value = in.readShort();
-          result.accumulate(value);
+          if (value != fillValue)
+            result.accumulate(value);
         }
       }
     }

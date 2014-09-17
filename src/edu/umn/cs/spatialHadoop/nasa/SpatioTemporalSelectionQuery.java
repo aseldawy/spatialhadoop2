@@ -6,17 +6,19 @@ package edu.umn.cs.spatialHadoop.nasa;
 import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree.Node;
 import edu.umn.cs.spatialHadoop.temporal.TemporalIndex;
 import edu.umn.cs.spatialHadoop.temporal.TemporalIndex.TemporalPartition;
 
@@ -51,6 +53,9 @@ public class SpatioTemporalSelectionQuery {
       this.end = end;
     }
   }
+  
+  /**A regular expression to catch the tile identifier of a MODIS grid cell*/
+  private static final Pattern MODISTileID = Pattern.compile("^.*h(\\d\\d)v(\\d\\d).*$"); 
 
 
   /**
@@ -108,7 +113,66 @@ public class SpatioTemporalSelectionQuery {
       index++;
     }
     
-    Shape spatialRange = params.getShape("rect");
+    // 2- Run a spatial aggregate query in each matched partition
+    Rectangle spatialRange = params.getShape("rect", new Rectangle()).getMBR();
+    // Convert spatialRange from lat/lng space to Sinusoidal space
+    double cosPhiRad = Math.cos(spatialRange.y1 * Math.PI / 180);
+    double southWest = spatialRange.x1 * cosPhiRad;
+    double southEast = spatialRange.x2 * cosPhiRad;
+    cosPhiRad = Math.cos(spatialRange.y2 * Math.PI / 180);
+    double northWest = spatialRange.x1 * cosPhiRad;
+    double northEast = spatialRange.x2 * cosPhiRad;
+    spatialRange.x1 = Math.min(northWest, southWest);
+    spatialRange.x2 = Math.max(northEast, southEast);
+    // Convert to the h v space used by MODIS
+    spatialRange.x1 = (spatialRange.x1 + 180.0) / 10.0;
+    spatialRange.x2 = (spatialRange.x2 + 180.0) / 10.0;
+    spatialRange.y2 = (90.0 - spatialRange.y2) / 10.0;
+    spatialRange.y1 = (90.0 - spatialRange.y1) / 10.0;
+    // Vertically flip because the Sinusoidal space increases to the south
+    double tmp = spatialRange.y2;
+    spatialRange.y2 = spatialRange.y1;
+    spatialRange.y1 = tmp;
+    // Find the range of cells in MODIS Sinusoidal grid overlapping the range
+    final int h1 = (int) Math.floor(spatialRange.x1);
+    final int h2 = (int) Math.ceil(spatialRange.x2);
+    final int v1 = (int) Math.floor(spatialRange.y1);
+    final int v2 = (int) Math.ceil(spatialRange.y2);
+    PathFilter rangeFilter = new PathFilter() {
+      @Override
+      public boolean accept(Path p) {
+        Matcher matcher = MODISTileID.matcher(p.getName());
+        if (!matcher.matches())
+          return false;
+        int h = Integer.parseInt(matcher.group(1));
+        int v = Integer.parseInt(matcher.group(2));
+        return h >= h1 && h < h2 && v >= v1 && v < v2;
+      }
+    };
+    
+    AggregateQuadTree.Node finalResult = new AggregateQuadTree.Node();
+    
+    for (Path matchingPartition : matchingPartitions) {
+      // Select all matching files
+      FileStatus[] matchingFiles = fs.listStatus(matchingPartition, rangeFilter);
+      for (FileStatus matchingFile : matchingFiles) {
+        Matcher matcher = MODISTileID.matcher(matchingFile.getPath().getName());
+        matcher.matches(); // It has to match
+        int h = Integer.parseInt(matcher.group(1));
+        int v = Integer.parseInt(matcher.group(2));
+        // Clip the query region and normalize in this tile
+        Rectangle translated = spatialRange.translate(-h, -v);
+        int x1 = (int) (Math.max(translated.x1, 0) * 1200);
+        int y1 = (int) (Math.max(translated.y1, 0) * 1200);
+        int x2 = (int) (Math.min(translated.x2, 1.0) * 1200);
+        int y2 = (int) (Math.min(translated.y2, 1.0) * 1200);
+        AggregateQuadTree.Node fileResult = AggregateQuadTree.aggregateQuery(fs, matchingFile.getPath(),
+            new java.awt.Rectangle(x1, y1, (x2 - x1), (y2 - y1)));
+        finalResult.accumulate(fileResult);
+      }
+    }
+    
+    System.out.println("Final Result: "+finalResult);
   }
   
   /**
