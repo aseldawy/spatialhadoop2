@@ -4,10 +4,10 @@
   <property name="src" location="src"/>
 	<property name="res" location="res"/>
   <property name="doc" location="doc"/>
-  <property name="build1" location="bin1"/>
-  <property name="dist1"  location="dist1"/>
-  <property name="build2" location="bin2"/>
-  <property name="dist2"  location="dist2"/>
+  <property name="build1" location="bin1/classes"/>
+  <property name="dist1"  location="bin1/dist"/>
+  <property name="build2" location="bin2/classes"/>
+  <property name="dist2"  location="bin2/dist"/>
   <property name="version" value="2.3-rc1"/>
   
   <path id="hdflib.path.ref">

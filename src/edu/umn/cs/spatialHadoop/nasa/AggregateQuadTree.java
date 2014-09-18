@@ -782,6 +782,24 @@ public class AggregateQuadTree {
   }
 
   public static void main(String[] args) throws IllegalArgumentException, Exception {
+    Path sourceFolder = new Path("/export/scratch/modis/2013.02.01");
+    Path destFolder = new Path("/export/scratch/modis-indexed/daily/2013.02.01");
+    FileSystem localFs = FileSystem.getLocal(new Configuration());
+    
+    FileStatus[] nonIndexedFiles = localFs.listStatus(sourceFolder);
+    for (FileStatus nonIndexedFile : nonIndexedFiles) {
+      System.out.println("Indexing: "+nonIndexedFile.getPath().getName());
+      Path indexedFilePath = new Path(destFolder, nonIndexedFile.getPath().getName());
+      AggregateQuadTree.build(new Configuration(),
+          nonIndexedFile.getPath(),
+          "LST_Day_1km",
+          indexedFilePath);
+    }
+    
+    
+    System.exit(0);
+    
+    
     long t1, t2;
     
     AggregateQuadTree.getOrCreateStockQuadTree(1200);
