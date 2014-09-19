@@ -42,8 +42,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Writable;
@@ -51,6 +49,8 @@ import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+import edu.umn.cs.spatialHadoop.io.RandomCompressedInputStream;
+import edu.umn.cs.spatialHadoop.io.RandomCompressedOutputStream;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
@@ -367,7 +367,8 @@ public class AggregateQuadTree {
       Object values = matchedDataset.read();
       if (values instanceof short[]) {
         FileSystem outFs = outFile.getFileSystem(conf);
-        FSDataOutputStream out = outFs.create(outFile, false);
+        DataOutputStream out = new DataOutputStream(
+            new RandomCompressedOutputStream(outFs.create(outFile, false)));
         build((short[])values, fillValue, out);
         out.close();
       } else {
@@ -657,7 +658,7 @@ public class AggregateQuadTree {
   public static Node aggregateQuery(FileSystem fs, Path p, Rectangle query_mbr) throws IOException {
     FSDataInputStream inStream = null;
     try {
-      inStream = fs.open(p);
+      inStream = new FSDataInputStream(new RandomCompressedInputStream(fs, p));
       return aggregateQuery(inStream, query_mbr);
     } finally {
       if (inStream != null)

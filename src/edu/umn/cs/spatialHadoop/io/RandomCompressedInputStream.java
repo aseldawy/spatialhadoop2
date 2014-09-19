@@ -11,6 +11,9 @@ import java.io.InputStream;
 import java.util.zip.GZIPInputStream;
 
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PositionedReadable;
 import org.apache.hadoop.fs.Seekable;
 
 /**
@@ -22,7 +25,7 @@ import org.apache.hadoop.fs.Seekable;
  * @author Ahmed Eldawy
  *
  */
-public class RandomCompressedInputStream extends InputStream implements Seekable {
+public class RandomCompressedInputStream extends InputStream implements Seekable, PositionedReadable {
   /**The underlying stream of compressed data*/
   private FSDataInputStream compressedIn;
   private InputStream decompressedIn;
@@ -34,6 +37,10 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
   /**Number of bytes in the decompressed file*/
   private long decompressedLength;
 
+  public RandomCompressedInputStream(FileSystem fs, Path p) throws IOException {
+    this(fs.open(p), fs.getFileStatus(p).getLen());
+  }
+  
   public RandomCompressedInputStream(FSDataInputStream in, long totalLength) throws IOException {
     this.compressedIn = new FSDataInputStream(in);
     // Read and cache the lookup table
@@ -110,4 +117,29 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
     }
     return s - 1;
   }
+
+  @Override
+  public int read(long position, byte[] buffer, int offset, int length)
+      throws IOException {
+    long oldPos = getPos();
+    seek(position);
+    int x = read(buffer, offset, length);
+    seek(oldPos);
+    return x;
+  }
+
+  @Override
+  public void readFully(long position, byte[] buffer, int offset, int length)
+      throws IOException {
+    long oldPos = getPos();
+    seek(position);
+    read(buffer, offset, length);
+    seek(oldPos);
+  }
+
+  @Override
+  public void readFully(long position, byte[] buffer) throws IOException {
+    readFully(position, buffer, 0, buffer.length);
+  }
+
 }
