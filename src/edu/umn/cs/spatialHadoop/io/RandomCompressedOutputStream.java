@@ -33,7 +33,7 @@ public class RandomCompressedOutputStream extends OutputStream {
   private static final long DefaultBlockSize = 1024 * 1024;
   
   /**The output stream on which raw data is written (internally compressed)*/
-  private OutputStream rawOut;
+  private GZIPOutputStream rawOut;
   
   /**The output stream to which compressed bytes are written*/
   private TrackedOutputStream compressedOut;
@@ -65,7 +65,7 @@ public class RandomCompressedOutputStream extends OutputStream {
     rawOffset++;
     
     if (rawOffset - rawOffsetOfLastBlock >= blockSize) {
-      closeCurrentBlock();
+      finishCurrentBlock();
       // Start a new block
       this.rawOut = new GZIPOutputStream(this.compressedOut);
     }
@@ -73,7 +73,7 @@ public class RandomCompressedOutputStream extends OutputStream {
   
   @Override
   public void close() throws IOException {
-    this.closeCurrentBlock();
+    this.finishCurrentBlock();
     // Store the lookup table at the end of the stream in uncompressed format
     DataOutputStream dout = new DataOutputStream(this.compressedOut);
     for (int i = 0; i < blockOffsetsInCompressedFile.size(); i++) {
@@ -84,9 +84,11 @@ public class RandomCompressedOutputStream extends OutputStream {
     dout.close();
   }
   
-  private void closeCurrentBlock() throws IOException {
+  private void finishCurrentBlock() throws IOException {
     // Write all the data to out and start a new block
+    this.rawOut.finish();
     this.rawOut.flush();
+    this.compressedOut.flush();
     // Save the current checkpoint
     long compressedOffset = this.compressedOut.getPos();
     this.blockOffsetsInCompressedFile.add(compressedOffset);
@@ -105,7 +107,7 @@ public class RandomCompressedOutputStream extends OutputStream {
     FileSystem localFs = FileSystem.getLocal(new Configuration());
     RandomCompressedInputStream in = new RandomCompressedInputStream(localFs.open(new Path("test.gzp")),
         new File("test.gzp").length());
-    in.seek(4 * 200320);
+    in.seek(4 * 999998);
     DataInputStream din = new DataInputStream(in);
     while (din.available() > 0) {
       System.out.println("Number is "+din.readInt());

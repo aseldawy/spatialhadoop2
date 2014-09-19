@@ -32,12 +32,8 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
 
   private long[] blockOffsetsInCompressedFile;
   private long[] blockOffsetsInRawFile;
-  /**Block index currently being read*/
-  private int currentBlock;
   
   private long pos;
-  /**Number of bytes in the decompressed file*/
-  private long decompressedLength;
 
   public RandomCompressedInputStream(FileSystem fs, Path p) throws IOException {
     this(fs.open(p), fs.getFileStatus(p).getLen());
@@ -57,7 +53,6 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
     }
     this.compressedIn.seek(0);
     this.decompressedIn = new GZIPInputStream(this.compressedIn);
-    this.decompressedLength = blockOffsetsInRawFile[numberOfBlocks - 1];
   }
 
   @Override
@@ -66,54 +61,55 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
   }
   
   private void gotoBlock(int blockIndex) throws IOException {
-    this.currentBlock = blockIndex;
-    compressedIn.seek(this.blockOffsetsInCompressedFile[currentBlock]);
-    long blockSizeInCompressedFile = this.blockOffsetsInCompressedFile[currentBlock+1] - this.blockOffsetsInCompressedFile[currentBlock];
+    compressedIn.seek(this.blockOffsetsInCompressedFile[blockIndex]);
+    long blockSizeInCompressedFile = this.blockOffsetsInCompressedFile[blockIndex+1] - this.blockOffsetsInCompressedFile[blockIndex];
     decompressedIn = new GZIPInputStream(new InputSubstream(this.compressedIn, blockSizeInCompressedFile));
-    this.pos = this.blockOffsetsInRawFile[currentBlock];
+    this.pos = this.blockOffsetsInRawFile[blockIndex];
   }
 
   @Override
   public void seek(long newPos) throws IOException {
     int newBlock = findBlock(newPos);
     gotoBlock(newBlock);
-    this.decompressedIn.skip(newPos - this.blockOffsetsInRawFile[currentBlock]);
+    this.skip(newPos - this.blockOffsetsInRawFile[newBlock]);
   }
 
   private boolean gotoBlockNewSource(int blockIndex) throws IOException {
-    this.currentBlock = blockIndex;
-    if (!compressedIn.seekToNewSource(this.blockOffsetsInCompressedFile[currentBlock]))
+    if (!compressedIn.seekToNewSource(this.blockOffsetsInCompressedFile[blockIndex]))
       return false;
-    long blockSizeInCompressedFile = this.blockOffsetsInCompressedFile[currentBlock+1] - this.blockOffsetsInCompressedFile[currentBlock];
-    decompressedIn = new GZIPInputStream(new InputSubstream(this.compressedIn, blockSizeInCompressedFile));
-    this.pos = this.blockOffsetsInRawFile[currentBlock];
+    long remainingCompressedBytes = getCompressedLength() - this.blockOffsetsInCompressedFile[blockIndex];
+    decompressedIn = new GZIPInputStream(new InputSubstream(this.compressedIn, remainingCompressedBytes));
+    this.pos = this.blockOffsetsInRawFile[blockIndex];
     return true;
   }
   
+  private long getCompressedLength() {
+    return blockOffsetsInCompressedFile[blockOffsetsInCompressedFile.length - 1];
+  }
+
+  private long getDecompressedLength() {
+    return blockOffsetsInRawFile[blockOffsetsInRawFile.length - 1];
+  }
+
   @Override
   public boolean seekToNewSource(long newPos) throws IOException {
     int newBlock = findBlock(newPos);
     if (!gotoBlockNewSource(newBlock))
       return false;
-    this.decompressedIn.skip(newPos - this.blockOffsetsInRawFile[currentBlock]);
+    this.skip(newPos - this.blockOffsetsInRawFile[newBlock]);
     return true;
   }
 
   @Override
   public int read() throws IOException {
-    if (pos >= decompressedLength)
+    if (pos >= getDecompressedLength())
       return -1;
-    if (pos >= this.blockOffsetsInRawFile[currentBlock+1]) {
-      // Go to next block
-      currentBlock++;
-      this.compressedIn.seek(this.blockOffsetsInCompressedFile[currentBlock]);
-      this.decompressedIn = new GZIPInputStream(this.compressedIn);
-    }
     int b = this.decompressedIn.read();
     pos++;
     return b;
   }
   
+
   @Override
   public void close() throws IOException {
     this.compressedIn.close();
@@ -165,6 +161,6 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
 
   @Override
   public int available() throws IOException {
-    return (int) Math.max(decompressedLength - pos, this.compressedIn.available());
+    return (int) Math.min(getDecompressedLength() - pos, this.compressedIn.available());
   }
 }
