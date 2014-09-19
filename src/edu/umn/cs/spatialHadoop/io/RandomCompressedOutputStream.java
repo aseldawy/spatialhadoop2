@@ -107,7 +107,9 @@ public class RandomCompressedOutputStream extends OutputStream {
         new File("test.gzp").length());
     in.seek(4 * 200320);
     DataInputStream din = new DataInputStream(in);
-    System.out.println("Number is "+din.readInt());
+    while (din.available() > 0) {
+      System.out.println("Number is "+din.readInt());
+    }
     din.close();
   }
 }
