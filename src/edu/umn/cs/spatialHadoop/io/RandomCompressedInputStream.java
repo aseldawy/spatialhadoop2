@@ -39,10 +39,10 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
     // Read and cache the lookup table
     this.compressedIn.seek(totalLength - 4);
     int numberOfBlocks = this.compressedIn.readInt();
-    this.blockOffsetsInCompressedFile = new long[numberOfBlocks];
-    this.blockOffsetsInRawFile = new long[numberOfBlocks];
+    this.blockOffsetsInCompressedFile = new long[numberOfBlocks + 1];
+    this.blockOffsetsInRawFile = new long[numberOfBlocks + 1];
     this.compressedIn.seek(totalLength - 4 - numberOfBlocks * (8 + 8));
-    for (int i = 0; i < numberOfBlocks; i++) {
+    for (int i = 1; i <= numberOfBlocks; i++) {
       blockOffsetsInCompressedFile[i] = this.compressedIn.readLong();
       blockOffsetsInRawFile[i] = this.compressedIn.readLong();
     }
@@ -59,14 +59,22 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
   @Override
   public void seek(long newPos) throws IOException {
     int blockIndex = findBlock(newPos);
-    // TODO Auto-generated method stub
-    
+    compressedIn.seek(this.blockOffsetsInCompressedFile[blockIndex]);
+    this.decompressedIn = new GZIPInputStream(this.compressedIn);
+    this.pos = this.blockOffsetsInRawFile[blockIndex];
+    this.decompressedIn.skip(newPos - this.blockOffsetsInRawFile[blockIndex]);
   }
 
   @Override
   public boolean seekToNewSource(long newPos) throws IOException {
-    // TODO Auto-generated method stub
-    return false;
+    int blockIndex = findBlock(newPos);
+    if (!compressedIn.seekToNewSource(this.blockOffsetsInCompressedFile[blockIndex])) {
+      return false;
+    }
+    this.decompressedIn = new GZIPInputStream(this.compressedIn);
+    this.pos = this.blockOffsetsInRawFile[blockIndex];
+    this.decompressedIn.skip(newPos - this.blockOffsetsInRawFile[blockIndex]);
+    return true;
   }
 
   @Override
@@ -78,6 +86,11 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
     return b;
   }
   
+  @Override
+  public void close() throws IOException {
+    this.compressedIn.close();
+  }
+  
   /**
    * Finds the block that contains the given position in the uncompressed
    * file.
@@ -85,7 +98,16 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
    * @return
    */
   private int findBlock(long newPos) {
-    // TODO Auto-generated method stub
-    return 0;
+    int s = 0;
+    int e = blockOffsetsInRawFile.length;
+    while (s < e) {
+      int m = (s + e) / 2;
+      if (blockOffsetsInRawFile[m] < newPos) {
+        s = m + 1;
+      } else {
+        e = m;
+      }
+    }
+    return s - 1;
   }
 }

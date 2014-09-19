@@ -7,12 +7,18 @@
 package edu.umn.cs.spatialHadoop.io;
 
 import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Vector;
 import java.util.zip.GZIPOutputStream;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 
 /**
  * An output stream that writes data in separate blocks each one is compressed
@@ -95,5 +101,13 @@ public class RandomCompressedOutputStream extends OutputStream {
       out.writeInt(i);
     }
     out.close();
+    
+    FileSystem localFs = FileSystem.getLocal(new Configuration());
+    RandomCompressedInputStream in = new RandomCompressedInputStream(localFs.open(new Path("test.gzp")),
+        new File("test.gzp").length());
+    in.seek(4 * 200320);
+    DataInputStream din = new DataInputStream(in);
+    System.out.println("Number is "+din.readInt());
+    din.close();
   }
 }
