@@ -71,7 +71,7 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
 
   @Override
   public void seek(long newPos) throws IOException {
-    if (newPos > getPos() && newPos < this.blockOffsetsInRawFile[currentBlock + 1]) {
+    if (newPos >= getPos() && newPos < this.blockOffsetsInRawFile[currentBlock + 1]) {
       // Just skip bytes to newPos if within the same block
       this.skip(newPos - getPos());
       return;
@@ -118,6 +118,14 @@ public class RandomCompressedInputStream extends InputStream implements Seekable
       currentBlock++;
     }
     return b;
+  }
+  
+  @Override
+  public long skip(long n) throws IOException {
+    long canSkip = Math.min(n, getDecompressedLength() - getPos());
+    this.decompressedIn.skip(canSkip);
+    pos += canSkip;
+    return canSkip;
   }
   
 

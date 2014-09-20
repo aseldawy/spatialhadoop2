@@ -368,9 +368,9 @@ public class AggregateQuadTree {
       Object values = matchedDataset.read();
       if (values instanceof short[]) {
         FileSystem outFs = outFile.getFileSystem(conf);
-//        DataOutputStream out = new DataOutputStream(
-//            new RandomCompressedOutputStream(outFs.create(outFile, false)));
-        DataOutputStream out = outFs.create(outFile, false);
+        DataOutputStream out = new DataOutputStream(
+            new RandomCompressedOutputStream(outFs.create(outFile, false)));
+//        DataOutputStream out = outFs.create(outFile, false);
         build((short[])values, fillValue, out);
         out.close();
       } else {
@@ -490,15 +490,15 @@ public class AggregateQuadTree {
     DataInputStream[] inTrees = new DataInputStream[inFiles.length];
     for (int i = 0; i < inFiles.length; i++) {
       FileSystem inFs = inFiles[i].getFileSystem(conf);
-      inTrees[i] = inFs.open(inFiles[i]);
-//      inTrees[i] = new FSDataInputStream(
-//          new RandomCompressedInputStream(inFs, inFiles[i]));
+//      inTrees[i] = inFs.open(inFiles[i]);
+      inTrees[i] = new FSDataInputStream(
+          new RandomCompressedInputStream(inFs, inFiles[i]));
     }
     
     FileSystem outFs = outFile.getFileSystem(conf);
-    DataOutputStream outTree = outFs.create(outFile, false);
-//    DataOutputStream outTree = new DataOutputStream(
-//        new RandomCompressedOutputStream(outFs.create(outFile, false))); 
+//    DataOutputStream outTree = outFs.create(outFile, false);
+    DataOutputStream outTree = new DataOutputStream(
+        new RandomCompressedOutputStream(outFs.create(outFile, false))); 
     
     merge(inTrees, outTree);
     
@@ -664,8 +664,8 @@ public class AggregateQuadTree {
   public static Node aggregateQuery(FileSystem fs, Path p, Rectangle query_mbr) throws IOException {
     FSDataInputStream inStream = null;
     try {
-      //inStream = new FSDataInputStream(new RandomCompressedInputStream(fs, p));
-      inStream = fs.open(p);
+      inStream = new FSDataInputStream(new RandomCompressedInputStream(fs, p));
+      //inStream = fs.open(p);
       return aggregateQuery(inStream, query_mbr);
     } finally {
       if (inStream != null)

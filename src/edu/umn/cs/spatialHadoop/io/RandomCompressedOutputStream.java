@@ -7,16 +7,18 @@
 package edu.umn.cs.spatialHadoop.io;
 
 import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Arrays;
+import java.util.Random;
 import java.util.Vector;
 import java.util.zip.GZIPOutputStream;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
@@ -97,21 +99,34 @@ public class RandomCompressedOutputStream extends OutputStream {
   }
 
   public static void main(String[] args) throws IOException {
+    long t1 = System.currentTimeMillis();
     DataOutputStream out = new DataOutputStream(new RandomCompressedOutputStream(
         new BufferedOutputStream(new FileOutputStream("test.gzp"))));
-    for (int i = 0; i < 1000000; i++) {
+    for (int i = 0; i < 10000000; i++) {
       out.writeInt(i);
     }
     out.close();
-    
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for writing the file: "+(t2-t1)/1000.0+" secs");
+
     FileSystem localFs = FileSystem.getLocal(new Configuration());
-    RandomCompressedInputStream in = new RandomCompressedInputStream(localFs.open(new Path("test.gzp")),
-        new File("test.gzp").length());
-    in.seek(4 * 999998);
-    DataInputStream din = new DataInputStream(in);
-    while (din.available() > 0) {
-      System.out.println("Number is "+din.readInt());
+    t1 = System.currentTimeMillis();
+    InputStream in = new RandomCompressedInputStream(localFs, new Path("test.gzp"));
+    FSDataInputStream din = new FSDataInputStream(in);
+    long[] pos = new long[1000];
+    Random rand = new Random();
+    for (int i = 0; i < pos.length; i++) {
+      pos[i] = rand.nextInt(10000000) * 4L;
     }
+    Arrays.sort(pos);
+    for (int i = 0; i < pos.length; i++) {
+      //din.seek(pos[i]);
+      din.skip(pos[i] - din.getPos());
+      din.readInt();
+      //System.out.println("Number is "+din.readInt());
+    }
+    t2 = System.currentTimeMillis();
+    System.out.println("Total time for reading the file: "+(t2-t1)/1000.0+" secs");
     din.close();
   }
 }
