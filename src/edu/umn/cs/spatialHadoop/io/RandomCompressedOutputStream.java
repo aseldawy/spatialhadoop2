@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.Path;
  */
 public class RandomCompressedOutputStream extends OutputStream {
   /**Default size for one block to be compressed separately*/
-  private static final long DefaultBlockSize = 1024 * 1024;
+  private static final long DefaultBlockSize = 10 * 1024 * 1024;
   
   /**The output stream on which raw data is written (internally compressed)*/
   private GZIPOutputStream rawOut;
