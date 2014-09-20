@@ -491,10 +491,14 @@ public class AggregateQuadTree {
     for (int i = 0; i < inFiles.length; i++) {
       FileSystem inFs = inFiles[i].getFileSystem(conf);
       inTrees[i] = inFs.open(inFiles[i]);
+//      inTrees[i] = new FSDataInputStream(
+//          new RandomCompressedInputStream(inFs, inFiles[i]));
     }
     
     FileSystem outFs = outFile.getFileSystem(conf);
     DataOutputStream outTree = outFs.create(outFile, false);
+//    DataOutputStream outTree = new DataOutputStream(
+//        new RandomCompressedOutputStream(outFs.create(outFile, false))); 
     
     merge(inTrees, outTree);
     
