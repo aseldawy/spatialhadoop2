@@ -211,27 +211,27 @@ public class SpatioTemporalAggregateQuery {
       response.setContentType("application/json;charset=utf-8");
       ((Request) request).setHandled(true);
       
-      String rectStr = request.getParameter("rect");
-      if (rectStr == null) {
-        // Error spatial range not set
-        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-        response.getWriter().println("{error: 'rect parameter not set'}");
+      OperationsParams params;
+      try {
+        String west = request.getParameter("min_lon");
+        String east = request.getParameter("max_lon");
+        String south = request.getParameter("min_lat");
+        String north = request.getParameter("max_lat");
+        
+        String[] startDateParts = request.getParameter("fromDate").split("/");
+        String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+        String[] endDateParts = request.getParameter("toDate").split("/");
+        String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+        
+        // Create the query parameters
+        params = new OperationsParams(commonParams);
+        params.set("rect", west+','+south+','+north+','+east);
+        params.set("time", startDate+".."+endDate);
+      } catch (Exception e) {
+        reportError(response, "Error parsing parameters", e);
         return;
       }
-      
-      String timeStr = request.getParameter("time");
-      if (timeStr == null) {
-        // Error temporal range not set
-        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-        response.getWriter().println("{error: 'time parameter not set'}");
-        return;
-      }
-  
-      // Create the query parameters
-      OperationsParams params = new OperationsParams(commonParams);
-      params.set("rect", rectStr);
-      params.set("time", timeStr);
-      
+
       try {
         long t1 = System.currentTimeMillis();
         Node result = aggregateQuery(indexPath, params);
@@ -250,16 +250,23 @@ public class SpatioTemporalAggregateQuery {
         writer.print("}");
         writer.print("}");
       } catch (ParseException e) {
-        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-        response.getWriter().println("{error: '"+e.getMessage()+"',");
-        response.getWriter().println("stacktrace: [");
-        for (StackTraceElement trc : e.getStackTrace()) {
-          response.getWriter().println("'"+trc.toString()+"',");
-        }
-        response.getWriter().println("]");
-        response.getWriter().println("}");
+        reportError(response, "Error executing the query", e);
         return;
       }
+    }
+
+    private void reportError(HttpServletResponse response, String msg,
+        Exception e)
+        throws IOException {
+      response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+      response.getWriter().println("{error: '"+e.getMessage()+"',");
+      response.getWriter().println("message: '"+msg+"',");
+      response.getWriter().println("stacktrace: [");
+      for (StackTraceElement trc : e.getStackTrace()) {
+        response.getWriter().println("'"+trc.toString()+"',");
+      }
+      response.getWriter().println("]");
+      response.getWriter().println("}");
     }
   }
 

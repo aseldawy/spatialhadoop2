@@ -27,6 +27,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -134,6 +135,13 @@ public class DistributedSpatioTemporalIndexer {
 		TextInputFormat.setInputPaths(job, inputPathsDictionaryPath);
 		TextOutputFormat.setOutputPath(job, outputPath);
 
+    if (job.getBoolean("local", false)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
+
 		// Submit the job
 		JobClient.runJob(job);
 	}
@@ -150,7 +158,7 @@ public class DistributedSpatioTemporalIndexer {
 	public static void main(String[] args) throws IOException, ParseException {
 
 		OperationsParams params = new OperationsParams(
-				new GenericOptionsParser(args));
+				new GenericOptionsParser(args), false);
 		String timeRange = params.get("time"); //time range
 		Path datasetPath = params.getPaths()[0]; //dataset path
 		Path indexesPath = params.getPaths()[1]; //index path

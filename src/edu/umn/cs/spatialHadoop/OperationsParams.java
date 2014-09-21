@@ -548,6 +548,11 @@ public class OperationsParams extends Configuration {
           sampleLines.add(line.toString());
         }
       }, sampleParams);
+      
+      if (sampleLines.isEmpty()) {
+        LOG.warn("No input to detect in '"+this.getInputPath()+"-");
+        return false;
+      }
 
       // Collect some stats about the sample to help detecting shape type
       final String Separators[] = {",", "\t"};
