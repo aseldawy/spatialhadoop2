@@ -4,10 +4,10 @@
   <property name="src" location="src"/>
 	<property name="res" location="res"/>
   <property name="doc" location="doc"/>
-  <property name="build1" location="bin1"/>
-  <property name="dist1"  location="dist1"/>
-  <property name="build2" location="bin2"/>
-  <property name="dist2"  location="dist2"/>
+  <property name="build1" location="bin1/classes"/>
+  <property name="dist1"  location="bin1/dist"/>
+  <property name="build2" location="bin2/classes"/>
+  <property name="dist2"  location="bin2/dist"/>
   <property name="version" value="2.3-rc1"/>
   
   <path id="hdflib.path.ref">
@@ -131,7 +131,7 @@
 
   <target name="emr-jar1" depends="dist1"
       description="Creates a JAR file that can run on Amazon EMR for Hadoop 1.x">
-    <zip destfile="${dist}/spatialhadoop-${version}-emr.jar">
+    <zip destfile="${dist1}/spatialhadoop-${version}-emr.jar">
       <zipgroupfileset dir="lib/ivy/common">
         <include name="esri-geometry-api-*.jar"/>
         <exclude name="*sources.jar"/>
@@ -251,7 +251,7 @@
 	    description="Install SpatialHadoop on an existing Hadoop installation">
 		<echo message="Installing on a Hadoop 1.x installation"/>
 	  <!-- Extract the constructed package file (tar) in the destination directory -->
-		<untar src="${dist}/package/spatialhadoop-${version}.tar.gz"
+		<untar src="${dist1}/package/spatialhadoop-${version}.tar.gz"
            dest="${hadoop.dir}" compression="gzip"/>
   </target>
 
@@ -259,7 +259,7 @@
     description="Install SpatialHadoop on an existing Hadoop 2 installation">
   	<echo message="Installing on a Hadoop 2.x installation"/>
     <!-- Extract the constructed package file (tar) in the destination directory -->
-    <untar src="${dist}/package/spatialhadoop-${version}-2.tar.gz"
+    <untar src="${dist2}/package/spatialhadoop-${version}-2.tar.gz"
            dest="${hadoop.dir}" compression="gzip"/>
   </target>
 	

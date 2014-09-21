@@ -17,20 +17,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
-import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
@@ -38,17 +33,12 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
-import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
-import com.esri.core.geometry.ogc.OGCGeometry;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
-import com.vividsolutions.jts.io.ParseException;
-import com.vividsolutions.jts.io.WKTReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
-import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -69,7 +59,7 @@ public class Union {
   
   /**
    * Reduce function takes a category and union all shapes in that category
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
    */
   static class UnionReducer<S extends OGCJTSShape> extends MapReduceBase
@@ -128,21 +118,8 @@ public class Union {
    */
   public static void unionMapReduce(Path inFile, Path output,
       OperationsParams params) throws IOException {
-    JobConf job = new JobConf(Union.class);
+    JobConf job = new JobConf(params, Union.class);
     job.setJobName("Union");
-    boolean overwrite = params.is("overwrite");
-    Shape shape = params.getShape("shape");
-
-    // Check output file existence
-    FileSystem outFs = output.getFileSystem(job);
-    if (outFs.exists(output)) {
-      if (overwrite) {
-        outFs.delete(output, true);
-      } else {
-        throw new RuntimeException("Output path already exists and -overwrite flag is not set");
-      }
-    }
-    
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFile.getFileSystem(job), inFile);
     int reduceBuckets = 1;
     if (gindex != null) {
@@ -216,7 +193,7 @@ public class Union {
     job.setReducerClass(UnionReducer.class);
     
     job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(shape.getClass());
+    job.setMapOutputValueClass(params.getShape("shape").getClass());
 
     // Set input and output
     job.setInputFormat(ShapeInputFormat.class);
@@ -225,12 +202,15 @@ public class Union {
     job.setOutputFormat(GridOutputFormat.class);
     GridOutputFormat.setOutputPath(job, output);
 
+    if (OperationsParams.isLocal(job, inFile)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
+
     // Start job
     JobClient.runJob(job);
-    
-    // TODO If outputPath not set by user, automatically delete it
-//    if (userOutputPath == null)
-//      outFs.delete(outputPath, true);
   }
   
   
@@ -284,89 +264,6 @@ public class Union {
     return union;
   }
 
-  /**
-   * Calculates the union of a set of shapes
-   * @param fs
-   * @param file
-   * @return
-   * @throws IOException
-   */
-  public static Geometry unionLocal(Path inFile, OperationsParams params)
-      throws IOException {
-    Shape shape = params.getShape("shape");
-    // Read shapes from the shape file and relate each one to a category
-    
-    // Prepare a hash that stores all shapes
-    Vector shapes;
-    if (shape instanceof OGCJTSShape) {
-      shapes = new Vector<Geometry>();
-    } else if (shape instanceof OGCESRIShape) {
-      shapes = new Vector<OGCGeometry>();
-    } else {
-      throw new RuntimeException("Cannot union shapes of type '"+shape.getClass()+"'");
-    }
-    
-    FileSystem fs = inFile.getFileSystem(new Configuration());
-    long file_size = fs.getFileStatus(inFile).getLen();
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-    JobConf job = new JobConf(params);
-    ShapeInputFormat.addInputPath(job, inFile);
-    InputSplit[] splits = inputFormat.getSplits(job, 1);
-
-    double progress = 0;
-    for (InputSplit split : splits) {
-      ShapeRecordReader<Shape> shapeReader =
-          new ShapeRecordReader<Shape>(job, (FileSplit)split);
-      Rectangle partition = new Rectangle();
-      
-      // Number of entries before we perform a partial union
-      int threshold = 1000;
-      
-      while (shapeReader.next(partition, shape)) {
-        if (shape instanceof OGCJTSShape)
-          shapes.add(((OGCJTSShape)shape).geom);
-        else if (shape instanceof OGCESRIShape)
-          shapes.add(((OGCESRIShape)shape).geom);
-        
-        if (shapes.size() > threshold ) {
-          System.out.print("Calculating union for "+shapes.size()+" shapes ... ");
-          // Find the union of all shapes
-          if (shape instanceof OGCJTSShape) {
-            GeometryCollection all_geoms = new GeometryCollection((Geometry[])shapes.toArray(new Geometry[shapes.size()]), ((Geometry)shapes.firstElement()).getFactory());
-            
-            Geometry union = all_geoms.buffer(0);
-            shapes.clear();
-            shapes.add(union);
-          } else {
-            OGCConcreteGeometryCollection all_geoms = new OGCConcreteGeometryCollection(shapes, ((OGCGeometry)shapes.firstElement()).getEsriSpatialReference());
-            OGCGeometry union = all_geoms.union((OGCGeometry)shapes.firstElement());
-            shapes.clear();
-            shapes.add(union);
-          }
-          System.out.println(((int)((progress + shapeReader.getProgress() / splits.length)*100))+"% done");
-        }
-      }
-      shapeReader.close();
-      progress += 1.0f / splits.length;
-    }
-
-    // Find the union of all shapes
-    if (shape instanceof OGCJTSShape) {
-      GeometryCollection all_geoms = new GeometryCollection((Geometry[])shapes.toArray(new Geometry[shapes.size()]), ((Geometry)shapes.firstElement()).getFactory());
-      
-      Geometry union = all_geoms.buffer(0);
-      return union;
-    } else {
-      OGCConcreteGeometryCollection all_geoms = new OGCConcreteGeometryCollection(shapes, ((OGCGeometry)shapes.firstElement()).getEsriSpatialReference());
-      OGCGeometry union = all_geoms.union((OGCGeometry)shapes.firstElement());
-      try {
-        return new WKTReader().read(union.asText());
-      } catch (ParseException e) {
-        throw new RuntimeException("Error converting result", e);
-      }
-    }
-  }
-
   private static void printUsage() {
     System.out.println("Finds the union of all shapes in the input file.");
     System.out.println("The output is one shape that represents the union of all shapes in input file.");
@@ -377,17 +274,7 @@ public class Union {
 
   public static void union(Path inFile, Path outFile,
       OperationsParams params) throws IOException {
-    FileSystem inFs = inFile.getFileSystem(params);
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    boolean autoLocal = !(inFStatus.isDir() ||
-        inFStatus.getLen() / inFStatus.getBlockSize() > 3);
-    Boolean isLocal = params.is("local", autoLocal);
-    
-    if (isLocal) {
-      unionLocal(inFile, params);
-    } else {
-      unionMapReduce(inFile, outFile, params);
-    }
+    unionMapReduce(inFile, outFile, params);
   }
 
 
@@ -397,21 +284,18 @@ public class Union {
    */
   public static void main(String[] args) throws IOException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    if (params.getPaths().length == 0) {
-      if (params.is("local")) {
-        long t1 = System.currentTimeMillis();
-        unionStream((OGCJTSShape)params.getShape("shape"));
-        long t2 = System.currentTimeMillis();
-        System.err.println("Total time for union: "+(t2-t1)+" millis");
-        return;
-      }
-      printUsage();
-      throw new RuntimeException("Illegal arguments. Input file missing");
+    if (params.getPaths().length == 0 && params.is("local")) {
+      // Special handling for union on an input stream
+      long t1 = System.currentTimeMillis();
+      unionStream((OGCJTSShape)params.getShape("shape"));
+      long t2 = System.currentTimeMillis();
+      System.err.println("Total time for union: "+(t2-t1)+" millis");
+      return;
     }
     
-    if (!params.checkInputOutput()) {
+    if (!params.checkInputOutput(true)) {
       printUsage();
-      return;
+      System.exit(1);
     }
 
     Path inputPath = params.getInputPath();
