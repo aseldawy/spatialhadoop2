@@ -11,22 +11,28 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Properties;
 
+import javax.activation.DataHandler;
+import javax.activation.DataSource;
 import javax.mail.Message;
 import javax.mail.Message.RecipientType;
 import javax.mail.MessagingException;
+import javax.mail.Multipart;
 import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.AddressException;
 import javax.mail.internet.InternetAddress;
+import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
+import javax.mail.internet.MimeMultipart;
+import javax.mail.util.ByteArrayDataSource;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -48,17 +54,12 @@ public class VisualizationServer extends AbstractHandler {
 
   /**Common parameters for all queries*/
   private OperationsParams commonParams;
-  final private Path localWorkingDir;
   /**Username of the mail server*/
   final private String username;
   /**Password of the mail server*/
   final private String password;
-  /**Intermediate files in HDFS to generate images*/
-  private Path hdfsWorkingDir;
 
   public VisualizationServer(OperationsParams params) {
-    this.localWorkingDir = new Path(params.get("workdir"));
-    this.hdfsWorkingDir = new Path("visulization-request");
     this.commonParams = new OperationsParams(params);
     this.username = params.get("username");
     this.password = params.get("password");
@@ -87,20 +88,24 @@ public class VisualizationServer extends AbstractHandler {
     response.addHeader("Access-Control-Allow-Credentials", "true");
     response.setContentType("application/json;charset=utf-8");
     ((Request) request).setHandled(true);
-
-    if (target.equals("/generate_image")) {
-      LOG.info("Generating image");
-      // Generate a video
-      int requestID = generateRequestID();
-      // Start a background thread that handles the request
-      new ImageRequestHandler(request, requestID).start();
+    
+    try {
+      if (target.equals("/generate_image")) {
+        LOG.info("Generating image");
+        // Start a background thread that handles the request
+        new ImageRequestHandler(request).start();
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.getWriter().println("Image request received successfully");
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      reportError(response, "Error placing the request", e);
     }
   }
   
   private class ImageRequestHandler extends Thread {
 
     /**A unique ID for this request*/
-    private int requestID;
     private String datasetURL;
     private String requesterName;
     private String email;
@@ -112,10 +117,13 @@ public class VisualizationServer extends AbstractHandler {
     private String south;
     private String north;
     private Path inputURL;
-    private Path outputPath;
+    private Path outDir;
 
-    public ImageRequestHandler(HttpServletRequest request, int requestID) {
-      this.requestID = requestID;
+    public ImageRequestHandler(HttpServletRequest request) throws IOException {
+      FileSystem fs = FileSystem.get(commonParams);
+      do {
+        this.outDir = new Path(String.format("%06d", (int)(Math.random() * 1000000)));
+      } while (fs.exists(outDir));
       this.requesterName = request.getParameter("user_name");
       this.email = request.getParameter("email");
       this.datasetURL = request.getParameter("dataset_url");
@@ -136,61 +144,13 @@ public class VisualizationServer extends AbstractHandler {
     public void run() {
       try {
         sendConfirmEmail();
-        plotImage();
-        // Create a KML file for this request
-//        String kmlFile = createKMLFile();
-        
-        // Send a notification email with the result
-
+        byte[] imageFile = plotImage();
+        byte[] kmlFile = createKMLFile();
+        sendResponseEmail(imageFile, kmlFile);
       } catch (Exception e) {
         LOG.info("Error handling request");
         e.printStackTrace();
       }
-    }
-
-    /*private String createKMLFile() {
-      PrintWriter printWriter = new PrintWriter(new ByteArrayOutputStream());
-      printWriter.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-      printWriter.println("<kml xmlns=\"http://www.opengis.net/kml/2.2\">");
-      printWriter.println("  <Folder>");
-      printWriter.println("    <name>Generated Image</name>");
-      printWriter.println("    <description>No describtion available</description>");
-      printWriter.println("    <GroundOverlay>");
-      printWriter.println("      <name></name>");
-      printWriter.println("      <description>None available</description>");
-      printWriter.println("      <Icon>");
-      printWriter.println("        <href>"+outputPath.getName()+"</href>");
-      printWriter.println("      </Icon>");
-      printWriter.println("      <LatLonBox>");
-      printWriter.println("        <north>"+ north +"</north>");
-      printWriter.println("        <south>"+ south +"</south>");
-      printWriter.println("        <east>"+ east +"</east>");
-      printWriter.println("        <west>"+ west +"</west>");
-      printWriter.println("        <rotation>0</rotation>");
-      printWriter.println("      </LatLonBox>");
-      printWriter.println("    </GroundOverlay>");
-      printWriter.println("  </Folder>");
-      printWriter.println("</kml>");
-      
-    }*/
-
-    /**
-     * Plots the image as the user requested
-     * @throws IOException
-     */
-    private void plotImage() throws IOException {
-      this.inputURL = new Path(datasetURL+"/"+startDate);
-      this.outputPath = new Path(hdfsWorkingDir, String.format("%05d/image-%05d.png", requestID, requestID));
-
-      // Launch the MapReduce job that plots the dataset
-      OperationsParams plotParams = new OperationsParams();
-      plotParams.setBoolean("vflip", true);
-      plotParams.setClass("shape", NASARectangle.class, Shape.class);
-      plotParams.set("rect", rect);
-      plotParams.setBoolean("recoverholes", true);
-      plotParams.set("dataset", datasetName);
-      
-      GeometricPlot.plotMapReduce(inputURL, outputPath, plotParams);
     }
 
     /**
@@ -207,52 +167,151 @@ public class VisualizationServer extends AbstractHandler {
       props.put("mail.smtp.starttls.enable", "true");
       props.put("mail.smtp.host", "smtp.gmail.com");
       props.put("mail.smtp.port", "587");
-
+    
       Session session = Session.getInstance(props,
           new javax.mail.Authenticator() {
         protected PasswordAuthentication getPasswordAuthentication() {
           return new PasswordAuthentication(username, password);
         }
       });
-
+    
       Message message = new MimeMessage(session);
       message.setFrom(new InternetAddress(username));
       String toLine = requesterName+'<'+email+'>';
       message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
       message.setSubject("Confirmation: Your request was received");
       message.setText("Dear "+requesterName+",\n"+
-          "Your request was received and assigned the ID #"+requestID+". "+
-          "The server is currently processing your request and you will received " +
-          "an email with the generated files as soon as it is complete.\n\n"+
+          "Your request was received. "+
+          "The server is currently processing your request and you will receive " +
+          "an email with the generated files as soon as the request is complete.\n\n"+
           "Thank you for using Shahed. \n\n Shahed team");
       Transport.send(message);
       LOG.info("Message sent successfully to '"+toLine+"'");
     }
-  }
 
-
-  private int generateRequestID() throws IOException {
-    FileSystem fs = localWorkingDir.getFileSystem(commonParams);
-    FileStatus[] prevFiles = fs.listStatus(localWorkingDir);
-    int maxID = 0;
-    for (FileStatus prevFile : prevFiles) {
-      int prevID = Integer.parseInt(prevFile.getPath().getName());
-      if (prevID > maxID)
-        maxID = prevID;
+    /**
+     * Plots the image as the user requested
+     * @throws IOException
+     */
+    private byte[] plotImage() throws IOException {
+      this.inputURL = new Path(datasetURL+"/"+startDate);
+      Path outputPath = new Path(outDir, "image.png");
+      // Launch the MapReduce job that plots the dataset
+      OperationsParams plotParams = new OperationsParams();
+      plotParams.setBoolean("vflip", true);
+      plotParams.setClass("shape", NASARectangle.class, Shape.class);
+      plotParams.set("rect", rect);
+      plotParams.setBoolean("recoverholes", true);
+      plotParams.set("dataset", datasetName);
+      
+      GeometricPlot.plotMapReduce(inputURL, outputPath, plotParams);
+      
+      FileSystem fs = outputPath.getFileSystem(commonParams);
+      if (!fs.exists(outputPath)) {
+        LOG.error("Image not generated");
+        return null;
+      }
+      FSDataInputStream inputStream = fs.open(outputPath);
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      byte[] buffer = new byte[1024*1024];
+      int size;
+      while ((size = inputStream.read(buffer)) != -1) {
+        baos.write(buffer, 0, size);
+      }
+      inputStream.close();
+      baos.close();
+      byte[] imageData = baos.toByteArray();
+      fs.delete(outDir, true);
+      return imageData;
     }
-    return maxID + 1;
-  }
 
-  /**
-   * Report an error back to the web browser
-   * @param response
-   * @param msg
-   * @param e
-   * @throws IOException
-   */
-  private static void reportError(HttpServletResponse response, String msg,
+    /**
+     * Creates a KML file that displays the generated image in Google Earth
+     * @return
+     */
+    private byte[] createKMLFile() {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      PrintWriter printWriter = new PrintWriter(baos);
+      printWriter.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
+      printWriter.println("<kml xmlns=\"http://www.opengis.net/kml/2.2\">");
+      printWriter.println("  <Folder>");
+      printWriter.println("    <name>Generated Image</name>");
+      printWriter.println("    <description>No describtion available</description>");
+      printWriter.println("    <GroundOverlay>");
+      printWriter.println("      <name></name>");
+      printWriter.println("      <description>None available</description>");
+      printWriter.println("      <Icon>");
+      printWriter.println("        <href>image.png</href>");
+      printWriter.println("      </Icon>");
+      printWriter.println("      <LatLonBox>");
+      printWriter.println("        <north>"+ north +"</north>");
+      printWriter.println("        <south>"+ south +"</south>");
+      printWriter.println("        <east>"+ east +"</east>");
+      printWriter.println("        <west>"+ west +"</west>");
+      printWriter.println("        <rotation>0</rotation>");
+      printWriter.println("      </LatLonBox>");
+      printWriter.println("    </GroundOverlay>");
+      printWriter.println("  </Folder>");
+      printWriter.println("</kml>");
+      printWriter.close();
+      return baos.toByteArray();
+    }
+
+    /**
+     * Sends an email to the client with the generated image.
+     * @param kmlFile
+     * @throws MessagingException 
+     * @throws AddressException 
+     */
+    private void sendResponseEmail(byte[] image, byte[] kmlFile) throws AddressException, MessagingException {
+      Properties props = new Properties();
+      props.put("mail.smtp.auth", "true");
+      props.put("mail.smtp.starttls.enable", "true");
+      props.put("mail.smtp.host", "smtp.gmail.com");
+      props.put("mail.smtp.port", "587");
+    
+      Session session = Session.getInstance(props,
+          new javax.mail.Authenticator() {
+        protected PasswordAuthentication getPasswordAuthentication() {
+          return new PasswordAuthentication(username, password);
+        }
+      });
+    
+      Message message = new MimeMessage(session);
+      message.setFrom(new InternetAddress(username));
+      String toLine = requesterName+'<'+email+'>';
+      message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
+      message.setSubject("Your request is complete");
+      message.setText("Dear "+requesterName+",\n"+
+          "Your request was successfully completed. "+
+          "Please find the generated images attached.\n\n"+
+          "Thank you for using Shahed. \n\n Shahed team");
+      
+      Multipart multipart = new MimeMultipart();
+      
+      MimeBodyPart imagePart = new MimeBodyPart();
+      DataSource source1 = new ByteArrayDataSource(image, "image/png");
+      imagePart.setDataHandler(new DataHandler(source1));
+      imagePart.setFileName("image.png");
+      multipart.addBodyPart(imagePart);
+
+      MimeBodyPart kmlPart = new MimeBodyPart();
+      DataSource source2 = new ByteArrayDataSource(kmlFile, "application/vnd.google-earth.kml+xml");
+      kmlPart.setDataHandler(new DataHandler(source2));
+      kmlPart.setFileName("heatmap.kml");
+      multipart.addBodyPart(kmlPart);
+      
+      message.setContent(multipart);
+
+      Transport.send(message);
+      LOG.info("Request finished successfully");
+    }
+  }
+  
+  private void reportError(HttpServletResponse response, String msg,
       Exception e)
-          throws IOException {
+      throws IOException {
+    e.printStackTrace();
     response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
     response.getWriter().println("{error: '"+e.getMessage()+"',");
     response.getWriter().println("message: '"+msg+"',");
@@ -270,7 +329,6 @@ public class VisualizationServer extends AbstractHandler {
   public static void printUsage() {
     System.out.println("Starts a server which will handle visualization requests");
     System.out.println("Parameters: (* marks required parameters)");
-    System.out.println("workdir:<w> - (*) The working directory where all intermediate files are placed");
     System.out.println("username:<u> - (*) Username to authenticate with the mail server");
     System.out.println("password:<pw> - (*) Password to authenticate with the mail server");
     System.out.println("port:<p> - The port to start listening to. Default: 8889");
@@ -284,9 +342,8 @@ public class VisualizationServer extends AbstractHandler {
   public static void main(String[] args) throws Exception {
     final OperationsParams params =
         new OperationsParams(new GenericOptionsParser(args), false);
-    if (params.get("workdir") == null) {
-      System.err.println("Error! Working directory not set");
-      printUsage();
+    if (params.get("username") == null || params.get("password") == null) {
+      System.err.println("Please specify username and password for mail server");
       System.exit(1);
     }
     startServer(params.getInputPath(), params);

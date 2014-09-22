@@ -249,6 +249,7 @@ public class SpatioTemporalAggregateQuery {
         writer.print("\"totaltime\":"+(t2-t1));
         writer.print("}");
         writer.print("}");
+        response.setStatus(HttpServletResponse.SC_OK);
       } catch (ParseException e) {
         reportError(response, "Error executing the query", e);
         return;

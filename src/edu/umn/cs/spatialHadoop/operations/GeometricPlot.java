@@ -71,6 +71,7 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
+import edu.umn.cs.spatialHadoop.operations.PyramidPlot.SpacePartitionMap;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
@@ -829,6 +830,7 @@ public class GeometricPlot {
       job.set("valuerange", valueRange.minValue+".."+valueRange.maxValue);
       fileMBR = plotRange != null?
           plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
+      job.setInputFormat(ShapeInputFormat.class);
           //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
           //          GeoProjector.class);
     } else {
@@ -917,7 +919,16 @@ public class GeometricPlot {
     } else {
       throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
     }
-
+    
+    if (hdfDataset != null) {
+      job.setMapperClass(SpacePartitionMap.class);
+      GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
+          fileMBR.y2);
+      partitionGrid.calculateCellDimensions(
+          (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
+      OperationsParams.setShape(job, PartitionGrid, partitionGrid);
+    }
+    
     LOG.info("Creating an image of size "+width+"x"+height);
     ImageOutputFormat.setFileMBR(job, fileMBR);
     if (plotRange != null) {
