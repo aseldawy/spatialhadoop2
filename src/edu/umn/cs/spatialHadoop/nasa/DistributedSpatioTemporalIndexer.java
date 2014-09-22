@@ -54,6 +54,9 @@ public class DistributedSpatioTemporalIndexer {
 	private static final Log LOG = LogFactory
 			.getLog(DistributedSpatioTemporalIndexer.class);
 
+  private static final String HDFSIndexPath =
+      "DistributedSpatioTemporalIndexer.HDFSIndexPath";
+
 	private static Path hdfsIndexPath = null;
 
 	public static class AggregateQuadTreeMaper extends MapReduceBase implements
@@ -61,6 +64,12 @@ public class DistributedSpatioTemporalIndexer {
 
 		private Text success = new Text("true");
 		private Text failure = new Text("false");
+		
+		@Override
+		public void configure(JobConf job) {
+		  super.configure(job);
+		  setIndexPath(new Path(job.get(HDFSIndexPath)));
+		}
 
 		@Override
 		public void map(LongWritable dummy, Text hdfFilePathText,
@@ -89,10 +98,7 @@ public class DistributedSpatioTemporalIndexer {
 						"LST_Day_1km", hdfIndexFilePath);
 				output.collect(hdfFilePathText, success);
 			} catch (Exception e) {
-
-				LOG.warn("Failed to build AggregateQuadTree for "
-						+ hdfFilePathText.toString() + ": " + e.getMessage());
-				output.collect(hdfFilePathText, failure);
+			  throw new RuntimeException("Error in mapper", e);
 			}
 
 		}
@@ -126,6 +132,7 @@ public class DistributedSpatioTemporalIndexer {
 		job.setMapOutputKeyClass(Text.class);
 		job.setMapOutputValueClass(Text.class);
 		job.setMapperClass(AggregateQuadTreeMaper.class);
+		job.set(HDFSIndexPath, hdfsIndexPath.toString());
 
 		ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
 		job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
@@ -141,9 +148,12 @@ public class DistributedSpatioTemporalIndexer {
       // Use multithreading too
       job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     }
+    job.setNumReduceTasks(0);
 
 		// Submit the job
 		JobClient.runJob(job);
+		
+		outFs.deleteOnExit(outputPath);
 	}
 
 	/**
