@@ -792,7 +792,7 @@ public class GeometricPlot {
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
 
-  private static RunningJob plotMapReduce(Path inFile, Path outFile, OperationsParams params) throws IOException {
+  public static RunningJob plotMapReduce(Path inFile, Path outFile, OperationsParams params) throws IOException {
     boolean background = params.is("background");
 
     int width = params.getInt("width", 1000);

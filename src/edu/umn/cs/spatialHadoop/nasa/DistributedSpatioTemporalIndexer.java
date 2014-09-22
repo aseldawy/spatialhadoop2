@@ -146,7 +146,7 @@ public class DistributedSpatioTemporalIndexer {
       // Enforce local execution if explicitly set by user or for small files
       job.set("mapred.job.tracker", "local");
       // Use multithreading too
-      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, 16);
     }
     job.setNumReduceTasks(0);
 

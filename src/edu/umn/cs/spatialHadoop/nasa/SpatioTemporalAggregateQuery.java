@@ -189,14 +189,14 @@ public class SpatioTemporalAggregateQuery {
    * @author Ahmed Eldawy
    *
    */
-  public static class HomeServer extends AbstractHandler {
+  public static class AggregateQueryHandler extends AbstractHandler {
     
     /**The path in which indexes are stored*/
     private Path indexPath;
     /**Common parameters for all queries*/
     private OperationsParams commonParams;
   
-    public HomeServer(Path indexPath, OperationsParams params) {
+    public AggregateQueryHandler(Path indexPath, OperationsParams params) {
       this.indexPath = indexPath;
       this.commonParams = new OperationsParams(params);
     }
@@ -225,7 +225,7 @@ public class SpatioTemporalAggregateQuery {
         
         // Create the query parameters
         params = new OperationsParams(commonParams);
-        params.set("rect", west+','+south+','+north+','+east);
+        params.set("rect", west+','+south+','+east+','+north);
         params.set("time", startDate+".."+endDate);
       } catch (Exception e) {
         reportError(response, "Error parsing parameters", e);
@@ -239,14 +239,14 @@ public class SpatioTemporalAggregateQuery {
         // Report the answer and time
         PrintWriter writer = response.getWriter();
         writer.print("{");
-        writer.print("answer:{");
-        writer.print("min: "+result.min+',');
-        writer.print("max: "+result.max+',');
-        writer.print("count: "+result.count+',');
-        writer.print("sum: "+result.sum);
+        writer.print("\"results\":{");
+        writer.print("\"min\": "+result.min+',');
+        writer.print("\"max\": "+result.max+',');
+        writer.print("\"count\": "+result.count+',');
+        writer.print("\"sum\": "+result.sum);
         writer.print("},");
-        writer.print("stats:{");
-        writer.print("totaltime:"+(t2-t1));
+        writer.print("\"stats\":{");
+        writer.print("\"totaltime\":"+(t2-t1));
         writer.print("}");
         writer.print("}");
       } catch (ParseException e) {
@@ -258,6 +258,7 @@ public class SpatioTemporalAggregateQuery {
     private void reportError(HttpServletResponse response, String msg,
         Exception e)
         throws IOException {
+      e.printStackTrace();
       response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
       response.getWriter().println("{error: '"+e.getMessage()+"',");
       response.getWriter().println("message: '"+msg+"',");
@@ -279,7 +280,7 @@ public class SpatioTemporalAggregateQuery {
     int port = params.getInt("port", 8888);
     
     Server server = new Server(port);
-    server.setHandler(new HomeServer(indexPath, params));
+    server.setHandler(new AggregateQueryHandler(indexPath, params));
     server.start();
     server.join();
   }
@@ -291,9 +292,11 @@ public class SpatioTemporalAggregateQuery {
     System.out.println("Runs a spatio-temporal aggregate query on indexed MODIS data");
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<input file> - (*) Path to input file");
-    System.out.println("rect:<x1,y1,x2,y2> - (*) Spatial query range");
-    System.out.println("time:<date1..date2> - (*) Temporal query range. "
+    System.out.println("rect:<x1,y1,x2,y2> - Spatial query range");
+    System.out.println("time:<date1..date2> - Temporal query range. "
         + "Format of each date is yyyy.mm.dd");
+    System.out.println("-server - Starts a server to handle queries");
+    System.out.println("port:<p> - Port to listen to. Default: 8888");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
   

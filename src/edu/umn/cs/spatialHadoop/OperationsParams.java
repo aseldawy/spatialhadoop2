@@ -77,6 +77,7 @@ public class OperationsParams extends Configuration {
   }
   
   public OperationsParams() {
+    this(new Configuration());
   }
 
   public OperationsParams(GenericOptionsParser parser) {
