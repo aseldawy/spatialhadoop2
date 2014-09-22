@@ -296,16 +296,16 @@
             										+ "&max_lon=" + document.getElementById("max_lon").value
             										+ "&fromDate=" + document.getElementById("fromDate").value
             										+ "&toDate=" + document.getElementById("toDate").value;
-                $.getJSON(requestURL, function(response) {
-                    min = ((parseInt(data.results[0].min)/50) - 273.15) * 1.8000 + 32.00;
+                $.getJSON(requestURL, function(data) {
+                    min = ((parseInt(data.results.min)/50) - 273.15) * 1.8000 + 32.00;
                     document.getElementById("min").value = min;
-                    max = ((parseInt(data.results[0].max)/50) - 273.15) * 1.8000 + 32.00;
+                    max = ((parseInt(data.results.max)/50) - 273.15) * 1.8000 + 32.00;
                     document.getElementById("max").value = max;
-                    sum = ((parseInt(data.results[0].sum)/50) - 273.15) * 1.8000 + 32.00;
-                    count = parseInt(data.results[0].count);
-                    average = sum/count;
+                    sum = data.results.sum;
+                    count = parseInt(data.results.count);
+                    average = ((sum/count / 50.0)-273.15)*1.8+32;
                     document.getElementById("avg").value = average;
-                    timeInMilliSec = parseInt(data.results[1].totaltime);
+                    timeInMilliSec = parseInt(data.stats.totaltime);
                     document.getElementById("time").value = timeInMilliSec;
                 });
             }
