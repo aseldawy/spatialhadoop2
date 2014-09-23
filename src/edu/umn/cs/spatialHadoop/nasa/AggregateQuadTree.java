@@ -22,14 +22,18 @@ import java.io.DataOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Stack;
 import java.util.Vector;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.tree.DefaultMutableTreeNode;
 
@@ -45,10 +49,13 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.io.RandomCompressedInputStream;
 import edu.umn.cs.spatialHadoop.io.RandomCompressedOutputStream;
@@ -334,6 +341,8 @@ public class AggregateQuadTree {
   private static final int ValueSize = 2;
   /**Node size: min + max + sum + count*/
   private static final int NodeSize = 2 + 2 + 8 + 8;
+
+  private static final long FULL_DAY = 24 * 60 * 60 * 1000;
   
   /**
    * Constructs an aggregate quad tree for an input HDF file on a selected
@@ -370,7 +379,6 @@ public class AggregateQuadTree {
         FileSystem outFs = outFile.getFileSystem(conf);
         DataOutputStream out = new DataOutputStream(
             new RandomCompressedOutputStream(outFs.create(outFile, false)));
-//        DataOutputStream out = outFs.create(outFile, false);
         build((short[])values, fillValue, out);
         out.close();
       } else {
@@ -490,13 +498,11 @@ public class AggregateQuadTree {
     DataInputStream[] inTrees = new DataInputStream[inFiles.length];
     for (int i = 0; i < inFiles.length; i++) {
       FileSystem inFs = inFiles[i].getFileSystem(conf);
-//      inTrees[i] = inFs.open(inFiles[i]);
       inTrees[i] = new FSDataInputStream(
           new RandomCompressedInputStream(inFs, inFiles[i]));
     }
     
     FileSystem outFs = outFile.getFileSystem(conf);
-//    DataOutputStream outTree = outFs.create(outFile, false);
     DataOutputStream outTree = new DataOutputStream(
         new RandomCompressedOutputStream(outFs.create(outFile, false))); 
     
@@ -518,13 +524,16 @@ public class AggregateQuadTree {
       throws IOException {
     // Write the spatial resolution of the output as the same of all input trees
     int resolution = inTrees[0].readInt();
+    short fillValue = inTrees[0].readShort();
     for (int iTree = 1; iTree < inTrees.length; iTree++) {
       int iResolution = inTrees[iTree].readInt();
-      if (resolution != iResolution)
+      int iFillValue = inTrees[iTree].readShort();
+      if (resolution != iResolution || fillValue != iFillValue)
         throw new RuntimeException("Tree #0 has a resolution of "+resolution
             +" not compatible with resolution"+iResolution+" of Tree #"+iTree);
     }
     outTree.writeInt(resolution);
+    outTree.writeShort(fillValue);
     
     // Sum up the cardinality of all input trees
     int cardinality = 0;
@@ -832,19 +841,8 @@ public class AggregateQuadTree {
   }
 
   public static void main(String[] args) throws Exception {
-    Path sourceFolder = new Path("/export/scratch/modis/2013.02.01");
-    Path destFolder = new Path("/export/scratch/modis-indexed/daily/2013.02.01");
-    FileSystem localFs = FileSystem.getLocal(new Configuration());
-    
-    FileStatus[] nonIndexedFiles = localFs.listStatus(sourceFolder);
-    for (FileStatus nonIndexedFile : nonIndexedFiles) {
-      System.out.println("Indexing: "+nonIndexedFile.getPath().getName());
-      Path indexedFilePath = new Path(destFolder, nonIndexedFile.getPath().getName());
-      AggregateQuadTree.build(new Configuration(),
-          nonIndexedFile.getPath(),
-          "LST_Day_1km",
-          indexedFilePath);
-    }
+    final OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
+    directoryIndexer(params);
     
     System.exit(0);
     
@@ -915,6 +913,153 @@ public class AggregateQuadTree {
     });
     t2 = System.currentTimeMillis();
     System.out.println("Found "+resultSize+" results in "+(t2-t1)+" millis");
+  }
+
+  /**
+   * Creates a full spatio-temporal hierarchy for a source folder
+   */
+  private static void directoryIndexer(OperationsParams params) throws Exception  {
+    Path sourceDir = params.getInputPath();
+    FileSystem sourceFs = sourceDir.getFileSystem(params);
+    sourceDir = sourceDir.makeQualified(sourceFs);
+    Path destDir = params.getOutputPath();
+    FileSystem destFs = destDir.getFileSystem(params);
+    
+    // Create daily indexes that do not exist
+    Path dailyIndexDir = new Path(destDir, "daily");
+    FileStatus[] sourceFiles = sourceFs.globStatus(new Path(sourceDir, "**/*"));
+    for (FileStatus sourceFile : sourceFiles) {
+      Path relativeSourceFile = makeRelative(sourceDir, sourceFile.getPath());
+      Path destFilePath = new Path(dailyIndexDir, relativeSourceFile);
+      if (!destFs.exists(destFilePath)) {
+        LOG.info("Indexing: "+sourceFile.getPath().getName());
+        Path tmpFile;
+        do {
+          tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
+        } while (destFs.exists(tmpFile));
+        AggregateQuadTree.build(params,
+            sourceFile.getPath(),
+            "LST_Day_1km",
+            tmpFile);
+        destFs.rename(tmpFile, destFilePath);
+      }
+    }
+    LOG.info("Done generating daily indexes");
+    
+    // Merge daily indexes into monthly indexes
+    Path monthlyIndexDir = new Path(destDir, "monthly");
+    final SimpleDateFormat dayFormat = new SimpleDateFormat("yyyy.MM.dd");
+    final SimpleDateFormat monthFormat = new SimpleDateFormat("yyyy.MM");
+//    this.yearFormat = new SimpleDateFormat("yyyy");
+    FileStatus[] dailyIndexes = destFs.listStatus(dailyIndexDir);
+    Arrays.sort(dailyIndexes); // Alphabetical sort works fine here
+    int i1 = 0;
+    while (i1 < dailyIndexes.length) {
+      Date lastDate = null;
+      // Search for first day in month
+      while (i1 < dailyIndexes.length) {
+        lastDate = dayFormat.parse(dailyIndexes[i1].getPath().getName());
+        if (lastDate.getDate() == 1)
+          break;
+        i1++;
+      }
+      // Scan until the end of this month
+      int i2 = i1 + 1;
+      while (i2 < dailyIndexes.length) {
+        Date i2Date = dayFormat.parse(dailyIndexes[i2].getPath().getName());
+        if (i2Date.getTime() - lastDate.getTime() != FULL_DAY) {
+          i1 = i2; // Skip up to i2
+          break;
+        }
+        if (i2Date.getDate() == 1) {
+          // End of month reached
+          break;
+        }
+        i2++;
+        lastDate = i2Date;
+      }
+      if (i2 == dailyIndexes.length) {
+        // Check if i2 is the last day in that month
+        Date oneDayAfterI2 = new Date(lastDate.getTime() + FULL_DAY);
+        if (oneDayAfterI2.getDate() != 1)
+          break; // Nothing to do more
+      }
+      if (i1 == i2)
+        continue; // Nothing in this run
+
+      // Merge all daily indexes in the range [i1, i2) into one monthly index
+      String monthlyIndexName = monthFormat.format(lastDate);
+      Path destIndex = new Path(monthlyIndexDir, monthlyIndexName);
+      
+      // For each tile, merge all values in all days
+      /*A regular expression to catch the tile identifier of a MODIS grid cell*/
+      final Pattern MODISTileID = Pattern.compile("^.*(h\\d\\dv\\d\\d).*$"); 
+      FileStatus[] tilesInFirstDay = destFs.listStatus(dailyIndexes[i1].getPath());
+      for (FileStatus tileInFirstDay : tilesInFirstDay) {
+        // Extract tile ID
+        Matcher matcher = MODISTileID.matcher(tileInFirstDay.getPath().getName());
+        if (!matcher.matches()) {
+          LOG.warn("Cannot extract tile id from file "+tileInFirstDay.getPath());
+          continue;
+        }
+        
+        if (matcher.matches()) {
+          final String tileID = matcher.group(1);
+          Path destIndexFile = new Path(destIndex, tileID);
+          if (destFs.exists(destIndexFile))
+            continue; // Destination file already exists
+          PathFilter tileFilter = new PathFilter() {
+            @Override
+            public boolean accept(Path path) {
+              return path.getName().contains(tileID);
+            }
+          };
+          
+          // Find matching tiles in all daily indexes to merge
+          Path[] filesToMerge = new Path[i2 - i1];
+          filesToMerge[0] = tileInFirstDay.getPath();
+          for (int iDailyIndex = i1 + 1; iDailyIndex < i2; iDailyIndex++) {
+            FileStatus[] matchedTileFile = destFs.listStatus(dailyIndexes[iDailyIndex].getPath(), tileFilter);
+            if (matchedTileFile.length != 1)
+              throw new RuntimeException("Matched "+matchedTileFile.length+" files instead of 1 for tile "+tileID+" in dir "+dailyIndexes[iDailyIndex].getPath());
+            filesToMerge[iDailyIndex - i1] = matchedTileFile[0].getPath();
+          }
+          
+          // Do the merge
+          Path tmpFile;
+          do {
+            tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
+          } while (destFs.exists(tmpFile));
+          
+          AggregateQuadTree.merge(params, filesToMerge, tmpFile);
+          destFs.rename(tmpFile, destIndexFile);
+        }
+      }
+      i1 = i2;
+    }
+    LOG.info("Done generating monthly indexes");
+  }
+
+  /**
+   * Make a path relative to another path by removing all common ancestors
+   * @param parent
+   * @param descendant
+   * @return
+   */
+  private static Path makeRelative(Path parent, Path descendant) {
+    Stack<String> components = new Stack<String>();
+    while (descendant.depth() > parent.depth()) {
+      components.push(descendant.getName());
+      descendant = descendant.getParent();
+    }
+    if (!descendant.equals(parent))
+      throw new RuntimeException("descendant not a child of parent");
+    if (components.isEmpty())
+      return new Path(".");
+    Path relative = new Path(components.pop());
+    while (!components.isEmpty())
+      relative = new Path(relative, components.pop());
+    return relative;
   }
 }
 

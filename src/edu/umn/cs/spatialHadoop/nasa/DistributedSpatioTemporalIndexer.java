@@ -180,7 +180,7 @@ public class DistributedSpatioTemporalIndexer {
 		// Indexes need to be built or re-built using AggregateQuadTreeMapReduce
 		Path[] dailyIndexes = temporalIndexManager.getNeededDailyIndexes();
 		for (Path dailyIndexPath : dailyIndexes) {	
-			FileSystem currFileSystem = dailyIndexPath.getFileSystem(new Configuration());
+			FileSystem currFileSystem = dailyIndexPath.getFileSystem(params);
 			Path[] dailyIndexHDFFiles = NASADatasetUtil.getFilesListInPath(dailyIndexPath);
 			Path dailyIndexDictionaryPath = FileUtil.writePathsToFile(params,
 					dailyIndexHDFFiles);
