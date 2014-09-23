@@ -4,7 +4,9 @@
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
+import java.net.URLConnection;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Vector;
@@ -12,9 +14,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.servlet.ServletException;
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -36,6 +41,8 @@ import edu.umn.cs.spatialHadoop.temporal.TemporalIndex.TemporalPartition;
  *
  */
 public class SpatioTemporalAggregateQuery {
+  
+  private static final Log LOG = LogFactory.getLog(SpatioTemporalAggregateQuery.class);
   
   public static class TimeRange {
     /**Date format of time range*/
@@ -60,6 +67,11 @@ public class SpatioTemporalAggregateQuery {
     public TimeRange(long start, long end) {
       this.start = start;
       this.end = end;
+    }
+    
+    @Override
+    public String toString() {
+      return DateFormat.format(this.start) + " -- "+DateFormat.format(this.end);
     }
   }
   
@@ -91,11 +103,13 @@ public class SpatioTemporalAggregateQuery {
     FileSystem fs = inFile.getFileSystem(params);
     while (index < temporalIndexes.length && !temporalRanges.isEmpty()) {
       Path indexDir = temporalIndexes[index];
+      LOG.info("Checking index dir "+indexDir);
       TemporalIndex temporalIndex = new TemporalIndex(fs, indexDir);
       for (int iRange = 0; iRange < temporalRanges.size(); iRange++) {
         TimeRange range = temporalRanges.get(iRange);
         TemporalPartition[] matches = temporalIndex.selectContained(range.start, range.end);
         if (matches != null) {
+          LOG.info("Matched "+matches.length+" partitions in "+indexDir);
           for (TemporalPartition match : matches)
             matchingPartitions.add(new Path(indexDir, match.dirName));
           // Update range to remove matching part
@@ -205,69 +219,104 @@ public class SpatioTemporalAggregateQuery {
     public void handle(String target, HttpServletRequest request,
         HttpServletResponse response, int dispatch) throws IOException,
         ServletException {
+      LOG.info("Received request: "+target);
       // Bypass cross-site scripting (XSS)
       response.addHeader("Access-Control-Allow-Origin", "*");
       response.addHeader("Access-Control-Allow-Credentials", "true");
-      response.setContentType("application/json;charset=utf-8");
       ((Request) request).setHandled(true);
       
       OperationsParams params;
       try {
-        String west = request.getParameter("min_lon");
-        String east = request.getParameter("max_lon");
-        String south = request.getParameter("min_lat");
-        String north = request.getParameter("max_lat");
-        
-        String[] startDateParts = request.getParameter("fromDate").split("/");
-        String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
-        String[] endDateParts = request.getParameter("toDate").split("/");
-        String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
-        
-        // Create the query parameters
-        params = new OperationsParams(commonParams);
-        params.set("rect", west+','+south+','+east+','+north);
-        params.set("time", startDate+".."+endDate);
+        if (target.equals("/aggregate_query")) {
+          String west = request.getParameter("min_lon");
+          String east = request.getParameter("max_lon");
+          String south = request.getParameter("min_lat");
+          String north = request.getParameter("max_lat");
+          
+          String[] startDateParts = request.getParameter("fromDate").split("/");
+          String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+          String[] endDateParts = request.getParameter("toDate").split("/");
+          String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+          
+          // Create the query parameters
+          params = new OperationsParams(commonParams);
+          params.set("rect", west+','+south+','+east+','+north);
+          params.set("time", startDate+".."+endDate);
+          
+          long t1 = System.currentTimeMillis();
+          Node result = aggregateQuery(indexPath, params);
+          long t2 = System.currentTimeMillis();
+          // Report the answer and time
+          response.setContentType("application/json;charset=utf-8");
+          PrintWriter writer = response.getWriter();
+          writer.print("{");
+          writer.print("\"results\":{");
+          writer.print("\"min\": "+result.min+',');
+          writer.print("\"max\": "+result.max+',');
+          writer.print("\"count\": "+result.count+',');
+          writer.print("\"sum\": "+result.sum);
+          writer.print("},");
+          writer.print("\"stats\":{");
+          writer.print("\"totaltime\":"+(t2-t1));
+          writer.print("}");
+          writer.print("}");
+          response.setStatus(HttpServletResponse.SC_OK);
+          LOG.info("Query results returned");
+        } else {
+          if (target.equals("/"))
+            target = "/aggregate_query.html";
+          tryToLoadStaticResource(target, response);
+        }
       } catch (Exception e) {
-        reportError(response, "Error parsing parameters", e);
-        return;
-      }
-
-      try {
-        long t1 = System.currentTimeMillis();
-        Node result = aggregateQuery(indexPath, params);
-        long t2 = System.currentTimeMillis();
-        // Report the answer and time
-        PrintWriter writer = response.getWriter();
-        writer.print("{");
-        writer.print("\"results\":{");
-        writer.print("\"min\": "+result.min+',');
-        writer.print("\"max\": "+result.max+',');
-        writer.print("\"count\": "+result.count+',');
-        writer.print("\"sum\": "+result.sum);
-        writer.print("},");
-        writer.print("\"stats\":{");
-        writer.print("\"totaltime\":"+(t2-t1));
-        writer.print("}");
-        writer.print("}");
-        response.setStatus(HttpServletResponse.SC_OK);
-      } catch (ParseException e) {
-        reportError(response, "Error executing the query", e);
+        reportError(response, "Error handling request", e);
         return;
       }
     }
 
+
+    /**
+     * Tries to load the given resource name frmo class path if it exists.
+     * Used to serve static files such as HTML pages, images and JavaScript files.
+     * @param target
+     * @param response
+     * @throws IOException
+     */
+    private void tryToLoadStaticResource(String target,
+        HttpServletResponse response) throws IOException {
+      // Try to load this resource as a static page
+      InputStream resource =
+          getClass().getResourceAsStream("/webapps/static/shahedfrontend"+target);
+      if (resource == null) {
+        reportError(response, "Cannot load resource '"+target+"'", null);
+        return;
+      }
+      byte[] buffer = new byte[1024*1024];
+      ServletOutputStream outResponse = response.getOutputStream();
+      int size;
+      while ((size = resource.read(buffer)) != -1) {
+        outResponse.write(buffer, 0, size);
+      }
+      resource.close();
+      outResponse.close();
+      response.setStatus(HttpServletResponse.SC_OK);
+      response.setContentType(URLConnection.guessContentTypeFromName(target));
+    }
+    
     private void reportError(HttpServletResponse response, String msg,
         Exception e)
         throws IOException {
-      e.printStackTrace();
+      if (e != null)
+        e.printStackTrace();
       response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-      response.getWriter().println("{error: '"+e.getMessage()+"',");
-      response.getWriter().println("message: '"+msg+"',");
-      response.getWriter().println("stacktrace: [");
-      for (StackTraceElement trc : e.getStackTrace()) {
-        response.getWriter().println("'"+trc.toString()+"',");
+      response.getWriter().println("{\"message\": '"+msg+"',");
+      if (e != null) {
+        response.getWriter().println("\"error\": '"+e.getMessage()+"',");
+        response.getWriter().println("\"stacktrace\": [");
+        for (StackTraceElement trc : e.getStackTrace()) {
+          response.getWriter().println("'"+trc.toString()+"',");
+        }
+        response.getWriter().println("]");
       }
-      response.getWriter().println("]");
       response.getWriter().println("}");
     }
   }

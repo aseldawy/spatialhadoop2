@@ -71,7 +71,6 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
-import edu.umn.cs.spatialHadoop.operations.PyramidPlot.SpacePartitionMap;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
@@ -113,7 +112,7 @@ public class GeometricPlot {
    *
    */
   public static class GridPartitionMap extends MapReduceBase 
-  implements Mapper<Rectangle, ArrayWritable, IntWritable, Shape> {
+  implements Mapper<Rectangle, Object, IntWritable, Shape> {
 
     private GridInfo partitionGrid;
     private IntWritable cellNumber;
@@ -145,39 +144,71 @@ public class GeometricPlot {
       }
     }
 
-    public void map(Rectangle cell, ArrayWritable value,
+    public void map(Rectangle cell, Object value,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
             throws IOException {
-      
-      for(Shape shape : (Shape[]) value.get()) {
-    	  Rectangle shapeMbr = shape.getMBR();
-    	  if (shapeMbr == null)
-    		  return;
-    	  // Check if this shape can be skipped using the gradual fade option
-    	  if (gradualFade && !(shape instanceof Point)) {
-    		  double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
-    		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-    			  // This shape can be safely skipped as it is too small to be plotted
-    			  return;
-    		  }
-    	  }
-    	  if (adaptiveSample && shape instanceof Point) {
-    		  if (Math.random() > adaptiveSampleRatio)
-    			  return;
-    	  }
-
-    	  // Skip shapes outside query range if query range is set
-    	  if (queryRange != null && !shapeMbr.isIntersected(queryRange))
-    		  return;
-    	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
-    	  for (int i = 0; i < overlappingCells.width; i++) {
-    		  int x = overlappingCells.x + i;
-    		  for (int j = 0; j < overlappingCells.height; j++) {
-    			  int y = overlappingCells.y + j;
-    			  cellNumber.set(y * partitionGrid.columns + x + 1);
-    			  output.collect(cellNumber, shape);
-    		  }
-    	  }
+      if (value instanceof Shape) {
+        Shape shape = (Shape) value;
+        Rectangle shapeMbr = shape.getMBR();
+        if (shapeMbr == null)
+          return;
+        // Check if this shape can be skipped using the gradual fade option
+        if (gradualFade && !(shape instanceof Point)) {
+          double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
+          if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+            // This shape can be safely skipped as it is too small to be plotted
+            return;
+          }
+        }
+        if (adaptiveSample && shape instanceof Point) {
+          if (Math.random() > adaptiveSampleRatio)
+            return;
+        }
+        
+        // Skip shapes outside query range if query range is set
+        if (queryRange != null && !shapeMbr.isIntersected(queryRange))
+          return;
+        java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
+        for (int i = 0; i < overlappingCells.width; i++) {
+          int x = overlappingCells.x + i;
+          for (int j = 0; j < overlappingCells.height; j++) {
+            int y = overlappingCells.y + j;
+            cellNumber.set(y * partitionGrid.columns + x + 1);
+            output.collect(cellNumber, shape);
+          }
+        }
+      } else {
+        for(Shape shape : (Shape[]) ((ArrayWritable)value).get()) {
+          Rectangle shapeMbr = shape.getMBR();
+          if (shapeMbr == null)
+            return;
+          // Check if this shape can be skipped using the gradual fade option
+          if (gradualFade && !(shape instanceof Point)) {
+            double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
+            if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+              // This shape can be safely skipped as it is too small to be plotted
+              return;
+            }
+          }
+          if (adaptiveSample && shape instanceof Point) {
+            if (Math.random() > adaptiveSampleRatio)
+              return;
+          }
+          
+          // Skip shapes outside query range if query range is set
+          if (queryRange != null && !shapeMbr.isIntersected(queryRange))
+            return;
+          java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
+          for (int i = 0; i < overlappingCells.width; i++) {
+            int x = overlappingCells.x + i;
+            for (int j = 0; j < overlappingCells.height; j++) {
+              int y = overlappingCells.y + j;
+              cellNumber.set(y * partitionGrid.columns + x + 1);
+              output.collect(cellNumber, shape);
+            }
+          }
+        }
+        
       }
     }
   }
@@ -873,6 +904,8 @@ public class GeometricPlot {
 
     FileSystem inFs = inFile.getFileSystem(params);
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, inFile);
+    if (hdfDataset != null)
+      partition = "grid";
 
     if (partition.equals("space") || partition.equals("grid")) {
       if (gindex != null && gindex.isReplicated()) {
@@ -918,15 +951,6 @@ public class GeometricPlot {
       job.setInputFormat(ShapeArrayInputFormat.class);
     } else {
       throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
-    }
-    
-    if (hdfDataset != null) {
-      job.setMapperClass(SpacePartitionMap.class);
-      GridInfo partitionGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2,
-          fileMBR.y2);
-      partitionGrid.calculateCellDimensions(
-          (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
-      OperationsParams.setShape(job, PartitionGrid, partitionGrid);
     }
     
     LOG.info("Creating an image of size "+width+"x"+height);

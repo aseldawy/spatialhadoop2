@@ -195,6 +195,9 @@ class StockQuadTree {
     nodesEndPosition = new int[nodes.size()];
     
     for (int i = 0; i < nodes.size(); i++) {
+      if (i == 54) {
+        System.err.println("hobaaaa");
+      }
       Node node = nodes.get(i);
       nodesID[i] = node.id;
       nodesStartPosition[i] = node.startPosition;
@@ -230,12 +233,17 @@ class StockQuadTree {
    * @return
    */
   public void getNodeMBR(int node_pos, java.awt.Rectangle mbr) {
-    mbr.x = this.r[this.nodesStartPosition[node_pos]] % resolution;
-    mbr.y = this.r[this.nodesStartPosition[node_pos]] / resolution;
-    int x2 = (this.r[this.nodesEndPosition[node_pos] - 1]) % resolution;
-    mbr.width = x2 - mbr.x + 1;
-    int y2 = (this.r[this.nodesEndPosition[node_pos] - 1]) / resolution;
-    mbr.height = y2 - mbr.y + 1;
+    if (this.nodesStartPosition[node_pos] >= this.r.length) {
+      // Special case for a node that falls completely outside data range
+      mbr.width = mbr.height = 0;
+    } else {
+      mbr.x = this.r[this.nodesStartPosition[node_pos]] % resolution;
+      mbr.y = this.r[this.nodesStartPosition[node_pos]] / resolution;
+      int x2 = (this.r[this.nodesEndPosition[node_pos] - 1]) % resolution;
+      mbr.width = x2 - mbr.x + 1;
+      int y2 = (this.r[this.nodesEndPosition[node_pos] - 1]) / resolution;
+      mbr.height = y2 - mbr.y + 1;
+    }
   }
 
   /**
@@ -832,6 +840,8 @@ public class AggregateQuadTree {
   }
 
   public static void main(String[] args) throws Exception {
+    getOrCreateStockQuadTree(1200);
+    System.exit(0);
     Path sourceFolder = new Path("/export/scratch/modis/2013.02.01");
     Path destFolder = new Path("/export/scratch/modis-indexed/daily/2013.02.01");
     FileSystem localFs = FileSystem.getLocal(new Configuration());

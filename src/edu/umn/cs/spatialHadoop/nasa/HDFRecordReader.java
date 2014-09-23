@@ -200,6 +200,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
           if (wmFile.length == 0) {
             LOG.warn("Could not find water mask for tile '"+tileIdentifier+"'");
           } else {
+            dataArrayTemp = new short[Array.getLength(dataArray)];
             localFile = FileUtil.copyFile(job, wmFile[0]);
             FileFormat wmHDFFile = fileFormat.createInstance(localFile, FileFormat.READ);
             wmHDFFile.open();
@@ -688,13 +689,15 @@ private Object interpolate(Object value1, Object value2,
         xs[1] /= Math.cos(rect.y2 * Math.PI / 180);
         xs[2] /= Math.cos(rect.y1 * Math.PI / 180);
         xs[3] /= Math.cos(rect.y2 * Math.PI / 180);
-        rect.x1 = rect.x2 = xs[0];
+        rect.x1 = Math.min(xs[0], xs[1]);
+        rect.x2 = Math.max(xs[2], xs[3]);
+        /*rect.x1 = rect.x2 = xs[0];
         for (double x : xs) {
           if (x < rect.x1)
             rect.x1 = x;
           if (x > rect.x2)
             rect.x2 = x;
-        }
+        }*/
       }
       if (projector != null)
         projector.project(shape);

@@ -78,6 +78,11 @@ public class TemporalIndex {
     public boolean contains(long time) {
       return time >= start && time < end;
     }
+    
+    @Override
+    public String toString() {
+      return DayFormat.format(start) +" .. "+DayFormat.format(end) +" ["+dirName+"]";
+    }
   }
   
   /**
@@ -91,12 +96,12 @@ public class TemporalIndex {
   private Path path;
 
   /**Pattern for date format of a day as it appears in NASA LP DAAC archive*/
-  final Pattern DayPattern = Pattern.compile("^\\d{4}\\.\\d{2}\\.\\d{2}$");
-  final SimpleDateFormat DayFormat = new SimpleDateFormat("yyyy.MM.dd");
-  final Pattern MonthPattern = Pattern.compile("^\\d{4}\\.\\d{2}$");
-  final SimpleDateFormat MonthFormat = new SimpleDateFormat("yyyy.MM");
-  final Pattern YearPattern = Pattern.compile("^\\d{4}$");
-  final SimpleDateFormat YearFormat = new SimpleDateFormat("yyyy");
+  final static Pattern DayPattern = Pattern.compile("^\\d{4}\\.\\d{2}\\.\\d{2}$");
+  final static SimpleDateFormat DayFormat = new SimpleDateFormat("yyyy.MM.dd");
+  final static Pattern MonthPattern = Pattern.compile("^\\d{4}\\.\\d{2}$");
+  final static SimpleDateFormat MonthFormat = new SimpleDateFormat("yyyy.MM");
+  final static Pattern YearPattern = Pattern.compile("^\\d{4}$");
+  final static SimpleDateFormat YearFormat = new SimpleDateFormat("yyyy");
   /**
    * Constructs a temporal index on the fly given a directory that follows
    * a standard naming convention for subdirectories.
