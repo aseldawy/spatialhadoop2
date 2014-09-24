@@ -5,9 +5,9 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <link rel="stylesheet" href="jquery-ui-1.11.1.custom/jquery-ui.css">
+        <link rel="stylesheet" href="jquery-ui/jquery-ui.css">
         <script src="jquery-2.0.0.min.js"></script>
-        <script src="jquery-ui-1.11.1.custom/jquery-ui.js"></script>
+        <script src="jquery-ui/jquery-ui.js"></script>
         
         <title>SHAHED Demo</title>
     	<style type="text/css">
@@ -171,7 +171,7 @@
         </style>
         <script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?libraries=places&sensor=false"></script>
         <script src="navigation.js"></script>
-        <link rel="stylesheet" href="jquery-ui-1.11.1.custom/jquery-ui.css">
+        <link rel="stylesheet" href="jquery-ui/jquery-ui.css">
  </head>
  
  <body>
@@ -204,10 +204,10 @@
         </div>
         <div id="submissionFormDiv" class="submenu" title="submissionFormDivTitle" style="visibility: hidden">
             <fieldset>
-                <form title="submissionFormTitle" id="submissionForm" method="post" name="submissionForm" action="/aggregate_query" >
+                <form title="submissionFormTitle" id="submissionForm" method="post" name="submissionForm" action="aggregate_query.cgi" >
                     <input type="text" name="title" id="title" />
-                    <input name="dataSet" id="dataSet" type="hidden" readonly="readonly" />
-                    <input name="url" id="url" type="hidden" readonly="readonly"/>
+                    <input name="dataset" id="dataset" type="hidden" readonly="readonly" />
+                    <input name="dataset_url" id="dataset_url" type="hidden" readonly="readonly"/>
                     <input id="fromDate" name="selectedFromDate" type="hidden" readonly="readonly">
                     <input id="toDate" name="selectedToDate" type="hidden" readonly="readonly">
                     <input id="min_lat"	name="min_lat"	type="hidden" readonly="readonly">
@@ -257,25 +257,28 @@
                 });
             }
 			      var rectangle;
+			      var rectangleIsDragged = false;
+			      
             function DrawRect() {
                 if (rectangle != null) {
-                    rectangle.setBounds(bounds);
+                  rectangle.setBounds(bounds);
                 }else{
-                rectangle = new google.maps.Rectangle({
-                    bounds : bounds,
-                    fillOpacity : 0.2,
-                    strokeOpacity : 0.8,
-                    draggable : true,
-                    editable : true
-                });
+                  rectangle = new google.maps.Rectangle({
+                      bounds : bounds,
+                      fillOpacity : 0.2,
+                      strokeOpacity : 0.8,
+                      draggable : true,
+                      editable : true
+                  });
+                  rectangle.setMap(map);
+                  google.maps.event.addListener(rectangle, 'bounds_changed', showNewRect);
+                  google.maps.event.addListener(rectangle, 'click', showNewRect);
+                  google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
+                  google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
+                  google.maps.event.addListener(rectangle, 'bounds_changed', processRequest);
                 }
                 
-                rectangle.setMap(map);
                 showNewRect();
-                google.maps.event.addListener(rectangle, 'bounds_changed', showNewRect);
-                google.maps.event.addListener(rectangle, 'click', showNewRect);
-                google.maps.event.addListener(rectangle, 'mouseup', processRequest);
-                google.maps.event.addListener(rectangle, 'bounds_changed', processRequest);
             }   
             
             function showNewRect(event) {
@@ -300,7 +303,7 @@
               }
             	document.getElementById("fromDate").value = document.getElementById("fromDatePicker").value;
             	document.getElementById("toDate").value = document.getElementById("toDatePicker").value;
-            	requestURL = "/aggregate_query?min_lat=" + document.getElementById("min_lat").value 
+            	requestURL = "aggregate_query.cgi?min_lat=" + document.getElementById("min_lat").value 
             										+ "&min_lon=" + document.getElementById("min_lon").value
             										+ "&max_lat=" + document.getElementById("max_lat").value
             										+ "&max_lon=" + document.getElementById("max_lon").value
@@ -322,7 +325,7 @@
             
             
             
-            $(function() {
+        $(function() {
     			$("#fromDatePicker").datepicker();
   			});
   			
@@ -334,7 +337,7 @@
  	 	<div id="map"> </div>
  	 	
  	 	<script type="text/javascript">
-            var rectangleIsDragged = false;        
+                    
             var element = document.getElementById("map");
             
             function callback(results, status) {
@@ -365,23 +368,23 @@
                 lng = event.latLng.lng();
                 bounds = new google.maps.LatLngBounds(new google.maps.LatLng(lat - 0.5, lng - 1), new google.maps.LatLng(lat + 0.5, lng + 1));
                 if (rectangle != null) {
-                    rectangle.setBounds(bounds);
+                  rectangle.setBounds(bounds);
                 }else{
-                rectangle = new google.maps.Rectangle({
-                    bounds : bounds,
-                    fillOpacity : 0.2,
-                    strokeOpacity : 0.8,
-                    draggable : true,
-                    editable : true
-                });
+                  rectangle = new google.maps.Rectangle({
+                      bounds : bounds,
+                      fillOpacity : 0.2,
+                      strokeOpacity : 0.8,
+                      draggable : true,
+                      editable : true
+                  });
+                  google.maps.event.addListener(rectangle, 'bounds_changed', showNewRect);
+                  google.maps.event.addListener(rectangle, 'click', showNewRect);
+                  google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
+                  google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
+                  google.maps.event.addListener(rectangle, 'bounds_changed', processRequest);
+                  rectangle.setMap(map);
                 }
-                rectangle.setMap(map);
                 showNewRect();
-                google.maps.event.addListener(rectangle, 'bounds_changed', showNewRect);
-                google.maps.event.addListener(rectangle, 'click', showNewRect);
-                google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
-                google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
-                google.maps.event.addListener(rectangle, 'bounds_changed', processRequest);
             });
             
              

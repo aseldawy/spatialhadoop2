@@ -202,9 +202,6 @@ class StockQuadTree {
     nodesEndPosition = new int[nodes.size()];
     
     for (int i = 0; i < nodes.size(); i++) {
-      if (i == 54) {
-        System.err.println("hobaaaa");
-      }
       Node node = nodes.get(i);
       nodesID[i] = node.id;
       nodesStartPosition[i] = node.startPosition;
@@ -945,6 +942,7 @@ public class AggregateQuadTree {
         do {
           tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
         } while (destFs.exists(tmpFile));
+        tmpFile = tmpFile.makeQualified(destFs);
         AggregateQuadTree.build(params,
             sourceFile.getPath(),
             "LST_Day_1km",
@@ -1038,7 +1036,7 @@ public class AggregateQuadTree {
           do {
             tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
           } while (destFs.exists(tmpFile));
-          
+          tmpFile = tmpFile.makeQualified(destFs);
           AggregateQuadTree.merge(params, filesToMerge, tmpFile);
           destFs.rename(tmpFile, destIndexFile);
         }

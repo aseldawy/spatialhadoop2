@@ -227,7 +227,7 @@ public class SpatioTemporalAggregateQuery {
       
       OperationsParams params;
       try {
-        if (target.equals("/aggregate_query")) {
+        if (target.equals("/aggregate_query.cgi")) {
           String west = request.getParameter("min_lon");
           String east = request.getParameter("max_lon");
           String south = request.getParameter("min_lat");
@@ -275,7 +275,7 @@ public class SpatioTemporalAggregateQuery {
 
 
     /**
-     * Tries to load the given resource name frmo class path if it exists.
+     * Tries to load the given resource name from class path if it exists.
      * Used to serve static files such as HTML pages, images and JavaScript files.
      * @param target
      * @param response

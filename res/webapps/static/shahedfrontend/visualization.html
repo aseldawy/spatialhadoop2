@@ -5,9 +5,9 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <link rel="stylesheet" href="jquery-ui-1.11.1.custom/jquery-ui.css">
+        <link rel="stylesheet" href="jquery-ui/jquery-ui.css">
         <script src="jquery-2.0.0.min.js"></script>
-        <script src="jquery-ui-1.11.1.custom/jquery-ui.js"></script>
+        <script src="jquery-ui/jquery-ui.js"></script>
         
         <title>SHAHED Demo</title>
     	<style type="text/css">
@@ -171,7 +171,7 @@
         </style>
         <script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?libraries=places&sensor=false"></script>
         <script src="navigation.js"></script>
-        <link rel="stylesheet" href="jquery-ui-1.11.1.custom/jquery-ui.css">
+        <link rel="stylesheet" href="jquery-ui/jquery-ui.css">
  </head>
  
  <body>
@@ -203,8 +203,8 @@
         -->
         <br/>
         
-        <label for="username">Name: </label>
-        <input type="text" name="username" id="username" size="32" style="width:120px;"/>
+        <label for="user_name">Name: </label>
+        <input type="text" name="user_name" id="user_name" size="32" style="width:120px;"/>
         <label for="max">Email: </label>
         <input name="email" type="email" id="email" size="32" style="width:120px;"/>
         
@@ -280,7 +280,7 @@
           alert("Please select a region on map");
           return;
         }
-        if ($("#username").val().length == 0) {
+        if ($("#user_name").val().length == 0) {
           alert("Please specify your name");
           return;
         }
@@ -302,24 +302,12 @@
         $("#max_lat").val(ne.lat());
         $("#max_lon").val(ne.lng());
         $("#dataset").val("LST_Day_1km");
-        $("#dataset_url").val("/export/scratch/modis/MYD11A1.005/");
+        $("#dataset_url").val("file:///export/scratch/modis/MYD11A1.005/");
         // Send using Ajax
         jQuery.get(form.attr('action'), form.serialize(), function(response) {
           alert(response);
         });
       });
-      
-      
-      function handleNoGeolocation(errorFlag) {
-        if (errorFlag) {
-          var content = 'Error: The Geolocation service failed.';
-        } else {
-          var content = 'Error: Your browser doesn\'t support geolocation.';
-        }
-      
-        var infowindow = new google.maps.InfoWindow(options);
-        map.setCenter(new google.maps.LatLng(44.983181, -93.227377));
-      }
       
       $(function() {
   			$("#fromDate").datepicker();
@@ -327,21 +315,6 @@
       
         map = new google.maps.Map(element, {
           center : new google.maps.LatLng(44.983181, -93.227377), zoom : 5});
-        
-        // Try HTML5 geolocation
-        if(navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(function(position) {
-            var pos = new google.maps.LatLng(position.coords.latitude,
-                                             position.coords.longitude);
-      
-            map.setCenter(pos);
-          }, function() {
-            handleNoGeolocation(true);
-          });
-        } else {
-          // Browser doesn't support Geolocation
-          handleNoGeolocation(false);
-        }
         
         google.maps.event.addListener(map, 'click', function(event) {
           var lat = event.latLng.lat();

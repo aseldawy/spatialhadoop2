@@ -120,6 +120,7 @@ public class VisualizationServer extends AbstractHandler {
    */
   private void tryToLoadStaticResource(String target,
       HttpServletResponse response) throws IOException {
+    LOG.info("Loading resource "+target);
     // Try to load this resource as a static page
     InputStream resource =
         getClass().getResourceAsStream("/webapps/static/shahedfrontend"+target);
@@ -349,6 +350,7 @@ public class VisualizationServer extends AbstractHandler {
       throws IOException {
     if (e != null)
       e.printStackTrace();
+    LOG.error(msg);
     response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
     response.getWriter().println("{\"message\": '"+msg+"',");
     if (e != null) {
