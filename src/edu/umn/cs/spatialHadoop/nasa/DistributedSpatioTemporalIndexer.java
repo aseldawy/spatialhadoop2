@@ -62,8 +62,8 @@ public class DistributedSpatioTemporalIndexer {
 	public static class AggregateQuadTreeMaper extends MapReduceBase implements
 			Mapper<LongWritable, Text, Text, Text> {
 
-		private Text success = new Text("true");
-		private Text failure = new Text("false");
+//		private Text success = new Text("true");
+//		private Text failure = new Text("false");
 		
 		@Override
 		public void configure(JobConf job) {
@@ -79,7 +79,7 @@ public class DistributedSpatioTemporalIndexer {
 			if (hdfsIndexPath == null) {
 				LOG.warn("Index path for " + hdfFilePathText.toString()
 						+ " is not setted");
-				output.collect(hdfFilePathText, failure);
+				//output.collect(hdfFilePathText, failure);
 				return;
 			}
 
@@ -96,7 +96,7 @@ public class DistributedSpatioTemporalIndexer {
 			try {
 				AggregateQuadTree.build(new Configuration(), hdfFilePath,
 						"LST_Day_1km", hdfIndexFilePath);
-				output.collect(hdfFilePathText, success);
+				//output.collect(hdfFilePathText, success);
 			} catch (Exception e) {
 			  throw new RuntimeException("Error in mapper", e);
 			}
@@ -153,7 +153,7 @@ public class DistributedSpatioTemporalIndexer {
 		// Submit the job
 		JobClient.runJob(job);
 		
-		outFs.deleteOnExit(outputPath);
+		outFs.delete(outputPath, true);
 	}
 
 	/**

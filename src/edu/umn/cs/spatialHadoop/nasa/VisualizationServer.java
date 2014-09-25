@@ -8,7 +8,9 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
+import java.net.URLConnection;
 import java.util.Properties;
 
 import javax.activation.DataHandler;
@@ -27,6 +29,7 @@ import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
 import javax.mail.util.ByteArrayDataSource;
 import javax.servlet.ServletException;
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -36,6 +39,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.mortbay.jetty.MimeTypes;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
@@ -86,7 +90,6 @@ public class VisualizationServer extends AbstractHandler {
     // Bypass cross-site scripting (XSS)
     response.addHeader("Access-Control-Allow-Origin", "*");
     response.addHeader("Access-Control-Allow-Credentials", "true");
-    response.setContentType("application/json;charset=utf-8");
     ((Request) request).setHandled(true);
     
     try {
@@ -95,12 +98,46 @@ public class VisualizationServer extends AbstractHandler {
         // Start a background thread that handles the request
         new ImageRequestHandler(request).start();
         response.setStatus(HttpServletResponse.SC_OK);
+        response.setContentType("text/plain;charset=utf-8");
         response.getWriter().println("Image request received successfully");
+      } else {
+        if (target.equals("/"))
+          target = "/visualization.html";
+        tryToLoadStaticResource(target, response);
       }
     } catch (Exception e) {
       e.printStackTrace();
       reportError(response, "Error placing the request", e);
     }
+  }
+
+  /**
+   * Tries to load the given resource name frmo class path if it exists.
+   * Used to serve static files such as HTML pages, images and JavaScript files.
+   * @param target
+   * @param response
+   * @throws IOException
+   */
+  private void tryToLoadStaticResource(String target,
+      HttpServletResponse response) throws IOException {
+    LOG.info("Loading resource "+target);
+    // Try to load this resource as a static page
+    InputStream resource =
+        getClass().getResourceAsStream("/webapps/static/shahedfrontend"+target);
+    if (resource == null) {
+      reportError(response, "Cannot load resource '"+target+"'", null);
+      return;
+    }
+    byte[] buffer = new byte[1024*1024];
+    ServletOutputStream outResponse = response.getOutputStream();
+    int size;
+    while ((size = resource.read(buffer)) != -1) {
+      outResponse.write(buffer, 0, size);
+    }
+    resource.close();
+    outResponse.close();
+    response.setStatus(HttpServletResponse.SC_OK);
+    response.setContentType(URLConnection.guessContentTypeFromName(target));
   }
   
   private class ImageRequestHandler extends Thread {
@@ -137,7 +174,7 @@ public class VisualizationServer extends AbstractHandler {
       this.startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
 
       // Create the query parameters
-      this.rect = west+','+south+','+north+','+east;
+      this.rect = west+','+south+','+east+','+north;
     }
     
     @Override
@@ -197,7 +234,7 @@ public class VisualizationServer extends AbstractHandler {
       this.inputURL = new Path(datasetURL+"/"+startDate);
       Path outputPath = new Path(outDir, "image.png");
       // Launch the MapReduce job that plots the dataset
-      OperationsParams plotParams = new OperationsParams();
+      OperationsParams plotParams = new OperationsParams(commonParams);
       plotParams.setBoolean("vflip", true);
       plotParams.setClass("shape", NASARectangle.class, Shape.class);
       plotParams.set("rect", rect);
@@ -311,15 +348,19 @@ public class VisualizationServer extends AbstractHandler {
   private void reportError(HttpServletResponse response, String msg,
       Exception e)
       throws IOException {
-    e.printStackTrace();
+    if (e != null)
+      e.printStackTrace();
+    LOG.error(msg);
     response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-    response.getWriter().println("{error: '"+e.getMessage()+"',");
-    response.getWriter().println("message: '"+msg+"',");
-    response.getWriter().println("stacktrace: [");
-    for (StackTraceElement trc : e.getStackTrace()) {
-      response.getWriter().println("'"+trc.toString()+"',");
+    response.getWriter().println("{\"message\": '"+msg+"',");
+    if (e != null) {
+      response.getWriter().println("\"error\": '"+e.getMessage()+"',");
+      response.getWriter().println("\"stacktrace\": [");
+      for (StackTraceElement trc : e.getStackTrace()) {
+        response.getWriter().println("'"+trc.toString()+"',");
+      }
+      response.getWriter().println("]");
     }
-    response.getWriter().println("]");
     response.getWriter().println("}");
   }
 
