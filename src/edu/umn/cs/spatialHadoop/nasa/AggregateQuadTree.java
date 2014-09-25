@@ -60,6 +60,8 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.io.RandomCompressedInputStream;
 import edu.umn.cs.spatialHadoop.io.RandomCompressedOutputStream;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 /**
  * A structure that stores all lookup tables needed to construct and work
@@ -998,6 +1000,9 @@ public class AggregateQuadTree {
       if (i1 == i2)
         continue; // Nothing in this run
 
+      // Copy i1, i2 to other variables as final to be accessible from threads
+      final int startDay = i1;
+      final int endDay = i2;
       // Merge all daily indexes in the range [i1, i2) into one monthly index
       String monthlyIndexName = monthFormat.format(lastDate);
       final Path destIndex = new Path(monthlyIndexDir, monthlyIndexName);
@@ -1006,72 +1011,59 @@ public class AggregateQuadTree {
       /*A regular expression to catch the tile identifier of a MODIS grid cell*/
       final Pattern MODISTileID = Pattern.compile("^.*(h\\d\\dv\\d\\d).*$"); 
       final FileStatus[] tilesInFirstDay = destFs.listStatus(dailyIndexes[i1].getPath());
-      int parallelism = 8;
-      final int[] ranges = new int[parallelism+1];
-      for (int i = 0; i <= parallelism; i++)
-        ranges[i] = i * tilesInFirstDay.length / parallelism;
-      Thread[] threads = new Thread[parallelism];
-      for (int i_thread = 0; i_thread < parallelism; i_thread++) {
-        threads[i_thread] = new Thread(Integer.toString(i_thread)) {
-          @Override
-          public void run() {
-            int thread_id = Integer.parseInt(this.getName());
-            int i_file1 = ranges[thread_id];
-            int i_file2 = ranges[thread_id+1];
-            for (int i = i_file1; i < i_file2; i++) {
-              try {
-                FileStatus tileInFirstDay = tilesInFirstDay[i];
-
-                // Extract tile ID
-                Matcher matcher = MODISTileID.matcher(tileInFirstDay.getPath().getName());
-                if (!matcher.matches()) {
-                  LOG.warn("Cannot extract tile id from file "+tileInFirstDay.getPath());
-                  continue;
+      Parallel.forEach(tilesInFirstDay.length, new RunnableRange<Byte>() {
+        @Override
+        public Byte run(int i_file1, int i_file2) {
+          for (int i = i_file1; i < i_file2; i++) {
+            try {
+              FileStatus tileInFirstDay = tilesInFirstDay[i];
+              
+              // Extract tile ID
+              Matcher matcher = MODISTileID.matcher(tileInFirstDay.getPath().getName());
+              if (!matcher.matches()) {
+                LOG.warn("Cannot extract tile id from file "+tileInFirstDay.getPath());
+                continue;
+              }
+              
+              if (matcher.matches()) {
+                final String tileID = matcher.group(1);
+                Path destIndexFile = new Path(destIndex, tileID);
+                if (destFs.exists(destIndexFile))
+                  continue; // Destination file already exists
+                PathFilter tileFilter = new PathFilter() {
+                  @Override
+                  public boolean accept(Path path) {
+                    return path.getName().contains(tileID);
+                  }
+                };
+                
+                // Find matching tiles in all daily indexes to merge
+                Path[] filesToMerge = new Path[endDay - startDay];
+                filesToMerge[0] = tileInFirstDay.getPath();
+                for (int iDailyIndex = startDay + 1; iDailyIndex < endDay; iDailyIndex++) {
+                  FileStatus[] matchedTileFile = destFs.listStatus(dailyIndexes[iDailyIndex].getPath(), tileFilter);
+                  if (matchedTileFile.length != 1)
+                    throw new RuntimeException("Matched "+matchedTileFile.length+" files instead of 1 for tile "+tileID+" in dir "+dailyIndexes[iDailyIndex].getPath());
+                  filesToMerge[iDailyIndex - startDay] = matchedTileFile[0].getPath();
                 }
                 
-                if (matcher.matches()) {
-                  final String tileID = matcher.group(1);
-                  Path destIndexFile = new Path(destIndex, tileID);
-                  if (destFs.exists(destIndexFile))
-                    continue; // Destination file already exists
-                  PathFilter tileFilter = new PathFilter() {
-                    @Override
-                    public boolean accept(Path path) {
-                      return path.getName().contains(tileID);
-                    }
-                  };
-                  
-                  // Find matching tiles in all daily indexes to merge
-                  Path[] filesToMerge = new Path[i_file2 - i_file1];
-                  filesToMerge[0] = tileInFirstDay.getPath();
-                  for (int iDailyIndex = i_file1 + 1; iDailyIndex < i_file2; iDailyIndex++) {
-                    FileStatus[] matchedTileFile = destFs.listStatus(dailyIndexes[iDailyIndex].getPath(), tileFilter);
-                    if (matchedTileFile.length != 1)
-                      throw new RuntimeException("Matched "+matchedTileFile.length+" files instead of 1 for tile "+tileID+" in dir "+dailyIndexes[iDailyIndex].getPath());
-                    filesToMerge[iDailyIndex - i_file1] = matchedTileFile[0].getPath();
-                  }
-                  
-                  // Do the merge
-                  Path tmpFile;
-                  do {
-                    tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
-                  } while (destFs.exists(tmpFile));
-                  tmpFile = tmpFile.makeQualified(destFs);
-                  LOG.info("Merging tile "+tileID+" into file "+destIndexFile);
-                  AggregateQuadTree.merge(params, filesToMerge, tmpFile);
-                  destFs.rename(tmpFile, destIndexFile);
-                }
-              } catch (IOException e) {
-                e.printStackTrace();
+                // Do the merge
+                Path tmpFile;
+                do {
+                  tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
+                } while (destFs.exists(tmpFile));
+                tmpFile = tmpFile.makeQualified(destFs);
+                LOG.info("Merging tile "+tileID+" into file "+destIndexFile);
+                AggregateQuadTree.merge(params, filesToMerge, tmpFile);
+                destFs.rename(tmpFile, destIndexFile);
               }
-            
+            } catch (IOException e) {
+              e.printStackTrace();
             }
           }
-        };
-        threads[i_thread].start();
-      }
-      for (int i_thread = 0; i_thread < parallelism; i_thread++)
-        threads[i_thread].join();
+          return null;
+        }
+      });
       //for (FileStatus tileInFirstDay : tilesInFirstDay) {}
       i1 = i2;
     }

@@ -18,7 +18,7 @@ public class Parallel {
   private Parallel() { /* Static use only */ }
   
   public static interface RunnableRange<T> {
-    public T run(int id, int i1, int i2);
+    public T run(int i1, int i2);
   }
   
   /**
@@ -27,15 +27,13 @@ public class Parallel {
    *
    */
   public static class RunnableRangeThread<T> extends Thread {
-    protected int id;
     private int i1;
     private int i2;
     private RunnableRange<T> runnableRange;
     private T result;
     
-    protected RunnableRangeThread(RunnableRange<T> runnableRange, int id, int i1, int i2) {
-      super("Worker #"+id);
-      this.id = id;
+    protected RunnableRangeThread(RunnableRange<T> runnableRange, int i1, int i2) {
+      super("Worker ["+i1+","+i2+")");
       this.i1 = i1;
       this.i2 = i2;
       this.runnableRange = runnableRange;
@@ -43,7 +41,7 @@ public class Parallel {
     
     @Override
     public void run() {
-      this.result = this.runnableRange.run(id, i1, i2);
+      this.result = this.runnableRange.run(i1, i2);
     }
     
     public T getResult() {
@@ -51,22 +49,27 @@ public class Parallel {
     }
   }
   
-  public static <T> Vector<T> forEach(int size, RunnableRange<T> r) throws InterruptedException {
-    int parallelism = Runtime.getRuntime().availableProcessors() * 2;
-    final int[] partitions = new int[parallelism + 1];
-    for (int i_thread = 0; i_thread <= parallelism; i_thread++)
-      partitions[i_thread] = i_thread * size / parallelism;
-    final Vector<RunnableRangeThread<T>> threads = new Vector<RunnableRangeThread<T>>();
-    Vector<T> results = new Vector<T>();
-    for (int i_thread = 0; i_thread < parallelism; i_thread++) {
-      threads.add(new RunnableRangeThread<T>(r, i_thread, partitions[i_thread], partitions[i_thread+1]));
-      threads.lastElement().start();
+  public static <T> Vector<T> forEach(int size, RunnableRange<T> r) {
+    try {
+      int parallelism = Runtime.getRuntime().availableProcessors() * 2;
+      final int[] partitions = new int[parallelism + 1];
+      for (int i_thread = 0; i_thread <= parallelism; i_thread++)
+        partitions[i_thread] = i_thread * size / parallelism;
+      final Vector<RunnableRangeThread<T>> threads = new Vector<RunnableRangeThread<T>>();
+      Vector<T> results = new Vector<T>();
+      for (int i_thread = 0; i_thread < parallelism; i_thread++) {
+        threads.add(new RunnableRangeThread<T>(r, partitions[i_thread], partitions[i_thread+1]));
+        threads.lastElement().start();
+      }
+      for (int i_thread = 0; i_thread < parallelism; i_thread++) {
+        threads.get(i_thread).join();
+        results.add(threads.get(i_thread).getResult());
+      }
+      return results;
+    } catch (InterruptedException e) {
+      e.printStackTrace();
     }
-    for (int i_thread = 0; i_thread < parallelism; i_thread++) {
-      threads.get(i_thread).join();
-      results.add(threads.get(i_thread).getResult());
-    }
-    return results;
+    return null;
   }
 
   /**
@@ -79,7 +82,7 @@ public class Parallel {
       values[i] = i;
     Vector<Long> results = Parallel.forEach(values.length, new RunnableRange<Long>() {
       @Override
-      public Long run(int id, int i1, int i2) {
+      public Long run(int i1, int i2) {
         long total = 0;
         for (int i = i1; i < i2; i++)
           total += values[i];
