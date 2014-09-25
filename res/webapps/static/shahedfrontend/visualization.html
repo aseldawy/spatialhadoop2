@@ -175,7 +175,7 @@
  </head>
  
  <body>
- 		<div id="panel2" class="submenu" style="background:#DEDEDE;height: 55px;">
+ 		<div id="panel2" class="submenu" style="background:#DEDEDE;height: 80px;">
       <!--
       <label> Data Set: </label>
       <select id="datasets" style="display: compact;">
@@ -197,11 +197,14 @@
         
         <label for="fromDate" style="display: inline;">Date</label>
         <input type="text" name="fromDate" id="fromDate" style="display: inline; width: 120px;"/>
+        
         <!--
         <label for="toDate" style="display: inline;"> To Date: </label>
         <input type="datetime" name="toDate" id="toDate" style="display: inline; width: 120px;"/>
         -->
         <br/>
+        
+        <input type="range" name="day" id="date-slider" min="0" max="365" style="width:100%;"/><br/>
         
         <label for="user_name">Name: </label>
         <input type="text" name="user_name" id="user_name" size="32" style="width:120px;"/>
@@ -309,6 +312,7 @@
         });
       });
       
+      var startDate = new Date(2013, 0, 1);
       $(function() {
   			$("#fromDate").datepicker();
         var element = document.getElementById("map");

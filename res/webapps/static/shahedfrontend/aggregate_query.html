@@ -189,7 +189,7 @@
             <input type="text" id="time" readonly="readonly" size="16"/>
             <br/>
         </div>
- 		<div id="panel2" class="submenu" style="background:#DEDEDE;height: 45px">
+ 		<div id="panel2" class="submenu" style="background:#DEDEDE;height: 70px">
             <label for="fly-to">Fly to: </label>
             <input type="text" id="fly-to" placeholder="Type destination..." size="17"/>
             <label> Data Set: </label>
@@ -201,6 +201,8 @@
             <input type="text" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;"/>
             <label for="toDatePicker" style="display: inline;"> To Date: </label>
             <input type="datetime" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;"/>
+            <br/>
+            <div id="date-range-selector"></div>
         </div>
         <div id="submissionFormDiv" class="submenu" title="submissionFormDivTitle" style="visibility: hidden">
             <fieldset>
@@ -239,7 +241,7 @@
                     codeAddress();
                 });
                 
-                service.textSearch(request, callback);
+                //service.textSearch(request, callback);
             }
 
             function codeAddress() {
@@ -323,14 +325,60 @@
                 });
             }
             
-            
-            
+        function formatDate(date) {
+          var year = date.getFullYear();
+          var month = (date.getMonth() + 1).toString();
+          if (month.length == 1)
+            month = "0" + month;
+          var day = (date.getDate()).toString();
+          if (day.length == 1)
+            day = "0" + day;
+          return month+"/"+day+"/"+year;         
+        }
+        var slider;  
+        var MillisPerDay = 1000 * 60 * 60 * 24; // Milliseconds in one day
+        var day0 = new Date(2013, 0, 1); // Minimum day supported
+        
         $(function() {
-    			$("#fromDatePicker").datepicker();
+    			$("#fromDatePicker").datepicker({
+    			  dateFormat : 'mm/dd/yy',
+            changeYear : true,
+            changeMonth : true,
+            yearRange : "2013:2013",
+    			}).change( function() {
+    			  var day0 = new Date(2013, 0, 1);
+            var value1 = (Date.parse($("#fromDatePicker").val()) - day0.getTime()) / MillisPerDay;
+            var value2 = (Date.parse($("#toDatePicker").val()) - day0.getTime()) / MillisPerDay;
+            slider.slider('values', [value1, value2]);
+    			});
+    			slider = $("#date-range-selector").slider( {
+      			range: true,
+            min: 0,
+            max: 365,
+            values: [ 0, 15 ],
+            slide: function( event, ui ) {
+              var value1 = ui.values[0];
+              var value2 = ui.values[1];
+              var fromDate = new Date(day0.getTime() + value1 * MillisPerDay);
+              var toDate = new Date(day0.getTime() + value2 * MillisPerDay);
+              $("#fromDatePicker").val(formatDate(fromDate));
+              $("#toDatePicker").val(formatDate(toDate));
+            }
+    			});
   			});
   			
   			$(function() {
-    			$("#toDatePicker").datepicker();
+    			$("#toDatePicker").datepicker({
+            dateFormat : 'mm/dd/yy',
+            changeYear : true,
+            changeMonth : true,
+            yearRange : "2013:2013",
+          }).change( function() {
+            var day0 = new Date(2013, 0, 1);
+            var value1 = (Date.parse($("#fromDatePicker").val()) - day0.getTime()) / MillisPerDay;
+            var value2 = (Date.parse($("#toDatePicker").val()) - day0.getTime()) / MillisPerDay;
+            slider.slider('values', [value1, value2]);
+          });
   			});
 		</script>
 		

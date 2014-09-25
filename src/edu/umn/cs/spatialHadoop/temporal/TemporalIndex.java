@@ -9,6 +9,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -118,45 +119,49 @@ public class TemporalIndex {
     FileStatus[] subdirs = fs.listStatus(path, SpatialSite.NonHiddenFileFilter);
     Calendar calendar = Calendar.getInstance();
     // Initialize partitions
-    this.partitions = new TemporalPartition[subdirs.length];
+    Vector<TemporalPartition> vpartitions = new Vector<TemporalPartition>();
     for (int i = 0; i < subdirs.length; i++) {
       FileStatus subdir = subdirs[i];
-      partitions[i] = new TemporalPartition();
-      partitions[i].dirName = subdir.getPath().getName();
-      Matcher matcher = DayPattern.matcher(partitions[i].dirName);
+      if (!subdir.isDir())
+        continue;
+      TemporalPartition p = new TemporalPartition();
+      vpartitions.add(p);
+      p.dirName = subdir.getPath().getName();
+      Matcher matcher = DayPattern.matcher(p.dirName);
       if (matcher.matches()) {
         // Day
-        Date date = DayFormat.parse(partitions[i].dirName);
+        Date date = DayFormat.parse(p.dirName);
         calendar.setTime(date);
-        partitions[i].start = calendar.getTimeInMillis();
+        p.start = calendar.getTimeInMillis();
         calendar.add(Calendar.DAY_OF_MONTH, 1);
-        partitions[i].end = calendar.getTimeInMillis();
+        p.end = calendar.getTimeInMillis();
         continue;
       } 
-      matcher = MonthPattern.matcher(partitions[i].dirName);
+      matcher = MonthPattern.matcher(p.dirName);
       if (matcher.matches()) {
         // Month
-        Date date = MonthFormat.parse(partitions[i].dirName);
+        Date date = MonthFormat.parse(p.dirName);
         calendar.setTime(date);
-        partitions[i].start = calendar.getTimeInMillis();
+        p.start = calendar.getTimeInMillis();
         calendar.add(Calendar.MONTH, 1);
-        partitions[i].end = calendar.getTimeInMillis();
+        p.end = calendar.getTimeInMillis();
         continue;
       }
-      matcher = YearPattern.matcher(partitions[i].dirName);
+      matcher = YearPattern.matcher(p.dirName);
       if (matcher.matches()) {
         // Month
-        Date date = YearFormat.parse(partitions[i].dirName);
+        Date date = YearFormat.parse(p.dirName);
         calendar.setTime(date);
-        partitions[i].start = calendar.getTimeInMillis();
+        p.start = calendar.getTimeInMillis();
         calendar.add(Calendar.YEAR, 1);
-        partitions[i].end = calendar.getTimeInMillis();
+        p.end = calendar.getTimeInMillis();
         continue;
       }
       throw new RuntimeException("Cannot detect time range for directory: '" +
           subdir.getPath()+"'");
     }
     // Sort partitions based on time
+    this.partitions = vpartitions.toArray(new TemporalPartition[vpartitions.size()]);
     Arrays.sort(this.partitions);
   }
   
