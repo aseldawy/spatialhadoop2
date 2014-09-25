@@ -100,7 +100,7 @@ public class SpatioTemporalAggregateQuery {
       new Path(inFile, "daily")
     };
     int index = 0;
-    FileSystem fs = inFile.getFileSystem(params);
+    final FileSystem fs = inFile.getFileSystem(params);
     while (index < temporalIndexes.length && !temporalRanges.isEmpty()) {
       Path indexDir = temporalIndexes[index];
       LOG.info("Checking index dir "+indexDir);
@@ -136,8 +136,8 @@ public class SpatioTemporalAggregateQuery {
       index++;
     }
     
-    // 2- Run a spatial aggregate query in each matched partition
-    Rectangle spatialRange = params.getShape("rect", new Rectangle()).getMBR();
+    // 2- Find all matching files (AggregateQuadTrees) in matching partitions
+    final Rectangle spatialRange = params.getShape("rect", new Rectangle()).getMBR();
     // Convert spatialRange from lat/lng space to Sinusoidal space
     double cosPhiRad = Math.cos(spatialRange.y1 * Math.PI / 180);
     double southWest = spatialRange.x1 * cosPhiRad;
@@ -172,27 +172,65 @@ public class SpatioTemporalAggregateQuery {
         return h >= h1 && h < h2 && v >= v1 && v < v2;
       }
     };
-    
-    AggregateQuadTree.Node finalResult = new AggregateQuadTree.Node();
+
+    final Vector<Path> allMatchingFiles = new Vector<Path>();
     
     for (Path matchingPartition : matchingPartitions) {
       // Select all matching files
       FileStatus[] matchingFiles = fs.listStatus(matchingPartition, rangeFilter);
       for (FileStatus matchingFile : matchingFiles) {
-        Matcher matcher = MODISTileID.matcher(matchingFile.getPath().getName());
-        matcher.matches(); // It has to match
-        int h = Integer.parseInt(matcher.group(1));
-        int v = Integer.parseInt(matcher.group(2));
-        // Clip the query region and normalize in this tile
-        Rectangle translated = spatialRange.translate(-h, -v);
-        int x1 = (int) (Math.max(translated.x1, 0) * 1200);
-        int y1 = (int) (Math.max(translated.y1, 0) * 1200);
-        int x2 = (int) (Math.min(translated.x2, 1.0) * 1200);
-        int y2 = (int) (Math.min(translated.y2, 1.0) * 1200);
-        AggregateQuadTree.Node fileResult = AggregateQuadTree.aggregateQuery(fs, matchingFile.getPath(),
-            new java.awt.Rectangle(x1, y1, (x2 - x1), (y2 - y1)));
-        finalResult.accumulate(fileResult);
+        allMatchingFiles.add(matchingFile.getPath());
       }
+    }
+    AggregateQuadTree.Node finalResult = new AggregateQuadTree.Node();
+    
+    // 3- Query all matching files in parallel
+    final int parallelism = Runtime.getRuntime().availableProcessors();
+    final int[] partitions = new int[parallelism + 1];
+    for (int i_thread = 0; i_thread <= parallelism; i_thread++)
+      partitions[i_thread] = i_thread * allMatchingFiles.size() / parallelism;
+    Thread[] threads = new Thread[parallelism];
+    final AggregateQuadTree.Node[] threadResults = new AggregateQuadTree.Node[parallelism];
+    for (int i_thread = 0; i_thread < parallelism; i_thread++) {
+      threads[i_thread] = new Thread("thread_"+i_thread) {
+        @Override
+        public void run() {
+          int thread_id = Integer.parseInt(this.getName().split("_")[1]);
+          threadResults[thread_id] = new AggregateQuadTree.Node();
+          int i1 = partitions[thread_id];
+          int i2 = partitions[thread_id+1];
+          for (int i_file = i1; i_file < i2; i_file++) {
+            try {
+              Path matchingFile = allMatchingFiles.get(i_file);
+              Matcher matcher = MODISTileID.matcher(matchingFile.getName());
+              matcher.matches(); // It has to match
+              int h = Integer.parseInt(matcher.group(1));
+              int v = Integer.parseInt(matcher.group(2));
+              // Clip the query region and normalize in this tile
+              Rectangle translated = spatialRange.translate(-h, -v);
+              int x1 = (int) (Math.max(translated.x1, 0) * 1200);
+              int y1 = (int) (Math.max(translated.y1, 0) * 1200);
+              int x2 = (int) (Math.min(translated.x2, 1.0) * 1200);
+              int y2 = (int) (Math.min(translated.y2, 1.0) * 1200);
+              AggregateQuadTree.Node fileResult = AggregateQuadTree.aggregateQuery(fs, matchingFile,
+                  new java.awt.Rectangle(x1, y1, (x2 - x1), (y2 - y1)));
+              threadResults[thread_id].accumulate(fileResult);
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+
+          }
+        }
+      };
+      threads[i_thread].start();
+    }
+    try {
+      for (int i_thread = 0; i_thread < parallelism; i_thread++) {
+        threads[i_thread].join();
+        finalResult.accumulate(threadResults[i_thread]);
+      }
+    } catch (InterruptedException e) {
+      e.printStackTrace();
     }
     
     return finalResult;
