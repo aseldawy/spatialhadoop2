@@ -171,6 +171,8 @@
         </style>
         <script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?libraries=places&sensor=false"></script>
         <script src="navigation.js"></script>
+        <script src="http://malsup.github.io/jquery.blockUI.js"></script>
+		<script src="AjaxGlobalHandler.js" type="text/javascript"></script>
         <link rel="stylesheet" href="jquery-ui/jquery-ui.css">
  </head>
  
@@ -265,23 +267,30 @@
                 if (rectangle != null) {
                   rectangle.setBounds(bounds);
                 }else{
-                  rectangle = new google.maps.Rectangle({
+                  fillRectangleWithBounds();
+                  rectangle.setMap(map);
+                  prepareEventListeners();
+                }
+                showNewRect();
+            }  
+            
+            function prepareEventListeners(){
+            	  google.maps.event.addListener(rectangle, 'bounds_changed', showNewRect);
+                  google.maps.event.addListener(rectangle, 'click', showNewRect);
+                  google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
+                  google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
+                  google.maps.event.addListener(rectangle, 'bounds_changed', processRequest);
+            }
+             
+            function fillRectangleWithBounds(){
+            	  rectangle = new google.maps.Rectangle({
                       bounds : bounds,
                       fillOpacity : 0.2,
                       strokeOpacity : 0.8,
                       draggable : true,
                       editable : true
                   });
-                  rectangle.setMap(map);
-                  google.maps.event.addListener(rectangle, 'bounds_changed', showNewRect);
-                  google.maps.event.addListener(rectangle, 'click', showNewRect);
-                  google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
-                  google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
-                  google.maps.event.addListener(rectangle, 'bounds_changed', processRequest);
-                }
-                
-                showNewRect();
-            }   
+            }
             
             function showNewRect(event) {
                 ne = rectangle.getBounds().getNorthEast();
@@ -293,16 +302,16 @@
             }
             
             function processRequest(){
-              if (rectangleIsDragged)
-                return;
-              if ($("#fromDatePicker").val().length == 0 || $("#toDatePicker").val().length == 0) {
-                alert('Please specify start and end date');
-                return;
-              }
-              if (rectangle == null) {
-                alert("Please specify a rectangle");
-                return;
-              }
+              	if (rectangleIsDragged)
+                	return;
+              	if ($("#fromDatePicker").val().length == 0 || $("#toDatePicker").val().length == 0) {
+                	alert('Please specify start and end date');
+                	return;
+              	}
+              	if (rectangle == null) {
+                	alert("Please specify a rectangle");
+                	return;
+              	}
             	document.getElementById("fromDate").value = document.getElementById("fromDatePicker").value;
             	document.getElementById("toDate").value = document.getElementById("toDatePicker").value;
             	requestURL = "aggregate_query.cgi?min_lat=" + document.getElementById("min_lat").value 
@@ -385,6 +394,26 @@
  	 	<div id="map"> </div>
  	 	
  	 	<script type="text/javascript">
+ 	 		var waitImageURL = 'wait.gif';
+ 	 		var sessionoutRedirectURL = 'aggregate_query.html';
+ 	 		$(function () {
+                var options = {
+                    AjaxWait: {
+                        AjaxWaitMessage: "<img style='height: 250px' src='"
+                            + waitImageURL + "' />",
+                        AjaxWaitMessageCss: { width: "250px", left: "40%" }
+                    },
+                    AjaxErrorMessage: "<h6>Error! please contact the administrator!</h6>",
+                    SessionOut: {
+                        StatusCode: 590,
+                        RedirectUrl: sessionoutRedirectURL
+                    }
+                };
+                AjaxGlobalHandler.Initiate(options);
+            });
+ 	 	</script>
+ 	 	
+ 	 	<script type="text/javascript">
                     
             var element = document.getElementById("map");
             
@@ -418,18 +447,8 @@
                 if (rectangle != null) {
                   rectangle.setBounds(bounds);
                 }else{
-                  rectangle = new google.maps.Rectangle({
-                      bounds : bounds,
-                      fillOpacity : 0.2,
-                      strokeOpacity : 0.8,
-                      draggable : true,
-                      editable : true
-                  });
-                  google.maps.event.addListener(rectangle, 'bounds_changed', showNewRect);
-                  google.maps.event.addListener(rectangle, 'click', showNewRect);
-                  google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
-                  google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
-                  google.maps.event.addListener(rectangle, 'bounds_changed', processRequest);
+				  fillRectangleWithBounds();
+                  prepareEventListeners();
                   rectangle.setMap(map);
                 }
                 showNewRect();
