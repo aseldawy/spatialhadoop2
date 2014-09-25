@@ -78,7 +78,8 @@ public class SpatioTemporalAggregateQuery {
   }
   
   /**A regular expression to catch the tile identifier of a MODIS grid cell*/
-  private static final Pattern MODISTileID = Pattern.compile("^.*h(\\d\\d)v(\\d\\d).*$"); 
+  private static final Pattern MODISTileID = Pattern.compile("^.*h(\\d\\d)v(\\d\\d).*$");
+  private static int numOfTreesTouchesInLastRequest; 
 
 
   /**
@@ -214,10 +215,9 @@ public class SpatioTemporalAggregateQuery {
       }
     });
     AggregateQuadTree.Node finalResult = new AggregateQuadTree.Node();
-    for (Node threadResult : threadsResults) {
+    for (Node threadResult : threadsResults)
       finalResult.accumulate(threadResult);
-    }
-    
+    numOfTreesTouchesInLastRequest = allMatchingFiles.size();
     return finalResult;
   }
   
@@ -281,6 +281,7 @@ public class SpatioTemporalAggregateQuery {
           writer.print("},");
           writer.print("\"stats\":{");
           writer.print("\"totaltime\":"+(t2-t1));
+          writer.print("\"num-of-trees\":"+numOfTreesTouchesInLastRequest);
           writer.print("}");
           writer.print("}");
           response.setStatus(HttpServletResponse.SC_OK);
