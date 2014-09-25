@@ -937,6 +937,7 @@ public class AggregateQuadTree {
         do {
           tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
         } while (destFs.exists(tmpFile));
+        tmpFile = tmpFile.makeQualified(destFs);
         AggregateQuadTree.build(params,
             sourceFile.getPath(),
             "LST_Day_1km",
