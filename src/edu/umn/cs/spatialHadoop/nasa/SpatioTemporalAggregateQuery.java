@@ -79,7 +79,10 @@ public class SpatioTemporalAggregateQuery {
   
   /**A regular expression to catch the tile identifier of a MODIS grid cell*/
   private static final Pattern MODISTileID = Pattern.compile("^.*h(\\d\\d)v(\\d\\d).*$");
-  private static int numOfTreesTouchesInLastRequest; 
+  /**Keeps track of total number of trees queries in last query as stats*/
+  private static int numOfTreesTouchesInLastRequest;
+  /**Keeps track of number of temporal partitions matched by last query as stats*/
+  private static int numOfTemporalPartitionsInLastQuery; 
 
 
   /**
@@ -138,6 +141,8 @@ public class SpatioTemporalAggregateQuery {
       }
       index++;
     }
+    
+    numOfTemporalPartitionsInLastQuery = matchingPartitions.size();
     
     // 2- Find all matching files (AggregateQuadTrees) in matching partitions
     final Rectangle spatialRange = params.getShape("rect", new Rectangle()).getMBR();
@@ -280,7 +285,8 @@ public class SpatioTemporalAggregateQuery {
           writer.print("\"sum\": "+result.sum);
           writer.print("},");
           writer.print("\"stats\":{");
-          writer.print("\"totaltime\":"+(t2-t1));
+          writer.print("\"totaltime\":"+(t2-t1)+',');
+          writer.print("\"num-of-temporal-partitions\":"+numOfTemporalPartitionsInLastQuery+',');
           writer.print("\"num-of-trees\":"+numOfTreesTouchesInLastRequest);
           writer.print("}");
           writer.print("}");
