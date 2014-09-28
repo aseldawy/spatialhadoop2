@@ -116,8 +116,10 @@ public class SpatioTemporalAggregateQuery {
         TemporalPartition[] matches = temporalIndex.selectContained(range.start, range.end);
         if (matches != null) {
           LOG.info("Matched "+matches.length+" partitions in "+indexDir);
-          for (TemporalPartition match : matches)
+          for (TemporalPartition match : matches) {
+            LOG.info("Matched temporal partition: "+match.dirName);
             matchingPartitions.add(new Path(indexDir, match.dirName));
+          }
           // Update range to remove matching part
           TemporalPartition firstMatch = matches[0];
           TemporalPartition lastMatch = matches[matches.length - 1];

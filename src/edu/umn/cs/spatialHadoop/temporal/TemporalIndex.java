@@ -200,7 +200,7 @@ public class TemporalIndex {
     // If startIndex points to a partially overlapping partition, skip it and
     // match the next one (which has to be totally contained in given range)
     if (startIndex < this.partitions.length
-        && this.partitions[startIndex].start > start)
+        && this.partitions[startIndex].start < start)
       startIndex++;
     // If endIndex points to a partition that is totally contained, include
     // it in the range by incrementing endIndex
