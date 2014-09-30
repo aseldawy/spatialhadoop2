@@ -200,9 +200,9 @@
             </select>
             <br/>
             <label for="fromDatePicker" style="display: inline;"> From Date: </label>
-            <input type="text" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;"/>
+            <input type="text" value="01/01/2013" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;"/>
             <label for="toDatePicker" style="display: inline;"> To Date: </label>
-            <input type="datetime" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;"/>
+            <input type="text" value="01/15/2013" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;"/>
             <br/>
             <div id="date-range-selector"></div>
         </div>
@@ -432,7 +432,7 @@
             }
 
             var map = new google.maps.Map(element, {
-                center : new google.maps.LatLng(21.422506, 39.826131),
+                center : new google.maps.LatLng(39.502506, -98.356131),
                 zoom : 5,
                 mapTypeId : google.maps.MapTypeId.ROADMAP,
                 mapTypeControlOptions : {
