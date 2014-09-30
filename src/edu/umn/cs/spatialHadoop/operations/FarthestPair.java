@@ -191,6 +191,8 @@ public class FarthestPair {
       
       @Override
       public int compare(int a, int b) {
+    	if (xs[a] == xs[b])
+    	  return 0;
         if (xs[a] < xs[b])
           return -1;
         return 1;

@@ -610,6 +610,8 @@ public class DistributedJoin {
       
       @Override
       public int compare(int i, int j) {
+    	if (fStatus[i].getLen() < fStatus[j].getLen())
+    		return 0;
         return fStatus[i].getLen() < fStatus[j].getLen() ? -1 : 1;
       }
     };

@@ -89,6 +89,8 @@ public class SpatialAlgorithms {
     Comparator<Shape> comparator = new Comparator<Shape>() {
       @Override
       public int compare(Shape o1, Shape o2) {
+    	if (o1.getMBR().x1 == o2.getMBR().x1)
+    		return 0;
         return o1.getMBR().x1 < o2.getMBR().x1 ? -1 : 1;
       }
     };
@@ -151,6 +153,8 @@ public class SpatialAlgorithms {
     final Comparator<Shape> comparator = new Comparator<Shape>() {
       @Override
       public int compare(Shape o1, Shape o2) {
+    	if (o1.getMBR().x1 == o2.getMBR().x1)
+    		return 0;
         return o1.getMBR().x1 < o2.getMBR().x1 ? -1 : 1;
       }
     };
@@ -219,6 +223,8 @@ public class SpatialAlgorithms {
     final Comparator<Rectangle> comparator = new Comparator<Rectangle>() {
       @Override
       public int compare(Rectangle o1, Rectangle o2) {
+    	if (o1.x1 == o2.x1)
+    		  return 0;
         return o1.x1 < o2.x1 ? -1 : 1;
       }
     };
