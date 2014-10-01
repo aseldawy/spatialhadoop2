@@ -212,6 +212,7 @@ public class PyramidPlot {
     public void map(Rectangle cell, ArrayWritable value,
         OutputCollector<TileIndex, Shape> output, Reporter reporter)
         throws IOException {
+    	
       if (value instanceof Shape) {
         Shape shape = (Shape) value;
         Rectangle shapeMBR = shape.getMBR();

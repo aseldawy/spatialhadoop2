@@ -341,7 +341,7 @@ public class HeatMapPlot {
         Shape s = (Shape) w;
         if (adaptiveSample && s instanceof Point
             && Math.random() > adaptiveSampleRatio)
-            return;
+            continue;
         Point center;
         if (s instanceof Point) {
           center = (Point) s;

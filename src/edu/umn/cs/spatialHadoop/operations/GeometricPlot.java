@@ -147,6 +147,7 @@ public class GeometricPlot {
     public void map(Rectangle cell, Object value,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
             throws IOException {
+
       if (value instanceof Shape) {
         Shape shape = (Shape) value;
         Rectangle shapeMbr = shape.getMBR();
@@ -179,36 +180,36 @@ public class GeometricPlot {
         }
       } else {
         for(Shape shape : (Shape[]) ((ArrayWritable)value).get()) {
-          Rectangle shapeMbr = shape.getMBR();
-          if (shapeMbr == null)
-            return;
-          // Check if this shape can be skipped using the gradual fade option
-          if (gradualFade && !(shape instanceof Point)) {
-            double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
-            if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-              // This shape can be safely skipped as it is too small to be plotted
-              return;
-            }
-          }
-          if (adaptiveSample && shape instanceof Point) {
-            if (Math.random() > adaptiveSampleRatio)
-              return;
-          }
           
-          // Skip shapes outside query range if query range is set
-          if (queryRange != null && !shapeMbr.isIntersected(queryRange))
-            return;
-          java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
-          for (int i = 0; i < overlappingCells.width; i++) {
-            int x = overlappingCells.x + i;
-            for (int j = 0; j < overlappingCells.height; j++) {
-              int y = overlappingCells.y + j;
-              cellNumber.set(y * partitionGrid.columns + x + 1);
-              output.collect(cellNumber, shape);
-            }
-          }
+          Rectangle shapeMbr = shape.getMBR();
+       	  if (shapeMbr == null)
+       		  continue;
+       	  // Check if this shape can be skipped using the gradual fade option
+       	  if (gradualFade && !(shape instanceof Point)) {
+       		  double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
+       		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+       			  // This shape can be safely skipped as it is too small to be plotted
+       			  continue;
+       		  }
+       	  }
+       	  if (adaptiveSample && shape instanceof Point) {
+       		  if (Math.random() > adaptiveSampleRatio)
+       			  continue;
+       	  }
+
+       	  // Skip shapes outside query range if query range is set
+       	  if (queryRange != null && !shapeMbr.isIntersected(queryRange))
+       		  continue;
+       	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
+       	  for (int i = 0; i < overlappingCells.width; i++) {
+       		  int x = overlappingCells.x + i;
+       		  for (int j = 0; j < overlappingCells.height; j++) {
+       			  int y = overlappingCells.y + j;
+       			  cellNumber.set(y * partitionGrid.columns + x + 1);
+       			  output.collect(cellNumber, shape);
+       		  }
+       	  }
         }
-        
       }
     }
   }
@@ -1146,5 +1147,4 @@ public class GeometricPlot {
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }
-
-}
+  }
