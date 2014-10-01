@@ -29,7 +29,6 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -47,7 +46,6 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAShape;
@@ -226,41 +224,6 @@ public class Aggregate {
   }
   
   /**
-   * Counts the exact number of lines in a file by opening the file and
-   * reading it line by line
-   * @param fs
-   * @param file
-   * @return
-   * @throws IOException
-   */
-  public static MinMax aggregateLocal(Path[] files, OperationsParams params) throws IOException {
-    Shape plotRange = params.getShape("rect");
-    params.setClass("shape", NASAPoint.class, Shape.class);
-    MinMax minMax = new MinMax();
-    for (Path file : files) {
-      FileSystem fs = file.getFileSystem(params);
-      long file_size = fs.getFileStatus(file).getLen();
-      
-      // HDF file
-      HDFRecordReader reader = new HDFRecordReader(params,
-          new FileSplit(file, 0, file_size, new String[] {}), null, true);
-      NASADataset key = reader.createKey();
-      NASAShape point = reader.createValue();
-      while (reader.next(key, point)) {
-        if (plotRange == null || plotRange.isIntersected(point)) {
-          if (point.getValue() < minMax.minValue)
-            minMax.minValue = point.getValue();
-          if (point.getValue() > minMax.maxValue)
-            minMax.maxValue = point.getValue();
-        }
-      }
-      reader.close();
-    }
-    
-    return minMax;
-  }
-  
-  /**
    * Computes the minimum and maximum values of readings in input. Useful as
    * a preparatory step before drawing.
    * @param inFiles - A list of input files.
@@ -293,10 +256,7 @@ public class Aggregate {
     FileInputFormat.setInputPaths(job, inFiles);
     ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
 
-    boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
-    boolean isLocal = params.is("local", autoLocal);
-    
-    return isLocal ? aggregateLocal(inFiles, params) : aggregateMapReduce(inFiles, params);
+    return aggregateMapReduce(inFiles, params);
   }
   
   private static void printUsage() {

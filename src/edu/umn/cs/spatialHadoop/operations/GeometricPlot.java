@@ -112,7 +112,7 @@ public class GeometricPlot {
    *
    */
   public static class GridPartitionMap extends MapReduceBase 
-  implements Mapper<Rectangle, ArrayWritable, IntWritable, Shape> {
+  implements Mapper<Rectangle, Object, IntWritable, Shape> {
 
     private GridInfo partitionGrid;
     private IntWritable cellNumber;
@@ -144,39 +144,71 @@ public class GeometricPlot {
       }
     }
 
-    public void map(Rectangle cell, ArrayWritable value,
+    public void map(Rectangle cell, Object value,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
             throws IOException {
-      
-      for(Shape shape : (Shape[]) value.get()) {
-    	  Rectangle shapeMbr = shape.getMBR();
-    	  if (shapeMbr == null)
-    		  return;
-    	  // Check if this shape can be skipped using the gradual fade option
-    	  if (gradualFade && !(shape instanceof Point)) {
-    		  double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
-    		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-    			  // This shape can be safely skipped as it is too small to be plotted
-    			  return;
-    		  }
-    	  }
-    	  if (adaptiveSample && shape instanceof Point) {
-    		  if (Math.random() > adaptiveSampleRatio)
-    			  return;
-    	  }
-
-    	  // Skip shapes outside query range if query range is set
-    	  if (queryRange != null && !shapeMbr.isIntersected(queryRange))
-    		  return;
-    	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
-    	  for (int i = 0; i < overlappingCells.width; i++) {
-    		  int x = overlappingCells.x + i;
-    		  for (int j = 0; j < overlappingCells.height; j++) {
-    			  int y = overlappingCells.y + j;
-    			  cellNumber.set(y * partitionGrid.columns + x + 1);
-    			  output.collect(cellNumber, shape);
-    		  }
-    	  }
+      if (value instanceof Shape) {
+        Shape shape = (Shape) value;
+        Rectangle shapeMbr = shape.getMBR();
+        if (shapeMbr == null)
+          return;
+        // Check if this shape can be skipped using the gradual fade option
+        if (gradualFade && !(shape instanceof Point)) {
+          double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
+          if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+            // This shape can be safely skipped as it is too small to be plotted
+            return;
+          }
+        }
+        if (adaptiveSample && shape instanceof Point) {
+          if (Math.random() > adaptiveSampleRatio)
+            return;
+        }
+        
+        // Skip shapes outside query range if query range is set
+        if (queryRange != null && !shapeMbr.isIntersected(queryRange))
+          return;
+        java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
+        for (int i = 0; i < overlappingCells.width; i++) {
+          int x = overlappingCells.x + i;
+          for (int j = 0; j < overlappingCells.height; j++) {
+            int y = overlappingCells.y + j;
+            cellNumber.set(y * partitionGrid.columns + x + 1);
+            output.collect(cellNumber, shape);
+          }
+        }
+      } else {
+        for(Shape shape : (Shape[]) ((ArrayWritable)value).get()) {
+          Rectangle shapeMbr = shape.getMBR();
+          if (shapeMbr == null)
+            return;
+          // Check if this shape can be skipped using the gradual fade option
+          if (gradualFade && !(shape instanceof Point)) {
+            double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
+            if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+              // This shape can be safely skipped as it is too small to be plotted
+              return;
+            }
+          }
+          if (adaptiveSample && shape instanceof Point) {
+            if (Math.random() > adaptiveSampleRatio)
+              return;
+          }
+          
+          // Skip shapes outside query range if query range is set
+          if (queryRange != null && !shapeMbr.isIntersected(queryRange))
+            return;
+          java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
+          for (int i = 0; i < overlappingCells.width; i++) {
+            int x = overlappingCells.x + i;
+            for (int j = 0; j < overlappingCells.height; j++) {
+              int y = overlappingCells.y + j;
+              cellNumber.set(y * partitionGrid.columns + x + 1);
+              output.collect(cellNumber, shape);
+            }
+          }
+        }
+        
       }
     }
   }
@@ -794,7 +826,7 @@ public class GeometricPlot {
   /**Last submitted Plot job*/
   public static RunningJob lastSubmittedJob;
 
-  private static RunningJob plotMapReduce(Path inFile, Path outFile, OperationsParams params) throws IOException {
+  public static RunningJob plotMapReduce(Path inFile, Path outFile, OperationsParams params) throws IOException {
     boolean background = params.is("background");
 
     int width = params.getInt("width", 1000);
@@ -836,6 +868,7 @@ public class GeometricPlot {
       job.set("valuerange", valueRange.minValue+".."+valueRange.maxValue);
       fileMBR = plotRange != null?
           plotRange.getMBR() : new Rectangle(-180, -140, 180, 169);
+      job.setInputFormat(ShapeInputFormat.class);
           //      job.setClass(HDFRecordReader.ProjectorClass, MercatorProjector.class,
           //          GeoProjector.class);
     } else {
@@ -878,6 +911,8 @@ public class GeometricPlot {
 
     FileSystem inFs = inFile.getFileSystem(params);
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFs, inFile);
+    if (hdfDataset != null)
+      partition = "grid";
 
     if (partition.equals("space") || partition.equals("grid")) {
       if (gindex != null && gindex.isReplicated()) {
@@ -924,7 +959,7 @@ public class GeometricPlot {
     } else {
       throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
     }
-
+    
     LOG.info("Creating an image of size "+width+"x"+height);
     ImageOutputFormat.setFileMBR(job, fileMBR);
     if (plotRange != null) {

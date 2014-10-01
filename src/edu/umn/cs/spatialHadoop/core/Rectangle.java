@@ -332,4 +332,11 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   public Rectangle buffer(double dw, double dh) {
     return new Rectangle(this.x1 - dw, this.y1 - dh, this.x2 + dw, this.y2 + dh);
   }
+
+  /**
+   * Returns a new rectangle after tanslating with the given amount
+   */
+  public Rectangle translate(double dx, double dy) {
+    return new Rectangle(this.x1 + dx, this.y1 + dy, this.x2 + dx, this.y2 + dy);
+  }
 }

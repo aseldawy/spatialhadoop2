@@ -54,7 +54,7 @@ public class OSMRelation extends EvalFunc<Tuple> {
       return null;
     try {
       String str = (String)input.get(0);
-      ByteArrayInputStream in = new ByteArrayInputStream(str.getBytes());
+      ByteArrayInputStream in = new ByteArrayInputStream(str.getBytes("UTF8"));
       Document doc = dBuilder.parse(in);
       
       Element rootElement = doc.getDocumentElement();

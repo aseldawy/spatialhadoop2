@@ -967,7 +967,9 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
           public int compare(int i, int j) {
             // Note. Equality is not important to check because items with the
             // same distance can be ordered anyway. 
-            if (distances.elementAt(i) < distances.elementAt(j))
+        	if (distances.elementAt(i) == distances.elementAt(j))
+                  return 0;
+        	if (distances.elementAt(i) < distances.elementAt(j))
               return -1;
             return 1;
           }
