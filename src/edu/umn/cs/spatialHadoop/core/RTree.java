@@ -967,7 +967,9 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
           public int compare(int i, int j) {
             // Note. Equality is not important to check because items with the
             // same distance can be ordered anyway. 
-            if (distances.elementAt(i) < distances.elementAt(j))
+        	if (distances.elementAt(i) == distances.elementAt(j))
+                  return 0;
+        	if (distances.elementAt(i) < distances.elementAt(j))
               return -1;
             return 1;
           }
@@ -1048,7 +1050,13 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
    * @param output
    * @return
    * @throws IOException
+   * SuppresWarnings("resource") is used because we create LineReaders on the
+   * internal data stream of both R and S. We do not want to close the
+   * LineReader because it will subsequently close the internal data stream
+   * of R and S which is something we want to avoid because both R and S are
+   * not created by this function and it should not free these resources.
    */
+  @SuppressWarnings("resource")
   protected static<S1 extends Shape, S2 extends Shape> int spatialJoinDisk(
       final RTree<S1> R,
       final RTree<S2> S,

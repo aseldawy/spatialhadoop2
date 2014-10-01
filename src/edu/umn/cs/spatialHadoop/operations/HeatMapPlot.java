@@ -14,22 +14,16 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-import javax.imageio.ImageIO;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
@@ -37,10 +31,9 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -62,7 +55,6 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
@@ -86,18 +78,20 @@ public class HeatMapPlot {
    *
    */
   public static class FrequencyMap implements Writable {
-    int[][] frequency;
+    float[][] frequency;
+    float[][] gaussianKernel;
+    int radius;
     
     private Map<Integer, BufferedImage> cachedCircles = new HashMap<Integer, BufferedImage>();
     public FrequencyMap() {
     }
     
     public FrequencyMap(int width, int height) {
-      frequency = new int[width][height];
+      frequency = new float[width][height];
     }
     
     public FrequencyMap(FrequencyMap other) {
-      this.frequency = new int[other.getWidth()][other.getHeight()];
+      this.frequency = new float[other.getWidth()][other.getHeight()];
       for (int x = 0; x < this.getWidth(); x++)
         for (int y = 0; y < this.getHeight(); y++) {
           this.frequency[x][y] = other.frequency[x][y];
@@ -118,17 +112,17 @@ public class HeatMapPlot {
     public void write(DataOutput out) throws IOException {
       out.writeInt(this.getWidth());
       out.writeInt(this.getHeight());
-      for (int[] col : frequency) {
+      for (float[] col : frequency) {
         int y1 = 0;
         while (y1 < col.length) {
           int y2 = y1;
           while (y2 < col.length && col[y2] == col[y1])
             y2++;
           if (y2 - y1 == 1) {
-            out.writeInt(-col[y1]);
+            out.writeFloat(-col[y1]);
           } else {
-            out.writeInt(y2 - y1);
-            out.writeInt(col[y1]);
+            out.writeFloat(y2 - y1);
+            out.writeFloat(col[y1]);
           }
           y1 = y2;
         }
@@ -140,18 +134,18 @@ public class HeatMapPlot {
       int width = in.readInt();
       int height = in.readInt();
       if (getWidth() != width || getHeight() != height)
-        frequency = new int[width][height];
+        frequency = new float[width][height];
       for (int x = 0; x < width; x++) {
         int y = 0;
         while (y < height) {
-          int v = in.readInt();
+          float v = in.readFloat();
           if (v <= 0) {
             frequency[x][y] = -v;
             y++;
           } else {
-            int cnt = v;
-            v = in.readInt();
-            int y2 = y + cnt;
+            float cnt = v;
+            v = in.readFloat();
+            float y2 = y + cnt;
             while (y < y2) {
               frequency[x][y] = v;
               y++;
@@ -188,10 +182,10 @@ public class HeatMapPlot {
     }
     
     private MinMax getValueRange() {
-      Map<Integer, Integer> histogram = new HashMap<Integer, Integer>();
+      Map<Float, Integer> histogram = new HashMap<Float, Integer>();
       MinMax minMax = new MinMax(Integer.MAX_VALUE, Integer.MIN_VALUE);
-      for (int[] col : frequency)
-        for (int value : col) {
+      for (float[] col : frequency)
+        for (float value : col) {
           if (!histogram.containsKey(value)) {
             histogram.put(value, 1);
           } else {
@@ -210,7 +204,8 @@ public class HeatMapPlot {
       return frequency == null? 0 : frequency[0].length;
     }
 
-    public BufferedImage toImage(MinMax valueRange, boolean skipZeros) {
+    public BufferedImage toImage(MinMax valueRange, boolean skipZeros, int radius) {
+      this.radius = radius;
       if (valueRange == null)
         valueRange = getValueRange();
       LOG.info("Using the value range: "+valueRange);
@@ -241,6 +236,42 @@ public class HeatMapPlot {
           }
         }
       }
+    }
+    
+    // Add a point but updating the distribution in the radius using Gaussian Distribution.
+    public void addGaussianPoint(int cx, int cy, int radius) {
+    	BufferedImage circle = getCircle(radius);
+    	// Create Gaussian Kernel for the first time.
+    	if(gaussianKernel == null) {
+        	createGaussianKernel(radius);
+    	}
+    	
+    	for (int x = 0; x < circle.getWidth(); x++) {
+            for (int y = 0; y < circle.getHeight(); y++) {
+              int imgx = x - radius + cx;
+              int imgy = y - radius + cy;
+              if (imgx >= 0 && imgx < getWidth() && imgy >= 0 && imgy < getHeight()) {
+                  frequency[x - radius + cx][y - radius + cy] += gaussianKernel[x][y];
+              }
+            }
+        }
+    }
+    
+    // Create the GaussianKernel from a radius and standard deviation.
+    public void createGaussianKernel(int radius) {
+    	float stdev = 8;
+    	gaussianKernel = new float[2*radius+1][2*radius+1];
+    	float temp = 0;
+    	
+    	// Create the gaussianKernel.
+    	for (int j = 0; j < gaussianKernel.length; j++) {
+			for (int i = 0; i < gaussianKernel.length; i++) {
+				// If this is the center of the kernel.
+				temp = (float) Math.pow(Math.E, (-1/(2*Math.pow(stdev,2))) * 
+						(Math.pow(Math.abs(radius - i), 2) + Math.pow(Math.abs(radius - j), 2)));
+				gaussianKernel[i][j] = temp;
+			}
+		}
     }
 
     public BufferedImage getCircle(int radius) {
@@ -281,6 +312,8 @@ public class HeatMapPlot {
     private int radius;
     private boolean adaptiveSample;
     private float adaptiveSampleRatio;
+    /**Use smoothing or not*/
+    private boolean smooth;
     
     @Override
     public void configure(JobConf job) {
@@ -297,6 +330,7 @@ public class HeatMapPlot {
         // Calculate the sample ratio
         this.adaptiveSampleRatio = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.01f);
       }
+      this.smooth = job.getBoolean("smooth", false);
     }
 
     @Override
@@ -321,8 +355,13 @@ public class HeatMapPlot {
         }
         int centerx = (int) Math.round((center.x - drawMbr.x1) * imageWidth / drawMbr.getWidth());
         int centery = (int) Math.round((center.y - drawMbr.y1) * imageHeight / drawMbr.getHeight());
-        frequencyMap.addPoint(centerx, centery, radius);
+        if(smooth) {
+        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        } else {
+            frequencyMap.addPoint(centerx, centery, radius);
+        }
       }
+      
       output.collect(NullWritable.get(), frequencyMap);
     }
     
@@ -335,9 +374,11 @@ public class HeatMapPlot {
     /**Range of values to do the gradient of the heat map*/
     private MinMax valueRange;
     private boolean skipZeros;
+    private int radius;
 
     @Override
     public void configure(JobConf job) {
+      this.radius = job.getInt("radius", 5);
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
       Shape queryRange = OperationsParams.getShape(job, "rect");
@@ -363,7 +404,7 @@ public class HeatMapPlot {
       while (frequencies.hasNext())
         combined.combine(frequencies.next());
 
-      BufferedImage image = combined.toImage(valueRange, skipZeros);
+      BufferedImage image = combined.toImage(valueRange, skipZeros, radius);
       output.collect(drawMBR, new ImageWritable(image));
     }
   }
@@ -462,6 +503,7 @@ public class HeatMapPlot {
     private int radius;
     private boolean skipZeros;
     private MinMax valueRange;
+    private boolean smooth;
     
     @Override
     public void configure(JobConf job) {
@@ -479,6 +521,7 @@ public class HeatMapPlot {
         String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
         this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
+      this.smooth = job.getBoolean("smooth", false);
     }
 
     @Override
@@ -498,9 +541,13 @@ public class HeatMapPlot {
         Point p = points.next();
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
-        frequencyMap.addPoint(centerx, centery, radius);
+        if(smooth) {
+        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        } else {
+            frequencyMap.addPoint(centerx, centery, radius);
+        }
       }
-      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, radius);
       output.collect(cellInfo, new ImageWritable(image));
     }
   }
@@ -595,6 +642,7 @@ public class HeatMapPlot {
     private boolean skipZeros;
     private MinMax valueRange;
     private Rectangle fileMBR;
+    private boolean smooth;
 
     @Override
     public void configure(JobConf job) {
@@ -621,7 +669,7 @@ public class HeatMapPlot {
       for (CellInfo cell : cells) {
         fileMBR.expand(cell);
       }
-
+      this.smooth = job.getBoolean("smooth", false);
     }
 
     @Override
@@ -648,9 +696,13 @@ public class HeatMapPlot {
         Point p = points.next();
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
-        frequencyMap.addPoint(centerx, centery, radius);
+        if(smooth) {
+        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        } else {
+            frequencyMap.addPoint(centerx, centery, radius);
+        }
       }
-      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, radius);
       output.collect(cellInfo, new ImageWritable(image));
     }
 }
@@ -769,121 +821,18 @@ public class HeatMapPlot {
     job.setOutputFormat(ImageOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outFile);
 
+    if (OperationsParams.isLocal(job, inFile)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
+    
     if (background) {
       JobClient jc = new JobClient(job);
       return lastSubmittedJob = jc.submitJob(job);
     } else {
       return lastSubmittedJob = JobClient.runJob(job);
-    }
-  }
-
-  private static <S extends Shape> void plotHeatMapLocal(Path inFile, Path outFile,
-      OperationsParams params) throws IOException {
-    int imageWidth = params.getInt("width", 1000);
-    int imageHeight = params.getInt("height", 1000);
-    
-    //Shape shape = params.getShape("shape", new Point());
-    Shape plotRange = params.getShape("rect", null);
-
-    boolean keepAspectRatio = params.is("keep-ratio", true);
-    
-    InputSplit[] splits;
-    FileSystem inFs = inFile.getFileSystem(params);
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus != null && !inFStatus.isDir()) {
-      // One file, retrieve it immediately.
-      // This is useful if the input is a hidden file which is automatically
-      // skipped by FileInputFormat. We need to plot a hidden file for the case
-      // of plotting partition boundaries of a spatial index
-      splits = new InputSplit[] {new FileSplit(inFile, 0, inFStatus.getLen(), new String[0])};
-    } else {
-      JobConf job = new JobConf(params);
-      ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-      ShapeInputFormat.addInputPath(job, inFile);
-      splits = inputFormat.getSplits(job, 1);
-    }
-
-    boolean vflip = params.is("vflip");
-
-    Rectangle fileMBR;
-    if (plotRange != null) {
-      fileMBR = plotRange.getMBR();
-    } else {
-      fileMBR = FileMBR.fileMBR(inFile, params);
-    }
-
-    if (keepAspectRatio) {
-      // Adjust width and height to maintain aspect ratio
-      if (fileMBR.getWidth() / fileMBR.getHeight() > (double) imageWidth / imageHeight) {
-        // Fix width and change height
-        imageHeight = (int) (fileMBR.getHeight() * imageWidth / fileMBR.getWidth());
-      } else {
-        imageWidth = (int) (fileMBR.getWidth() * imageHeight / fileMBR.getHeight());
-      }
-    }
-    
-    // Create the frequency map
-    int radius = params.getInt("radius", 5);
-    FrequencyMap frequencyMap = new FrequencyMap(imageWidth, imageHeight);
-
-    long t1 = System.currentTimeMillis();
-    for (InputSplit split : splits) {
-      ShapeArrayRecordReader reader = new ShapeArrayRecordReader(params, (FileSplit)split);
-      Rectangle cell = reader.createKey();
-      ArrayWritable shapes = reader.createValue();
-      while (reader.next(cell, shapes)) {
-        for (Writable w : shapes.get()) {
-          Shape shape = (Shape) w;
-          Rectangle shapeBuffer = shape.getMBR();
-          if (shapeBuffer == null)
-            continue;
-          shapeBuffer = shapeBuffer.buffer(radius, radius);
-          if (plotRange == null || shapeBuffer.isIntersected(plotRange)) {
-            Point centerPoint = shapeBuffer.getCenterPoint();
-            int cx = (int) Math.round((centerPoint.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-            int cy = (int) Math.round((centerPoint.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
-            frequencyMap.addPoint(cx, cy, radius);
-          }
-        }
-      }
-      reader.close();
-    }
-    long t2 = System.currentTimeMillis();
-    System.out.println("total time in millis "+(t2-t1));
-    
-    // Convert frequency map to an image with colors
-    NASAPoint.setColor1(params.getColor("color1", Color.BLUE));
-    NASAPoint.setColor2(params.getColor("color2", Color.RED));
-    NASAPoint.gradientType = params.getGradientType("gradient", NASAPoint.GradientType.GT_HUE);
-    String valueRangeStr = params.get("valuerange");
-    MinMax valueRange = null;
-    if (valueRangeStr != null) {
-      String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
-      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-    }
-
-    boolean skipZeros = params.getBoolean("skipzeros", false);
-    BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
-    
-    if (vflip) {
-      AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-      tx.translate(0, -image.getHeight());
-      AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-      image = op.filter(image, null);
-    }
-    FileSystem outFs = outFile.getFileSystem(params);
-    OutputStream out = outFs.create(outFile, true);
-    ImageIO.write(image, "png", out);
-    out.close();
-
-  }
-
-  public static RunningJob plotHeatMap(Path inFile, Path outFile, OperationsParams params) throws IOException {
-    if (params.isLocal(true)) {
-      plotHeatMapLocal(inFile, outFile, params);
-      return null;
-    } else {
-      return plotHeatMapMapReduce(inFile, outFile, params);
     }
   }
 
@@ -903,6 +852,7 @@ public class HeatMapPlot {
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     System.out.println("-skipzeros: Leave empty areas (frequency < min) transparent");
+    System.out.println("-smooth: Use mean smoothing to the result");
     
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
@@ -923,9 +873,8 @@ public class HeatMapPlot {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    plotHeatMap(inFile, outFile, params);
+    plotHeatMapMapReduce(inFile, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot heat map finished in "+(t2-t1)+" millis");
   }
-
 }

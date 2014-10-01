@@ -34,6 +34,7 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -286,16 +287,16 @@ public class SJMR {
     }
   }
 
-  public static <S extends Shape> long sjmr(Path[] inputFiles,
+  public static <S extends Shape> long sjmr(Path[] inFiles,
       Path userOutputPath, OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, SJMR.class);
     
-    FileSystem inFs = inputFiles[0].getFileSystem(job);
+    FileSystem inFs = inFiles[0].getFileSystem(job);
     Path outputPath = userOutputPath;
     if (outputPath == null) {
       FileSystem outFs = FileSystem.get(job);
       do {
-        outputPath = new Path(inputFiles[0].getName() + ".sjmr_"
+        outputPath = new Path(inFiles[0].getName() + ".sjmr_"
             + (int) (Math.random() * 1000000));
       } while (outFs.exists(outputPath));
     }
@@ -308,8 +309,8 @@ public class SJMR {
     job.setMapOutputValueClass(IndexedText.class);
     job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
     job.setLong("mapred.min.split.size",
-        Math.max(inFs.getFileStatus(inputFiles[0]).getBlockSize(),
-            inFs.getFileStatus(inputFiles[1]).getBlockSize()));
+        Math.max(inFs.getFileStatus(inFiles[0]).getBlockSize(),
+            inFs.getFileStatus(inFiles[1]).getBlockSize()));
 
 
     job.setReducerClass(SJMRReduce.class);
@@ -319,10 +320,10 @@ public class SJMR {
     job.setOutputFormat(TextOutputFormat.class);
     
     String commaSeparatedFiles = "";
-    for (int i = 0; i < inputFiles.length; i++) {
+    for (int i = 0; i < inFiles.length; i++) {
       if (i > 0)
         commaSeparatedFiles += ',';
-      commaSeparatedFiles += inputFiles[i].toUri().toString();
+      commaSeparatedFiles += inFiles[i].toUri().toString();
     }
     ShapeLineInputFormat.addInputPaths(job, commaSeparatedFiles);
     
@@ -330,7 +331,7 @@ public class SJMR {
     long total_size = 0;
     Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
-    for (Path file : inputFiles) {
+    for (Path file : inFiles) {
       Rectangle file_mbr = FileMBR.fileMBR(file, params);
       mbr.expand(file_mbr);
       total_size += FileMBR.sizeOfLastProcessedFile;
@@ -343,6 +344,13 @@ public class SJMR {
     OperationsParams.setShape(job, PartitionGrid, gridInfo);
     
     TextOutputFormat.setOutputPath(job, outputPath);
+    
+    if (OperationsParams.isLocal(job, inFiles)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
     
     // Start the job
     RunningJob runningJob = JobClient.runJob(job);

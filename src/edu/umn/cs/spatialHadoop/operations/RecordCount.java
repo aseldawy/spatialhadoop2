@@ -25,6 +25,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -82,14 +83,14 @@ public class RecordCount {
    * that does the thing
    * @param conf
    * @param fs
-   * @param file
+   * @param inFile
    * @return
    * @throws IOException 
    */
-  public static long recordCountMapReduce(FileSystem fs, Path file) throws IOException {
+  public static long recordCountMapReduce(FileSystem fs, Path inFile) throws IOException {
     JobConf job = new JobConf(RecordCount.class);
     
-    Path outputPath = new Path(file.toUri().getPath()+".linecount");
+    Path outputPath = new Path(inFile.toUri().getPath()+".linecount");
     FileSystem outFs = outputPath.getFileSystem(job);
     outFs.delete(outputPath, true);
     
@@ -108,13 +109,20 @@ public class RecordCount {
     job.setInputFormat(ShapeLineInputFormat.class);
     job.setOutputFormat(TextOutputFormat.class);
     
-    ShapeLineInputFormat.setInputPaths(job, file);
+    ShapeLineInputFormat.setInputPaths(job, inFile);
     TextOutputFormat.setOutputPath(job, outputPath);
     
     // Submit the job
     JobClient.runJob(job);
     
     // Read job result
+    if (OperationsParams.isLocal(job, inFile)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
+    
     long lineCount = 0;
     FileStatus[] results = outFs.listStatus(outputPath);
     for (FileStatus fileStatus : results) {
@@ -130,27 +138,6 @@ public class RecordCount {
     
     outFs.delete(outputPath, true);
     
-    return lineCount;
-  }
-  
-  /**
-   * Counts the exact number of lines in a file by opening the file and
-   * reading it line by line
-   * @param fs
-   * @param file
-   * @return
-   * @throws IOException
-   */
-  public static long recordCountLocal(FileSystem fs, Path file) throws IOException {
-    LineReader lineReader = new LineReader(fs.open(file));
-    Text line = new Text();
-    long lineCount = 0;
-    
-    while (lineReader.readLine(line) > 0) {
-      if (line.getLength() > 0)
-        lineCount++;
-    }
-    lineReader.close();
     return lineCount;
   }
   
@@ -229,15 +216,10 @@ public class RecordCount {
     if (!fs.exists(inputFile)) {
       throw new RuntimeException("Input file does not exist");
     }
-    boolean local = params.is("local");
     boolean random = params.is("random");
     long lineCount;
-    if (local) {
-      if (random) {
-        lineCount = recordCountApprox(fs, inputFile);
-      } else {
-        lineCount = recordCountLocal(fs, inputFile);
-      }
+    if (random) {
+      lineCount = recordCountApprox(fs, inputFile);
     } else {
       lineCount = recordCountMapReduce(fs, inputFile);
     }

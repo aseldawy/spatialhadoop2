@@ -104,14 +104,14 @@ public class NASARectangle extends Rectangle implements NASAShape {
     g.setColor(calculateColor(this.value));
     super.draw(g, fileMBR, imageWidth, imageHeight, scale);
   
-    char[] textTemperature=(this.value+"").toCharArray();
+    /*char[] textTemperature=(this.value+"").toCharArray();
     g.setColor(Color.black);
     
     int s_x1 = (int) Math.round((this.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
     int s_y1 = (int) Math.round((this.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     
     g.drawChars(textTemperature, 0, textTemperature.length,(int)(s_x1),(int) (s_y1));
-
+*/
   }
 
   public static Color calculateColor(int value) {
@@ -140,6 +140,33 @@ public class NASARectangle extends Rectangle implements NASAShape {
     }
     return color;
   }
+  
+  public static Color calculateColor(float value) {
+	    Color color;
+	    if (value < NASAPoint.minValue) {
+	      color = NASAPoint.color1;
+	    } else if (value > NASAPoint.maxValue) {
+	      color = NASAPoint.color2;
+	    } else {
+	      // Interpolate between two colors according to gradient type
+	      float ratio = (value - NASAPoint.minValue) / (NASAPoint.maxValue - NASAPoint.minValue);
+	      if (NASAPoint.gradientType == GradientType.GT_HUE) {
+	        // Interpolate between two hues
+	        float hue = NASAPoint.hue1 * (1.0f - ratio) + NASAPoint.hue2 * ratio;
+	        color = Color.getHSBColor(hue, 0.5f, 1.0f);
+	      } else if (NASAPoint.gradientType == GradientType.GT_COLOR) {
+	        // Interpolate between colors
+	        int red = (int) (NASAPoint.color1.getRed() * (1.0f - ratio) + NASAPoint.color2.getRed() * ratio);
+	        int green = (int) (NASAPoint.color1.getGreen() * (1.0f - ratio) + NASAPoint.color2.getGreen() * ratio);
+	        int blue = (int) (NASAPoint.color1.getBlue() * (1.0f - ratio) + NASAPoint.color2.getBlue() * ratio);
+	        int alpha = (int) (NASAPoint.color1.getAlpha() * (1.0f - ratio) + NASAPoint.color2.getAlpha() * ratio);
+	        color = new Color(red, green, blue, alpha);
+	      } else {
+	        throw new RuntimeException("Unsupported gradient type: "+NASAPoint.gradientType);
+	      }
+	    }
+	    return color;
+	  }
   
   @Override
   public void setTimestamp(long t) {

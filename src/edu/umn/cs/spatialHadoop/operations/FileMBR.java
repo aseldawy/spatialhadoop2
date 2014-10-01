@@ -14,9 +14,7 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -26,20 +24,22 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileInputFormat;
+import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
@@ -51,9 +51,9 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 
 /**
  * Finds the minimal bounding rectangle for a file.
@@ -202,19 +202,19 @@ public class FileMBR {
   /**
    * Computes the MBR of the input file using an aggregate MapReduce job.
    * 
-   * @param file - Path to input file
+   * @param inFile - Path to input file
    * @param params - Additional operation parameters
    * @return
    * @throws IOException
    */
-  private static <S extends Shape> Partition fileMBRMapReduce(Path file,
+  private static <S extends Shape> Partition fileMBRMapReduce(Path inFile,
       OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, FileMBR.class);
       
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
     do {
-      outputPath = new Path(file.getName()+".mbr_"+(int)(Math.random()*1000000));
+      outputPath = new Path(inFile.getName()+".mbr_"+(int)(Math.random()*1000000));
     } while (outFs.exists(outputPath));
     
     job.setJobName("FileMBR");
@@ -230,30 +230,47 @@ public class FileMBR {
     job.setInputFormat(ShapeLineInputFormat.class);
     job.setOutputFormat(TextOutputFormat.class);
     
-    ShapeInputFormat.setInputPaths(job, file);
+    ShapeInputFormat.setInputPaths(job, inFile);
     TextOutputFormat.setOutputPath(job, outputPath);
     job.setOutputCommitter(MBROutputCommitter.class);
     
     // Submit the job
+    if (OperationsParams.isLocal(job, inFile)) {
+      // Enforce local execution if explicitly set by user or for small files
+      job.set("mapred.job.tracker", "local");
+      // Use multithreading too
+      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    }
+    
     if (params.is("background")) {
       JobClient jc = new JobClient(job);
       lastSubmittedJob = jc.submitJob(job);
       return null;
     } else {
       lastSubmittedJob = JobClient.runJob(job);
+      Counters counters = lastSubmittedJob.getCounters();
+      Counter outputSizeCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
+      sizeOfLastProcessedFile = outputSizeCounter.getCounter();
+      
       FileStatus[] outFiles = outFs.listStatus(outputPath,
           SpatialSite.NonHiddenFileFilter);
       Partition mbr = new Partition();
       mbr.set(Double.MAX_VALUE, Double.MAX_VALUE,
           -Double.MAX_VALUE, -Double.MAX_VALUE);
       OperationsParams localMBRParams = new OperationsParams(params);
-      localMBRParams.setBoolean("local", true);
+      localMBRParams.setBoolean("local", true); // Enforce local execution
       localMBRParams.setClass("shape", Partition.class, Shape.class);
       for (FileStatus outFile : outFiles) {
         if (outFile.isDir())
           continue;
-        Partition p = FileMBR.fileMBRLocal(outFile.getPath(), localMBRParams);
-        mbr.expand(p);
+        ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>
+            (localMBRParams, new FileSplit(outFile.getPath(), 0, outFile.getLen(), new String[0]));
+        Rectangle key = reader.createKey();
+        Partition p = reader.createValue();
+        while (reader.next(key, p)) {
+          mbr.expand(p);
+        }
+        reader.close();
       }
       return mbr;
     }
@@ -280,69 +297,6 @@ public class FileMBR {
     return p;
   }
 
-  private static Partition fileMBRLocal(Path inFile, OperationsParams params)
-      throws IOException {    
-    JobConf job = new JobConf(params);
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-    ShapeInputFormat.addInputPath(job, inFile);
-    InputSplit[] splits = inputFormat.getSplits(job, 1);
-
-    // Prepare master file if needed
-    // Keep partition information for each file in input dataset
-    Map<String, Partition> partitionPerFile = new HashMap<String, Partition>();
-    Partition total = new Partition();
-    total.set(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
-
-    for (InputSplit split : splits) {
-      FileSplit fsplit = (FileSplit) split;
-      Partition p = new Partition();
-      p.set(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
-      p.filename = fsplit.getPath().getName();
-      p.size = split.getLength(); // TODO handle compressed files
-      p.recordCount = 0;
-      RecordReader<Rectangle, Shape> reader = inputFormat.getRecordReader(split, job, null);
-      
-      Rectangle key = (Rectangle) reader.createKey();
-      Shape value = (Shape) reader.createValue();
-      if (key instanceof NASADataset) {
-        // For HDF file, extract MBR from the file header
-        if (reader.next(key, value)) {
-          p.expand(key);
-        }
-      } else {
-        while (reader.next(key, value)) {
-          p.recordCount++;
-          Rectangle shapeMBR = value.getMBR();
-          if (shapeMBR != null)
-            p.expand(shapeMBR);;
-        }
-      }
-      // Merge partition information with an existing one (if any)
-      total.expand(p);
-      Partition oldP = partitionPerFile.get(p.filename);
-      if (oldP == null) {
-        p.cellId = partitionPerFile.size() + 1;
-        partitionPerFile.put(p.filename, p);
-      } else {
-        oldP.expand(p);
-      }
-      reader.close();
-    }
-    FileSystem inFS = inFile.getFileSystem(params);
-    if (inFS.getFileStatus(inFile).isDir()) {
-      Path masterFilePath = new Path(inFile, "_master.heap");
-      PrintStream masterFileOut = new PrintStream(inFS.create(masterFilePath));
-      for (Map.Entry<String, Partition> entry : partitionPerFile.entrySet()) {
-        masterFileOut.println(entry.getValue().toText(new Text()));
-      }
-      masterFileOut.close();
-    }
-
-    sizeOfLastProcessedFile = total.size;
-
-    return total;
-  }
-  
   public static Partition fileMBR(Path file, OperationsParams params) throws IOException {
     Partition cachedMBR = fileMBRCached(file, params);
     if (cachedMBR != null)
@@ -352,13 +306,8 @@ public class FileMBR {
       return null; 
     }
     
-    if (params.isLocal(true)) {
-      // Process without MapReduce
-      return fileMBRLocal(file, params);
-    } else {
-      // Process with MapReduce
-      return fileMBRMapReduce(file, params);
-    }
+    // Process with MapReduce
+    return fileMBRMapReduce(file, params);
   }
 
   private static void printUsage() {
