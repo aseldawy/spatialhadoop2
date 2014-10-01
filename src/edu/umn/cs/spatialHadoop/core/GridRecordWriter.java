@@ -93,6 +93,16 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   /**A list of threads closing cells in background*/
   protected ArrayList<Thread> closingThreads;
   
+  /**
+   * Keeps the number of elements written to each cell so far.
+   * Helps calculating the overhead of RTree indexing
+   */
+  protected int[] intermediateCellRecordCount;
+
+  /**Size in bytes of intermediate files written so far*/
+  protected int[] intermediateCellSize;
+
+  
   /**New line marker to separate records*/
   protected static byte[] NEW_LINE;
   
@@ -197,6 +207,10 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       intermediateCellStreams = new OutputStream[this.cells.length];
       intermediateCellPath = new Path[this.cells.length];
       cellsMbr = new Rectangle[this.cells.length];
+      // Initialize the counters for each cell
+      intermediateCellRecordCount = new int[this.cells.length];
+      intermediateCellSize = new int[this.cells.length];
+
     } else {
       intermediateCellStreams = new OutputStream[1];
       intermediateCellPath = new Path[1];
@@ -343,6 +357,8 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
     OutputStream cellStream = getIntermediateCellStream(cellIndex);
     cellStream.write(text.getBytes(), 0, text.getLength());
     cellStream.write(NEW_LINE);
+    intermediateCellSize[cellIndex] += text.getLength() + NEW_LINE.length;
+    intermediateCellRecordCount[cellIndex]++;
   }
   
   /**
@@ -411,11 +427,13 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
 
     closeCellBackground(intermediateCellPath[cellIndex],
         getFinalCellPath(cellIndex), intermediateCellStreams[cellIndex],
-        masterFile, cell);
+        masterFile, cell, intermediateCellRecordCount[cellIndex], intermediateCellSize[cellIndex]);
     cellsMbr[cellIndex] = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     intermediateCellPath[cellIndex] = null;
     intermediateCellStreams[cellIndex] = null;
+    intermediateCellRecordCount[cellIndex] = 0;
+    intermediateCellSize[cellIndex] = 0;
   }
   
   /**
@@ -426,7 +444,8 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    */
   protected void closeCellBackground(final Path intermediateCellPath,
       final Path finalCellPath, final OutputStream intermediateCellStream,
-      final OutputStream masterFile, final CellInfo cellMbr) throws IOException {
+      final OutputStream masterFile, final CellInfo cellMbr,
+      final long recordCount, final long cellSize) throws IOException {
     
     Thread closingThread = new Thread() {
       @Override
@@ -439,6 +458,8 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
           // Write a line to the master file including file name and cellInfo
           if (masterFile != null) {
             Partition partition = new Partition(finalfinalCellPath.getName(), cellMbr);
+            partition.recordCount = recordCount;
+            partition.size = cellSize;
             Text line = partition.toText(new Text());
             masterFile.write(line.getBytes(), 0, line.getLength());
             masterFile.write(NEW_LINE);

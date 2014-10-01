@@ -272,6 +272,8 @@ public class FileMBR {
         }
         reader.close();
       }
+      
+      outFs.delete(outputPath, true);
       return mbr;
     }
   }

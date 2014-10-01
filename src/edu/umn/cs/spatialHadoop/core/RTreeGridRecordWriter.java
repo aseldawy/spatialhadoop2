@@ -31,15 +31,6 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
   public static final Log LOG = LogFactory.getLog(RTreeGridRecordWriter.class);
   
   /**
-   * Keeps the number of elements written to each cell so far.
-   * Helps calculating the overhead of RTree indexing
-   */
-  private int[] cellCount;
-
-  /**Size in bytes of intermediate files written so far*/
-  private int[] intermediateFileSize;
-
-  /**
    * Whether to use the fast mode for building RTree or not.
    * @see RTree#bulkLoadWrite(byte[], int, int, int, java.io.DataOutput, boolean)
    */
@@ -61,10 +52,6 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     super(outDir, job, prefix, cells);
     LOG.info("Writing to RTrees");
 
-    // Initialize the counters for each cell
-    cellCount = new int[this.cells.length];
-    intermediateFileSize = new int[this.cells.length];
-    
     // Determine the size of each RTree to decide when to flush a cell
     Configuration conf = fileSystem.getConf();
     this.fastRTree = conf.get(SpatialSite.RTREE_BUILD_MODE, "fast").equals("fast");
@@ -86,17 +73,17 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     // Check if inserting this object will increase the degree of the R-tree
     // above the threshold
     int new_data_size =
-        intermediateFileSize[cellIndex] + text.getLength() + NEW_LINE.length;
+        intermediateCellSize[cellIndex] + text.getLength() + NEW_LINE.length;
     int bytes_available = (int) (blockSize - 8 - new_data_size);
     if (bytes_available < maximumStorageOverhead) {
       // Check if writing this new record will take storage overhead beyond the
       // available bytes in the block
       int degree = 4096 / RTree.NodeSize;
       int rtreeStorageOverhead =
-          RTree.calculateStorageOverhead(cellCount[cellIndex], degree);
+          RTree.calculateStorageOverhead(intermediateCellRecordCount[cellIndex], degree);
       if (rtreeStorageOverhead > bytes_available) {
         LOG.info("Early flushing an RTree with data "+
-            intermediateFileSize[cellIndex]);
+            intermediateCellSize[cellIndex]);
         // Writing this element will get the degree above the threshold
         // Flush current file and start a new file
         super.writeInternal(-cellIndex, null);
@@ -104,14 +91,6 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     }
     
     super.writeInternal(cellIndex, shape);
-    intermediateFileSize[cellIndex] += text.getLength() + NEW_LINE.length;
-    cellCount[cellIndex]++;
-  }
-  
-  protected void closeCell(int cellIndex) throws IOException {
-    super.closeCell(cellIndex);
-    cellCount[cellIndex] = 0;
-    intermediateFileSize[cellIndex] = 0;
   }
   
   /**
