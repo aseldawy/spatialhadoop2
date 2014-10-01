@@ -8,6 +8,7 @@
 # Unless required by applicable law or agreed to in writing, software distributed under the License is
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and limitations under the License.
+require 'fileutils'
 
 FilePattern = /<a href="([^"]+)">(.+)<\/a>\s*(\d+-\w+-\d+)\s+(\d+:\d+)\s+([\d\.]+[KMG]|-)/
 
@@ -63,8 +64,9 @@ end
 baseUrl = ARGV.delete_at(0)
 downloadPath = ARGV.delete_at(0) || "."
 tempDownloadPath = File.join(downloadPath, 'tmp')
+FileUtils.mkdir_p(tempDownloadPath) unless File.exists?(tempDownloadPath)
 
-index_file = `wget -qO- '#{baseUrl}'`
+index_file = `curl -s '#{baseUrl}'`
 
 all_files = []
 index_file.scan(FilePattern) do |href|
@@ -76,12 +78,12 @@ index_file.scan(FilePattern) do |href|
 end
 
 files_to_download = []
-batch_size = 6
+parallel_size = 16
 
 for snapshot_dir in all_files
   puts "Checking #{snapshot_dir}"
-  snapshot_url = "#{baseUrl}/#{snapshot_dir}"
-  index_file = `wget -qO- '#{snapshot_url}'`
+  snapshot_url = File.join(baseUrl, snapshot_dir)
+  index_file = `curl -s '#{snapshot_url}/'`
   index_file.scan(FilePattern) do |href|
     cell_file_name = File.basename($1)
     if File.extname(cell_file_name).downcase == ".hdf"
@@ -117,25 +119,35 @@ for snapshot_dir in all_files
     end
   end
   
-  if files_to_download.size >= batch_size
+  if files_to_download.size >= parallel_size
     puts "Downloading #{files_to_download.size} files to '#{downloadPath}'"
-    download_threads = files_to_download.map do |url_to_download|
-      snapshot_date = File.basename(File.dirname(url_to_download))
-      output_dir = File.join(downloadPath, snapshot_date)
-      Thread.new(url_to_download, output_dir) { |_url_to_download, _output_dir|
-        if system("wget -q --base=#{baseUrl} '#{_url_to_download}' '--directory-prefix=#{tempDownloadPath}' --no-host-directories --no-clobber --continue")
-          downloadedFile = File.join(tempDownloadPath, File.basename(_url_to_download))
-          Dir.mkdir(_output_dir) unless File.exists?(_output_dir)
-          if system("mv #{downloadedFile} #{_output_dir}")
-            puts "File #{_url_to_download} downloaded successfully"
+    partitions = []
+    parallel_size.times {|i| partitions << (files_to_download.size * i / parallel_size)}
+    partitions << files_to_download.size
+    download_threads = []
+    parallel_size.times do |thread_id|
+      first, last = partitions[thread_id, 2]
+      download_threads << Thread.new(first, last) { |_first, _last|
+        (_first..._last).each do |file_id|
+          url_to_download = files_to_download[file_id]
+          snapshot_date = File.basename(File.dirname(url_to_download))
+          output_dir = File.join(downloadPath, snapshot_date)
+          temp_download_file = File.join(tempDownloadPath, File.basename(url_to_download))
+
+          system("curl -sf '#{url_to_download}' -o '#{temp_download_file}'")
+          if $?.success?
+            Dir.mkdir(output_dir) unless File.exists?(output_dir)
+            if system("mv #{temp_download_file} #{output_dir}")
+              puts "File #{url_to_download} downloaded successfully"
+            else
+              $stderr.puts "Error moving file #{downloadedFile}"
+            end
           else
-            $stderr.puts "Error moving file #{downloadedFile}"
+            puts "Error downloading file #{url_to_download}"
           end
-        else
-          puts "Error downloading file #{_url_to_download}"
-        end
-      }
-    end
+        end # each file_id
+      } # Thread
+    end # parallel_size.times
     download_threads.each(&:join)
     files_to_download.clear
   end

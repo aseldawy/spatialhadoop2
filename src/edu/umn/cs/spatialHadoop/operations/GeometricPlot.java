@@ -147,7 +147,7 @@ public class GeometricPlot {
     public void map(Rectangle cell, Object value,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
             throws IOException {
-    	
+
       if (value instanceof Shape) {
         Shape shape = (Shape) value;
         Rectangle shapeMbr = shape.getMBR();
@@ -180,7 +180,8 @@ public class GeometricPlot {
         }
       } else {
         for(Shape shape : (Shape[]) ((ArrayWritable)value).get()) {
-        	 Rectangle shapeMbr = shape.getMBR();
+          
+          Rectangle shapeMbr = shape.getMBR();
        	  if (shapeMbr == null)
        		  continue;
        	  // Check if this shape can be skipped using the gradual fade option
