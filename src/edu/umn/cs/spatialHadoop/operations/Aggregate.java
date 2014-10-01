@@ -125,6 +125,13 @@ public class Aggregate {
       if (value > maxValue)
         maxValue = value;
     }
+    
+    public void expand(Float value) {
+        if (value < minValue)
+          minValue = value.intValue();
+        if (value > maxValue)
+          maxValue = value.intValue();
+      }
   }
 
   public static class Map extends MapReduceBase implements

@@ -316,7 +316,17 @@ public class OperationsParams extends Configuration {
     } else if (colorName.equals("orange")) {
       color = Color.ORANGE;
     } else if (colorName.equals("none")) {
-      color = new Color(0, true);
+      color = new Color(0, 0, 255, 0);
+    } else if (colorName.matches("#[a-zA-Z0-9]{8}")) {
+      String redHex = colorName.substring(1, 2);
+      String greenHex = colorName.substring(3, 4);
+      String blueHex = colorName.substring(5, 6);
+      String opacityHex = colorName.substring(7, 8);
+      int red = Integer.parseInt(redHex, 16);
+      int green = Integer.parseInt(greenHex, 16);
+      int blue = Integer.parseInt(blueHex, 16);
+      int opacity = Integer.parseInt(opacityHex, 16);
+      color = new Color(red, green, blue, opacity);
     } else {
       LOG.warn("Does not understand the color '"+conf.get(key)+"'");
     }
