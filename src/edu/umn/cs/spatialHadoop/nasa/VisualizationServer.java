@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.URLConnection;
 import java.util.Properties;
+import java.util.zip.ZipOutputStream;
 
 import javax.activation.DataHandler;
 import javax.activation.DataSource;
@@ -39,7 +40,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.mortbay.jetty.MimeTypes;
+import org.apache.tools.zip.ZipEntry;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
@@ -296,11 +297,12 @@ public class VisualizationServer extends AbstractHandler {
 
     /**
      * Sends an email to the client with the generated image.
-     * @param kmlFile
+     * @param kmlBytes
      * @throws MessagingException 
      * @throws AddressException 
+     * @throws IOException 
      */
-    private void sendResponseEmail(byte[] image, byte[] kmlFile) throws AddressException, MessagingException {
+    private void sendResponseEmail(byte[] imageBytes, byte[] kmlBytes) throws AddressException, MessagingException, IOException {
       Properties props = new Properties();
       props.put("mail.smtp.auth", "true");
       props.put("mail.smtp.starttls.enable", "true");
@@ -319,24 +321,43 @@ public class VisualizationServer extends AbstractHandler {
       String toLine = requesterName+'<'+email+'>';
       message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
       message.setSubject("Your request is complete");
-      message.setText("Dear "+requesterName+",\n"+
-          "Your request was successfully completed. "+
-          "Please find the generated images attached.\n\n"+
-          "Thank you for using Shahed. \n\n Shahed team");
       
       Multipart multipart = new MimeMultipart();
       
+      MimeBodyPart textPart = new MimeBodyPart();
+      textPart.setText("Dear "+requesterName+",\n"+
+          "Your request was successfully completed. "+
+          "Please find the generated images attached.\n\n"+
+          "Thank you for using Shahed. \n\n Shahed team");
+      multipart.addBodyPart(textPart);
+      
       MimeBodyPart imagePart = new MimeBodyPart();
-      DataSource source1 = new ByteArrayDataSource(image, "image/png");
+      DataSource source1 = new ByteArrayDataSource(imageBytes, "image/png");
       imagePart.setDataHandler(new DataHandler(source1));
       imagePart.setFileName("image.png");
       multipart.addBodyPart(imagePart);
+      
+      // Create a KMZ file and attach it to the email
+      ByteArrayOutputStream kmzFile = new ByteArrayOutputStream();
+      ZipOutputStream zipOut = new ZipOutputStream(kmzFile);
+      ZipEntry ze = new ZipEntry("image.png");
+      zipOut.putNextEntry(ze);
+      zipOut.write(imageBytes);
+      zipOut.closeEntry();
+      
+      ze = new ZipEntry("heatmap.kml");
+      zipOut.putNextEntry(ze);
+      zipOut.write(kmlBytes);
+      zipOut.closeEntry();
+      
+      zipOut.close();
+      byte[] kmzBytes = kmzFile.toByteArray();
 
-      MimeBodyPart kmlPart = new MimeBodyPart();
-      DataSource source2 = new ByteArrayDataSource(kmlFile, "application/vnd.google-earth.kml+xml");
-      kmlPart.setDataHandler(new DataHandler(source2));
-      kmlPart.setFileName("heatmap.kml");
-      multipart.addBodyPart(kmlPart);
+      MimeBodyPart kmzPart = new MimeBodyPart();
+      DataSource source2 = new ByteArrayDataSource(kmzBytes, "application/vnd.google-earth.kmz");
+      kmzPart.setDataHandler(new DataHandler(source2));
+      kmzPart.setFileName("heatmap.kmz");
+      multipart.addBodyPart(kmzPart);
       
       message.setContent(multipart);
 
