@@ -281,7 +281,7 @@ public class HTTPFileSystem extends FileSystem {
     if (modificationTime == 0)
       modificationTime = connection.getDate();
     // Hard coded to work with LP DAAC archives
-    boolean isdir = !f.getName().matches("(?i:([^*\\?])*\\.(hdf|xml|jpg)$)");
+    boolean isdir = !f.getName().matches("(?i:([^*\\?])*\\.(hdf|xml|jpg|gz|bz2|zip|txt|csv|tsv)$)");
     return new FileStatus(length, isdir, 1, BLOCK_SIZE, modificationTime, 0,
         null, null, null, f);
   }
