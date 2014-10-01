@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -37,6 +38,8 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
@@ -245,6 +248,10 @@ public class FileMBR {
       return null;
     } else {
       lastSubmittedJob = JobClient.runJob(job);
+      Counters counters = lastSubmittedJob.getCounters();
+      Counter outputSizeCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
+      sizeOfLastProcessedFile = outputSizeCounter.getCounter();
+      
       FileStatus[] outFiles = outFs.listStatus(outputPath,
           SpatialSite.NonHiddenFileFilter);
       Partition mbr = new Partition();
