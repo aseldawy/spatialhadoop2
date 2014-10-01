@@ -78,18 +78,20 @@ public class HeatMapPlot {
    *
    */
   public static class FrequencyMap implements Writable {
-    int[][] frequency;
+    float[][] frequency;
+    float[][] gaussianKernel;
+    int radius;
     
     private Map<Integer, BufferedImage> cachedCircles = new HashMap<Integer, BufferedImage>();
     public FrequencyMap() {
     }
     
     public FrequencyMap(int width, int height) {
-      frequency = new int[width][height];
+      frequency = new float[width][height];
     }
     
     public FrequencyMap(FrequencyMap other) {
-      this.frequency = new int[other.getWidth()][other.getHeight()];
+      this.frequency = new float[other.getWidth()][other.getHeight()];
       for (int x = 0; x < this.getWidth(); x++)
         for (int y = 0; y < this.getHeight(); y++) {
           this.frequency[x][y] = other.frequency[x][y];
@@ -110,17 +112,17 @@ public class HeatMapPlot {
     public void write(DataOutput out) throws IOException {
       out.writeInt(this.getWidth());
       out.writeInt(this.getHeight());
-      for (int[] col : frequency) {
+      for (float[] col : frequency) {
         int y1 = 0;
         while (y1 < col.length) {
           int y2 = y1;
           while (y2 < col.length && col[y2] == col[y1])
             y2++;
           if (y2 - y1 == 1) {
-            out.writeInt(-col[y1]);
+            out.writeFloat(-col[y1]);
           } else {
-            out.writeInt(y2 - y1);
-            out.writeInt(col[y1]);
+            out.writeFloat(y2 - y1);
+            out.writeFloat(col[y1]);
           }
           y1 = y2;
         }
@@ -132,18 +134,18 @@ public class HeatMapPlot {
       int width = in.readInt();
       int height = in.readInt();
       if (getWidth() != width || getHeight() != height)
-        frequency = new int[width][height];
+        frequency = new float[width][height];
       for (int x = 0; x < width; x++) {
         int y = 0;
         while (y < height) {
-          int v = in.readInt();
+          float v = in.readFloat();
           if (v <= 0) {
             frequency[x][y] = -v;
             y++;
           } else {
-            int cnt = v;
-            v = in.readInt();
-            int y2 = y + cnt;
+            float cnt = v;
+            v = in.readFloat();
+            float y2 = y + cnt;
             while (y < y2) {
               frequency[x][y] = v;
               y++;
@@ -180,10 +182,10 @@ public class HeatMapPlot {
     }
     
     private MinMax getValueRange() {
-      Map<Integer, Integer> histogram = new HashMap<Integer, Integer>();
+      Map<Float, Integer> histogram = new HashMap<Float, Integer>();
       MinMax minMax = new MinMax(Integer.MAX_VALUE, Integer.MIN_VALUE);
-      for (int[] col : frequency)
-        for (int value : col) {
+      for (float[] col : frequency)
+        for (float value : col) {
           if (!histogram.containsKey(value)) {
             histogram.put(value, 1);
           } else {
@@ -202,7 +204,8 @@ public class HeatMapPlot {
       return frequency == null? 0 : frequency[0].length;
     }
 
-    public BufferedImage toImage(MinMax valueRange, boolean skipZeros) {
+    public BufferedImage toImage(MinMax valueRange, boolean skipZeros, int radius) {
+      this.radius = radius;
       if (valueRange == null)
         valueRange = getValueRange();
       LOG.info("Using the value range: "+valueRange);
@@ -233,6 +236,42 @@ public class HeatMapPlot {
           }
         }
       }
+    }
+    
+    // Add a point but updating the distribution in the radius using Gaussian Distribution.
+    public void addGaussianPoint(int cx, int cy, int radius) {
+    	BufferedImage circle = getCircle(radius);
+    	// Create Gaussian Kernel for the first time.
+    	if(gaussianKernel == null) {
+        	createGaussianKernel(radius);
+    	}
+    	
+    	for (int x = 0; x < circle.getWidth(); x++) {
+            for (int y = 0; y < circle.getHeight(); y++) {
+              int imgx = x - radius + cx;
+              int imgy = y - radius + cy;
+              if (imgx >= 0 && imgx < getWidth() && imgy >= 0 && imgy < getHeight()) {
+                  frequency[x - radius + cx][y - radius + cy] += gaussianKernel[x][y];
+              }
+            }
+        }
+    }
+    
+    // Create the GaussianKernel from a radius and standard deviation.
+    public void createGaussianKernel(int radius) {
+    	float stdev = 8;
+    	gaussianKernel = new float[2*radius+1][2*radius+1];
+    	float temp = 0;
+    	
+    	// Create the gaussianKernel.
+    	for (int j = 0; j < gaussianKernel.length; j++) {
+			for (int i = 0; i < gaussianKernel.length; i++) {
+				// If this is the center of the kernel.
+				temp = (float) Math.pow(Math.E, (-1/(2*Math.pow(stdev,2))) * 
+						(Math.pow(Math.abs(radius - i), 2) + Math.pow(Math.abs(radius - j), 2)));
+				gaussianKernel[i][j] = temp;
+			}
+		}
     }
 
     public BufferedImage getCircle(int radius) {
@@ -273,6 +312,8 @@ public class HeatMapPlot {
     private int radius;
     private boolean adaptiveSample;
     private float adaptiveSampleRatio;
+    /**Use smoothing or not*/
+    private boolean smooth;
     
     @Override
     public void configure(JobConf job) {
@@ -289,6 +330,7 @@ public class HeatMapPlot {
         // Calculate the sample ratio
         this.adaptiveSampleRatio = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.01f);
       }
+      this.smooth = job.getBoolean("smooth", false);
     }
 
     @Override
@@ -313,8 +355,13 @@ public class HeatMapPlot {
         }
         int centerx = (int) Math.round((center.x - drawMbr.x1) * imageWidth / drawMbr.getWidth());
         int centery = (int) Math.round((center.y - drawMbr.y1) * imageHeight / drawMbr.getHeight());
-        frequencyMap.addPoint(centerx, centery, radius);
+        if(smooth) {
+        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        } else {
+            frequencyMap.addPoint(centerx, centery, radius);
+        }
       }
+      
       output.collect(NullWritable.get(), frequencyMap);
     }
     
@@ -327,9 +374,11 @@ public class HeatMapPlot {
     /**Range of values to do the gradient of the heat map*/
     private MinMax valueRange;
     private boolean skipZeros;
+    private int radius;
 
     @Override
     public void configure(JobConf job) {
+      this.radius = job.getInt("radius", 5);
       System.setProperty("java.awt.headless", "true");
       super.configure(job);
       Shape queryRange = OperationsParams.getShape(job, "rect");
@@ -355,7 +404,7 @@ public class HeatMapPlot {
       while (frequencies.hasNext())
         combined.combine(frequencies.next());
 
-      BufferedImage image = combined.toImage(valueRange, skipZeros);
+      BufferedImage image = combined.toImage(valueRange, skipZeros, radius);
       output.collect(drawMBR, new ImageWritable(image));
     }
   }
@@ -410,7 +459,7 @@ public class HeatMapPlot {
       for(Shape s : (Shape[]) value.get()) {
     	  if (adaptiveSample && s instanceof Point
     			  && Math.random() > adaptiveSampleRatio)
-    		  return;
+    		  continue;
 
     	  Point center;
     	  if (s instanceof Point) {
@@ -420,13 +469,13 @@ public class HeatMapPlot {
     	  } else {
     		  Rectangle shapeMBR = s.getMBR();
     		  if (shapeMBR == null)
-    			  return;
+    			  continue;
     		  center = shapeMBR.getCenterPoint();
     	  }
     	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
     	  // Skip shapes outside query range if query range is set
     	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-    		  return;
+    		  continue;
     	  // Replicate to all overlapping cells
     	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMBR);
     	  for (int i = 0; i < overlappingCells.width; i++) {
@@ -454,6 +503,7 @@ public class HeatMapPlot {
     private int radius;
     private boolean skipZeros;
     private MinMax valueRange;
+    private boolean smooth;
     
     @Override
     public void configure(JobConf job) {
@@ -471,6 +521,7 @@ public class HeatMapPlot {
         String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
         this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
+      this.smooth = job.getBoolean("smooth", false);
     }
 
     @Override
@@ -490,9 +541,13 @@ public class HeatMapPlot {
         Point p = points.next();
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
-        frequencyMap.addPoint(centerx, centery, radius);
+        if(smooth) {
+        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        } else {
+            frequencyMap.addPoint(centerx, centery, radius);
+        }
       }
-      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, radius);
       output.collect(cellInfo, new ImageWritable(image));
     }
   }
@@ -552,7 +607,7 @@ public class HeatMapPlot {
       for(Shape s : (Shape[]) value.get()) {
     	  if (adaptiveSample && s instanceof Point
     			  && Math.random() > adaptiveSampleRatio)
-    		  return;
+    		  continue;
 
     	  Point center;
     	  if (s instanceof Point) {
@@ -562,13 +617,13 @@ public class HeatMapPlot {
     	  } else {
     		  Rectangle shapeMBR = s.getMBR();
     		  if (shapeMBR == null)
-    			  return;
+    			  continue;
     		  center = shapeMBR.getCenterPoint();
     	  }
     	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
     	  // Skip shapes outside query range if query range is set
     	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-    		  return;
+    		  continue;
     	  for (CellInfo cell : cells) {
     		  if (cell.isIntersected(shapeMBR)) {
     			  cellNumber.set(cell.cellId);
@@ -587,6 +642,7 @@ public class HeatMapPlot {
     private boolean skipZeros;
     private MinMax valueRange;
     private Rectangle fileMBR;
+    private boolean smooth;
 
     @Override
     public void configure(JobConf job) {
@@ -613,7 +669,7 @@ public class HeatMapPlot {
       for (CellInfo cell : cells) {
         fileMBR.expand(cell);
       }
-
+      this.smooth = job.getBoolean("smooth", false);
     }
 
     @Override
@@ -640,9 +696,13 @@ public class HeatMapPlot {
         Point p = points.next();
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
-        frequencyMap.addPoint(centerx, centery, radius);
+        if(smooth) {
+        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        } else {
+            frequencyMap.addPoint(centerx, centery, radius);
+        }
       }
-      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros);
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, radius);
       output.collect(cellInfo, new ImageWritable(image));
     }
 }
@@ -792,6 +852,7 @@ public class HeatMapPlot {
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     System.out.println("-skipzeros: Leave empty areas (frequency < min) transparent");
+    System.out.println("-smooth: Use mean smoothing to the result");
     
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
@@ -816,5 +877,4 @@ public class HeatMapPlot {
     long t2 = System.currentTimeMillis();
     System.out.println("Plot heat map finished in "+(t2-t1)+" millis");
   }
-
 }

@@ -138,6 +138,8 @@ public class Union {
       Arrays.sort(all, new Comparator<Partition>() {
         @Override
         public int compare(Partition o1, Partition o2) {
+          if (o1.x1 == o2.x1)
+        	  return 0;
           return o1.x1 < o2.x1 ? -1 : 1;
         }
       });
@@ -149,6 +151,8 @@ public class Union {
         Arrays.sort(all, i1, i2, new Comparator<Partition>() {
           @Override
           public int compare(Partition o1, Partition o2) {
+        	if(o1.y1 == o2.y1)
+        		return 0;
             return o1.y1 < o2.y1 ? -1 : 1;
           }
         });

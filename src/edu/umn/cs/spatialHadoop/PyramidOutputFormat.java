@@ -27,6 +27,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
+import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.operations.PyramidPlot.TileIndex;
 
@@ -54,7 +55,6 @@ public class PyramidOutputFormat extends FileOutputFormat<TileIndex, ImageWritab
     @Override
     public void write(TileIndex tileIndex, ImageWritable value) throws IOException {
       progress.progress();
-      Path imagePath = new Path(out, tileIndex.getImageFileName());
 
       BufferedImage image = value.getImage();
       if (vflip) {
@@ -64,7 +64,8 @@ public class PyramidOutputFormat extends FileOutputFormat<TileIndex, ImageWritab
         image = op.filter(image, null);
         tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
       }
-
+      
+      Path imagePath = new Path(out, tileIndex.getImageFileName());
       OutputStream output = outFs.create(imagePath);
       ImageIO.write(image, "png", output);
       output.close();

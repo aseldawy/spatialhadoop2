@@ -367,23 +367,23 @@ public class GeometricPlot {
       for(Shape shape : (Shape[]) value.get()) {
     	  Rectangle shapeMBR = shape.getMBR();
     	  if (shapeMBR == null)
-    		  return;
+    		  continue;
     	  // Check if this shape can be skipped using the gradual fade option
     	  if (gradualFade && !(shape instanceof Point)) {
     		  double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
     		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
     			  // This shape can be safely skipped as it is too small to be plotted
-    			  return;
+    			  continue;
     		  }
     	  }
     	  if (adaptiveSample && shape instanceof Point) {
     		  if (Math.random() > adaptiveSampleRatio)
-    			  return;
+    			  continue;
     	  }
 
     	  // Skip shapes outside query range if query range is set
     	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-    		  return;
+    		  continue;
     	  for (CellInfo cell : cells) {
     		  if (cell.isIntersected(shapeMBR)) {
     			  cellNumber.set(cell.cellId);
@@ -751,22 +751,24 @@ public class GeometricPlot {
         if (queryRange == null || queryRange.isIntersected(shape)) {
           if (fade) {
             Rectangle shapeMBR = shape.getMBR();
-            // shapeArea represents how many pixels are covered by shapeMBR
-            double shapeArea = (shapeMBR.getWidth() + shapeMBR.getHeight()) * this.scale;
-            if (shapeArea > 1.0) {
-              graphics.setColor(storkeClr);
-            } else {
-              byte alpha = (byte) Math.round(shapeArea * 255);
-              if (alpha == 0) {
-                continue;
-              } else {
-                graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
-              }
+            if(shapeMBR != null) {
+            	 // shapeArea represents how many pixels are covered by shapeMBR
+                double shapeArea = (shapeMBR.getWidth() + shapeMBR.getHeight()) * this.scale;
+                if (shapeArea > 1.0) {
+                  graphics.setColor(storkeClr);
+                } else {
+                  byte alpha = (byte) Math.round(shapeArea * 255);
+                  if (alpha == 0) {
+                    continue;
+                  } else {
+                    graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+                  }
+                }
             }
           }
           if (adaptiveSample && shape instanceof Point) {
             if (Math.random() > adaptiveSampleRatio)
-              return;
+              continue;
           }
           shape.draw(graphics, drawMbr, imageWidth, imageHeight, scale2);
         }
@@ -847,6 +849,11 @@ public class GeometricPlot {
 
     JobConf job = new JobConf(params, GeometricPlot.class);
     job.setJobName("Plot");
+    
+    // Get the color and assign it.
+    Color strokeColor = params.getColor("color", Color.BLACK);
+    int color = strokeColor.getRGB();
+    job.setInt("color", color);
 
     Rectangle fileMBR;
     // Collects some stats about the file to plot it correctly

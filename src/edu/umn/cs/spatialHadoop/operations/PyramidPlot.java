@@ -257,51 +257,51 @@ public class PyramidPlot {
           overlappingCells.height = updatedY2 - updatedY1 + 1;
         }
       } else {
-        
-        for (Shape shape : (Shape[]) value.get()) {
-          Rectangle shapeMBR = shape.getMBR();
-          if (shapeMBR == null)
-            return;
+    	  
+          for(Shape shape : (Shape[]) value.get()) {
+        	  Rectangle shapeMBR = shape.getMBR();
+        	  if (shapeMBR == null)
+        		  continue;
           
-          int min_level = 0;
-          if (adaptiveSampling && shape instanceof Point) {
-            // Special handling for NASA data
-            double p = Math.random();
-            // Skip levels that do not satisfy the probability
-            while (min_level < numLevels && p > levelProb[min_level])
-              min_level++;
-          }
+        	  int min_level = 0;
+        	  if (adaptiveSampling && shape instanceof Point) {
+        		  // Special handling for NASA data
+        		  double p = Math.random();
+        		  // Skip levels that do not satisfy the probability
+        		  while (min_level < numLevels && p > levelProb[min_level])
+        			  min_level++;
+        	  }
           
-          java.awt.Rectangle overlappingCells =
-              bottomGrid.getOverlappingCells(shapeMBR);
-          for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
-            if (gradualFade && !(shape instanceof Point)) {
-              double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
-              if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-                // This shape can be safely skipped as it is too small to be plotted
-                return;
-              }
-            }
-            
-            for (int i = 0; i < overlappingCells.width; i++) {
-              key.x = i + overlappingCells.x;
-              for (int j = 0; j < overlappingCells.height; j++) {
-                key.y = j + overlappingCells.y;
-                // Replicate to the cell at (x + i, y + j) on the current level
-                output.collect(key, shape);
-              }	
-            }
-            // Shrink overlapping cells to match the upper level
-            int updatedX1 = overlappingCells.x / 2;
-            int updatedY1 = overlappingCells.y / 2;
-            int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
-            int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
-            overlappingCells.x = updatedX1;
-            overlappingCells.y = updatedY1;
-            overlappingCells.width = updatedX2 - updatedX1 + 1;
-            overlappingCells.height = updatedY2 - updatedY1 + 1;
+        	  java.awt.Rectangle overlappingCells =
+        			  bottomGrid.getOverlappingCells(shapeMBR);
+        	  for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
+        		  if (gradualFade && !(shape instanceof Point)) {
+        			  double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
+        			  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+        				  // This shape can be safely skipped as it is too small to be plotted
+        				  continue;
+        			  }
+        		  }
+
+        		  for (int i = 0; i < overlappingCells.width; i++) {
+        			  key.x = i + overlappingCells.x;
+        			  for (int j = 0; j < overlappingCells.height; j++) {
+        				  key.y = j + overlappingCells.y;
+        				  // Replicate to the cell at (x + i, y + j) on the current level
+        				  output.collect(key, shape);
+        			  }	
+        		  }
+        		  // Shrink overlapping cells to match the upper level
+        		  int updatedX1 = overlappingCells.x / 2;
+        		  int updatedY1 = overlappingCells.y / 2;
+        		  int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
+        		  int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
+        		  overlappingCells.x = updatedX1;
+        		  overlappingCells.y = updatedY1;
+        		  overlappingCells.width = updatedX2 - updatedX1 + 1;
+        		  overlappingCells.height = updatedY2 - updatedY1 + 1;
+        	  }
           }
-        }
       }
     }
   }
@@ -453,7 +453,7 @@ public class PyramidPlot {
       for (Shape shape : (Shape[])value.get()) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
-          return;
+          continue;
         
         int min_level = 0;
         
@@ -472,7 +472,7 @@ public class PyramidPlot {
             double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
             if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
               // This shape can be safely skipped as it is too small to be plotted
-              return;
+              continue;
             }
           }
           for (int i = 0; i < overlappingCells.width; i++) {
