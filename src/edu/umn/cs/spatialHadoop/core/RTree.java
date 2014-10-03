@@ -1056,7 +1056,6 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
    * of R and S which is something we want to avoid because both R and S are
    * not created by this function and it should not free these resources.
    */
-  @SuppressWarnings("resource")
   protected static<S1 extends Shape, S2 extends Shape> int spatialJoinDisk(
       final RTree<S1> R,
       final RTree<S2> S,

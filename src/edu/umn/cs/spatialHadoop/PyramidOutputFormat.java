@@ -27,7 +27,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
-import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.operations.PyramidPlot.TileIndex;
 

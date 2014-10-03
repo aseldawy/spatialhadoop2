@@ -398,15 +398,15 @@ public class SpatialSite {
    * to the DistributedCache of the job. Later on, a call to
    * {@link #getCells(JobConf)} will open the corresponding file from
    * DistributedCache and parse cells from that file.
-   * @param job
+   * @param conf
    * @param cellsInfo
    * @throws IOException
    */
-  public static void setCells(JobConf job, CellInfo[] cellsInfo) throws IOException {
+  public static void setCells(Configuration conf, CellInfo[] cellsInfo) throws IOException {
     Path tempFile;
-    FileSystem fs = FileSystem.get(job);
+    FileSystem fs = FileSystem.get(conf);
     do {
-      tempFile = new Path(job.getJobName()+"_"+(int)(Math.random()*1000000)+".cells");
+      tempFile = new Path("cells_"+(int)(Math.random()*1000000)+".cells");
     } while (fs.exists(tempFile));
     FSDataOutputStream out = fs.create(tempFile);
     out.writeInt(cellsInfo.length);
@@ -417,8 +417,8 @@ public class SpatialSite {
     
     fs.deleteOnExit(tempFile);
 
-    DistributedCache.addCacheFile(tempFile.toUri(), job);
-    job.set(OUTPUT_CELLS, tempFile.getName());
+    DistributedCache.addCacheFile(tempFile.toUri(), conf);
+    conf.set(OUTPUT_CELLS, tempFile.getName());
     LOG.info("Partitioning file into "+cellsInfo.length+" cells");
   }
   
@@ -426,18 +426,18 @@ public class SpatialSite {
    * Retrieves cells that were stored earlier using
    * {@link #setCells(JobConf, CellInfo[])}. This function opens the corresponding
    * file from DistributedCache and parses jobs from it.
-   * @param job
+   * @param conf
    * @return
    * @throws IOException
    */
-  public static CellInfo[] getCells(JobConf job) throws IOException {
+  public static CellInfo[] getCells(Configuration conf) throws IOException {
     CellInfo[] cells = null;
-    String cells_file = job.get(OUTPUT_CELLS);
+    String cells_file = conf.get(OUTPUT_CELLS);
     if (cells_file != null) {
-      Path[] cacheFiles = DistributedCache.getLocalCacheFiles(job);
+      Path[] cacheFiles = DistributedCache.getLocalCacheFiles(conf);
       for (Path cacheFile : cacheFiles) {
         if (cacheFile.getName().contains(cells_file)) {
-          FSDataInputStream in = FileSystem.getLocal(job).open(cacheFile);
+          FSDataInputStream in = FileSystem.getLocal(conf).open(cacheFile);
           
           int cellCount = in.readInt();
           cells = new CellInfo[cellCount];

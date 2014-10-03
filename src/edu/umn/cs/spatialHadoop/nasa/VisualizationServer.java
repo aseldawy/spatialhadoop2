@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.URLConnection;
 import java.util.Properties;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import javax.activation.DataHandler;
@@ -40,7 +41,6 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.apache.tools.zip.ZipEntry;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
@@ -64,10 +64,14 @@ public class VisualizationServer extends AbstractHandler {
   /**Password of the mail server*/
   final private String password;
 
-  public VisualizationServer(OperationsParams params) {
+  /**The base directory in which all datasets are stored*/
+  private Path dataBaseDir;
+
+  public VisualizationServer(Path dataPath, OperationsParams params) {
     this.commonParams = new OperationsParams(params);
     this.username = params.get("username");
     this.password = params.get("password");
+    this.dataBaseDir = dataPath;
   }
 
   /**
@@ -75,11 +79,11 @@ public class VisualizationServer extends AbstractHandler {
    * all queries
    * @throws Exception 
    */
-  private static void startServer(Path indexPath, OperationsParams params) throws Exception {
+  private static void startServer(Path dataPath, OperationsParams params) throws Exception {
     int port = params.getInt("port", 8889);
 
     Server server = new Server(port);
-    server.setHandler(new VisualizationServer(params));
+    server.setHandler(new VisualizationServer(dataPath, params));
     server.start();
     server.join();
   }
@@ -144,7 +148,7 @@ public class VisualizationServer extends AbstractHandler {
   private class ImageRequestHandler extends Thread {
 
     /**A unique ID for this request*/
-    private String datasetURL;
+    private String datasetPath;
     private String requesterName;
     private String email;
     private String datasetName;
@@ -164,7 +168,7 @@ public class VisualizationServer extends AbstractHandler {
       } while (fs.exists(outDir));
       this.requesterName = request.getParameter("user_name");
       this.email = request.getParameter("email");
-      this.datasetURL = request.getParameter("dataset_url");
+      this.datasetPath = request.getParameter("dataset_url");
       this.datasetName = request.getParameter("dataset");
       this.west = request.getParameter("min_lon");
       this.east = request.getParameter("max_lon");
@@ -232,7 +236,7 @@ public class VisualizationServer extends AbstractHandler {
      * @throws IOException
      */
     private byte[] plotImage() throws IOException {
-      this.inputURL = new Path(datasetURL+"/"+startDate);
+      this.inputURL = new Path(dataBaseDir, datasetPath+"/"+startDate);
       Path outputPath = new Path(outDir, "image.png");
       // Launch the MapReduce job that plots the dataset
       OperationsParams plotParams = new OperationsParams(commonParams);
@@ -404,8 +408,14 @@ public class VisualizationServer extends AbstractHandler {
   public static void main(String[] args) throws Exception {
     final OperationsParams params =
         new OperationsParams(new GenericOptionsParser(args), false);
+    if (!params.checkInput()) {
+      System.err.println("Please specify the directory which contains modis data");
+      printUsage();
+      System.exit(1);
+    }
     if (params.get("username") == null || params.get("password") == null) {
       System.err.println("Please specify username and password for mail server");
+      printUsage();
       System.exit(1);
     }
     startServer(params.getInputPath(), params);

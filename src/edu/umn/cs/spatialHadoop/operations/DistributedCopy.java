@@ -245,7 +245,7 @@ public class DistributedCopy {
       long minSize = job.getLong("mapred.min.split.size", 10*1024*1024);
       Path outPath = BlockOutputFormat.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
-      long outputBlockSize = outFs.getDefaultBlockSize(outPath);
+      long outputBlockSize = outFs.getDefaultBlockSize();
       Vector<FileBlockSplit> splits = new Vector<FileBlockSplit>();
       Queue<FileStatus> files = new ArrayDeque<FileStatus>();
       Path[] dirs = getInputPaths(job);

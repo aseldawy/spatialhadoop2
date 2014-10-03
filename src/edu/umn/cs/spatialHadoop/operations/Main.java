@@ -20,6 +20,7 @@ import edu.umn.cs.spatialHadoop.ReadFile;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
+import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
 
 /**
  * The main entry point to all queries.
@@ -103,6 +104,9 @@ public class Main {
 
       pgd.addClass("distcp", DistributedCopy.class,
           "Copies a directory or file using a MapReduce job");
+      
+      pgd.addClass("vizserver", VisualizationServer.class,
+          "Starts a server that handles visualization requests");
       
       pgd.driver(args);
       

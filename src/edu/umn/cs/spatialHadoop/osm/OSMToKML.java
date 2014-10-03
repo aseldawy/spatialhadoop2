@@ -8,18 +8,16 @@ package edu.umn.cs.spatialHadoop.osm;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
 
-import com.esri.core.geometry.Line;
-import com.esri.core.geometry.MultiPath;
-import com.esri.core.geometry.Segment;
-import com.esri.core.geometry.SpatialReference;
-import com.esri.core.geometry.ogc.OGCGeometry;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
@@ -138,7 +136,17 @@ public class OSMToKML {
             new String[0]));
     Path outPath = params.getOutputPath();
     FileSystem outFs = outPath.getFileSystem(params);
-    PrintWriter out = new PrintWriter(outFs.create(outPath));
+    PrintWriter out;
+    ZipOutputStream zipOut = null;
+    if (outPath.getName().toLowerCase().endsWith(".kmz")) {
+      // Create a KMZ file
+      FSDataOutputStream kmzOut = outFs.create(outPath);
+      zipOut = new ZipOutputStream(kmzOut);
+      zipOut.putNextEntry(new ZipEntry("osm.kml"));
+      out = new PrintWriter(zipOut);
+    } else {
+      out = new PrintWriter(outFs.create(outPath));
+    }
     out.println("<?xml version='1.0' encoding='UTF-8'?>");
     out.println("<kml xmlns='http://www.opengis.net/kml/2.2'>");
     out.println("<Document>");
@@ -155,7 +163,15 @@ public class OSMToKML {
     out.println("</Document>");
     out.println("</kml>");
     in.close();
-    out.close();
+    if (zipOut != null) {
+      // KMZ file
+      out.flush();
+      zipOut.closeEntry();
+      zipOut.close();
+    } else {
+      // KML file
+      out.close();
+    }
   }
 
 }
