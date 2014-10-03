@@ -38,6 +38,90 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
  */
 public class OSMToKML {
 
+  /**
+   * Returns the style name that should be used to draw the given object.
+   * @param polygon
+   * @return
+   */
+  public static String getStyle(OSMPolygon polygon) {
+    if (HasTag.hasTag(polygon.tags, "amenity,building", "yes"))
+      return "building";
+    if (HasTag.hasTag(polygon.tags, "natural,waterway", "bay,wetland,water,coastline,riverbank,dock,boatyard"))
+      return "lake";
+    if (HasTag.hasTag(polygon.tags, "leisure,boundary,landuse,natural",
+        "wood,tree_row,grassland,park,golf_course,national_park,garden,nature_reserve,forest,grass,tree,orchard,farmland,protected_area"))
+      return "park";
+    if (HasTag.hasTag(polygon.tags, "landuse", "cemetery"))
+      return "cemetery";
+    if (HasTag.hasTag(polygon.tags, "leisure,landuse",
+        "sports_centre,stadium,track,pitch,golf_course,water_park,swimming_pool,recreation_ground,piste"))
+      return "sport";
+    if (HasTag.hasTag(polygon.tags, "admin_level", "8"))
+      return "postal_code";
+    return null;
+  }
+  
+  public static void writeAllStyles(PrintWriter out) {
+    out.println("<Style id='lake'>");
+    out.println("<LineStyle>");
+    out.println("<color>ffff0000</color>");
+    out.println("<width>3.0</width>");
+    out.println("</LineStyle>");
+    out.println("<PolyStyle>");
+    out.println("<color>3dff0000</color>");
+    out.println("</PolyStyle>");
+    out.println("</Style>");
+
+    out.println("<Style id='park'>");
+    out.println("<LineStyle>");
+    out.println("<color>ff00ff00</color>");
+    out.println("<width>2.0</width>");
+    out.println("</LineStyle>");
+    out.println("<PolyStyle>");
+    out.println("<color>3d00ff00</color>");
+    out.println("</PolyStyle>");
+    out.println("</Style>");
+    
+    out.println("<Style id='cemetery'>");
+    out.println("<LineStyle>");
+    out.println("<color>ff000000</color>");
+    out.println("<width>2.0</width>");
+    out.println("</LineStyle>");
+    out.println("<PolyStyle>");
+    out.println("<color>1d000000</color>");
+    out.println("</PolyStyle>");
+    out.println("</Style>");
+    
+    out.println("<Style id='postal_code'>");
+    out.println("<LineStyle>");
+    out.println("<color>ffffffff</color>");
+    out.println("<width>2.0</width>");
+    out.println("</LineStyle>");
+    out.println("<PolyStyle>");
+    out.println("<color>00000000</color>");
+    out.println("</PolyStyle>");
+    out.println("</Style>");
+    
+    out.println("<Style id='sport'>");
+    out.println("<LineStyle>");
+    out.println("<color>ff0ec9ff</color>");
+    out.println("<width>2.0</width>");
+    out.println("</LineStyle>");
+    out.println("<PolyStyle>");
+    out.println("<color>3d0ec9ff</color>");
+    out.println("</PolyStyle>");
+    out.println("</Style>");
+    
+    out.println("<Style id='building'>");
+    out.println("<LineStyle>");
+    out.println("<color>ff000000</color>");
+    out.println("<width>2.0</width>");
+    out.println("</LineStyle>");
+    out.println("<PolyStyle>");
+    out.println("<color>7fffffff</color>");
+    out.println("</PolyStyle>");
+    out.println("</Style>");
+  }
   
   public static void geometryToKML(StringBuilder str, Geometry geom) {
     if (geom instanceof Point) {
@@ -90,7 +174,7 @@ public class OSMToKML {
       throw new RuntimeException("Cannot generate KML from '"+geom.getClass()+"'");
     }
   }
-  
+
   /**
    * Returns a KML representation of this object.
    * @return
@@ -98,6 +182,7 @@ public class OSMToKML {
   public static String OSMtoKMLElement(OSMPolygon osm) {
     StringBuilder str = new StringBuilder();
     str.append("<Placemark>");
+    str.append("<styleUrl>#"+getStyle(osm)+"</styleUrl>");
     if (osm.tags != null) {
       if (osm.tags.containsKey("name")) {
         str.append("<name>");
@@ -150,9 +235,11 @@ public class OSMToKML {
     out.println("<?xml version='1.0' encoding='UTF-8'?>");
     out.println("<kml xmlns='http://www.opengis.net/kml/2.2'>");
     out.println("<Document>");
+    writeAllStyles(out);
     Rectangle key = in.createKey();
     ArrayWritable values = in.createValue();
     while (in.next(key, values)) {
+      System.out.println("Read "+values.get().length);
       for (Shape shape : (Shape[]) values.get()) {
         if (shape instanceof OSMPolygon) {
           out.println(OSMtoKMLElement((OSMPolygon) shape));

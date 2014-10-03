@@ -36,11 +36,13 @@ public class HasTag extends EvalFunc<Boolean> {
     String keys = (String)input.get(1);
     String values = (String)input.get(2);
 
-    for (Map.Entry<String, String> entry : tags.entrySet()) {
-      if (keys.contains(entry.getKey()) && values.contains(entry.getValue())) {
+    return hasTag(tags, keys, values);
+  }
+
+  public static boolean hasTag(Map<String, String> tags, String keys, String values) {
+    for (Map.Entry<String, String> entry : tags.entrySet())
+      if (keys.contains(entry.getKey()) && values.contains(entry.getValue()))
         return true;
-      }
-    }
     return false;
   }
 }
