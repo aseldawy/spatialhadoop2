@@ -456,7 +456,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     try {
       Shape stockObject = (Shape) shapes.getValueClass().newInstance();
       // Reached the end of this split
-      if (getPos() >= end)
+      if (getFilePosition() >= end)
         return false;
       
       long initialReadPos = getPos();
