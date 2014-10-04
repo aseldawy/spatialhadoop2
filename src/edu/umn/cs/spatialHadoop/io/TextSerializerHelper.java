@@ -561,12 +561,16 @@ public final class TextSerializerHelper {
       i_end = 0;
       while (i_end < text.getLength() && IsHex[bytes[i_end]])
         i_end++;
-      String hex_string = new String(bytes, 0, i_end);
-      byte[] binary = hexToBytes(hex_string);
-      try {
-        geom = wkbReader.read(binary);
-      } catch (ParseException e) {
-        throw new RuntimeException("Error parsing Hex seting '"+hex_string+"'", e);
+      if (i_end > 1) {
+        String hex_string = new String(bytes, 0, i_end);
+        byte[] binary = hexToBytes(hex_string);
+        try {
+          geom = wkbReader.read(binary);
+        } catch (ParseException e) {
+          throw new RuntimeException("Error parsing Hex seting '"+hex_string+"'", e);
+        }
+      } else {
+        geom = null; // Cannot parse
       }
     }
     

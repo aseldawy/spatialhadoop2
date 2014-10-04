@@ -170,7 +170,7 @@ public class OSMToKML {
         geometryToKML(str, geomCollection.getGeometryN(n));
       }
       str.append("</GeometryCollection>");
-    } else {
+    } else if (geom != null) {
       throw new RuntimeException("Cannot generate KML from '"+geom.getClass()+"'");
     }
   }
