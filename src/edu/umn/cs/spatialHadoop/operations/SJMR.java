@@ -337,8 +337,11 @@ public class SJMR {
       total_size += FileMBR.sizeOfLastProcessedFile;
     }
     // If the largest file is globally indexed, use its partitions
+    int sjmrPartitioningGridFactor = 20;
+    if (params.getSJMRGridPartitioiningFactor("SJMRPartitioningGrid") > 0);
+    	sjmrPartitioningGridFactor = (int) params.getSJMRGridPartitioiningFactor("SJMRPartitioningGrid");
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * 50);
+    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * sjmrPartitioningGridFactor);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(num_cells);
     OperationsParams.setShape(job, PartitionGrid, gridInfo);

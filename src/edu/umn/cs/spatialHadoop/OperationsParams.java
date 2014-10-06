@@ -448,6 +448,10 @@ public class OperationsParams extends Configuration {
     return getSize(this, key);
   }
   
+  public long getSJMRGridPartitioiningFactor(String key){
+	  return getSJMRPartitioningGrid(this, key);
+  }
+  
   /**
    * Sets the specified configuration parameter to the current value of the shape.
    * Both class name and shape values are encoded in one string and set as the
@@ -462,7 +466,7 @@ public class OperationsParams extends Configuration {
     str += shape.toText(new Text()).toString();
     conf.set(param, str);
   }
-
+  
   public static long getSize(Configuration conf, String key) {
     String size_str = conf.get(key);
     if (size_str == null)
@@ -481,6 +485,16 @@ public class OperationsParams extends Configuration {
     else if (size_parts[1].startsWith("t"))
       size *= 1024 * 1024 * 1024 * 1024;
     return size;
+  }
+
+  public static long getSJMRPartitioningGrid(Configuration conf, String key){
+	  String sjmrPartitioningGrid_str = conf.get(key);
+	  if(sjmrPartitioningGrid_str  == null)
+		  return 0;
+	  long sjmrPartitioningGrid = Long.parseLong(sjmrPartitioningGrid_str);
+	  if(sjmrPartitioningGrid < 1)
+		  return 1;
+	  return sjmrPartitioningGrid;
   }
   
   /**Data type for the direction of skyline to compute*/
