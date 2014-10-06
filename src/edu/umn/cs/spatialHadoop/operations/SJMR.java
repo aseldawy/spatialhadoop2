@@ -71,6 +71,7 @@ public class SJMR {
   @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(SJMR.class);
   private static final String PartitionGrid = "SJMR.PartitionGrid";
+  public static final String PartitioiningGridParam = "SJMRPartitioiningGrid";
   
   public static class IndexedText implements Writable {
     public byte index;
@@ -338,7 +339,7 @@ public class SJMR {
     }
     // If the largest file is globally indexed, use its partitions
     int sjmrPartitioningGridFactor = 20;
-    if (params.getSJMRGridPartitioiningFactor("SJMRPartitioningGrid") > 0);
+    if (params.getSJMRGridPartitioiningFactor(PartitioiningGridParam) > 0);
     	sjmrPartitioningGridFactor = (int) params.getSJMRGridPartitioiningFactor("SJMRPartitioningGrid");
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
     int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * sjmrPartitioningGridFactor);
@@ -370,6 +371,7 @@ public class SJMR {
     System.out.println("<input file 1> - (*) Path to the first input file");
     System.out.println("<input file 2> - (*) Path to the second input file");
     System.out.println("<output file> - Path to output file");
+    System.out.println("-SJMRPartitioiningGrid:<value> - Patitioning grid factor (its default value is 20)");
     System.out.println("-overwrite - Overwrite output file without notice");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }

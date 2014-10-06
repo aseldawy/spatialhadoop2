@@ -66,7 +66,7 @@ public class OperationsParams extends Configuration {
       Runtime.getRuntime().availableProcessors();
 
   private static final long MaxSizeForLocalProcessing = 200 * 1024 * 1024;
-
+ 
   /**All detected input paths*/
   private Path[] allPaths;
 
