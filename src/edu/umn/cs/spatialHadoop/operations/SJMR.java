@@ -338,7 +338,7 @@ public class SJMR {
     }
     // If the largest file is globally indexed, use its partitions
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * 20);
+    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * 50);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(num_cells);
     OperationsParams.setShape(job, PartitionGrid, gridInfo);
