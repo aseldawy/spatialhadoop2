@@ -126,7 +126,11 @@ public class NASARectangle extends Rectangle implements NASAShape {
       if (NASAPoint.gradientType == GradientType.GT_HUE) {
         // Interpolate between two hues
         float hue = NASAPoint.hue1 * (1.0f - ratio) + NASAPoint.hue2 * ratio;
-        color = Color.getHSBColor(hue, 0.5f, 1.0f);
+        float saturation = NASAPoint.saturation1 * (1.0f - ratio) + NASAPoint.saturation2 * ratio;
+        float brightness = NASAPoint.brightness1 * (1.0f - ratio) + NASAPoint.brightness2 * ratio;
+        color = Color.getHSBColor(hue, saturation, brightness);
+        //int alpha = (int) (NASAPoint.color1.getAlpha() * (1.0f - ratio) + NASAPoint.color2.getAlpha() * ratio);
+        //color = new Color(color.getRGB() & 0xffffff | (alpha << 24), true);
       } else if (NASAPoint.gradientType == GradientType.GT_COLOR) {
         // Interpolate between colors
         int red = (int) (NASAPoint.color1.getRed() * (1.0f - ratio) + NASAPoint.color2.getRed() * ratio);

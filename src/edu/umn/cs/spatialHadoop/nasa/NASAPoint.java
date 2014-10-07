@@ -82,6 +82,8 @@ public class NASAPoint extends Point implements NASAShape {
   
   protected static Color color1, color2;
   protected static float hue1, hue2;
+  protected static float saturation1, saturation2;
+  protected static float brightness1, brightness2;
   
   public static enum GradientType {GT_HUE, GT_COLOR};
   public static GradientType gradientType;
@@ -91,6 +93,8 @@ public class NASAPoint extends Point implements NASAShape {
     float[] hsbvals = new float[3];
     Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), hsbvals);
     hue1 = hsbvals[0];
+    saturation1 = hsbvals[1];
+    brightness1 = hsbvals[2];
   }
   
   public static void setColor2(Color color) {
@@ -98,6 +102,8 @@ public class NASAPoint extends Point implements NASAShape {
     float[] hsbvals = new float[3];
     Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), hsbvals);
     hue2 = hsbvals[0];
+    saturation2 = hsbvals[1];
+    brightness2 = hsbvals[2];
   }
   
   @Override
