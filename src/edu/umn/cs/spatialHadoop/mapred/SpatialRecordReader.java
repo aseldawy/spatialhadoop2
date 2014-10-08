@@ -166,20 +166,21 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       Class<?> splittableCompressionCodecClass = null;
       try {
         splittableCompressionCodecClass = Class.forName("org.apache.hadoop.io.compress.SplittableCompressionCodec");
+        if (splittableCompressionCodecClass != null &&
+            splittableCompressionCodecClass.isAssignableFrom(codec.getClass())) {
+          final org.apache.hadoop.io.compress.SplitCompressionInputStream cIn =
+              ((org.apache.hadoop.io.compress.SplittableCompressionCodec)codec).createInputStream(
+                  directIn, decompressor, start, end,
+                  org.apache.hadoop.io.compress.SplittableCompressionCodec.READ_MODE.BYBLOCK);
+          in = cIn;
+          start = cIn.getAdjustedStart();
+          end = cIn.getAdjustedEnd();
+          filePosition = cIn; // take pos from compressed stream
+        } else {
+          in = codec.createInputStream(directIn, decompressor);
+          filePosition = directIn;
+        }
       } catch (ClassNotFoundException e) {
-        e.printStackTrace();
-      }
-      if (splittableCompressionCodecClass != null &&
-          splittableCompressionCodecClass.isAssignableFrom(codec.getClass())) {
-        final org.apache.hadoop.io.compress.SplitCompressionInputStream cIn =
-            ((org.apache.hadoop.io.compress.SplittableCompressionCodec)codec).createInputStream(
-              directIn, decompressor, start, end,
-              org.apache.hadoop.io.compress.SplittableCompressionCodec.READ_MODE.BYBLOCK);
-        in = cIn;
-        start = cIn.getAdjustedStart();
-        end = cIn.getAdjustedEnd();
-        filePosition = cIn; // take pos from compressed stream
-      } else {
         in = codec.createInputStream(directIn, decompressor);
         filePosition = directIn;
       }
