@@ -292,7 +292,9 @@ public class RangeQuery {
       // Enforce local execution if explicitly set by user or for small files
       job.set("mapred.job.tracker", "local");
       // Use multithreading too
-      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+      try {
+        job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+      } catch (Throwable e) {}
     }
 
     // Submit the job

@@ -16,8 +16,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -39,7 +42,6 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.util.ClassUtil;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
@@ -149,6 +151,28 @@ public class SpatialSite {
     conf.setClass(key, klass, xface);
     addClassToPath(conf, klass);
   }
+  
+  private static String findContainingJar(Class my_class) {
+    ClassLoader loader = my_class.getClassLoader();
+    String class_file = my_class.getName().replaceAll("\\.", "/") + ".class";
+    try {
+      for(Enumeration itr = loader.getResources(class_file);
+          itr.hasMoreElements();) {
+        URL url = (URL) itr.nextElement();
+        if ("jar".equals(url.getProtocol())) {
+          String toReturn = url.getPath();
+          if (toReturn.startsWith("file:")) {
+            toReturn = toReturn.substring("file:".length());
+          }
+          toReturn = URLDecoder.decode(toReturn, "UTF-8");
+          return toReturn.replaceAll("!.*$", "");
+        }
+      }
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    return null;
+  }
 
   /**
    * Ensures that the given class is in the class path of running jobs.
@@ -160,11 +184,11 @@ public class SpatialSite {
    */
   public static void addClassToPath(Configuration conf, Class<?> klass) {
     // Check if we need to add the containing jar to class path
-    String klassJar = ClassUtil.findContainingJar(klass);
-    String shadoopJar = ClassUtil.findContainingJar(SpatialSite.class);
+    String klassJar = findContainingJar(klass);
+    String shadoopJar = findContainingJar(SpatialSite.class);
     if (klassJar == null || (shadoopJar != null && klassJar.equals(shadoopJar)))
       return;
-    Path containingJar = new Path(ClassUtil.findContainingJar(klass));
+    Path containingJar = new Path(findContainingJar(klass));
     Path[] existingClassPaths = DistributedCache.getArchiveClassPaths(conf);
     if (existingClassPaths != null) {
       for (Path existingClassPath : existingClassPaths) {
@@ -189,7 +213,8 @@ public class SpatialSite {
       }
       defaultFS.copyFromLocalFile(containingJar, libFolder);
       Path jarFullPath = new Path(libFolder, containingJar.getName()).makeQualified(defaultFS);
-      DistributedCache.addArchiveToClassPath(jarFullPath, conf, defaultFS);
+      jarFullPath = jarFullPath.makeQualified(defaultFS);
+      DistributedCache.addArchiveToClassPath(jarFullPath, conf);
     } catch (IOException e) {
       e.printStackTrace();
     }
