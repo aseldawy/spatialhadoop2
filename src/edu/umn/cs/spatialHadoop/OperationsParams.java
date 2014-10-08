@@ -13,6 +13,7 @@
 package edu.umn.cs.spatialHadoop;
 
 import java.awt.Color;
+import java.awt.color.ColorSpace;
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.util.Vector;
@@ -291,11 +292,17 @@ public class OperationsParams extends Configuration {
   
   public static Color getColor(Configuration conf, String key, Color defaultValue) {
     String colorName = conf.get(key);
-    if (colorName == null)
-      return defaultValue;
+    Color color = defaultValue;
+    if (colorName == null) {
+    	if(key.equals("color1")) {
+        	color = new Color(defaultValue.getRed(), defaultValue.getGreen(), defaultValue.getBlue(), 0);
+    	} else if(key.equals("color2")) {
+    		color = new Color(defaultValue.getRed(), defaultValue.getGreen(), defaultValue.getBlue(), 255);
+    	}
+    	return color;
+    }
     
     colorName = colorName.toLowerCase();
-    Color color = defaultValue;
     if (colorName.equals("red")) {
       color = Color.RED;
     } else if (colorName.equals("pink")){
