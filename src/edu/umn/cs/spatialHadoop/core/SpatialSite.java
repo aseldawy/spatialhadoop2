@@ -55,6 +55,9 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 public class SpatialSite {
   
   private static final Log LOG = LogFactory.getLog(SpatialSite.class);
+  
+  /**Copy from LocalJobRunner.LOCAL_MAX_MAPS for consistency with Hadoop 0.20*/
+  public static final String LOCAL_MAX_MAPS = "mapreduce.local.map.tasks.maximum";
 
   /**
    * A filter that selects visible files and filters out hidden files.

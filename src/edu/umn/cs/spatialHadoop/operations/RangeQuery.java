@@ -27,7 +27,6 @@ import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -293,7 +292,7 @@ public class RangeQuery {
       job.set("mapred.job.tracker", "local");
       // Use multithreading too
       try {
-        job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+        job.setInt(SpatialSite.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
       } catch (Throwable e) {}
     }
 

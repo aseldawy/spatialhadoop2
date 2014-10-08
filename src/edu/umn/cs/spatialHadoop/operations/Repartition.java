@@ -276,7 +276,7 @@ public class Repartition {
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);
     long indexedFileSize = (long) (inFileSize * (1 + IndexingOverhead));
     if (blockSize == 0)
-      blockSize = outFs.getDefaultBlockSize(outFile);
+      blockSize = outFs.getDefaultBlockSize();
     return (int)Math.ceil((float)indexedFileSize / blockSize);
   }
 	
@@ -318,7 +318,7 @@ public class Repartition {
 
     // Calculate number of partitions in output file
     // Copy blocksize from source file if it's globally indexed
-    final long blockSize = outFs.getDefaultBlockSize(outPath);
+    final long blockSize = outFs.getDefaultBlockSize();
     
     // Calculate the dimensions of each partition based on gindex type
     CellInfo[] cellInfos;
@@ -521,7 +521,7 @@ public class Repartition {
     }
     GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     FileSystem outFs = outFile.getFileSystem(params);
-    long blocksize = outFs.getDefaultBlockSize(outFile);
+    long blocksize = outFs.getDefaultBlockSize();
     gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
     if (fileMBR == null)
       gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
@@ -578,7 +578,7 @@ public class Repartition {
         blockSize = inFs.getFileStatus(new Path(inFile, globalIndex.iterator().next().filename)).getBlockSize();
       } else {
         // Use default block size for output file system
-        blockSize = outFs.getDefaultBlockSize(outFile);
+        blockSize = outFs.getDefaultBlockSize();
       }
     }
 

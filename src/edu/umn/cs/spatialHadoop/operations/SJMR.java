@@ -34,7 +34,6 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -342,7 +341,7 @@ public class SJMR {
     if (params.getSJMRGridPartitioiningFactor(PartitioiningGridParam) > 0);
     	sjmrPartitioningGridFactor = (int) params.getSJMRGridPartitioiningFactor("SJMRPartitioningGrid");
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath) * sjmrPartitioningGridFactor);
+    int num_cells = (int) (total_size / outFs.getDefaultBlockSize() * sjmrPartitioningGridFactor);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(num_cells);
     OperationsParams.setShape(job, PartitionGrid, gridInfo);
@@ -353,7 +352,7 @@ public class SJMR {
       // Enforce local execution if explicitly set by user or for small files
       job.set("mapred.job.tracker", "local");
       // Use multithreading too
-      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+      job.setInt(SpatialSite.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     }
     
     // Start the job

@@ -26,7 +26,6 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
-import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -202,8 +201,17 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
     if (file.getName().toLowerCase().endsWith(".hdf"))
       return false;
     final CompressionCodec codec = compressionCodecs.getCodec(file);
-    if (codec != null && !(codec instanceof SplittableCompressionCodec))
-      return false;
+    if (codec != null) {
+      Class<?> klass = null;
+      try {
+        klass = Class.forName("org.apache.hadoop.io.compress.SplittableCompressionCodec");
+      } catch (ClassNotFoundException e1) {
+      }
+      
+      if (klass != null && klass.isAssignableFrom(codec.getClass()))
+        return false;
+    }
+    
 
     try {
       // For performance reasons, skip checking isRTree if the file is on http
