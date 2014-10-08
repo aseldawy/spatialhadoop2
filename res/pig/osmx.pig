@@ -11,15 +11,16 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 
-REGISTER spatialhadoop-2.2.jar;
-REGISTER pigeon.jar
-REGISTER esri-geometry-api-1.1.1.jar;
+REGISTER spatialhadoop-2.3-rc1.jar;
+REGISTER pigeon-1.0-SNAPSHOT.jar;
+REGISTER esri-geometry-api-1.2.jar;
+REGISTER jts-1.8.jar;
 REGISTER piggybank.jar;
 
 IMPORT 'pigeon_import.pig';
 
 /* Read and parse nodes */
-xml_nodes = LOAD 'planet-140115.osm.bz2'
+xml_nodes = LOAD '$input'
   USING org.apache.pig.piggybank.storage.XMLLoader('node')
   AS (node:chararray);
 
@@ -28,6 +29,7 @@ parsed_nodes = FOREACH xml_nodes
   
 /*filtered_nodes = FILTER parsed_nodes BY node.tags#'highway' == 'traffic_signals';*/
 filtered_nodes = parsed_nodes; /* No filter */
+/*filtered_nodes = FILTER parsed_nodes BY ST_Contains(ST_MakeBox(-92.3,46.6,-92.2,46.8), ST_MakePoint(node.lon, node.lat));*/
 
 flattened_nodes = FOREACH filtered_nodes
   GENERATE node.id, node.lon, node.lat, node.tags;
@@ -41,7 +43,7 @@ flattened_nodes_wkt = FOREACH flattened_nodes
 
 /******************************************************/
 /* Read and parse ways */
-xml_ways = LOAD 'planet-140115.osm.bz2'
+xml_ways = LOAD '$input'
   USING org.apache.pig.piggybank.storage.XMLLoader('way') AS (way:chararray);
 
 parsed_ways = FOREACH xml_ways
@@ -50,6 +52,12 @@ parsed_ways = FOREACH xml_ways
 /* Filter ways to keep only ways of interest */
 /*filtered_ways = FILTER parsed_ways BY way.tags#'boundary' == 'administrative';*/
 filtered_ways = parsed_ways;
+/*
+filtered_ways = FILTER parsed_ways BY edu.umn.cs.spatialHadoop.osm.HasTag(way.tags,
+  'amenity,building,natural,waterway,leisure,boundary,landuse,admin_level',
+  'yes,bay,wetland,water,coastline,riverbank,dock,boatyard,wood,tree_row,grassland,park,golf_course,national_park,garden,nature_reserve,forest,grass,tree,orchard,farmland,protected_area,cemetery,sports_centre,stadium,track,pitch,golf_course,water_park,swimming_pool,recreation_ground,piste,administrative,8');
+*/
+/*filtered_ways = FILTER parsed_ways BY way.id == 86212155;*/
 
 /* Project columns of interest in ways*/
 flattened_ways = FOREACH filtered_ways
@@ -60,10 +68,10 @@ node_locations = FOREACH parsed_nodes
   GENERATE node.id, ST_MakePoint(node.lon, node.lat) AS location;
 
 /* Join ways with nodes to find the location of each node (lat, lon)*/
-joined_ways = JOIN node_locations BY id, flattened_ways BY node_id PARALLEL 15;
+joined_ways = JOIN node_locations BY id, flattened_ways BY node_id PARALLEL 70;
 
 /* Group all node locations of each way*/
-ways_with_nodes = GROUP joined_ways BY way_id PARALLEL 15;
+ways_with_nodes = GROUP joined_ways BY way_id PARALLEL 70;
 
 /* For each way, generate a shape out of every list of points*/
 ways_with_shapes = FOREACH ways_with_nodes {
@@ -75,19 +83,24 @@ ways_with_shapes = FOREACH ways_with_nodes {
     FLATTEN(TOP(1, 0, tags)) AS tags;
 };
 
-/* STORE ways_with_shapes into 'all_ways.tsv'; */
+/* STORE ways_with_shapes into 'mn_bad_way'; */
 
 
 /******************************************************/
 /* Read and parse relations */
-xml_relations = LOAD 'planet-140115.osm.bz2'
+xml_relations = LOAD '$input'
   USING org.apache.pig.piggybank.storage.XMLLoader('relation') AS (relation:chararray);
 
 parsed_relations = FOREACH xml_relations
   GENERATE edu.umn.cs.spatialHadoop.osm.OSMRelation(relation) AS relation;
 
 /* Filter relations according to tags or space */
-filtered_relations = FILTER parsed_relations BY relation.tags#'admin_level' == '6';
+/* filtered_relations = FILTER parsed_relations BY relation.tags#'admin_level' == '6'; */
+/* filtered_relations = parsed_relations;*/
+filtered_relations = FILTER parsed_relations BY edu.umn.cs.spatialHadoop.osm.HasTag(relation.tags,
+  'amenity,building,natural,waterway,leisure,boundary,landuse,admin_level',
+  'yes,bay,wetland,water,coastline,riverbank,dock,boatyard,wood,tree_row,grassland,park,golf_course,national_park,garden,nature_reserve,forest,grass,tree,orchard,farmland,protected_area,cemetery,sports_centre,stadium,track,pitch,golf_course,water_park,swimming_pool,recreation_ground,piste,administrative,8');
+
 
 /* Flatten the members so that we have one member per line */
 flattened_relations = FOREACH filtered_relations
@@ -112,14 +125,14 @@ ways_with_ordered_shapes = FOREACH ways_with_nodes {
 };
 
 /* Join relations with ways to get the shape of each way */
-relations_join_ways = JOIN flattened_relations BY member_id RIGHT OUTER, ways_with_ordered_shapes BY way_id PARALLEL 15;
+relations_join_ways = JOIN flattened_relations BY member_id RIGHT OUTER, ways_with_ordered_shapes BY way_id PARALLEL 70;
 
-dangled_ways = FILTER relations_join_ways BY relation_id IS NULL AND way_tags#'admin_level' == '6';
+dangled_ways = FILTER relations_join_ways BY relation_id IS NULL;
 
 relations_with_ways = FILTER relations_join_ways BY relation_id IS NOT NULL;
 
 /* Group nodes by relation_id and way_role */
-relations_by_role = GROUP relations_with_ways BY (relation_id, member_role) PARALLEL 15;
+relations_by_role = GROUP relations_with_ways BY (relation_id, member_role) PARALLEL 70;
 
 relations_with_shapes = FOREACH relations_by_role {
   /* All tags are similar. Just grab the first one*/
@@ -140,5 +153,35 @@ way_objects = FOREACH dangled_ways
 
 all_objects = UNION ONSCHEMA relation_objects, way_objects;
 
-STORE all_objects INTO 'gcc_relations_dangled_ways';
-STORE bad_relations INTO 'gcc_bad_relations';
+buildings = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
+  'amenity,building.bz2',
+  'yes');
+STORE buildings INTO '$output/buildings.bz2';
+
+lakes = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
+  'natural,waterway',
+  'bay,wetland,water,coastline,riverbank,dock,boatyard');
+STORE lakes INTO '$output/lakes.bz2';
+
+parks = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
+  'leisure,boundary,landuse,natural',
+  'wood,tree_row,grassland,park,golf_course,national_park,garden,nature_reserve,forest,grass,tree,orchard,farmland,protected_area');
+STORE parks INTO '$output/parks.bz2';
+
+cemetery = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
+  'landuse',
+  'cemetery');
+STORE cemetery INTO '$output/cemetery.bz2';
+
+sports = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
+  'leisure,landuse',
+  'sports_centre,stadium,track,pitch,golf_course,water_park,swimming_pool,recreation_ground,piste');
+STORE sports INTO '$output/sports.bz2';
+
+postal = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
+  'admin_level',
+  '8');
+STORE postal INTO '$output/postal_codes.bz2';
+
+STORE all_objects INTO '$output/all_objects.bz2';
+STORE bad_relations INTO '$output/bad_relations.bz2';
