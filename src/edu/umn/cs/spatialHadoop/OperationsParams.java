@@ -292,17 +292,11 @@ public class OperationsParams extends Configuration {
   
   public static Color getColor(Configuration conf, String key, Color defaultValue) {
     String colorName = conf.get(key);
-    Color color = defaultValue;
-    if (colorName == null) {
-    	if(key.equals("color1")) {
-        	color = new Color(defaultValue.getRed(), defaultValue.getGreen(), defaultValue.getBlue(), 0);
-    	} else if(key.equals("color2")) {
-    		color = new Color(defaultValue.getRed(), defaultValue.getGreen(), defaultValue.getBlue(), 255);
-    	}
-    	return color;
-    }
+    if (colorName == null)
+      return defaultValue;
     
     colorName = colorName.toLowerCase();
+    Color color = defaultValue;
     if (colorName.equals("red")) {
       color = Color.RED;
     } else if (colorName.equals("pink")){

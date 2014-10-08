@@ -15,13 +15,19 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
+import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
@@ -110,48 +116,27 @@ public class HeatMapPlot {
 
     @Override
     public void write(DataOutput out) throws IOException {
-      out.writeInt(this.getWidth());
-      out.writeInt(this.getHeight());
-      for (float[] col : frequency) {
-        int y1 = 0;
-        while (y1 < col.length) {
-          int y2 = y1;
-          while (y2 < col.length && col[y2] == col[y1])
-            y2++;
-          if (y2 - y1 == 1) {
-            out.writeFloat(-col[y1]);
-          } else {
-            out.writeFloat(y2 - y1);
-            out.writeFloat(col[y1]);
-          }
-          y1 = y2;
-        }
-      }
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      GZIPOutputStream gzos = new GZIPOutputStream(baos);
+      ObjectOutputStream oos = new ObjectOutputStream(gzos);
+      oos.writeObject(frequency);
+      oos.close();
+      byte[] serializedData = baos.toByteArray();
+      out.writeInt(serializedData.length);
+      out.write(serializedData);
     }
     
     @Override
     public void readFields(DataInput in) throws IOException {
-      int width = in.readInt();
-      int height = in.readInt();
-      if (getWidth() != width || getHeight() != height)
-        frequency = new float[width][height];
-      for (int x = 0; x < width; x++) {
-        int y = 0;
-        while (y < height) {
-          float v = in.readFloat();
-          if (v <= 0) {
-            frequency[x][y] = -v;
-            y++;
-          } else {
-            float cnt = v;
-            v = in.readFloat();
-            float y2 = y + cnt;
-            while (y < y2) {
-              frequency[x][y] = v;
-              y++;
-            }
-          }
-        }
+      int length = in.readInt();
+      byte[] serializedData = new byte[length];
+      ByteArrayInputStream bais = new ByteArrayInputStream(serializedData);
+      GZIPInputStream gzis = new GZIPInputStream(bais);
+      ObjectInputStream ois = new ObjectInputStream(gzis);
+      try {
+        frequency = (float[][]) ois.readObject();
+      } catch (ClassNotFoundException e) {
+        throw new RuntimeException("Could not read the frequency map back from the stream", e);
       }
     }
     
@@ -383,8 +368,8 @@ public class HeatMapPlot {
       super.configure(job);
       Shape queryRange = OperationsParams.getShape(job, "rect");
       this.drawMBR = queryRange != null ? queryRange.getMBR() : ImageOutputFormat.getFileMBR(job);
-      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
-      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", new Color(0, 0, 255, 0)));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", new Color(255, 0, 0, 255)));
       NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
       this.skipZeros = job.getBoolean("skipzeros", false);
       String valueRangeStr = job.get("valuerange");
@@ -512,8 +497,8 @@ public class HeatMapPlot {
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
       this.radius = job.getInt("radius", 5);
-      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
-      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", new Color(0, 0, 255, 0)));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", new Color(255, 0, 0, 255)));
       NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
       this.skipZeros = job.getBoolean("skipzeros", false);
       String valueRangeStr = job.get("valuerange");
@@ -655,8 +640,8 @@ public class HeatMapPlot {
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
       this.radius = job.getInt("radius", 5);
-      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
-      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
+      NASAPoint.setColor1(OperationsParams.getColor(job, "color1", new Color(0, 0, 255, 0)));
+      NASAPoint.setColor2(OperationsParams.getColor(job, "color2", new Color(255, 0, 0, 255)));
       NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
       this.skipZeros = job.getBoolean("skipzeros", false);
       String valueRangeStr = job.get("valuerange");
@@ -852,7 +837,7 @@ public class HeatMapPlot {
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     System.out.println("-skipzeros: Leave empty areas (frequency < min) transparent");
-    System.out.println("-smooth: Use mean smoothing to the result");
+    System.out.println("-smooth: Use Gaussian Distribution");
     
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
