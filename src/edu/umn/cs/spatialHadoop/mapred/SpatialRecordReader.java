@@ -498,11 +498,9 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
    * @return
    * @throws IOException
    */
-  protected boolean nextIterator(ShapeIterator iter) throws IOException {
-    if (getFilePosition() > end)
-      return false;
+  protected boolean nextShapeIter(ShapeIterator iter) throws IOException {
     iter.setSpatialRecordReader((SpatialRecordReader<?, ? extends Shape>) this);
-    return true;
+    return iter.hasNext();
   }
   
   /**
@@ -511,34 +509,51 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
    */
   public static class ShapeIterator implements Iterator<Shape>, Iterable<Shape> {
     protected Shape shape;
+    protected Shape nextShape;
     private SpatialRecordReader<?, ? extends Shape> srr;
-    
-    public ShapeIterator(SpatialRecordReader<?, ? extends Shape> srr) {
-      this.setSpatialRecordReader(srr);
-    }
     
     public ShapeIterator() {
     }
 
     public void setSpatialRecordReader(SpatialRecordReader<?, ? extends Shape> srr) {
       this.srr = srr;
-      this.shape = srr.createValue();
+      try {
+        if (shape != null)
+          nextShape = shape.clone();
+        if (nextShape != null && !srr.nextShape(nextShape))
+            nextShape = null;
+      } catch (IOException e) {
+      }
+    }
+    
+    public void setShape(Shape shape) {
+      this.shape = shape;
+      this.nextShape = shape.clone();
+      try {
+        if (srr != null && !srr.nextShape(nextShape))
+            nextShape = null;
+      } catch (IOException e) {
+      }
     }
 
-    @Override
     public boolean hasNext() {
-      try {
-        return srr.getFilePosition() <= srr.end;
-      } catch (IOException e) {
+      if (nextShape == null)
         return false;
-      }
+      return nextShape != null;
     }
 
     @Override
     public Shape next() {
       try {
-        if (!srr.nextShape(shape))
+        if (nextShape == null)
           return null;
+        // Swap Shape and nextShape and read next
+        Shape temp = shape;
+        shape = nextShape;
+        nextShape = temp;
+        
+        if (!srr.nextShape(nextShape))
+          nextShape = null;
         return shape;
       } catch (IOException e) {
         return null;
@@ -548,6 +563,11 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     @Override
     public Iterator<Shape> iterator() {
       return this;
+    }
+
+    @Override
+    public void remove() {
+      throw new RuntimeException("Unsupported method ShapeIterator#remove");
     }
     
   }
