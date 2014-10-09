@@ -17,6 +17,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -489,6 +490,66 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       throw e;
     }
     return false;
+  }
+  
+  /**
+   * Returns an iterator that iterates over all remaining shapes in the file.
+   * @param iter
+   * @return
+   * @throws IOException
+   */
+  protected boolean nextIterator(ShapeIterator iter) throws IOException {
+    if (getFilePosition() > end)
+      return false;
+    iter.setSpatialRecordReader((SpatialRecordReader<?, ? extends Shape>) this);
+    return true;
+  }
+  
+  /**
+   * An iterator that iterates over all shapes in the input file
+   * @author Eldawy
+   */
+  public static class ShapeIterator implements Iterator<Shape>, Iterable<Shape> {
+    protected Shape shape;
+    private SpatialRecordReader<?, ? extends Shape> srr;
+    
+    public ShapeIterator(SpatialRecordReader<?, ? extends Shape> srr) {
+      this.setSpatialRecordReader(srr);
+    }
+    
+    public ShapeIterator() {
+    }
+
+    public void setSpatialRecordReader(SpatialRecordReader<?, ? extends Shape> srr) {
+      this.srr = srr;
+      this.shape = srr.createValue();
+    }
+
+    @Override
+    public boolean hasNext() {
+      try {
+        return srr.getFilePosition() <= srr.end;
+      } catch (IOException e) {
+        return false;
+      }
+    }
+
+    @Override
+    public Shape next() {
+      try {
+        if (!srr.nextShape(shape))
+          return null;
+        return shape;
+      } catch (IOException e) {
+        return null;
+      }
+    }
+
+    @Override
+    public Iterator<Shape> iterator() {
+      return this;
+    }
+    
   }
   
   /**
