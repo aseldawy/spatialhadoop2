@@ -152,10 +152,4 @@ public class OSMRelation extends EvalFunc<Tuple> {
       return null;
     }
   }
-  
-  public static void main(String[] args) throws IOException, ParserConfigurationException {
-    String text = "ahmed\t\nmohamed''\"";
-    System.out.println(text);
-    System.out.println(text.replaceAll("[\\s]", " ").replaceAll("[\\\'\\\"]", "_"));
-  }
 }

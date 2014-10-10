@@ -13,6 +13,9 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.JobClient;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
@@ -20,6 +23,7 @@ import edu.umn.cs.spatialHadoop.ReadFile;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
+import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
 import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
 
 /**
@@ -39,6 +43,10 @@ public class Main {
     int exitCode = -1;
     ProgramDriver pgd = new ProgramDriver();
     try {
+      ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+      System.out.println("Mappers "+clusterStatus.getMaxMapTasks());
+      System.out.println("Reducers "+clusterStatus.getMaxReduceTasks());
+      
       
       pgd.addClass("rangequery", RangeQuery.class,
           "Finds all objects in the query range given by a rectangle");
@@ -107,6 +115,9 @@ public class Main {
       
       pgd.addClass("vizserver", VisualizationServer.class,
           "Starts a server that handles visualization requests");
+
+      pgd.addClass("staggquery", SpatioTemporalAggregateQuery.class,
+          "Runs a spatio temporal aggregate query on HDF files");
       
       pgd.driver(args);
       
