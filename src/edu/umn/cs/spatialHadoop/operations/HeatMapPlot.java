@@ -129,6 +129,7 @@ public class HeatMapPlot {
     public void readFields(DataInput in) throws IOException {
       int length = in.readInt();
       byte[] serializedData = new byte[length];
+      in.readFully(serializedData);
       ByteArrayInputStream bais = new ByteArrayInputStream(serializedData);
       GZIPInputStream gzis = new GZIPInputStream(bais);
       ObjectInputStream ois = new ObjectInputStream(gzis);
