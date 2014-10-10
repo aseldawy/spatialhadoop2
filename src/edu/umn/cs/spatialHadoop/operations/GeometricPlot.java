@@ -39,12 +39,15 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputCommitter;
+import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
@@ -65,10 +68,14 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
+import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
@@ -989,6 +996,170 @@ public class GeometricPlot {
     }
   }
 
+  private static <S extends Shape> void plotLocal(Path inFile, Path outFile,
+      OperationsParams params) throws IOException {
+    String hdfDataset = (String) params.get("dataset");
+    Shape shape = hdfDataset != null ? new NASARectangle() : (Shape) params.getShape("shape", null);
+    Shape plotRange = params.getShape("rect", null);
+
+    boolean keepAspectRatio = params.is("keep-ratio", true);
+
+    String valueRangeStr = (String) params.get("valuerange");
+    MinMax valueRange;
+    if (valueRangeStr == null) {
+      valueRange = null;
+    } else {
+      String[] parts = valueRangeStr.split(",");
+      valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+    }
+
+    InputSplit[] splits;
+    FileSystem inFs = inFile.getFileSystem(params);
+    FileStatus inFStatus = inFs.getFileStatus(inFile);
+    if (inFStatus != null && !inFStatus.isDir()) {
+      // One file, retrieve it immediately.
+      // This is useful if the input is a hidden file which is automatically
+      // skipped by FileInputFormat. We need to plot a hidden file for the case
+      // of plotting partition boundaries of a spatial index
+      splits = new InputSplit[] {new FileSplit(inFile, 0, inFStatus.getLen(), new String[0])};
+    } else {
+      JobConf job = new JobConf(params);
+      ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+      ShapeInputFormat.addInputPath(job, inFile);
+      splits = inputFormat.getSplits(job, 1);
+    }
+
+    boolean vflip = params.is("vflip");
+
+    Rectangle fileMbr;
+    if (plotRange != null) {
+      fileMbr = plotRange.getMBR();
+    } else if (hdfDataset != null) {
+      // Plotting a NASA file
+      fileMbr = new Rectangle(-180, -90, 180, 90);
+    } else {
+      fileMbr = FileMBR.fileMBR(inFile, params);
+    }
+
+    int width = params.getInt("width", 1000);
+    int height = params.getInt("height", 1000);
+    if (keepAspectRatio) {
+      // Adjust width and height to maintain aspect ratio
+      if (fileMbr.getWidth() / fileMbr.getHeight() > (double) width / height) {
+        // Fix width and change height
+        height = (int) (fileMbr.getHeight() * width / fileMbr.getWidth());
+      } else {
+        width = (int) (fileMbr.getWidth() * height / fileMbr.getHeight());
+      }
+    }
+
+    boolean adaptiveSample = shape instanceof Point && params.getBoolean("sample", false);
+    float adaptiveSampleRatio = 0.0f;
+    if (adaptiveSample) {
+      // Calculate the sample ratio
+      long recordCount = FileMBR.fileMBR(inFile, params).recordCount;
+      adaptiveSampleRatio = params.getFloat(AdaptiveSampleFactor, 1.0f) *
+          width * height / recordCount;
+    }
+
+    boolean gradualFade = !(shape instanceof Point) && params.getBoolean("fade", false);
+
+    if (hdfDataset != null) {
+      // Collects some stats about the HDF file
+      if (valueRange == null)
+        valueRange = Aggregate.aggregate(new Path[] {inFile}, params);
+      NASAPoint.minValue = valueRange.minValue;
+      NASAPoint.maxValue = valueRange.maxValue;
+      NASAPoint.setColor1(params.getColor("color1", Color.BLUE));
+      NASAPoint.setColor2(params.getColor("color2", Color.RED));
+      NASAPoint.gradientType = params.getGradientType("gradient", NASAPoint.GradientType.GT_HUE);
+    }
+
+    double scale2 = (double) width * height
+        / (fileMbr.getWidth() * fileMbr.getHeight());
+    double scale = Math.sqrt(scale2);
+
+    // Create an image
+    BufferedImage image = new BufferedImage(width, height,
+        BufferedImage.TYPE_INT_ARGB);
+    Graphics2D graphics = image.createGraphics();
+    Color bg_color = params.getColor("bgcolor", new Color(0, 0, 0, 0));
+    graphics.setBackground(bg_color);
+    graphics.clearRect(0, 0, width, height);
+    Color strokeColor = params.getColor("color", Color.BLACK);
+    int color = strokeColor.getRGB();
+    graphics.setColor(strokeColor);
+
+    for (InputSplit split : splits) {
+      if (hdfDataset != null) {
+        // Read points from the HDF file
+        RecordReader<NASADataset, NASAShape> reader = new HDFRecordReader(params,
+            (FileSplit)split, hdfDataset, true);
+        NASADataset dataset = reader.createKey();
+
+        while (reader.next(dataset, (NASAShape)shape)) {
+          // Skip with a fixed ratio if adaptive sample is set
+          if (adaptiveSample && Math.random() > adaptiveSampleRatio)
+            continue;
+          if (plotRange == null || shape.isIntersected(shape)) {
+            shape.draw(graphics, fileMbr, width, height, 0.0);
+          }
+        }
+        reader.close();
+      } else {
+        RecordReader<Rectangle, ShapeIterator> reader = new ShapeIterRecordReader(params,
+            (FileSplit)split);
+        Rectangle cell = reader.createKey();
+        ShapeIterator value = reader.createValue();
+        while (reader.next(cell, value)) {
+          for (Shape s : value) {
+            // Skip with a fixed ratio if adaptive sample is set
+            if (adaptiveSample && Math.random() > adaptiveSampleRatio)
+              continue;
+            Rectangle shapeMBR = s.getMBR();
+            if (shapeMBR != null) {
+              if (plotRange == null || shapeMBR.isIntersected(plotRange)) {
+                if (gradualFade) {
+                  double sizeInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+                  if (sizeInPixels < 1.0 && Math.round(sizeInPixels * 255) < 1.0) {
+                    // This shape can be safely skipped as it is too small to be plotted
+                    continue;
+                  } else {
+                    int alpha = (int)Math.round(sizeInPixels * 255);
+                    graphics.setColor(new Color((alpha << 24) | color, true));
+                  }
+                }
+                s.draw(graphics, fileMbr, width, height, scale2);
+              }
+            }
+          }
+        }
+        reader.close();
+      }
+    }
+    // Write image to output
+    graphics.dispose();
+    if (vflip) {
+      AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+      tx.translate(0, -image.getHeight());
+      AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+      image = op.filter(image, null);
+    }
+    FileSystem outFs = outFile.getFileSystem(params);
+    OutputStream out = outFs.create(outFile, true);
+    ImageIO.write(image, "png", out);
+    out.close();
+  }
+
+  public static RunningJob plot(Path inFile, Path outFile, OperationsParams params) throws IOException {
+    if (params.getBoolean("local", false)) {
+      plotLocal(inFile, outFile, params);
+      return null;
+    } else {
+      return plotMapReduce(inFile, outFile, params);
+    }
+  }
+
   /**
    * Draws an image that can be used as a scale for heat maps generated using
    * Plot or PlotPyramid.
@@ -1142,7 +1313,7 @@ public class GeometricPlot {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    plotMapReduce(inFile, outFile, params);
+    plot(inFile, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

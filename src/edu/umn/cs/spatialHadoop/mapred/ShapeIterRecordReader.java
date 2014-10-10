@@ -23,6 +23,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 
 
 /**
@@ -30,7 +31,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  * @author Ahmed Eldawy
  *
  */
-public class ShapeIterRecordReader extends SpatialRecordReader<Rectangle, edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator> {
+public class ShapeIterRecordReader extends SpatialRecordReader<Rectangle, ShapeIterator> {
   public static final Log LOG = LogFactory.getLog(ShapeIterRecordReader.class);
   
   public ShapeIterRecordReader(CombineFileSplit split, Configuration conf,
