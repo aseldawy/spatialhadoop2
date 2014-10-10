@@ -23,7 +23,6 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
@@ -49,9 +48,10 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 
 /**
  * Computes the skyline of a set of points
@@ -259,12 +259,12 @@ public class Skyline {
    * @author Ahmed Eldawy
    */
   public static class IdentityMapper extends MapReduceBase implements
-  Mapper<Rectangle, ArrayWritable, NullWritable, Point> {
+  Mapper<Rectangle, ShapeIterator, NullWritable, Point> {
     @Override
-    public void map(Rectangle dummy, ArrayWritable points,
+    public void map(Rectangle dummy, ShapeIterator points,
         OutputCollector<NullWritable, Point> output, Reporter reporter)
         throws IOException {
-      for (Shape point : (Shape[])points.get()) {
+      for (Shape point : points) {
         output.collect(NullWritable.get(), (Point)point);
       }
     }
@@ -317,7 +317,7 @@ public class Skyline {
     job.setReducerClass(SkylineReducer.class);
     job.setOutputKeyClass(NullWritable.class);
     job.setOutputValueClass(Point.class);
-    job.setInputFormat(ShapeArrayInputFormat.class);
+    job.setInputFormat(ShapeIterInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     job.setOutputFormat(GridOutputFormat2.class);
     GridOutputFormat2.setOutputPath(job, outPath);

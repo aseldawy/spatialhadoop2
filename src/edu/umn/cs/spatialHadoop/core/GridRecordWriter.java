@@ -215,13 +215,15 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       intermediateCellStreams = new OutputStream[1];
       intermediateCellPath = new Path[1];
       cellsMbr = new Rectangle[1];
+      intermediateCellSize = new int[1];
+      intermediateCellRecordCount = new int[1];
     }
     for (int i = 0; i < cellsMbr.length; i++) {
       cellsMbr[i] = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
           -Double.MAX_VALUE, -Double.MAX_VALUE);
     }
 
-    this.blockSize = fileSystem.getDefaultBlockSize(this.outDir);
+    this.blockSize = fileSystem.getDefaultBlockSize();
     
     closingThreads = new ArrayList<Thread>();
     text = new Text();
@@ -392,7 +394,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       // Create new file
       cellStream = fileSystem.create(cellFilePath, true,
           fileSystem.getConf().getInt("io.file.buffer.size", 4096),
-          fileSystem.getDefaultReplication(outDir), this.blockSize);
+          fileSystem.getDefaultReplication(), this.blockSize);
     } else {
       Class<? extends CompressionCodec> codecClass =
           FileOutputFormat.getOutputCompressorClass(jobConf, GzipCodec.class);
@@ -402,7 +404,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       // Open a stream to the output file
       cellStream = fileSystem.create(cellFilePath, true,
           fileSystem.getConf().getInt("io.file.buffer.size", 4096),
-          fileSystem.getDefaultReplication(outDir), this.blockSize);
+          fileSystem.getDefaultReplication(), this.blockSize);
 
       // Encode the output stream using the codec
       cellStream = new DataOutputStream(codec.createOutputStream(cellStream));
@@ -419,7 +421,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @throws IOException
    */
   protected void closeCell(int cellIndex) throws IOException {
-    CellInfo cell = cells[cellIndex];
+    CellInfo cell = cells != null? cells[cellIndex] : new CellInfo(cellIndex+1, cellsMbr[cellIndex]);
     if (expand)
       cell.expand(cellsMbr[cellIndex]);
     if (pack)

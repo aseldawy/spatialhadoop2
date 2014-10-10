@@ -17,6 +17,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -32,8 +33,6 @@ import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.Decompressor;
-import org.apache.hadoop.io.compress.SplitCompressionInputStream;
-import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
@@ -165,16 +164,24 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
 
     if (isCompressedInput()) {
       decompressor = CodecPool.getDecompressor(codec);
-      if (codec instanceof SplittableCompressionCodec) {
-        final SplitCompressionInputStream cIn =
-            ((SplittableCompressionCodec)codec).createInputStream(
-              directIn, decompressor, start, end,
-              SplittableCompressionCodec.READ_MODE.BYBLOCK);
-        in = cIn;
-        start = cIn.getAdjustedStart();
-        end = cIn.getAdjustedEnd();
-        filePosition = cIn; // take pos from compressed stream
-      } else {
+      Class<?> splittableCompressionCodecClass = null;
+      try {
+        splittableCompressionCodecClass = Class.forName("org.apache.hadoop.io.compress.SplittableCompressionCodec");
+        if (splittableCompressionCodecClass != null &&
+            splittableCompressionCodecClass.isAssignableFrom(codec.getClass())) {
+          final org.apache.hadoop.io.compress.SplitCompressionInputStream cIn =
+              ((org.apache.hadoop.io.compress.SplittableCompressionCodec)codec).createInputStream(
+                  directIn, decompressor, start, end,
+                  org.apache.hadoop.io.compress.SplittableCompressionCodec.READ_MODE.BYBLOCK);
+          in = cIn;
+          start = cIn.getAdjustedStart();
+          end = cIn.getAdjustedEnd();
+          filePosition = cIn; // take pos from compressed stream
+        } else {
+          in = codec.createInputStream(directIn, decompressor);
+          filePosition = directIn;
+        }
+      } catch (ClassNotFoundException e) {
         in = codec.createInputStream(directIn, decompressor);
         filePosition = directIn;
       }
@@ -483,6 +490,86 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       throw e;
     }
     return false;
+  }
+  
+  /**
+   * Returns an iterator that iterates over all remaining shapes in the file.
+   * @param iter
+   * @return
+   * @throws IOException
+   */
+  protected boolean nextShapeIter(ShapeIterator iter) throws IOException {
+    iter.setSpatialRecordReader((SpatialRecordReader<?, ? extends Shape>) this);
+    return iter.hasNext();
+  }
+  
+  /**
+   * An iterator that iterates over all shapes in the input file
+   * @author Eldawy
+   */
+  public static class ShapeIterator implements Iterator<Shape>, Iterable<Shape> {
+    protected Shape shape;
+    protected Shape nextShape;
+    private SpatialRecordReader<?, ? extends Shape> srr;
+    
+    public ShapeIterator() {
+    }
+
+    public void setSpatialRecordReader(SpatialRecordReader<?, ? extends Shape> srr) {
+      this.srr = srr;
+      try {
+        if (shape != null)
+          nextShape = shape.clone();
+        if (nextShape != null && !srr.nextShape(nextShape))
+            nextShape = null;
+      } catch (IOException e) {
+      }
+    }
+    
+    public void setShape(Shape shape) {
+      this.shape = shape;
+      this.nextShape = shape.clone();
+      try {
+        if (srr != null && !srr.nextShape(nextShape))
+            nextShape = null;
+      } catch (IOException e) {
+      }
+    }
+
+    public boolean hasNext() {
+      if (nextShape == null)
+        return false;
+      return nextShape != null;
+    }
+
+    @Override
+    public Shape next() {
+      try {
+        if (nextShape == null)
+          return null;
+        // Swap Shape and nextShape and read next
+        Shape temp = shape;
+        shape = nextShape;
+        nextShape = temp;
+        
+        if (!srr.nextShape(nextShape))
+          nextShape = null;
+        return shape;
+      } catch (IOException e) {
+        return null;
+      }
+    }
+
+    @Override
+    public Iterator<Shape> iterator() {
+      return this;
+    }
+
+    @Override
+    public void remove() {
+      throw new RuntimeException("Unsupported method ShapeIterator#remove");
+    }
+    
   }
   
   /**

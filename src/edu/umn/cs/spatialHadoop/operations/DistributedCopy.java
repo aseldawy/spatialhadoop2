@@ -422,7 +422,7 @@ public class DistributedCopy {
           Path concatPath = filesToConcat.remove(0);
           try {
             outFs.concat(concatPath, filesToConcat.toArray(new Path[filesToConcat.size()]));
-          } catch (UnsupportedOperationException e) {
+          } catch (Exception e) {
             concatPath = dirToConcat.getPath().suffix("_off");
             FSDataOutputStream concatenated = outFs.create(concatPath);
             byte[] buffer = new byte[1024*1024];
