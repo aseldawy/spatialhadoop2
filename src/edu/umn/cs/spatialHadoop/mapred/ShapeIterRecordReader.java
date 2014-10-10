@@ -22,7 +22,9 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 
 
@@ -33,15 +35,18 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  */
 public class ShapeIterRecordReader extends SpatialRecordReader<Rectangle, ShapeIterator> {
   public static final Log LOG = LogFactory.getLog(ShapeIterRecordReader.class);
+  private Shape shape;
   
   public ShapeIterRecordReader(CombineFileSplit split, Configuration conf,
       Reporter reporter, Integer index) throws IOException {
     super(split, conf, reporter, index);
+    this.shape = OperationsParams.getShape(conf, "shape");
   }
   
   public ShapeIterRecordReader(Configuration conf, FileSplit split)
       throws IOException {
     super(conf, split);
+    this.shape = OperationsParams.getShape(conf, "shape");
   }
 
   public ShapeIterRecordReader(InputStream is, long offset, long endOffset)
@@ -52,7 +57,7 @@ public class ShapeIterRecordReader extends SpatialRecordReader<Rectangle, ShapeI
   @Override
   public boolean next(Rectangle key, ShapeIterator shapeIter) throws IOException {
     // Get cellInfo for the current position in file
-    boolean element_read = nextIterator(shapeIter);
+    boolean element_read = nextShapeIter(shapeIter);
     key.set(cellMbr); // Set the cellInfo for the last block read
     return element_read;
   }
@@ -64,7 +69,9 @@ public class ShapeIterRecordReader extends SpatialRecordReader<Rectangle, ShapeI
 
   @Override
   public ShapeIterator createValue() {
-    return new ShapeIterator();
+    ShapeIterator shapeIter = new ShapeIterator();
+    shapeIter.setShape(shape);
+    return shapeIter;
   }
   
 }

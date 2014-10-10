@@ -1,18 +1,12 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/*******************************************************************
+ * Copyright (C) 2014 by Regents of the University of Minnesota.   *
+ *                                                                 *
+ * This Software is released under the Apache License, Version 2.0 *
+ * http://www.apache.org/licenses/LICENSE-2.0                      *
+ *******************************************************************/
 
 REGISTER spatialhadoop-2.3-rc1.jar;
-REGISTER pigeon-1.0-SNAPSHOT.jar;
+REGISTER pigeon-0.1.0-rc1.jar;
 REGISTER esri-geometry-api-1.2.jar;
 REGISTER jts-1.8.jar;
 REGISTER piggybank.jar;
@@ -49,18 +43,8 @@ xml_ways = LOAD '$input'
 parsed_ways = FOREACH xml_ways
   GENERATE edu.umn.cs.spatialHadoop.osm.OSMWay(way) AS way;
   
-/* Filter ways to keep only ways of interest */
-/*filtered_ways = FILTER parsed_ways BY way.tags#'boundary' == 'administrative';*/
-filtered_ways = parsed_ways;
-/*
-filtered_ways = FILTER parsed_ways BY edu.umn.cs.spatialHadoop.osm.HasTag(way.tags,
-  'amenity,building,natural,waterway,leisure,boundary,landuse,admin_level',
-  'yes,bay,wetland,water,coastline,riverbank,dock,boatyard,wood,tree_row,grassland,park,golf_course,national_park,garden,nature_reserve,forest,grass,tree,orchard,farmland,protected_area,cemetery,sports_centre,stadium,track,pitch,golf_course,water_park,swimming_pool,recreation_ground,piste,administrative,8');
-*/
-/*filtered_ways = FILTER parsed_ways BY way.id == 86212155;*/
-
 /* Project columns of interest in ways*/
-flattened_ways = FOREACH filtered_ways
+flattened_ways = FOREACH parsed_ways
   GENERATE way.id AS way_id, FLATTEN(way.nodes), way.tags AS tags;
 
 /* Project node ID and point location from nodes extracted earlier*/
@@ -79,12 +63,30 @@ ways_with_shapes = FOREACH ways_with_nodes {
   ordered = ORDER joined_ways BY pos;
   /* All tags are similar. Just grab the first one*/
   tags = FOREACH joined_ways GENERATE tags;
-  GENERATE group AS way_id, ST_AsText(ST_MakeLinePolygon(ordered.node_id, ordered.location)) AS shape,
+  GENERATE group AS way_id, ST_MakeLinePolygon(ordered.node_id, ordered.location) AS geom,
     FLATTEN(TOP(1, 0, tags)) AS tags;
 };
 
-/* STORE ways_with_shapes into 'mn_bad_way'; */
+/**** Generate road network ****/
+road_network = FILTER joined_ways BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
+  'highway,junction,ford,route,cutting,tunnel,amenity',
+  'yes,street,highway,service,parking_aisle,motorway,motorway_link,trunk,trunk_link,primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,living_street,residential,unclassified,track,road,roundabout,escape,mini_roundabout,motorway_junction,passing_place,rest_area,turning_circle,detour,parking_entrance');
+  
+roads_with_nodes = GROUP road_network BY way_id PARALLEL 70;
 
+raod_segments = FOREACH roads_with_nodes {
+  /* order points by position */
+  ordered = ORDER road_network BY pos;
+  /* All tags are similar. Just grab the first one*/
+  tags = FOREACH road_network GENERATE tags;
+  GENERATE group AS way_id, ST_MakeSegments(ordered.node_id, ordered.location) AS geom,
+    FLATTEN(TOP(1, 0, tags)) AS tags;
+};
+
+raod_segments = FOREACH raod_segments GENERATE way_id, FLATTEN(geom), tags;
+raod_segments = FOREACH raod_segments GENERATE CONCAT((CHARARRAY)way_id, (CHARARRAY)position), id1, x1, y1, id2, x2, y2, way_id, edu.umn.cs.spatialHadoop.osm.MapToJson(tags);
+
+STORE raod_segments into '$output/road_network.bz2' USING PigStorage(',');
 
 /******************************************************/
 /* Read and parse relations */
@@ -153,6 +155,7 @@ way_objects = FOREACH dangled_ways
 
 all_objects = UNION ONSCHEMA relation_objects, way_objects;
 
+/*
 buildings = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
   'amenity,building.bz2',
   'yes');
@@ -185,3 +188,4 @@ STORE postal INTO '$output/postal_codes.bz2';
 
 STORE all_objects INTO '$output/all_objects.bz2';
 STORE bad_relations INTO '$output/bad_relations.bz2';
+*/
