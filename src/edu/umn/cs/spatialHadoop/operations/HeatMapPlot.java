@@ -85,6 +85,7 @@ public class HeatMapPlot {
   public static class FrequencyMap implements Writable {
     float[][] frequency;
     float[][] gaussianKernel;
+    float[][] circleKernel;
     int radius;
     
     private Map<Integer, BufferedImage> cachedCircles = new HashMap<Integer, BufferedImage>();
@@ -214,10 +215,7 @@ public class HeatMapPlot {
           int imgx = x - radius + cx;
           int imgy = y - radius + cy;
           if (imgx >= 0 && imgx < getWidth() && imgy >= 0 && imgy < getHeight()) {
-            boolean filled = (circle.getRGB(x, y) & 0xff) == 0;
-            if (filled) {
-              frequency[x - radius + cx][y - radius + cy]++;
-            }
+        	  frequency[x-radius+cx][y-radius+cy] += circleKernel[x][y];
           }
         }
       }
@@ -270,8 +268,24 @@ public class HeatMapPlot {
         graphics.fillArc(0, 0, radius * 2, radius * 2, 0, 360);
         graphics.dispose();
         cachedCircles.put(radius, circle);
+        createCircleKernel(radius);
       }
       return circle;
+    }
+    
+    public void createCircleKernel(int radius) {
+    	circleKernel = new float[2*radius][2*radius];
+    	BufferedImage circle = cachedCircles.get(radius);
+    	for(int x=0; x<circleKernel.length; x++) {
+    		for(int y=0; y<circleKernel[0].length; y++) {
+    			boolean filled = (circle.getRGB(x, y) & 0xff) == 0;
+    			if(filled) {
+    				circleKernel[x][y] = 1;
+    			} else {
+    				circleKernel[x][y] = 0;
+    			}
+    		}
+    	}
     }
   }
 
