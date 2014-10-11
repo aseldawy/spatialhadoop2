@@ -14,6 +14,7 @@
   
   <path id="hdflib.path.ref">
     <fileset dir="lib/hdflib" includes="*.jar"/>
+  	<fileset dir="lib" includes="*.jar"/>
   </path>
 
   <path id="common.lib.path.ref">
