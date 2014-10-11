@@ -4,6 +4,8 @@
   <property name="src" location="src"/>
 	<property name="res" location="res"/>
   <property name="doc" location="doc"/>
+  <property name="build0" location="bin0/classes"/>
+  <property name="dist0"  location="bin0/dist"/>
   <property name="build1" location="bin1/classes"/>
   <property name="dist1"  location="bin1/dist"/>
   <property name="build2" location="bin2/classes"/>
@@ -18,7 +20,11 @@
     <fileset dir="lib/ivy/common" includes="*.jar"/>
   </path>
 
-  <path id="hadoop1.lib.path.ref">
+  <path id="hadoop0.lib.path.ref">
+    <fileset dir="lib/ivy/hadoop0" includes="*.jar"/>
+  </path>
+
+	<path id="hadoop1.lib.path.ref">
     <fileset dir="lib/ivy/hadoop1" includes="*.jar"/>
   </path>
 
@@ -30,7 +36,14 @@
     <ivy:retrieve pattern="lib/ivy/[conf]/[artifact]-[revision].[ext]" />
   </target>
   
-  <target name="init1" depends="resolve">
+  <target name="init0" depends="resolve">
+    <!-- Create the time stamp -->
+    <tstamp/>
+    <!-- Create the build directory structure used by compile -->
+    <mkdir dir="${build0}"/>
+  </target>
+
+	<target name="init1" depends="resolve">
     <!-- Create the time stamp -->
     <tstamp/>
     <!-- Create the build directory structure used by compile -->
@@ -42,6 +55,22 @@
     <tstamp/>
     <!-- Create the build directory structure used by compile -->
     <mkdir dir="${build2}"/>
+  </target>
+	
+  <target name="compile0" depends="init0"
+        description="compile the source " >
+    <!-- Compile the java code from ${src} into ${build} -->
+    <javac srcdir="${src}" destdir="${build0}"
+    	  classpath="${toString:hdflib.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop0.lib.path.ref}"
+    	  target="1.6" source="1.6" debug="true" debuglevel="lines,vars,source"/>
+    <copy todir="${build0}">
+    	<fileset dir="${res}">
+    		<include name="spatial-default.xml"/>
+    		<include name="zoom_view.html"/>
+        <include name="gistic_logo.png"/>
+        <include name="gistic_logo_license.txt"/>
+    	</fileset>
+  	</copy>
   </target>
 	
   <target name="compile1" depends="init1"
@@ -80,6 +109,29 @@
       description="Generates JavaDoc for the source code">
     <mkdir dir="${doc}"/>
     <javadoc sourcepath="${src}" destdir="${doc}"/>
+  </target>
+  
+  <target name="dist0" depends="compile0"
+        description="generate the distribution for Hadoop 0.x" >
+    <!-- Create the distribution directory -->
+    <mkdir dir="${dist0}"/>
+
+    <!-- Put everything in ${build} into the spatialhadoop-${version}.jar file -->
+    <jar jarfile="${dist0}/spatialhadoop-${version}.jar" basedir="${build0}">
+      <manifest>
+        <attribute name="Manifest-Version" value="1.0"/>
+        <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
+      </manifest>
+  	</jar>
+
+  	<!-- For backward compatibility, provide a jar that contains just the main class-->
+    <jar jarfile="${dist0}/spatialhadoop-main.jar">
+    	<fileset dir="${build0}" includes="edu/umn/cs/spatialHadoop/operations/Main.class"/>
+    	<manifest>
+        <attribute name="Manifest-Version" value="1.0"/>
+        <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
+    	</manifest>
+  	</jar>
   </target>
   
   <target name="dist1" depends="compile1"
@@ -128,6 +180,19 @@
     </jar>
   </target>
   
+
+  <target name="emr-jar0" depends="dist0"
+      description="Creates a JAR file that can run on Amazon EMR for Hadoop 0.x">
+    <zip destfile="${dist0}/spatialhadoop-${version}-emr.jar">
+      <zipgroupfileset dir="lib/ivy/common">
+        <include name="esri-geometry-api-*.jar"/>
+        <exclude name="*sources.jar"/>
+        <exclude name="*javadoc.jar"/>
+        <include name="jts-*.jar"/>
+      </zipgroupfileset>
+      <zipgroupfileset dir="${dist0}" includes="spatialhadoop-${version}.jar"/>
+    </zip>
+  </target>
 
   <target name="emr-jar1" depends="dist1"
       description="Creates a JAR file that can run on Amazon EMR for Hadoop 1.x">
