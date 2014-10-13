@@ -419,24 +419,19 @@ public class DistributedCopy {
           outFs.delete(dirToConcat.getPath(), true);
           outFs.rename(tmpPath, dirToConcat.getPath());
         } else if (!filesToConcat.isEmpty()) {
-          Path concatPath = filesToConcat.remove(0);
-          try {
-            outFs.concat(concatPath, filesToConcat.toArray(new Path[filesToConcat.size()]));
-          } catch (Exception e) {
-            concatPath = dirToConcat.getPath().suffix("_off");
-            FSDataOutputStream concatenated = outFs.create(concatPath);
-            byte[] buffer = new byte[1024*1024];
-            for (Path fileToContact : filesToConcat) {
-              FSDataInputStream in = outFs.open(fileToContact);
-              int bytesRead;
-              do {
-                bytesRead = in.read(buffer, 0, buffer.length);
-                if (bytesRead > 0)
-                  concatenated.write(buffer, 0, bytesRead);
-              } while (bytesRead > 0);
-            }
-            concatenated.close();
+          Path concatPath = dirToConcat.getPath().suffix("_off");
+          FSDataOutputStream concatenated = outFs.create(concatPath);
+          byte[] buffer = new byte[1024*1024];
+          for (Path fileToContact : filesToConcat) {
+            FSDataInputStream in = outFs.open(fileToContact);
+            int bytesRead;
+            do {
+              bytesRead = in.read(buffer, 0, buffer.length);
+              if (bytesRead > 0)
+                concatenated.write(buffer, 0, bytesRead);
+            } while (bytesRead > 0);
           }
+          concatenated.close();
           Path tmpPath = dirToConcat.getPath().suffix("_tmp");
           outFs.rename(concatPath, tmpPath);
           outFs.delete(dirToConcat.getPath(), true);
