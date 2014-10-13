@@ -442,8 +442,17 @@ public class DistributedJoin {
     else
       throw new RuntimeException("Unknown index at: "+files[1-file_to_repartition]);
     
+    params.set("sindex", sindex);
+    
+    //Repartition the smaller file with heuristics cells info (general indexing)
     Repartition.repartitionMapReduce(files[file_to_repartition],
         partitioned_file, params);
+    
+    //Repartition the smaller file on the same cells of the larger file
+    /*Repartition.repartitionMapReduce(Path inFile, Path outPath,
+    	      params.getShape("shape"), long blockSize, cells, params.get("sindex"),
+    	      params.is("overwrite"))*/
+    	      
     long t2 = System.currentTimeMillis();
     System.out.println("Repartition time "+(t2-t1)+" millis");
   
@@ -715,6 +724,7 @@ public class DistributedJoin {
     System.out.println("<input file 1> - (*) Path to the first input file");
     System.out.println("<input file 2> - (*) Path to the second input file");
     System.out.println("<output file> - Path to output file");
+    System.out.println("repartition:<decision> - (*) Decision to repartition smaller dataset (yes|no|auto)");
     System.out.println("-overwrite - Overwrite output file without notice");
     
     GenericOptionsParser.printGenericCommandUsage(System.out);
@@ -738,8 +748,7 @@ public class DistributedJoin {
       System.exit(1);
     }
     
-    String repartition = params.get("repartition", "no");
-    
+    String repartition = params.get("repartition");
     Path[] inputPaths = params.getInputPaths();
     Path outputPath = params.getOutputPath();
 
