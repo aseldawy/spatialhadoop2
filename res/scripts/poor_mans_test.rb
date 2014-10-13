@@ -23,18 +23,21 @@ def system_check(cmd)
   raise "Error running '#{cmd}'" unless success 
 end
 
+$shadoop_jar = Dir.glob("**/spatialhadoop-*.jar").find{ |f| f =~ /\d/ }
+$shadoop_cmd = "hadoop jar #$shadoop_jar"
+
 ExtraConfigParams = "-D dfs.block.size=#{1024*1024}"
 
 def generate_file(prefix, shape)
   filename = "#{prefix}.#{shape}"
-  system_check "shadoop generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:200.kb mbr:0,0,10000,10000 -overwrite"
+  system_check "#$shadoop_cmd generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:200.kb mbr:0,0,10000,10000 -overwrite"
   filename
 end
 
 def index_file(filename, sindex)
   shape = File.extname(filename)[1..-1]
   indexed_filename = filename.dup; indexed_filename[-File.extname(filename).length, 0] = ".#{sindex}"
-  system_check "shadoop index #{ExtraConfigParams} #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite"
+  system_check "#$shadoop_cmd index #{ExtraConfigParams} #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite"
   indexed_filename
 end
 
@@ -60,7 +63,7 @@ end
 
 def range_query(input, output, query, extra_args)
   shape = File.extname(input)[1..-1]
-  system_check "shadoop rangequery #{ExtraConfigParams} #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd rangequery #{ExtraConfigParams} #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
 end
 
 def test_range_query
@@ -103,7 +106,7 @@ end
 
 def knn_query(input, output, point, k, extra_args="")
   shape = File.extname(input)[1..-1]
-  system_check "shadoop knn #{ExtraConfigParams} #{input} #{output} shape:#{shape} point:#{point} k:#{k} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd knn #{ExtraConfigParams} #{input} #{output} shape:#{shape} point:#{point} k:#{k} #{extra_args} -overwrite"
 end
 
 def test_knn
@@ -136,7 +139,7 @@ end
 
 def spatial_join(method, file1, file2, output, extra_args = '')
   shape = File.extname(file1)[1..-1]
-  system_check "shadoop #{method} #{ExtraConfigParams} #{file1} #{file2} #{output} shape:#{shape} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd #{method} #{ExtraConfigParams} #{file1} #{file2} #{output} shape:#{shape} #{extra_args} -overwrite"
 end
 
 def test_spatial_join
@@ -215,7 +218,7 @@ end
 
 def plot(input, output, extra_args="")
   shape = File.extname(input)[1..-1]
-  system_check "shadoop plot #{ExtraConfigParams} #{input} #{output} shape:#{shape} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd plot #{ExtraConfigParams} #{input} #{output} shape:#{shape} #{extra_args} -overwrite"
 end
 
 def test_plot
