@@ -50,7 +50,7 @@
         };
 
         Demo.ImgMapType.prototype.tileSize = new google.maps.Size(#{TILE_WIDTH}, #{TILE_HEIGHT});
-        Demo.ImgMapType.prototype.minZoom = 0;
+        Demo.ImgMapType.prototype.minZoom = #{MIN_ZOOM};
         Demo.ImgMapType.prototype.maxZoom = #{MAX_ZOOM};
 
         Demo.ImgMapType.prototype.getTile = function (coord, zoom, ownerDocument) {
