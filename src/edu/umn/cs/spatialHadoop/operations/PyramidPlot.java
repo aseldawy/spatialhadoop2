@@ -979,8 +979,7 @@ public class PyramidPlot {
 	  }
 	  partitionStr.toLowerCase();
 	  // Get the Levels.
-	  //int dataPartitioningMaxLevel = 5;
-	  int dataPartitioningMaxLevel = 2;
+	  int dataPartitioningMaxLevel = 5;
 	  String levelsRange = params.get("levels");
 	  int lowerRange = 0;
 	  int upperRange = 1;
