@@ -150,6 +150,12 @@ public class OperationsParams extends Configuration {
   public Path getOutputPath() {
     return allPaths.length > 1 ? allPaths[allPaths.length - 1] : null;
   }
+  
+  public void setOutputPath(String newPath) {
+	  if(allPaths.length > 1) {
+		  allPaths[allPaths.length-1] = new Path(newPath);
+	  }
+  }
 
   public Path getInputPath() {
     return getPath();
