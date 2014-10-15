@@ -68,6 +68,7 @@ import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
@@ -172,7 +173,7 @@ public class PyramidPlot {
    * @author Ahmed Eldawy
    */
   public static class SpacePartitionMap extends MapReduceBase 
-    implements Mapper<Rectangle, ArrayWritable, TileIndex, Shape> {
+    implements Mapper<Rectangle, ShapeIterator, TileIndex, Shape> {
 
     /**Number of levels in the pyramid*/
     private int topLevel;
@@ -212,7 +213,7 @@ public class PyramidPlot {
       this.gradualFade = job.getBoolean("fade", false);
     }
     
-    public void map(Rectangle cell, ArrayWritable value,
+    public void map(Rectangle cell, ShapeIterator value,
         OutputCollector<TileIndex, Shape> output, Reporter reporter)
         throws IOException {
     	
@@ -264,7 +265,9 @@ public class PyramidPlot {
         }
       } else {
     	  
-          for(Shape shape : (Shape[]) value.get()) {
+    	  while(value.hasNext()) {
+    		  Shape shape = value.next();
+
         	  Rectangle shapeMBR = shape.getMBR();
         	  if (shapeMBR == null)
         		  continue;
@@ -310,7 +313,8 @@ public class PyramidPlot {
         		  
         		  reporter.progress();
         	  }
-          }
+          
+    	  }
       }
     }
   }
@@ -395,7 +399,7 @@ public class PyramidPlot {
   }
   
   public static class DataPartitionMap extends MapReduceBase 
-    implements Mapper<Rectangle, ArrayWritable, TileIndex, ImageWritable> {
+    implements Mapper<Rectangle, ShapeIterator, TileIndex, ImageWritable> {
 
     /**The image of each tile that has data*/
     private Map<TileIndex, BufferedImage> tileImages =
@@ -463,55 +467,58 @@ public class PyramidPlot {
     }
     
     @Override
-    public void map(Rectangle d, ArrayWritable value,
+    public void map(Rectangle d, ShapeIterator value,
         OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
         throws IOException {
-      for (Shape shape : (Shape[])value.get()) {
-        Rectangle shapeMBR = shape.getMBR();
-        if (shapeMBR == null)
-          continue;
-        
-        int min_level = bottomLevel;
-        
-        if (adaptiveSampling) {
-          // Special handling for NASA data
-          double p = Math.random();
-          // Skip levels that do not satisfy the probability
-          while (min_level <= topLevel && p > levelProb[min_level])
-            min_level++;
-        }
-        
-        java.awt.Rectangle overlappingCells =
-            bottomGrid.getOverlappingCells(shapeMBR);
-        for (key.level = topLevel; key.level >= min_level; key.level--) {
-          if (gradualFade && !(shape instanceof Point)) {
-            double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
-            if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-              // This shape can be safely skipped as it is too small to be plotted
+    	
+    	while(value.hasNext()) {
+    		Shape shape = value.next();
+
+            Rectangle shapeMBR = shape.getMBR();
+            if (shapeMBR == null)
               continue;
+            
+            int min_level = bottomLevel;
+            
+            if (adaptiveSampling) {
+              // Special handling for NASA data
+              double p = Math.random();
+              // Skip levels that do not satisfy the probability
+              while (min_level <= topLevel && p > levelProb[min_level])
+                min_level++;
             }
-          }
-          for (int i = 0; i < overlappingCells.width; i++) {
-            key.x = i + overlappingCells.x;
-            for (int j = 0; j < overlappingCells.height; j++) {
-              key.y = j + overlappingCells.y;
-              // Draw in image associated with this tile
-              Graphics2D g = getGraphics(key);
-              shape.draw(g, fileMBR, tileWidth * (1 << key.level),
-                  tileHeight * (1 << key.level), scale2[key.level]);
-            }
-          }
-          // Shrink overlapping cells to match the upper level
-          int updatedX1 = overlappingCells.x / 2;
-          int updatedY1 = overlappingCells.y / 2;
-          int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
-          int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
-          overlappingCells.x = updatedX1;
-          overlappingCells.y = updatedY1;
-          overlappingCells.width = updatedX2 - updatedX1 + 1;
-          overlappingCells.height = updatedY2 - updatedY1 + 1;
-        }
-      }
+            
+            java.awt.Rectangle overlappingCells =
+                bottomGrid.getOverlappingCells(shapeMBR);
+            for (key.level = topLevel; key.level >= min_level; key.level--) {
+              if (gradualFade && !(shape instanceof Point)) {
+                double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
+                if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+                  // This shape can be safely skipped as it is too small to be plotted
+                  continue;
+                }
+              }
+              for (int i = 0; i < overlappingCells.width; i++) {
+                key.x = i + overlappingCells.x;
+                for (int j = 0; j < overlappingCells.height; j++) {
+                  key.y = j + overlappingCells.y;
+                  // Draw in image associated with this tile
+                  Graphics2D g = getGraphics(key);
+                  shape.draw(g, fileMBR, tileWidth * (1 << key.level),
+                      tileHeight * (1 << key.level), scale2[key.level]);
+                }
+              }
+              // Shrink overlapping cells to match the upper level
+              int updatedX1 = overlappingCells.x / 2;
+              int updatedY1 = overlappingCells.y / 2;
+              int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
+              int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
+              overlappingCells.x = updatedX1;
+              overlappingCells.y = updatedY1;
+              overlappingCells.width = updatedX2 - updatedX1 + 1;
+              overlappingCells.height = updatedY2 - updatedY1 + 1;
+            } 
+    	}
       for (Map.Entry<TileIndex, Graphics2D> tileGraph : tileGraphics.entrySet()) {
         tileGraph.getValue().dispose();
       }
@@ -885,13 +892,13 @@ public class PyramidPlot {
       job.setReducerClass(SpacePartitionReduce.class);
       job.setMapOutputKeyClass(TileIndex.class);
       job.setMapOutputValueClass(shape.getClass());
-      job.setInputFormat(ShapeArrayInputFormat.class);
+      job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
     } else {
       job.setMapperClass(DataPartitionMap.class);
       job.setReducerClass(DataPartitionReduce.class);
       job.setMapOutputKeyClass(TileIndex.class);
       job.setMapOutputValueClass(ImageWritable.class);
-      job.setInputFormat(ShapeArrayInputFormat.class);
+      job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
     }
 
     job.setInt("color", color.getRGB());

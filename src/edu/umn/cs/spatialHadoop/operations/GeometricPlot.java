@@ -185,37 +185,38 @@ public class GeometricPlot {
           }
         }
       } else {
-        for(Shape shape : (Shape[]) ((ArrayWritable)value).get()) {
-          
-          Rectangle shapeMbr = shape.getMBR();
-       	  if (shapeMbr == null)
-       		  continue;
-       	  // Check if this shape can be skipped using the gradual fade option
-       	  if (gradualFade && !(shape instanceof Point)) {
-       		  double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
-       		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-       			  // This shape can be safely skipped as it is too small to be plotted
-       			  continue;
-       		  }
-       	  }
-       	  if (adaptiveSample && shape instanceof Point) {
-       		  if (Math.random() > adaptiveSampleRatio)
-       			  continue;
-       	  }
+    	  while(((ShapeIterator) value).hasNext()) {
+    		  Shape shape = ((ShapeIterator) value).next();         
+              Rectangle shapeMbr = shape.getMBR();
+           	  if (shapeMbr == null)
+           		  continue;
+           	  // Check if this shape can be skipped using the gradual fade option
+           	  if (gradualFade && !(shape instanceof Point)) {
+           		  double areaInPixels = (shapeMbr.getWidth() + shapeMbr.getHeight()) * scale;
+           		  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+           			  // This shape can be safely skipped as it is too small to be plotted
+           			  continue;
+           		  }
+           	  }
+           	  if (adaptiveSample && shape instanceof Point) {
+           		  if (Math.random() > adaptiveSampleRatio)
+           			  continue;
+           	  }
 
-       	  // Skip shapes outside query range if query range is set
-       	  if (queryRange != null && !shapeMbr.isIntersected(queryRange))
-       		  continue;
-       	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
-       	  for (int i = 0; i < overlappingCells.width; i++) {
-       		  int x = overlappingCells.x + i;
-       		  for (int j = 0; j < overlappingCells.height; j++) {
-       			  int y = overlappingCells.y + j;
-       			  cellNumber.set(y * partitionGrid.columns + x + 1);
-       			  output.collect(cellNumber, shape);
-       		  }
-       	  }
-        }
+           	  // Skip shapes outside query range if query range is set
+           	  if (queryRange != null && !shapeMbr.isIntersected(queryRange))
+           		  continue;
+           	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMbr);
+           	  for (int i = 0; i < overlappingCells.width; i++) {
+           		  int x = overlappingCells.x + i;
+           		  for (int j = 0; j < overlappingCells.height; j++) {
+           			  int y = overlappingCells.y + j;
+           			  cellNumber.set(y * partitionGrid.columns + x + 1);
+           			  output.collect(cellNumber, shape);
+           		  }
+           	  }
+            
+    	  }
       }
     }
   }
@@ -330,7 +331,7 @@ public class GeometricPlot {
    * @author Ahmed Eldawy
    */
   public static class SkewedPartitionMap extends MapReduceBase implements
-  Mapper<Rectangle, ArrayWritable, IntWritable, Shape> {
+  Mapper<Rectangle, ShapeIterator, IntWritable, Shape> {
 
     /**The cells used to partition the space*/
     private CellInfo[] cells;
@@ -367,11 +368,12 @@ public class GeometricPlot {
       }
     }
 
-    public void map(Rectangle dummy, ArrayWritable value,
+    public void map(Rectangle dummy, ShapeIterator value,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
             throws IOException {
       
-      for(Shape shape : (Shape[]) value.get()) {
+      while(value.hasNext()) {
+    	  Shape shape = value.next();
     	  Rectangle shapeMBR = shape.getMBR();
     	  if (shapeMBR == null)
     		  continue;
@@ -524,7 +526,7 @@ public class GeometricPlot {
    *
    */
   public static class AlreadyPartitionedMap extends MapReduceBase 
-  implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
+  implements Mapper<Rectangle, ShapeIterator, Rectangle, ImageWritable> {
 
     private Rectangle fileMBR;
     private int imageWidth, imageHeight;
@@ -568,7 +570,7 @@ public class GeometricPlot {
     }
 
     @Override
-    public void map(Rectangle key, ArrayWritable value,
+    public void map(Rectangle key, ShapeIterator value,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
             throws IOException {
       // Initialize the image
@@ -587,28 +589,30 @@ public class GeometricPlot {
       Color strokeClr = new Color(strokeColor);
       graphics.setColor(strokeClr);
       graphics.translate(-image_x1, -image_y1);
-
-      for (Shape s : (Shape[]) value.get()) {
-        if (fade) {
-          Rectangle shapeMBR = s.getMBR();
-          double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
-          if (areaInPixels > 1.0) {
-            graphics.setColor(strokeClr);
-          } else {
-            byte alpha = (byte) Math.round(areaInPixels * 255);
-            if (alpha == 0) {
-              // Skip this shape
-              continue;
-            } else {
-              graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+      
+      while(value.hasNext()) {
+    	  Shape s = value.next();
+          if (fade) {
+              Rectangle shapeMBR = s.getMBR();
+              double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+              if (areaInPixels > 1.0) {
+                graphics.setColor(strokeClr);
+              } else {
+                byte alpha = (byte) Math.round(areaInPixels * 255);
+                if (alpha == 0) {
+                  // Skip this shape
+                  continue;
+                } else {
+                  graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+                }
+              }
             }
-          }
-        }
-        if (adaptiveSample && s instanceof Point) {
-          if (Math.random() > adaptiveSampleRatio)
-            return;
-        }
-        s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
+            if (adaptiveSample && s instanceof Point) {
+              if (Math.random() > adaptiveSampleRatio)
+                return;
+            }
+            s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
+          
       }
       graphics.dispose();
       sharedValue.setImage(image);
@@ -689,7 +693,7 @@ public class GeometricPlot {
    *
    */
   public static class DataPartitionMap extends MapReduceBase 
-  implements Mapper<Rectangle, ArrayWritable, Rectangle, ImageWritable> {
+  implements Mapper<Rectangle, ShapeIterator, Rectangle, ImageWritable> {
 
     /**Only objects inside this query range are drawn*/
     private Shape queryRange;
@@ -737,7 +741,7 @@ public class GeometricPlot {
     }
 
     @Override
-    public void map(Rectangle cell, ArrayWritable value,
+    public void map(Rectangle cell, ShapeIterator value,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
             throws IOException {
       BufferedImage image = new BufferedImage(imageWidth, imageHeight,
@@ -753,32 +757,33 @@ public class GeometricPlot {
       graphics.clearRect(0, 0, imageWidth, imageHeight);
       Color storkeClr = new Color(strokeColor);
       graphics.setColor(storkeClr);
-
-      for (Shape shape : (Shape[]) value.get()) {
-        if (queryRange == null || queryRange.isIntersected(shape)) {
-          if (fade) {
-            Rectangle shapeMBR = shape.getMBR();
-            if(shapeMBR != null) {
-            	 // shapeArea represents how many pixels are covered by shapeMBR
-                double shapeArea = (shapeMBR.getWidth() + shapeMBR.getHeight()) * this.scale;
-                if (shapeArea > 1.0) {
-                  graphics.setColor(storkeClr);
-                } else {
-                  byte alpha = (byte) Math.round(shapeArea * 255);
-                  if (alpha == 0) {
-                    continue;
-                  } else {
-                    graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
-                  }
-                }
-            }
-          }
-          if (adaptiveSample && shape instanceof Point) {
-            if (Math.random() > adaptiveSampleRatio)
-              continue;
-          }
-          shape.draw(graphics, drawMbr, imageWidth, imageHeight, scale2);
-        }
+      
+      while(value.hasNext()) {
+    	 Shape shape = value.next();
+         if (queryRange == null || queryRange.isIntersected(shape)) {
+           if (fade) {
+             Rectangle shapeMBR = shape.getMBR();
+             if(shapeMBR != null) {
+             	 // shapeArea represents how many pixels are covered by shapeMBR
+                 double shapeArea = (shapeMBR.getWidth() + shapeMBR.getHeight()) * this.scale;
+                 if (shapeArea > 1.0) {
+                   graphics.setColor(storkeClr);
+                 } else {
+                   byte alpha = (byte) Math.round(shapeArea * 255);
+                   if (alpha == 0) {
+                     continue;
+                   } else {
+                     graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+                   }
+                 }
+             }
+           }
+           if (adaptiveSample && shape instanceof Point) {
+             if (Math.random() > adaptiveSampleRatio)
+               continue;
+           }
+           shape.draw(graphics, drawMbr, imageWidth, imageHeight, scale2);
+         }
       }
 
       graphics.dispose();
@@ -926,7 +931,7 @@ public class GeometricPlot {
         LOG.info("Partitioned plot with an already partitioned file");
         job.setMapperClass(AlreadyPartitionedMap.class);
         job.setNumMapTasks(0); // No reducer for this job
-        job.setInputFormat(ShapeArrayInputFormat.class);
+        job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
         job.setMapOutputKeyClass(Rectangle.class);
         job.setMapOutputValueClass(ImageWritable.class);
       } else if (partition.equals("grid")) {
@@ -941,7 +946,7 @@ public class GeometricPlot {
         partitionGrid.calculateCellDimensions(
             (int) Math.max(1, clusterStatus.getMaxReduceTasks()));
         OperationsParams.setShape(job, PartitionGrid, partitionGrid);
-        job.setInputFormat(ShapeArrayInputFormat.class);
+        job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
       } else if (partition.equals("space")) {
         // Use Skewed partitioning
         LOG.info("Use skewed partitioning then plot");
@@ -953,7 +958,7 @@ public class GeometricPlot {
         // Pack in rectangles using an RTree
         CellInfo[] cellInfos = Repartition.packInRectangles(inFile, outFile, params, fileMBR);
         SpatialSite.setCells(job, cellInfos);
-        job.setInputFormat(ShapeArrayInputFormat.class);
+        job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
       }
     } else if (partition.equals("data")) {
       LOG.info("Plot using data partitioning");
@@ -962,7 +967,7 @@ public class GeometricPlot {
       job.setReducerClass(DataPartitionReduce.class);
       job.setMapOutputKeyClass(Rectangle.class);
       job.setMapOutputValueClass(ImageWritable.class);
-      job.setInputFormat(ShapeArrayInputFormat.class);
+      job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
     } else {
       throw new RuntimeException("Unknown partition scheme '"+job.get("partition")+"'");
     }
@@ -1315,4 +1320,4 @@ public class GeometricPlot {
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }
-  }
+}
