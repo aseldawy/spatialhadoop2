@@ -26,6 +26,7 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -205,6 +206,9 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       return false;
 
     try {
+      if (fs.getFileStatus(file).getLen() < 150L * 1024 * 1024) {
+    	return false;
+      }
       // For performance reasons, skip checking isRTree if the file is on http
       // isRTree needs to open the file and reads the first 8 bytes. Doing this
       // in the input format means it will open all files in input which is
