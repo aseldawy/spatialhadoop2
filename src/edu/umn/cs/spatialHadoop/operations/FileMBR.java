@@ -347,7 +347,11 @@ public class FileMBR {
     Partition cachedMBR = fileMBRCached(file, params);
     if (cachedMBR != null)
       return cachedMBR;
- 
+    if (!params.autoDetectShape()) {
+      LOG.error("shape of input files is not set and cannot be auto detected");
+      return null; 
+    }
+    
     JobConf job = new JobConf(params, FileMBR.class);
     FileInputFormat.addInputPath(job, file);
     ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
@@ -392,6 +396,11 @@ public class FileMBR {
     long t1 = System.currentTimeMillis();
     Rectangle mbr = fileMBR(inputFile, params);
     long t2 = System.currentTimeMillis();
+    if (mbr == null) {
+      LOG.error("Error computing the MBR");
+      System.exit(1);
+    }
+      
     System.out.println("Total processing time: "+(t2-t1)+" millis");
     System.out.println("MBR of records in file '"+inputFile+"' is "+mbr);
   }

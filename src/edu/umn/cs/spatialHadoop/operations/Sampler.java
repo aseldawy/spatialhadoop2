@@ -236,7 +236,7 @@ public class Sampler {
     if (selectRatio > 1.0f) {
       // Return all records from the output
       ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
-      ShapeLineInputFormat.addInputPath(job, outputPath);
+      ShapeLineInputFormat.setInputPaths(job, outputPath);
       InputSplit[] splits = inputFormat.getSplits(job, 1);
       for (InputSplit split : splits) {
         RecordReader<Rectangle, Text> reader = inputFormat.getRecordReader(split, job, null);

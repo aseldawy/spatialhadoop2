@@ -712,7 +712,7 @@ public class Repartition {
 	public static void main(String[] args) throws Exception {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     
-    if (!params.checkInputOutput()) {
+    if (!params.checkInputOutput(true)) {
       printUsage();
       return;
     }
