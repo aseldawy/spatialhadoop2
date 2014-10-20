@@ -394,9 +394,8 @@ public class KNN {
 
       // Retrieve answers for this iteration
       Counters counters = runningJob.getCounters();
-      Counter outputRecordCounter = counters.findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
-      resultCount = outputRecordCounter.getValue();
-      
+      resultCount = counters.getCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
+
       if (globalIndex != null) {
         Circle range_for_next_iteration;
         if (resultCount < k) {
