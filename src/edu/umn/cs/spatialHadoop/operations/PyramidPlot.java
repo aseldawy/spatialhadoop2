@@ -30,6 +30,7 @@ import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -51,6 +52,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
@@ -174,7 +176,8 @@ public class PyramidPlot {
     implements Mapper<Rectangle, ArrayWritable, TileIndex, Shape> {
 
     /**Number of levels in the pyramid*/
-    private int numLevels;
+    private int topLevel;
+    private int bottomLevel;
     /**The grid at the bottom level of the pyramid*/
     private GridInfo bottomGrid;
     /**Used as a key for output*/
@@ -188,21 +191,22 @@ public class PyramidPlot {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      this.numLevels = job.getInt("numlevels", 1);
+      this.topLevel = job.getInt("topLevel", 1);
+      this.bottomLevel = job.getInt("bottomLevel", 0);
       Rectangle inputMBR = SpatialSite.getRectangle(job, InputMBR);
       this.bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
       this.bottomGrid.rows = bottomGrid.columns =
-          (int) Math.round(Math.pow(2, numLevels - 1));
+          (int) Math.round(Math.pow(2, topLevel));
       this.key = new TileIndex();
       this.adaptiveSampling = job.getBoolean("sample", false);
-      this.levelProb = new double[this.numLevels];
-      this.scale = new double[numLevels];
+      this.levelProb = new double[this.topLevel+1];
+      this.scale = new double[topLevel+1];
       int tileWidth = job.getInt("tilewidth", 256);
       int tileHeight = job.getInt("tileheight", 256);
       this.scale[0] = Math.sqrt((double)tileWidth * tileHeight /
           (inputMBR.getWidth() * inputMBR.getHeight()));
       this.levelProb[0] = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
-      for (int level = 1; level < numLevels; level++) {
+      for (int level = 1; level < topLevel; level++) {
         this.levelProb[level] = this.levelProb[level - 1] * 4;
         this.scale[level] = this.scale[level - 1] * (1 << level);
       }
@@ -219,18 +223,20 @@ public class PyramidPlot {
         if (shapeMBR == null)
           return;
         
-        int min_level = 0;
+        int min_level = bottomLevel;
+        int index = 0;
         if (adaptiveSampling && shape instanceof Point) {
           // Special handling for NASA data
           double p = Math.random();
           // Skip levels that do not satisfy the probability
-          while (min_level < numLevels && p > levelProb[min_level])
+          while (min_level <= topLevel && p > levelProb[index])
             min_level++;
+          	index++;
         }
         
         java.awt.Rectangle overlappingCells =
             bottomGrid.getOverlappingCells(shapeMBR);
-        for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
+        for (key.level = topLevel; key.level >= min_level; key.level--) {
           if (gradualFade && !(shape instanceof Point)) {
             double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
             if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
@@ -264,18 +270,19 @@ public class PyramidPlot {
         	  if (shapeMBR == null)
         		  continue;
           
-        	  int min_level = 0;
+        	  int min_level = bottomLevel;
+        	  int index = 0;
         	  if (adaptiveSampling && shape instanceof Point) {
         		  // Special handling for NASA data
         		  double p = Math.random();
         		  // Skip levels that do not satisfy the probability
-        		  while (min_level < numLevels && p > levelProb[min_level])
+        		  while (min_level < topLevel && p > levelProb[index])
         			  min_level++;
         	  }
           
         	  java.awt.Rectangle overlappingCells =
         			  bottomGrid.getOverlappingCells(shapeMBR);
-        	  for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
+        	  for (key.level = topLevel; key.level >= min_level; key.level--) {
         		  if (gradualFade && !(shape instanceof Point)) {
         			  double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
         			  if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
@@ -301,6 +308,8 @@ public class PyramidPlot {
         		  overlappingCells.y = updatedY1;
         		  overlappingCells.width = updatedX2 - updatedX1 + 1;
         		  overlappingCells.height = updatedY2 - updatedY1 + 1;
+        		  
+        		  reporter.progress();
         	  }
           }
       }
@@ -365,9 +374,14 @@ public class PyramidPlot {
         graphics.setColor(strokeColor);
         graphics.translate(-tileX1, -tileY1);
         
+        int i = 0;
         while (values.hasNext()) {
           Shape s = values.next();
           s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
+          
+          if (++i % 100 == 0) {
+        	  reporter.progress();
+          }
         }
         
         graphics.dispose();
@@ -393,7 +407,8 @@ public class PyramidPlot {
         new HashMap<PyramidPlot.TileIndex, Graphics2D>();
 
     /**Number of levels in the pyramid*/
-    private int numLevels;
+    private int topLevel;
+    private int bottomLevel;
     /**The grid at the bottom level of the pyramid*/
     private GridInfo bottomGrid;
     /**Used as a key for output*/
@@ -422,26 +437,27 @@ public class PyramidPlot {
       super.configure(job);
       this.tileWidth = job.getInt("tilewidth", 256);
       this.tileHeight = job.getInt("tileheight", 256);
-      this.numLevels = job.getInt("numlevels", 1);
+      this.topLevel = job.getInt("topLevel", 1);
+      this.bottomLevel = job.getInt("bottomLevel", 0);
       this.fileMBR = SpatialSite.getRectangle(job, InputMBR);
       this.bottomGrid = new GridInfo(fileMBR.x1, fileMBR.y1, fileMBR.x2, fileMBR.y2);
       this.bottomGrid.rows = bottomGrid.columns =
-          (int) Math.round(Math.pow(2, numLevels - 1));
+          (int) Math.round(Math.pow(2, topLevel));
       this.key = new TileIndex();
       this.adaptiveSampling = job.getBoolean("sample", false);
-      this.levelProb = new float[this.numLevels];
-      this.scale2 = new double[numLevels];
-      this.scale = new double[numLevels];
+      this.levelProb = new float[this.topLevel+1];
+      this.scale2 = new double[topLevel+1];
+      this.scale = new double[topLevel+1];
       this.levelProb[0] = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.1f);
       // Size of the whole file in pixels at the f
       this.scale2[0] = (double)tileWidth * tileHeight /
           (fileMBR.getWidth() * fileMBR.getHeight());
       this.scale[0] = Math.sqrt(scale2[0]);
-      for (int level = 1; level < numLevels; level++) {
-        this.levelProb[level] = this.levelProb[level - 1] * 4;
-        this.scale2[level] = this.scale2[level - 1] *
+      for (int level = 1; level <= topLevel; level++) {
+        this.levelProb[level] = this.levelProb[level-1] * 4;
+        this.scale2[level] = this.scale2[level-1] *
             (1 << level) * (1 << level);
-        this.scale[level] = this.scale[level - 1] * (1 << level);
+        this.scale[level] = this.scale[level-1] * (1 << level);
       }
       this.strokeColor = new Color(job.getInt("color", 0));
       this.gradualFade = job.getBoolean("fade", false);
@@ -456,19 +472,19 @@ public class PyramidPlot {
         if (shapeMBR == null)
           continue;
         
-        int min_level = 0;
+        int min_level = bottomLevel;
         
         if (adaptiveSampling) {
           // Special handling for NASA data
           double p = Math.random();
           // Skip levels that do not satisfy the probability
-          while (min_level < numLevels && p > levelProb[min_level])
+          while (min_level <= topLevel && p > levelProb[min_level])
             min_level++;
         }
         
         java.awt.Rectangle overlappingCells =
             bottomGrid.getOverlappingCells(shapeMBR);
-        for (key.level = numLevels - 1; key.level >= min_level; key.level--) {
+        for (key.level = topLevel; key.level >= min_level; key.level--) {
           if (gradualFade && !(shape instanceof Point)) {
             double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[key.level];
             if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
@@ -593,9 +609,25 @@ public class PyramidPlot {
       OutputStream out = outFs.create(new Path(outPath, "default.png"));
       ImageIO.write(emptyImg, "png", out);
       out.close();
-
+      
+      // Get the correct levels.
+      String levelsRange = job.get("levels", "0,7");
+	  int lowerRange = 0;
+	  int upperRange = 1;
+	  if (levelsRange != null) {
+		  if(!levelsRange.contains(",")) {
+	  			upperRange = Integer.parseInt(levelsRange);
+	  		// For levels not start from 0.
+	   		} else {
+	   			String[] parts = levelsRange.split(",", 2);
+	   			lowerRange = Integer.parseInt(parts[0]);
+	   			upperRange = Integer.parseInt(parts[1]);
+	   		}
+	  }
+      
       // Add an HTML file that visualizes the result using Google Maps
-      int numLevels = job.getInt("numlevels", 7);
+      int bottomLevel = lowerRange;
+	  int topLevel = upperRange;
       LineReader templateFileReader = new LineReader(getClass().getResourceAsStream("/zoom_view.html"));
       PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath, "index.html")));
       Text line = new Text();
@@ -603,7 +635,8 @@ public class PyramidPlot {
         String lineStr = line.toString();
         lineStr = lineStr.replace("#{TILE_WIDTH}", Integer.toString(tileWidth));
         lineStr = lineStr.replace("#{TILE_HEIGHT}", Integer.toString(tileHeight));
-        lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(numLevels-1));
+        lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(topLevel));
+        lineStr = lineStr.replace("#{MIN_ZOOM}", Integer.toString(bottomLevel));
 
         htmlOut.println(lineStr);
       }
@@ -841,12 +874,12 @@ public class PyramidPlot {
     String hdfDataset = (String) params.get("dataset");
     Shape shape = hdfDataset != null ? new NASARectangle() : params.getShape("shape");
     Shape plotRange = params.getShape("rect");
-
+    
     boolean background = params.is("background");
     
     JobConf job = new JobConf(params, PyramidPlot.class);
     job.setJobName("PlotPyramid");
-    
+	
     String partition = job.get("partition", "space").toLowerCase();
     if (partition.equals("space")) {
       job.setMapperClass(SpacePartitionMap.class);
@@ -940,7 +973,82 @@ public class PyramidPlot {
   
   public static <S extends Shape> void plot(Path inFile, Path outFile, OperationsParams params)
           throws IOException {
-    plotMapReduce(inFile, outFile, params);
+	  
+	  String partitionStr = params.get("partition");
+	  if(partitionStr == null) {
+		  partitionStr = new String("hybrid");
+	  }
+	  partitionStr.toLowerCase();
+	  // Get the Levels.
+	  int dataPartitioningMaxLevel = 5;
+	  String levelsRange = params.get("levels");
+	  int lowerRange = 0;
+	  int upperRange = 1;
+	  if (levelsRange != null) {
+		  if(!levelsRange.contains(",")) {
+	  			upperRange = Integer.parseInt(levelsRange);
+	  		// For levels not start from 0.
+	   		} else {
+	   			String[] parts = levelsRange.split(",", 2);
+	   			lowerRange = Integer.parseInt(parts[0]);
+	   			upperRange = Integer.parseInt(parts[1]);
+	   		}
+	  }
+	  if(!partitionStr.equals("hybrid")) {
+		  params.setInt("bottomLevel", lowerRange);
+		  params.setInt("topLevel", upperRange);
+		  plotMapReduce(inFile, outFile, params);
+	  } else {
+		  // Set the Levels to a correct job.
+		  if(lowerRange <= dataPartitioningMaxLevel) {
+			  // Run the Data Partitioning MapReduce until level dataPartitioningMaxLevel.
+			  params.setInt("bottomLevel", lowerRange);
+			  params.setInt("topLevel", upperRange);
+			  params.setStrings("partition", "data");
+			  plotMapReduce(inFile, outFile, params);
+		  } else if(lowerRange > dataPartitioningMaxLevel) {
+			  // Run only Space Partitioning MapReduce
+			  params.setInt("bottomLevel", lowerRange);
+			  params.setInt("topLevel", upperRange);
+			  params.setStrings("partition", "space");
+			  plotMapReduce(inFile, outFile, params);
+		  } else {
+			  // Run the combination of Data Partitioning and Space Partitioning.
+			  // Run the data first.
+			  String originalOutputPath = params.getOutputPath().toString();
+			  String tempOutputPath = originalOutputPath + "_temp";
+			  params.setOutputPath(tempOutputPath);
+			  params.setInt("bottomLevel", lowerRange);
+			  params.setInt("topLevel", dataPartitioningMaxLevel);
+			  params.setStrings("partition", "data");
+			  plotMapReduce(inFile, new Path(tempOutputPath), params);
+			  
+			  // Run the space partitioning next.
+			  params.setOutputPath(originalOutputPath);
+			  params.setInt("bottomLevel", dataPartitioningMaxLevel + 1);
+			  params.setInt("topLevel", upperRange);
+			  params.setStrings("partition", "space");
+			  plotMapReduce(inFile, outFile, params);
+			  
+			  // Move the files from temporary directory to the original directory.
+			  FileSystem fs = FileSystem.get(new Configuration());
+			  FileStatus[] status = fs.listStatus(new Path(tempOutputPath));
+	          for (FileStatus file : status) {
+	        	  if (!file.isDir()) {
+	        		  // Check the name of the file and move it if it contains tile.
+	        		  String filePath = file.getPath().toString();
+	        		  if(filePath.contains("tile_")) {
+	        			  String[] fileSplit = filePath.split("/");
+	        			  String fileName = fileSplit[fileSplit.length - 1];
+	        			  fs.rename(file.getPath(), new Path(originalOutputPath + "/" + fileName));
+	        		  }
+	        	  }
+	          }
+	          // Remove the temporary directory files.
+	          fs.delete(new Path(tempOutputPath), true);
+	          fs.close();
+		  }
+	  }
   }
   
   private static void printUsage() {
@@ -949,10 +1057,11 @@ public class PyramidPlot {
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
+    System.out.println("partition:<data|shape|hybrid> - (*) Type of partition");
     System.out.println("tilewidth:<w> - Width of each tile in pixels");
     System.out.println("tileheight:<h> - Height of each tile in pixels");
     System.out.println("color:<c> - Main color used to draw shapes (black)");
-    System.out.println("numlevels:<n> - Number of levels in the pyrmaid");
+    System.out.println("levels:<min,max> - Number of levels in the pyrmaid");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("rect:<x1,y1,x2,y2> - Limit drawing to the selected area");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
