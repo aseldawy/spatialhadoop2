@@ -299,6 +299,7 @@ public class SpatialSite {
         ShapeIterRecordReader reader = new ShapeIterRecordReader(
             fs.open(masterFile.getPath()), 0, masterFile.getLen());
         Rectangle dummy = reader.createKey();
+        reader.setShape(new Partition());
         ShapeIterator values = reader.createValue();
         ArrayList<Partition> partitions = new ArrayList<Partition>();
         while (reader.next(dummy, values)) {
