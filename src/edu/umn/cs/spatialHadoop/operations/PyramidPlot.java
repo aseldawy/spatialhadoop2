@@ -52,7 +52,6 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
@@ -68,7 +67,8 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
@@ -751,78 +751,80 @@ public class PyramidPlot {
     boolean gradualFade = !(shape instanceof Point) && params.getBoolean("fade", false);
     
     for (InputSplit split : splits) {
-      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params,
-          (FileSplit)split);
+      ShapeIterRecordReader reader = new ShapeIterRecordReader(params, (FileSplit)split);
       Rectangle cell = reader.createKey();
-      while (reader.next(cell, shape)) {
-        Rectangle shapeMBR = shape.getMBR();
-        if (shapeMBR != null) {
-          int min_level = 0;
-          
-          if (adaptiveSampling) {
-            // Special handling for NASA data
-            double p = Math.random();
-            // Skip levels that do not satisfy the probability
-            while (min_level < numLevels && p > levelProb[min_level])
-              min_level++;
-          }
-          
-          java.awt.Rectangle overlappingCells =
-              bottomGrid.getOverlappingCells(shapeMBR);
-          for (tileIndex.level = numLevels - 1; tileIndex.level >= min_level; tileIndex.level--) {
-            if (gradualFade && !(shape instanceof Point)) {
-              double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[tileIndex.level];
-              if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
-                // This shape can be safely skipped as it is too small to be plotted
-                return;
-              }
+      ShapeIterator shapes = reader.createValue();
+      while (reader.next(cell, shapes)) {
+        for (Shape s : shapes) {
+          Rectangle shapeMBR = s.getMBR();
+          if (shapeMBR != null) {
+            int min_level = 0;
+
+            if (adaptiveSampling) {
+              // Special handling for NASA data
+              double p = Math.random();
+              // Skip levels that do not satisfy the probability
+              while (min_level < numLevels && p > levelProb[min_level])
+                min_level++;
             }
 
-            for (int i = 0; i < overlappingCells.width; i++) {
-              tileIndex.x = i + overlappingCells.x;
-              for (int j = 0; j < overlappingCells.height; j++) {
-                tileIndex.y = j + overlappingCells.y;
-                // Draw in image associated with this tile
-                Graphics2D g;
-                {
-                  g = tileGraphics.get(tileIndex);
-                  if (g == null) {
-                    TileIndex key = tileIndex.clone();
-                    BufferedImage image = new BufferedImage(tileWidth, tileHeight,
-                        BufferedImage.TYPE_INT_ARGB);
-                    if (tileImages.put(key, image) != null)
-                      throw new RuntimeException("Error! Image is already there but graphics is not "+tileIndex);
-                    
-                    Color bg_color = new Color(0,0,0,0);
-
-                    try {
-                      g = image.createGraphics();
-                    } catch (Throwable e) {
-                      g = new SimpleGraphics(image);
-                    }
-                    g.setBackground(bg_color);
-                    g.clearRect(0, 0, tileWidth, tileHeight);
-                    g.setColor(strokeColor);
-                    // Coordinates of this tile in image coordinates
-                    g.translate(-(tileWidth * tileIndex.x), -(tileHeight * tileIndex.y));
-
-                    tileGraphics.put(key, g);
-                  }
+            java.awt.Rectangle overlappingCells =
+                bottomGrid.getOverlappingCells(shapeMBR);
+            for (tileIndex.level = numLevels - 1; tileIndex.level >= min_level; tileIndex.level--) {
+              if (gradualFade && !(s instanceof Point)) {
+                double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale[tileIndex.level];
+                if (areaInPixels < 1.0 && Math.round(areaInPixels * 255) < 1.0) {
+                  // This shape can be safely skipped as it is too small to be plotted
+                  return;
                 }
-                
-                shape.draw(g, fileMBR, tileWidth * (1 << tileIndex.level),
-                    tileHeight * (1 << tileIndex.level), scale2[tileIndex.level]);
               }
+
+              for (int i = 0; i < overlappingCells.width; i++) {
+                tileIndex.x = i + overlappingCells.x;
+                for (int j = 0; j < overlappingCells.height; j++) {
+                  tileIndex.y = j + overlappingCells.y;
+                  // Draw in image associated with this tile
+                  Graphics2D g;
+                  {
+                    g = tileGraphics.get(tileIndex);
+                    if (g == null) {
+                      TileIndex key = tileIndex.clone();
+                      BufferedImage image = new BufferedImage(tileWidth, tileHeight,
+                          BufferedImage.TYPE_INT_ARGB);
+                      if (tileImages.put(key, image) != null)
+                        throw new RuntimeException("Error! Image is already there but graphics is not "+tileIndex);
+
+                      Color bg_color = new Color(0,0,0,0);
+
+                      try {
+                        g = image.createGraphics();
+                      } catch (Throwable e) {
+                        g = new SimpleGraphics(image);
+                      }
+                      g.setBackground(bg_color);
+                      g.clearRect(0, 0, tileWidth, tileHeight);
+                      g.setColor(strokeColor);
+                      // Coordinates of this tile in image coordinates
+                      g.translate(-(tileWidth * tileIndex.x), -(tileHeight * tileIndex.y));
+
+                      tileGraphics.put(key, g);
+                    }
+                  }
+
+                  s.draw(g, fileMBR, tileWidth * (1 << tileIndex.level),
+                      tileHeight * (1 << tileIndex.level), scale2[tileIndex.level]);
+                }
+              }
+              // Shrink overlapping cells to match the upper level
+              int updatedX1 = overlappingCells.x / 2;
+              int updatedY1 = overlappingCells.y / 2;
+              int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
+              int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
+              overlappingCells.x = updatedX1;
+              overlappingCells.y = updatedY1;
+              overlappingCells.width = updatedX2 - updatedX1 + 1;
+              overlappingCells.height = updatedY2 - updatedY1 + 1;
             }
-            // Shrink overlapping cells to match the upper level
-            int updatedX1 = overlappingCells.x / 2;
-            int updatedY1 = overlappingCells.y / 2;
-            int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
-            int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
-            overlappingCells.x = updatedX1;
-            overlappingCells.y = updatedY1;
-            overlappingCells.width = updatedX2 - updatedX1 + 1;
-            overlappingCells.height = updatedY2 - updatedY1 + 1;
           }
         }
       }
