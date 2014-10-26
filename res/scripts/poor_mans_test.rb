@@ -37,7 +37,7 @@ end
 def index_file(filename, sindex)
   shape = File.extname(filename)[1..-1]
   indexed_filename = filename.dup; indexed_filename[-File.extname(filename).length, 0] = ".#{sindex}"
-  system_check "#$shadoop_cmd index #{ExtraConfigParams} #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite"
+  system_check "#$shadoop_cmd index #{ExtraConfigParams} #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite -no-local"
   indexed_filename
 end
 
@@ -74,9 +74,6 @@ def test_range_query
     query = '40,990,1000,8000'
     range_query(heap_file, 'results_mr', query, '-no-local')
     results_heap_mr = `hadoop fs -cat results_mr/part* | sort`.lines.to_a
-    range_query(heap_file, 'results_local', query, '-local')
-    results_heap_local = `hadoop fs -cat results_local | sort`.lines.to_a
-    raise "Results of local and MapReduce implementations are different" unless array_equal?(results_heap_local, results_heap_mr)
     
     # Try with indexed files
     %w(grid rtree r+tree str str+).each do |sindex|
@@ -93,12 +90,8 @@ def test_range_query
       
       # Run range query on the heap file and make sure it gives the same result as before
       range_query(indexed_file, "results_#{sindex}_mr", query, '-no-local')
-      results_indexed_local = `hadoop fs -cat results_#{sindex}_mr/part* | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_local, results_heap_local)
-        
-      range_query(indexed_file, "results_#{sindex}_local", query, '-local')
-      results_indexed_mr = `hadoop fs -cat results_#{sindex}_local | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_local)
+      results_indexed_mr = `hadoop fs -cat results_#{sindex}_mr/part* | sort`.lines.to_a
+      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_mr)
     end
   end
 end
