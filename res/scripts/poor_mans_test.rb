@@ -25,6 +25,7 @@ end
 
 $shadoop_jar = Dir.glob("**/spatialhadoop-*.jar").find{ |f| f =~ /\d/ }
 $shadoop_cmd = "hadoop jar #$shadoop_jar"
+$hadoop_home = File.expand_path("..", File.dirname(`which hadoop`))
 
 ExtraConfigParams = "-D dfs.block.size=#{1024*1024}"
 
@@ -194,8 +195,9 @@ public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {
   
   # Compile the class
   required_jars = []
-  required_jars += Dir.glob(File.join("lib", "spatialhadoop*.jar"))
-  required_jars += Dir.glob("hadoop-core*jar")
+  required_jars += Dir.glob(File.join($hadoop_home, "lib", "spatialhadoop*.jar"))
+  required_jars += Dir.glob(File.join($hadoop_home, "hadoop-core*jar"))
+  required_jars << $shadoop_jar
   system_check "javac -cp #{required_jars.join(File::PATH_SEPARATOR)} #{source_filename}"
   class_filename = source_filename.sub('.java', '.class')
   
@@ -205,8 +207,14 @@ public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {
   
   # Create a test file with points and try with the custom jar file
   test_file = generate_file('test', 'point')
-  system_check "hadoop jar #{jar_file} CustomPoint #{test_file}/data_00001 shape:CustomPoint -no-local"
-  system_check "hadoop jar #{jar_file} CustomPoint #{test_file}/data_00001 shape:CustomPoint -local"
+
+  # Test running a standard operation with the custom class
+  system_check "#$shadoop_cmd mbr -libjars #{jar_file} #{test_file} shape:CustomPoint -no-local"
+  system_check "#$shadoop_cmd mbr -libjars #{jar_file} #{test_file} shape:CustomPoint -local"
+
+  # Test running the custom main method
+  system_check "hadoop jar #{jar_file} CustomPoint -libjars #$shadoop_jar #{test_file}/data_00001 shape:CustomPoint -no-local"
+  system_check "hadoop jar #{jar_file} CustomPoint -libjars #$shadoop_jar #{test_file}/data_00001 shape:CustomPoint -local"
 end
 
 def plot(input, output, extra_args="")
