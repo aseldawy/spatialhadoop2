@@ -45,7 +45,8 @@ import org.apache.hadoop.mapred.JobConf;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 
 /**
  * Combines all the configuration needed for SpatialHadoop.
@@ -56,9 +57,6 @@ public class SpatialSite {
   
   private static final Log LOG = LogFactory.getLog(SpatialSite.class);
   
-  /**Copy from LocalJobRunner.LOCAL_MAX_MAPS for consistency with Hadoop 0.20*/
-  public static final String LOCAL_MAX_MAPS = "mapreduce.local.map.tasks.maximum";
-
   /**
    * A filter that selects visible files and filters out hidden files.
    * Hidden files are the ones with a names starting in '.' or '_'
@@ -298,13 +296,16 @@ public class SpatialSite {
         }
       }
       if (masterFile != null) {
-        ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(
+        ShapeIterRecordReader reader = new ShapeIterRecordReader(
             fs.open(masterFile.getPath()), 0, masterFile.getLen());
-        CellInfo dummy = new CellInfo();
-        Partition partition = new Partition();
+        Rectangle dummy = reader.createKey();
+        reader.setShape(new Partition());
+        ShapeIterator values = reader.createValue();
         ArrayList<Partition> partitions = new ArrayList<Partition>();
-        while (reader.next(dummy, partition)) {
-          partitions.add(partition.clone());
+        while (reader.next(dummy, values)) {
+          for (Shape value : values) {
+            partitions.add((Partition) value.clone());
+          }
         }
         GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
         globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));

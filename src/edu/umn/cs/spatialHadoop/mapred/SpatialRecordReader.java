@@ -33,6 +33,8 @@ import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.Decompressor;
+import org.apache.hadoop.io.compress.SplitCompressionInputStream;
+import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
@@ -163,8 +165,20 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     codec = new CompressionCodecFactory(job).getCodec(this.path);
 
     if (isCompressedInput()) {
-      in = codec.createInputStream(directIn, decompressor);
-      filePosition = directIn;
+      decompressor = CodecPool.getDecompressor(codec);
+      if (codec instanceof SplittableCompressionCodec) {
+        final SplitCompressionInputStream cIn =
+            ((SplittableCompressionCodec)codec).createInputStream(
+                directIn, decompressor, start, end,
+                SplittableCompressionCodec.READ_MODE.BYBLOCK);
+        in = cIn;
+        start = cIn.getAdjustedStart();
+        end = cIn.getAdjustedEnd();
+        filePosition = cIn; // take pos from compressed stream
+      } else {
+        in = codec.createInputStream(directIn, decompressor);
+        filePosition = directIn;
+      }
     } else {
       directIn.seek(start);
       in = directIn;

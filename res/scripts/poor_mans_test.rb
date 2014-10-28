@@ -23,18 +23,22 @@ def system_check(cmd)
   raise "Error running '#{cmd}'" unless success 
 end
 
+$shadoop_jar = Dir.glob("**/spatialhadoop-*.jar").find{ |f| f =~ /\d/ }
+$shadoop_cmd = "hadoop jar #$shadoop_jar"
+$hadoop_home = File.expand_path("..", File.dirname(`which hadoop`))
+
 ExtraConfigParams = "-D dfs.block.size=#{1024*1024}"
 
 def generate_file(prefix, shape)
   filename = "#{prefix}.#{shape}"
-  system_check "shadoop generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:200.kb mbr:0,0,10000,10000 -overwrite"
+  system_check "#$shadoop_cmd generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:200.kb mbr:0,0,10000,10000 -overwrite"
   filename
 end
 
 def index_file(filename, sindex)
   shape = File.extname(filename)[1..-1]
   indexed_filename = filename.dup; indexed_filename[-File.extname(filename).length, 0] = ".#{sindex}"
-  system_check "shadoop index #{ExtraConfigParams} #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite"
+  system_check "#$shadoop_cmd index #{ExtraConfigParams} #{filename} #{indexed_filename} shape:#{shape} sindex:#{sindex} -overwrite -no-local"
   indexed_filename
 end
 
@@ -60,7 +64,7 @@ end
 
 def range_query(input, output, query, extra_args)
   shape = File.extname(input)[1..-1]
-  system_check "shadoop rangequery #{ExtraConfigParams} #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd rangequery #{ExtraConfigParams} #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
 end
 
 def test_range_query
@@ -71,9 +75,6 @@ def test_range_query
     query = '40,990,1000,8000'
     range_query(heap_file, 'results_mr', query, '-no-local')
     results_heap_mr = `hadoop fs -cat results_mr/part* | sort`.lines.to_a
-    range_query(heap_file, 'results_local', query, '-local')
-    results_heap_local = `hadoop fs -cat results_local | sort`.lines.to_a
-    raise "Results of local and MapReduce implementations are different" unless array_equal?(results_heap_local, results_heap_mr)
     
     # Try with indexed files
     %w(grid rtree r+tree str str+).each do |sindex|
@@ -90,12 +91,8 @@ def test_range_query
       
       # Run range query on the heap file and make sure it gives the same result as before
       range_query(indexed_file, "results_#{sindex}_mr", query, '-no-local')
-      results_indexed_local = `hadoop fs -cat results_#{sindex}_mr/part* | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_local, results_heap_local)
-        
-      range_query(indexed_file, "results_#{sindex}_local", query, '-local')
-      results_indexed_mr = `hadoop fs -cat results_#{sindex}_local | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_local)
+      results_indexed_mr = `hadoop fs -cat results_#{sindex}_mr/part* | sort`.lines.to_a
+      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_mr)
     end
   end
 end
@@ -103,7 +100,7 @@ end
 
 def knn_query(input, output, point, k, extra_args="")
   shape = File.extname(input)[1..-1]
-  system_check "shadoop knn #{ExtraConfigParams} #{input} #{output} shape:#{shape} point:#{point} k:#{k} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd knn #{ExtraConfigParams} #{input} #{output} shape:#{shape} point:#{point} k:#{k} #{extra_args} -overwrite"
 end
 
 def test_knn
@@ -136,7 +133,7 @@ end
 
 def spatial_join(method, file1, file2, output, extra_args = '')
   shape = File.extname(file1)[1..-1]
-  system_check "shadoop #{method} #{ExtraConfigParams} #{file1} #{file2} #{output} shape:#{shape} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd #{method} #{ExtraConfigParams} #{file1} #{file2} #{output} shape:#{shape} #{extra_args} -overwrite"
 end
 
 def test_spatial_join
@@ -198,8 +195,9 @@ public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {
   
   # Compile the class
   required_jars = []
-  required_jars += Dir.glob(File.join("lib", "spatialhadoop*.jar"))
-  required_jars += Dir.glob("hadoop-core*jar")
+  required_jars += Dir.glob(File.join($hadoop_home, "lib", "spatialhadoop*.jar"))
+  required_jars += Dir.glob(File.join($hadoop_home, "hadoop-core*jar"))
+  required_jars << $shadoop_jar
   system_check "javac -cp #{required_jars.join(File::PATH_SEPARATOR)} #{source_filename}"
   class_filename = source_filename.sub('.java', '.class')
   
@@ -209,13 +207,19 @@ public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {
   
   # Create a test file with points and try with the custom jar file
   test_file = generate_file('test', 'point')
-  system_check "hadoop jar #{jar_file} CustomPoint #{test_file}/data_00001 shape:CustomPoint -no-local"
-  system_check "hadoop jar #{jar_file} CustomPoint #{test_file}/data_00001 shape:CustomPoint -local"
+
+  # Test running a standard operation with the custom class
+  system_check "#$shadoop_cmd mbr -libjars #{jar_file} #{test_file} shape:CustomPoint -no-local"
+  system_check "#$shadoop_cmd mbr -libjars #{jar_file} #{test_file} shape:CustomPoint -local"
+
+  # Test running the custom main method
+  system_check "hadoop jar #{jar_file} CustomPoint -libjars #$shadoop_jar #{test_file}/data_00001 shape:CustomPoint -no-local"
+  system_check "hadoop jar #{jar_file} CustomPoint -libjars #$shadoop_jar #{test_file}/data_00001 shape:CustomPoint -local"
 end
 
 def plot(input, output, extra_args="")
   shape = File.extname(input)[1..-1]
-  system_check "shadoop plot #{ExtraConfigParams} #{input} #{output} shape:#{shape} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd plot #{ExtraConfigParams} #{input} #{output} shape:#{shape} #{extra_args} -overwrite"
 end
 
 def test_plot
