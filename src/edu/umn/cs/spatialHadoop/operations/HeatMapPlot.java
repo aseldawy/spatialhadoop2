@@ -120,6 +120,7 @@ public class HeatMapPlot {
       ByteBuffer bbuffer = ByteBuffer.allocate(getHeight() * 4 + 8);
       bbuffer.putInt(getWidth());
       bbuffer.putInt(getHeight());
+      
       gzos.write(bbuffer.array(), 0, bbuffer.position());
       for (int x = 0; x < getWidth(); x++) {
         bbuffer.clear();

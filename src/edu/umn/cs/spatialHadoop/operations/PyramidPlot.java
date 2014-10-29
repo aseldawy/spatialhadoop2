@@ -54,11 +54,18 @@ import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryCollection;
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.operation.buffer.BufferOp;
+import com.vividsolutions.jts.simplify.DouglasPeuckerSimplifier;
+
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -334,6 +341,9 @@ public class PyramidPlot {
     private ImageWritable sharedValue = new ImageWritable();
     private double scale2;
     private Color strokeColor;
+    private boolean clean;
+    private double buffer;
+    private double tolerance;
 
     @Override
     public void configure(JobConf job) {
@@ -348,6 +358,11 @@ public class PyramidPlot {
       NASAPoint.setColor1(OperationsParams.getColor(job, "color1", Color.BLUE));
       NASAPoint.setColor2(OperationsParams.getColor(job, "color2", Color.RED));
       NASAPoint.gradientType = OperationsParams.getGradientType(job, "gradient", NASAPoint.GradientType.GT_HUE);
+      
+      // Cleaning Part
+      clean = job.getBoolean("clean", false);
+      buffer = job.getInt("buffer", 3);
+      tolerance = job.getInt("tolerance", 2);
     }
 
     @Override
@@ -361,6 +376,13 @@ public class PyramidPlot {
       int tileX1 = tileWidth * tileIndex.x;
       int tileY1 = tileHeight * tileIndex.y;
       this.scale2 = (double)imageWidth * imageHeight/ (fileMBR.getWidth() * fileMBR.getHeight());
+      double scale = Math.sqrt(scale2);
+      double currentBuffer = buffer / scale;
+      double currentTolerance = tolerance / scale;
+      
+      // Calculate the correct buffer and tolerance for this level
+      LOG.info(tileIndex.level + " with buffer " + currentBuffer);
+      LOG.info(tileIndex.level + " with tolerance " + currentTolerance);
       
       try {
         // Initialize the image
@@ -380,13 +402,79 @@ public class PyramidPlot {
         graphics.translate(-tileX1, -tileY1);
         
         int i = 0;
+        Geometry resultGeometry = null;
+        OGCJTSShape ogcjtsshape = null;
+        int maxArraySize = 10000;
+    	Geometry[] shapeList = new Geometry[maxArraySize];
         while (values.hasNext()) {
           Shape s = values.next();
-          s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
-          
-          if (++i % 100 == 0) {
+          // If we do the cleaning
+          if(clean) {
+      		ogcjtsshape = (OGCJTSShape) s;
+      		Rectangle shapeMBR = s.getMBR();
+      		if(shapeMBR == null) {
+      			continue;
+      		}
+      		if(ogcjtsshape.geom == null) {
+      			continue;
+      		}
+      		ogcjtsshape.geom = DouglasPeuckerSimplifier.simplify(ogcjtsshape.geom, currentTolerance);
+        	BufferOp bufOp = new BufferOp(ogcjtsshape.geom);
+        	bufOp.setEndCapStyle(BufferOp.CAP_SQUARE);
+        	ogcjtsshape.geom = bufOp.getResultGeometry(currentBuffer);
+        	if(i < shapeList.length-1) {
+        		if(ogcjtsshape.geom.isEmpty()) {
+        			continue;
+        		} else {
+           			shapeList[i] = ogcjtsshape.geom;
+           			i++;
+        		}
+        	} else {
+        		if(ogcjtsshape.geom.isEmpty()) {
+        			continue;
+        		}
+            	if(shapeList.length > 1) {
+            		shapeList[i] = ogcjtsshape.geom;
+               		GeometryFactory geometryFactory = new GeometryFactory();
+               		GeometryCollection geo_collection = geometryFactory.createGeometryCollection(shapeList);
+            		resultGeometry = geo_collection.buffer(0);
+            		shapeList = new Geometry[maxArraySize];
+            		shapeList[0] = resultGeometry;
+               		i = 1;
+            	} else {
+            		LOG.info("Less than 1");
+            		resultGeometry = ogcjtsshape.geom;
+               		i = 0;
+            	}
+        	}  
+          } else {
+            s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
+          }
+          if (i % 100 == 0) {
         	  reporter.progress();
           }
+        }
+        
+        if(clean) {
+        	// Do the last union for the left shapes in shapeList.
+        	// Combine Geometry for this Split
+        	int numLeft = 0;
+        	for(Geometry g : shapeList) {
+        		if(g != null) {
+        			numLeft++;
+        		} else {
+        			break;
+        		}
+        	}
+        	Geometry[] thisSplitList = new Geometry[numLeft];
+        	for(int current=0; current < numLeft; current++) {
+        		thisSplitList[current] = shapeList[current];
+        	}
+        	GeometryFactory geometryFactory = new GeometryFactory();
+      		GeometryCollection geo_collection = geometryFactory.createGeometryCollection(thisSplitList);
+      		resultGeometry = geo_collection.buffer(0);
+        	OGCJTSShape combinedShape = new OGCJTSShape(resultGeometry);
+        	combinedShape.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
         }
         
         graphics.dispose();
@@ -435,7 +523,11 @@ public class PyramidPlot {
     private Color strokeColor;
 
     private boolean gradualFade;
-
+    
+    private boolean clean;
+    private double buffer;
+    private double tolerance;
+    
     @Override
     public void configure(JobConf job) {
       System.setProperty("java.awt.headless", "true");
@@ -466,6 +558,10 @@ public class PyramidPlot {
       }
       this.strokeColor = new Color(job.getInt("color", 0));
       this.gradualFade = job.getBoolean("fade", false);
+      
+      this.clean = job.getBoolean("clean", false);
+      this.buffer = job.getInt("buffer", 3);
+      this.tolerance = job.getInt("tolerance", 2);
     }
     
     @Override
@@ -473,9 +569,20 @@ public class PyramidPlot {
         OutputCollector<TileIndex, ImageWritable> output, Reporter reporter)
         throws IOException {
     	
+    	/*
+    	int maxArraySize = 10000;
+    	HashMap<TileIndex, Geometry[]> geometriesMap = new HashMap<TileIndex, Geometry[]>();
+    	HashMap<TileIndex, Integer> lastIndexMap = new HashMap<TileIndex, Integer>();
+    	Geometry[] helperGeometry = new Geometry[maxArraySize];
+    	Geometry resultGeometry;
+    	int helperIndex = 0;
+    	OGCJTSShape ogcjtsshape;
+    	double currentBuffer;
+    	double currentTolerance;
+    	*/
     	while(value.hasNext()) {
     		Shape shape = value.next();
-
+    		   		
             Rectangle shapeMBR = shape.getMBR();
             if (shapeMBR == null)
               continue;
@@ -504,10 +611,71 @@ public class PyramidPlot {
                 key.x = i + overlappingCells.x;
                 for (int j = 0; j < overlappingCells.height; j++) {
                   key.y = j + overlappingCells.y;
+                  /*
+                  if(clean) {
+                	  // Get the buffer and tolerance level.
+                	  currentBuffer = this.buffer  / Math.sqrt(scale2[key.level]);
+                	  currentTolerance = this.tolerance / Math.sqrt(scale2[key.level]);
+                	  
+                	  // Initialize current Array.
+                	  if(geometriesMap.keySet().contains(key)) {
+                		  helperGeometry = geometriesMap.get(key).clone();
+                		  helperIndex = lastIndexMap.get(key);
+                	  } else {
+                		  helperGeometry = new Geometry[maxArraySize];
+                		  helperIndex = 0;
+                	  }
+
+                	  ogcjtsshape = (OGCJTSShape) shape;
+                	  if(shapeMBR == null) {
+                		continue;
+                	  }
+                	  if(ogcjtsshape.geom == null) {
+                		continue;
+                	  }
+                	  // Simplify and buffer the geometry
+                	  ogcjtsshape.geom = DouglasPeuckerSimplifier.simplify(ogcjtsshape.geom, currentTolerance);
+                	  BufferOp bufOp = new BufferOp(ogcjtsshape.geom);
+                	  bufOp.setEndCapStyle(BufferOp.CAP_SQUARE);
+                	  ogcjtsshape.geom = bufOp.getResultGeometry(currentBuffer);
+                	  
+                	  if(helperIndex < helperGeometry.length-1) {
+                		  if(ogcjtsshape.geom.isEmpty()) {
+                			  continue;
+                		  } else {
+                			  helperGeometry[helperIndex] = ogcjtsshape.geom;
+                			  helperIndex++;
+                		  }
+                	  } else {
+                		  if(ogcjtsshape.geom.isEmpty()) {
+                  			continue;
+                		  }
+                		  if(helperGeometry.length > 1) {
+                			  helperGeometry[helperIndex] = ogcjtsshape.geom;
+                			  GeometryFactory geometryFactory = new GeometryFactory();
+                			  GeometryCollection geo_collection = geometryFactory.createGeometryCollection(helperGeometry);
+                			  resultGeometry = geo_collection.buffer(0);
+                			  helperGeometry = new Geometry[maxArraySize];
+                			  helperGeometry[0] = resultGeometry;
+                			  helperIndex = 1;
+                		  } else {
+                			  resultGeometry = ogcjtsshape.geom;
+                			  helperIndex = 0;
+                		  }	  
+                  	}
+                  	// Update the Map
+                	Geometry[] tempList = helperGeometry.clone();
+                	int tempIndex = helperIndex;
+                	LOG.info("Geometries Map inserted: " + tempList.length);
+                	geometriesMap.put(key, tempList);
+                	lastIndexMap.put(key, tempIndex);
+                	
+                  } else { */
                   // Draw in image associated with this tile
                   Graphics2D g = getGraphics(key);
                   shape.draw(g, fileMBR, tileWidth * (1 << key.level),
                       tileHeight * (1 << key.level), scale2[key.level]);
+                  //}
                 }
               }
               // Shrink overlapping cells to match the upper level
@@ -521,6 +689,34 @@ public class PyramidPlot {
               overlappingCells.height = updatedY2 - updatedY1 + 1;
             } 
     	}
+    	
+		// If it does cleaning, draw the graphic now.
+    	/*
+    	if(clean) {
+        	for(TileIndex key : geometriesMap.keySet()) {
+        		Geometry [] resultGeometryHelper = geometriesMap.get(key);
+        		
+        		int currentMax = 0;
+        		for(int k = 0; k < resultGeometryHelper.length; k++) {
+        			if(resultGeometryHelper[k] != null) {
+            			currentMax++;
+        			}
+        		}
+        		// Do the last union
+        		Geometry[] lastGeometries = new Geometry[currentMax];
+        		for(int k = 0; k < helperIndex; k++) {
+        			lastGeometries[k] = resultGeometryHelper[k];
+        		}
+        		GeometryFactory geometryFactory = new GeometryFactory();
+        		GeometryCollection geo_collection = geometryFactory.createGeometryCollection(lastGeometries);
+        		resultGeometry = geo_collection.buffer(0);
+        		OGCJTSShape resultShape = new OGCJTSShape(resultGeometry);
+        		
+        		Graphics2D g = getGraphics(key);
+        		resultShape.draw(g, fileMBR, tileWidth * (1<<key.level), tileHeight * (1 << key.level), scale2[key.level]);
+        	}
+    	} */
+
       for (Map.Entry<TileIndex, Graphics2D> tileGraph : tileGraphics.entrySet()) {
         tileGraph.getValue().dispose();
       }
@@ -1008,7 +1204,7 @@ public class PyramidPlot {
 		  plotMapReduce(inFile, outFile, params);
 	  } else {
 		  // Set the Levels to a correct job.
-		  if(lowerRange <= dataPartitioningMaxLevel) {
+		  if(upperRange <= dataPartitioningMaxLevel) {
 			  // Run the Data Partitioning MapReduce until level dataPartitioningMaxLevel.
 			  params.setInt("bottomLevel", lowerRange);
 			  params.setInt("topLevel", upperRange);
