@@ -18,7 +18,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 import javax.imageio.ImageIO;
-
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -38,6 +39,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable> {
   /**MBR of the input file*/
   private static final String InputFileMBR = "plot.file_mbr";
+  private static final Log LOG = LogFactory.getLog(ImageOutputFormat.class);
   
   /**Used to indicate the progress*/
   private Progressable progress;
@@ -66,6 +68,7 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
 
     @Override
     public void write(Rectangle cell, ImageWritable value) throws IOException {
+    	LOG.info("Start write in ImageOutputFormat.");
       progress.progress();
       int tile_x = (int) Math.floor((cell.x1 - fileMbr.x1) * image_width / fileMbr.getWidth());
       int tile_y = (int) Math.floor((cell.y1 - fileMbr.y1) * image_height / fileMbr.getHeight());
@@ -75,8 +78,11 @@ public class ImageOutputFormat extends FileOutputFormat<Rectangle, ImageWritable
       } catch (Throwable e) {
         graphics = new SimpleGraphics(image);
       }
+      LOG.info("Start drawing in ImageOutputFormat.");
       graphics.drawImage(value.getImage(), tile_x, tile_y, null);
+      LOG.info("Start dispose in ImageOutputFormat.");
       graphics.dispose();
+      LOG.info("Finish write in ImageOutputFormat.");
     }
 
     @Override

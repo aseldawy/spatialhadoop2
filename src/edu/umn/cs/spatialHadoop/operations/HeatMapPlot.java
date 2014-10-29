@@ -20,8 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -32,7 +31,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
@@ -59,7 +57,6 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
@@ -119,9 +116,20 @@ public class HeatMapPlot {
     public void write(DataOutput out) throws IOException {
       ByteArrayOutputStream baos = new ByteArrayOutputStream();
       GZIPOutputStream gzos = new GZIPOutputStream(baos);
-      ObjectOutputStream oos = new ObjectOutputStream(gzos);
-      oos.writeObject(frequency);
-      oos.close();
+      ByteBuffer bbuffer = ByteBuffer.allocate(getHeight() * 4 + 8);
+      bbuffer.putInt(getWidth());
+      bbuffer.putInt(getHeight());
+      
+      gzos.write(bbuffer.array(), 0, bbuffer.position());
+      for (int x = 0; x < getWidth(); x++) {
+        bbuffer.clear();
+        for (int y = 0; y < getHeight(); y++) {
+          bbuffer.putFloat(frequency[x][y]);
+        }
+        gzos.write(bbuffer.array(), 0, bbuffer.position());
+      }
+      gzos.close();
+      
       byte[] serializedData = baos.toByteArray();
       out.writeInt(serializedData.length);
       out.write(serializedData);
@@ -134,11 +142,25 @@ public class HeatMapPlot {
       in.readFully(serializedData);
       ByteArrayInputStream bais = new ByteArrayInputStream(serializedData);
       GZIPInputStream gzis = new GZIPInputStream(bais);
-      ObjectInputStream ois = new ObjectInputStream(gzis);
-      try {
-        frequency = (float[][]) ois.readObject();
-      } catch (ClassNotFoundException e) {
-        throw new RuntimeException("Could not read the frequency map back from the stream", e);
+      
+      byte[] buffer = new byte[8];
+      gzis.read(buffer);
+      ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
+      int width = bbuffer.getInt();
+      int height = bbuffer.getInt();
+      // Reallocate memory only if needed
+      if (width != this.getWidth() || height != this.getHeight())
+        frequency = new float[width][height];
+      buffer = new byte[getHeight() * 4];
+      for (int x = 0; x < getWidth(); x++) {
+        int size = 0;
+        while (size < buffer.length) {
+          size += gzis.read(buffer, size, buffer.length - size);
+        }
+        bbuffer = ByteBuffer.wrap(buffer);
+        for (int y = 0; y < getHeight(); y++) {
+          frequency[x][y] = bbuffer.getFloat();
+        }
       }
     }
     

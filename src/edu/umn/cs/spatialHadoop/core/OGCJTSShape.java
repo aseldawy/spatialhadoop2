@@ -240,7 +240,7 @@ public class OGCJTSShape implements Shape {
       
       int[] xpoints = new int[line.getNumPoints()];
       int[] ypoints = new int[line.getNumPoints()];
-
+      
       for (int i = 0; i < xpoints.length; i++) {
         double px = line.getPointN(i).getX();
         double py = line.getPointN(i).getY();
@@ -249,7 +249,6 @@ public class OGCJTSShape implements Shape {
         xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
         ypoints[i] = (int) Math.round((py - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       }
-      
       // Draw the polygon
       //graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
       graphics.drawPolyline(xpoints, ypoints, xpoints.length);

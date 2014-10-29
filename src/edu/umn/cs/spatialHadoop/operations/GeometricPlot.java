@@ -19,8 +19,10 @@ import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
+import java.io.Console;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Iterator;
 
 import javax.imageio.ImageIO;
@@ -34,7 +36,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileInputFormat;
@@ -53,6 +54,14 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.GenericOptionsParser;
 
+import com.esri.core.geometry.ogc.OGCGeometry;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryCollection;
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.operation.buffer.BufferOp;
+import com.vividsolutions.jts.simplify.DouglasPeuckerLineSimplifier;
+import com.vividsolutions.jts.simplify.DouglasPeuckerSimplifier;
+
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -60,13 +69,14 @@ import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
+import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
@@ -78,6 +88,7 @@ import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
+import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
  * Draws an image of all shapes in an input file.
@@ -419,6 +430,8 @@ public class GeometricPlot {
     private double scale2, scale;
     private int strokeColor;
     private boolean fade;
+    private boolean clean;
+    private int bufferSize;
 
     @Override
     public void configure(JobConf job) {
@@ -434,10 +447,14 @@ public class GeometricPlot {
       this.imageHeight = job.getInt("height", 1000);
       this.strokeColor = job.getInt("color", 0);
       this.fade = job.getBoolean("fade", false);
+      this.clean = job.getBoolean("clean", false);
+      this.bufferSize = job.getInt("buffersize", 2);
 
       this.scale2 = (double)imageWidth * imageHeight /
           (this.fileMbr.getWidth() * this.fileMbr.getHeight());
       this.scale = Math.sqrt(scale2);
+      
+      bufferSize = (int) Math.round(bufferSize * scale2);
 
       String valueRangeStr = job.get("valuerange");
       if (valueRangeStr != null) {
@@ -455,6 +472,7 @@ public class GeometricPlot {
     public void reduce(IntWritable cellNumber, Iterator<Shape> values,
         OutputCollector<Rectangle, ImageWritable> output, Reporter reporter)
             throws IOException {
+    	LOG.info("Start reduce");
       try {
         CellInfo cellInfo = null;
         int iCell = 0;
@@ -485,31 +503,122 @@ public class GeometricPlot {
         Color strokeClr = new Color(strokeColor);
         graphics.setColor(strokeClr);
         graphics.translate(-image_x1, -image_y1);
+        
+        // Going to do cleaning. Cast all shape to OGCJTSShape.
+        if(clean) {
+        	LOG.info("Start Clean Process");
+        	int i = 0;
+        	OGCJTSShape ogcjtsshape = null;
+        	Geometry[] shapeList = new Geometry[200];
+        	while(values.hasNext()) {
+        		LOG.info("Get Shape Number: " + i);
+        		Shape s = values.next();
+        		if (fade) {
+        			Rectangle shapeMBR = s.getMBR();
+        			double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+        			if (areaInPixels > 1.0) {
+        				graphics.setColor(strokeClr);
+        			} else {
+        				byte alpha = (byte) Math.round(areaInPixels * 255);
+        				if (alpha == 0) {
+        					// Skip this shape
+        					continue;
+        				} else {
+        					graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+        				}
+        			}
+        		}
+        		ogcjtsshape = (OGCJTSShape) s;
+        		OSMPolygon osmPolygonShape = (OSMPolygon) s;
+        		LOG.info("Finished Casting shape: " + i);
+        		LOG.info("Buffering shape: " + i + " with id: " + osmPolygonShape.id);
+        		BufferOp bufOp = new BufferOp(ogcjtsshape.geom);
+        		bufOp.setEndCapStyle(BufferOp.CAP_BUTT);
+        		ogcjtsshape.geom = bufOp.getResultGeometry(bufferSize);
+        		LOG.info("Finished Buffering shape: " + i);
+        		if(i < 200) {
+        			if(ogcjtsshape.geom == null) {
+        				continue;
+        			} else {
+        				LOG.info("Adding the " + i +" geom.");
+            			shapeList[i] = ogcjtsshape.geom;
+                		i++;
+        			}
+        		} else {
+        			if(ogcjtsshape.geom == null) {
+        				continue;
+        			} else {
+            			LOG.info("Merging "+shapeList.length+" shapes");
+            			GeometryFactory geometryFactory = new GeometryFactory();
+            			GeometryCollection geo_collection = geometryFactory.createGeometryCollection(shapeList);
+            			//GeometryCollection geo_collection = new GeometryCollection(shapeList, shapeList[0].getFactory());
+            			if(geo_collection.getNumGeometries() > 1) {
+            				Geometry union = geo_collection.buffer(0);
+            				shapeList = new Geometry[200];
+                			shapeList[0] = union;
+                			shapeList[1] = ogcjtsshape.geom;
+                			i = 1;
+            			} else {
+            				shapeList = new Geometry[200];
+                			shapeList[0] = ogcjtsshape.geom;
+                			i = 0;
+            			}
+            			
+                		i++;
+        			}
+        		}
+        		reporter.progress();
+        	}
 
-        while (values.hasNext()) {
-          Shape s = values.next();
-          if (fade) {
-            Rectangle shapeMBR = s.getMBR();
-            double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
-            if (areaInPixels > 1.0) {
-              graphics.setColor(strokeClr);
-            } else {
-              byte alpha = (byte) Math.round(areaInPixels * 255);
-              if (alpha == 0) {
-                // Skip this shape
-                continue;
-              } else {
-                graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
-              }
-            }
-          }
-          s.draw(graphics, fileMbr, imageWidth, imageHeight, scale2);
+        	Geometry[] newShapeList = new Geometry[i];
+        	for(int j=0; j<newShapeList.length; j++) {
+        		newShapeList[j] = shapeList[j];
+        	}
+        	LOG.info("Combining final geometry");
+        	GeometryCollection geo_collection = new GeometryCollection(newShapeList, newShapeList[0].getFactory());
+        	Geometry union;
+			if(geo_collection.getNumGeometries() != 1) {
+	        	//union = geo_collection.buffer(bufferSize, 1, BufferOp.CAP_SQUARE);
+				union = geo_collection.buffer(0);
+			} else {
+				union = newShapeList[0].buffer(bufferSize, 1, BufferOp.CAP_SQUARE);
+			}
+			OGCJTSShape combinedShape = new OGCJTSShape(union);
+        	
+        	// Draw the Image.
+			LOG.info("Draw the graphics");
+        	combinedShape.draw(graphics, fileMbr, imageWidth, imageHeight, scale2);
+        	LOG.info("Finish drawing the object");
+        } else {
+        
+        	while (values.hasNext()) {
+        		Shape s = values.next();
+        		if (fade) {
+        			Rectangle shapeMBR = s.getMBR();
+        			double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+        			if (areaInPixels > 1.0) {
+        				graphics.setColor(strokeClr);
+        			} else {
+        				byte alpha = (byte) Math.round(areaInPixels * 255);
+        				if (alpha == 0) {
+        					// Skip this shape
+        					continue;
+        				} else {
+        					graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+        				}
+        			}
+        		}
+        		s.draw(graphics, fileMbr, imageWidth, imageHeight, scale2);
+        	}
         }
-
+        LOG.info("Dispose the graphic");
         graphics.dispose();
-
+        
+        LOG.info("Set Image");
         sharedValue.setImage(image);
+        LOG.info("Collect the output");
         output.collect(cellInfo, sharedValue);
+        LOG.info("Finished collecting the output");
       } catch (RuntimeException e) {
         e.printStackTrace();
         throw e;
@@ -536,6 +645,8 @@ public class GeometricPlot {
     private boolean fade;
     private boolean adaptiveSample;
     private float adaptiveSampleRatio;
+    private boolean clean;
+    private int bufferSize;
 
     @Override
     public void configure(JobConf job) {
@@ -546,6 +657,8 @@ public class GeometricPlot {
       this.imageHeight = job.getInt("height", 1000);
       this.strokeColor = job.getInt("color", 0);
       this.fade = job.getBoolean("fade", false);
+      this.clean = job.getBoolean("clean", false);
+      this.bufferSize = job.getInt("buffersize", 2);
 
       this.scale2 = (double)imageWidth * imageHeight /
           (this.fileMBR.getWidth() * this.fileMBR.getHeight());
@@ -567,6 +680,8 @@ public class GeometricPlot {
         // Calculate the sample ratio
         this.adaptiveSampleRatio = job.getFloat(AdaptiveSampleRatio, 0.01f);
       }
+      
+      bufferSize = (int) Math.round(bufferSize * scale2);
     }
 
     @Override
@@ -590,29 +705,115 @@ public class GeometricPlot {
       graphics.setColor(strokeClr);
       graphics.translate(-image_x1, -image_y1);
       
-      while(value.hasNext()) {
-    	  Shape s = value.next();
-          if (fade) {
-              Rectangle shapeMBR = s.getMBR();
-              double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
-              if (areaInPixels > 1.0) {
-                graphics.setColor(strokeClr);
-              } else {
-                byte alpha = (byte) Math.round(areaInPixels * 255);
-                if (alpha == 0) {
-                  // Skip this shape
-                  continue;
-                } else {
-                  graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
-                }
-              }
-            }
-            if (adaptiveSample && s instanceof Point) {
-              if (Math.random() > adaptiveSampleRatio)
-                return;
-            }
-            s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
-          
+      // Going to do cleaning. Cast all shape to OGCJTSShape.
+      if(clean) {
+      	LOG.info("Start Clean Process");
+      	int i = 0;
+      	OGCJTSShape ogcjtsshape = null;
+      	Geometry[] shapeList = new Geometry[200];
+      	while(value.hasNext()) {
+      		LOG.info("Get Shape Number: " + i);
+      		Shape s = value.next();
+      		if (fade) {
+      			Rectangle shapeMBR = s.getMBR();
+      			double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+      			if (areaInPixels > 1.0) {
+      				graphics.setColor(strokeClr);
+      			} else {
+      				byte alpha = (byte) Math.round(areaInPixels * 255);
+      				if (alpha == 0) {
+      					// Skip this shape
+      					continue;
+      				} else {
+      					graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+      				}
+      			}
+      		}
+      		ogcjtsshape = (OGCJTSShape) s;
+      		OSMPolygon osmPolygonShape = (OSMPolygon) s;
+      		LOG.info("Finished Casting shape: " + i);
+      		LOG.info("Buffering shape: " + i + " with id: " + osmPolygonShape.id);
+      		BufferOp bufOp = new BufferOp(ogcjtsshape.geom);
+      		bufOp.setEndCapStyle(BufferOp.CAP_BUTT);
+      		ogcjtsshape.geom = bufOp.getResultGeometry(bufferSize);
+      		LOG.info("Finished Buffering shape: " + i);
+      		if(i < 200) {
+      			if(ogcjtsshape.geom == null) {
+      				continue;
+      			} else {
+      				LOG.info("Adding the " + i +" geom.");
+          			shapeList[i] = ogcjtsshape.geom;
+              		i++;
+      			}
+      		} else {
+      			if(ogcjtsshape.geom == null) {
+      				continue;
+      			} else {
+          			LOG.info("Merging "+shapeList.length+" shapes");
+          			GeometryFactory geometryFactory = new GeometryFactory();
+          			GeometryCollection geo_collection = geometryFactory.createGeometryCollection(shapeList);
+          			//GeometryCollection geo_collection = new GeometryCollection(shapeList, shapeList[0].getFactory());
+          			if(geo_collection.getNumGeometries() > 1) {
+          				Geometry union = geo_collection.buffer(0);
+          				shapeList = new Geometry[200];
+              			shapeList[0] = union;
+              			shapeList[1] = ogcjtsshape.geom;
+              			i = 1;
+          			} else {
+          				shapeList = new Geometry[200];
+              			shapeList[0] = ogcjtsshape.geom;
+              			i = 0;
+          			}
+          			
+              		i++;
+      			}
+      		}
+      		reporter.progress();
+      	}
+
+      	Geometry[] newShapeList = new Geometry[i];
+      	for(int j=0; j<newShapeList.length; j++) {
+      		newShapeList[j] = shapeList[j];
+      	}
+      	LOG.info("Combining final geometry");
+      	GeometryCollection geo_collection = new GeometryCollection(newShapeList, newShapeList[0].getFactory());
+      	Geometry union;
+			if(geo_collection.getNumGeometries() != 1) {
+	        	//union = geo_collection.buffer(bufferSize, 1, BufferOp.CAP_SQUARE);
+				union = geo_collection.buffer(0);
+			} else {
+				union = newShapeList[0].buffer(bufferSize, 1, BufferOp.CAP_SQUARE);
+			}
+			OGCJTSShape combinedShape = new OGCJTSShape(union);
+      	
+      	// Draw the Image.
+			LOG.info("Draw the graphics");
+      	combinedShape.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
+      	LOG.info("Finish drawing the object");
+      } else { 
+    	  while(value.hasNext()) {
+    		  Shape s = value.next();
+    		  if (fade) {
+    			  Rectangle shapeMBR = s.getMBR();
+    			  double areaInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
+    			  if (areaInPixels > 1.0) {
+    				  graphics.setColor(strokeClr);
+    			  } else {
+    				  byte alpha = (byte) Math.round(areaInPixels * 255);
+    				  if (alpha == 0) {
+    					  // Skip this shape
+    					  continue;
+    				  } else {
+    					  graphics.setColor(new Color(((int)alpha << 24) | strokeColor, true));
+    				  }
+    			  }
+    		  }
+    		  if (adaptiveSample && s instanceof Point) {
+    			  if (Math.random() > adaptiveSampleRatio)
+    				  return;
+    		  }
+    		  s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);   
+    	  }
       }
       graphics.dispose();
       sharedValue.setImage(image);
@@ -1078,8 +1279,7 @@ public class GeometricPlot {
       NASAPoint.gradientType = params.getGradientType("gradient", NASAPoint.GradientType.GT_HUE);
     }
 
-    double scale2 = (double) width * height
-        / (fileMbr.getWidth() * fileMbr.getHeight());
+    double scale2 = (double) (fileMbr.getWidth() * fileMbr.getHeight() / (width * height));
     double scale = Math.sqrt(scale2);
 
     // Create an image
@@ -1093,6 +1293,14 @@ public class GeometricPlot {
     int color = strokeColor.getRGB();
     graphics.setColor(strokeColor);
 
+    long startTime = 0;
+    long endTime = 0;
+	Geometry resultGeometry = null;
+    double toleranceDistance = 2 * scale;
+    LOG.info("TOLERANCE: " + toleranceDistance);
+    startTime = System.currentTimeMillis();
+    LOG.info("Before Bufffering");
+    int currentSplit = 1;
     for (InputSplit split : splits) {
       if (hdfDataset != null) {
         // Read points from the HDF file
@@ -1114,32 +1322,82 @@ public class GeometricPlot {
             (FileSplit)split);
         Rectangle cell = reader.createKey();
         ShapeIterator value = reader.createValue();
+        int maxArraySize = 10000;
+        int i = 0;
+    	OGCJTSShape ogcjtsshape = null;
+    	Geometry[] shapeList = new Geometry[maxArraySize];
+    	if(resultGeometry != null) {
+    		shapeList[0] = resultGeometry;
+    		i++;
+    	}
         while (reader.next(cell, value)) {
-          for (Shape s : value) {
-            // Skip with a fixed ratio if adaptive sample is set
-            if (adaptiveSample && Math.random() > adaptiveSampleRatio)
-              continue;
-            Rectangle shapeMBR = s.getMBR();
-            if (shapeMBR != null) {
-              if (plotRange == null || shapeMBR.isIntersected(plotRange)) {
-                if (gradualFade) {
-                  double sizeInPixels = (shapeMBR.getWidth() + shapeMBR.getHeight()) * scale;
-                  if (sizeInPixels < 1.0 && Math.round(sizeInPixels * 255) < 1.0) {
-                    // This shape can be safely skipped as it is too small to be plotted
-                    continue;
-                  } else {
-                    int alpha = (int)Math.round(sizeInPixels * 255);
-                    graphics.setColor(new Color((alpha << 24) | color, true));
-                  }
-                }
-                s.draw(graphics, fileMbr, width, height, scale2);
-              }
-            }
+        	for (Shape s : value) {
+        		ogcjtsshape = (OGCJTSShape) s;
+        		Rectangle shapeMBR = s.getMBR();
+        		if(shapeMBR == null) {
+        			continue;
+        		}
+        		if(ogcjtsshape.geom == null) {
+        			continue;
+        		}
+        		ogcjtsshape.geom = DouglasPeuckerSimplifier.simplify(ogcjtsshape.geom, toleranceDistance);
+          		BufferOp bufOp = new BufferOp(ogcjtsshape.geom);
+          		bufOp.setEndCapStyle(BufferOp.CAP_SQUARE);
+          		bufOp.setQuadrantSegments(1);
+          		ogcjtsshape.geom = bufOp.getResultGeometry(0.001);
+          		if(i < maxArraySize -1) {
+          			if(ogcjtsshape.geom.isEmpty()) {
+          				continue;
+          			} else {
+              			shapeList[i] = ogcjtsshape.geom;
+              			i++;
+          			}
+          		} else {
+          			if(ogcjtsshape.geom.isEmpty()) {
+          				continue;
+          			}
+              		if(shapeList.length > 1) {
+              			shapeList[i] = ogcjtsshape.geom;
+                  		GeometryFactory geometryFactory = new GeometryFactory();
+                  		GeometryCollection geo_collection = geometryFactory.createGeometryCollection(shapeList);
+                  		LOG.info("Combining " + maxArraySize + " geometries.");
+              			resultGeometry = geo_collection.buffer(0);
+              			shapeList = new Geometry[maxArraySize];
+              			shapeList[0] = resultGeometry;
+                  		i = 1;
+              		} else {
+              			resultGeometry = ogcjtsshape.geom;
+                  		i = 0;
+              		}
+          		}
           }
         }
+        // Combine Geometry for this Split
+    	int splitIter = 0;
+    	for(Geometry g : shapeList) {
+    		if(g != null) {
+        		splitIter++;
+    		} else {
+    			break;
+    		}
+    	}
+    	Geometry[] thisSplitList = new Geometry[splitIter];
+    	for(int current=0; current < splitIter; current++) {
+    		thisSplitList[current] = shapeList[current];
+    	}
+    	GeometryFactory geometryFactory = new GeometryFactory();
+  		GeometryCollection geo_collection = geometryFactory.createGeometryCollection(thisSplitList);
+  		LOG.info("Combining the geometry for split " + currentSplit + " out of " + splits.length);
+  		resultGeometry = geo_collection.buffer(0);
         reader.close();
+        LOG.info("FINISH THE SPLIT");
       }
     }
+    LOG.info("Draw the final image.");
+	OGCJTSShape combinedShape = new OGCJTSShape(resultGeometry);
+	combinedShape.draw(graphics, fileMbr, width, height, scale);
+
+    endTime = System.currentTimeMillis();
     // Write image to output
     graphics.dispose();
     if (vflip) {
@@ -1151,6 +1409,8 @@ public class GeometricPlot {
     FileSystem outFs = outFile.getFileSystem(params);
     OutputStream out = outFs.create(outFile, true);
     ImageIO.write(image, "png", out);
+    long resultTime = endTime - startTime;
+    LOG.info("Buffer time: " + resultTime);
     out.close();
   }
 
