@@ -362,7 +362,7 @@ public class PyramidHeatPlot {
 		private Rectangle fileMBR;
 
 		/** Heat Map Stuffs */
-		private int radius;
+		private double radius;
 
 		@Override
 		public void configure(JobConf job) {
@@ -462,7 +462,7 @@ public class PyramidHeatPlot {
 
 		private Rectangle fileMBR;
 		private int tileWidth, tileHeight;
-		private int radius;
+		private double radius;
 		private boolean smooth;
 		private FrequencyMap map;
 		private boolean skipZeros;
@@ -521,12 +521,15 @@ public class PyramidHeatPlot {
 						/ currentTileWidth);
 				int centery = (int) Math.round((shape.y - yTile) * tileHeight
 						/ currentTileHeight);
-
+				
+				double scale = Math.sqrt((double) tileWidth * tileHeight
+						/ (fileMBR.getWidth() * fileMBR.getHeight()));
+				double currentRadius = radius / scale;
 				// Add the point to current FrequencyMap.
 				if (smooth) {
-					map.addGaussianPoint(centerx, centery, radius);
+					map.addGaussianPoint(centerx, centery, (int) Math.ceil(currentRadius));
 				} else {
-					map.addPoint(centerx, centery, radius);
+					map.addPoint(centerx, centery, (int) Math.ceil(radius));
 				}
 			}
 			BufferedImage image = map.toImage(valueRange, skipZeros);
@@ -556,7 +559,7 @@ public class PyramidHeatPlot {
 
 		/** Heat Map Stuffs */
 		private Map<TileIndex, FrequencyMap> tileMap = new HashMap<TileIndex, FrequencyMap>();
-		private int radius;
+		private double radius;
 		private boolean smooth;
 
 		private Rectangle fileMBR;
@@ -597,7 +600,7 @@ public class PyramidHeatPlot {
 				Reporter reporter) throws IOException {
 
 			while (value.hasNext()) {
-
+				
 				Shape shape = value.next();
 				Point center;
 				if (shape instanceof Point) {
@@ -648,9 +651,10 @@ public class PyramidHeatPlot {
 									* tileWidth / currentTileWidth);
 							int centery = (int) Math.round((center.y - yTile)
 									* tileHeight / currentTileHeight);
-
+							
+							double currentRadius = radius / scale[key.level];
 							// Update the Map.
-							setMap(key, centerx, centery, radius, smooth);
+							setMap(key, centerx, centery, currentRadius, smooth);
 						}
 					}
 					// Shrink overlapping cells to match the upper level
@@ -675,7 +679,7 @@ public class PyramidHeatPlot {
 		}
 
 		// Insert the record to the correct FrequencyMap based on tile
-		private void setMap(TileIndex tileIndex, int cx, int cy, int radius,
+		private void setMap(TileIndex tileIndex, int cx, int cy, double radius,
 				boolean smooth) {
 
 			FrequencyMap map = tileMap.get(tileIndex);
@@ -684,9 +688,9 @@ public class PyramidHeatPlot {
 				map = new FrequencyMap(tileWidth, tileHeight);
 			}
 			if (smooth) {
-				map.addGaussianPoint(cx, cy, radius);
+				map.addGaussianPoint(cx, cy, (int) Math.ceil(radius));
 			} else {
-				map.addPoint(cx, cy, radius);
+				map.addPoint(cx, cy, (int) Math.ceil(radius));
 			}
 			tileMap.put(tileIndex, map);
 		}
@@ -933,7 +937,7 @@ public class PyramidHeatPlot {
 		}
 		partitionStr.toLowerCase();
 		// Get the Levels.
-		int dataPartitioningMaxLevel = 5;
+		int dataPartitioningMaxLevel = params.getInt("datamaxlevel", 5);
 		String levelsRange = params.get("levels");
 		int lowerRange = 0;
 		int upperRange = 1;
@@ -953,7 +957,7 @@ public class PyramidHeatPlot {
 			plotMapReduce(inFile, outFile, params);
 		} else {
 			// Set the Levels to a correct job.
-			if (lowerRange <= dataPartitioningMaxLevel) {
+			if (upperRange <= dataPartitioningMaxLevel) {
 				// Run the Data Partitioning MapReduce until level
 				// dataPartitioningMaxLevel.
 				params.setInt("bottomLevel", lowerRange);
@@ -1036,6 +1040,7 @@ public class PyramidHeatPlot {
 		System.out
 				.println("-skipzeros: Leave empty areas (frequency < min) transparent");
 		System.out.println("-smooth: Use Gaussian Distribution");
+		System.out.println("datamaxlevel:<d>: The maximum level to use Data Partitioning");
 	}
 
 	/**
