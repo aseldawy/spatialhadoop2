@@ -61,7 +61,8 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 
 /**
  * Creates an index on an input file
@@ -659,12 +660,14 @@ public class Repartition {
     ShapeInputFormat<S> inputFormat = new ShapeInputFormat<S>();
     InputSplit[] splits = inputFormat.getSplits(job, 1);
     for (InputSplit split : splits) {
-      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params, (FileSplit) split);
+      ShapeIterRecordReader reader = new ShapeIterRecordReader(params, (FileSplit) split);
       Rectangle c = reader.createKey();
-      
-      while (reader.next(c, shape)) {
-        if (shape.getMBR() != null)
-          writer.write(NullWritable.get(), shape);
+      ShapeIterator shapes = reader.createValue();
+      while (reader.next(c, shapes)) {
+        for (Shape s : shapes) {
+          if (s.getMBR() != null)
+            writer.write(NullWritable.get(), s);
+        }
       }
       reader.close();
     }

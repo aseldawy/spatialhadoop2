@@ -748,7 +748,7 @@ public class DistributedJoin {
       System.exit(1);
     }
     
-    String repartition = params.get("repartition");
+    String repartition = params.get("repartition", "no");
     Path[] inputPaths = params.getInputPaths();
     Path outputPath = params.getOutputPath();
 
