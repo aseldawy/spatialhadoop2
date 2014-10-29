@@ -331,11 +331,13 @@ public class HeatMapPlot {
     /**Used to output values*/
     private FrequencyMap frequencyMap;
     /**Radius to use for smoothing the heat map*/
-    private int radius;
+    private double radius;
     private boolean adaptiveSample;
     private float adaptiveSampleRatio;
     /**Use smoothing or not*/
     private boolean smooth;
+    private double scale2;
+    private double scale;
     
     @Override
     public void configure(JobConf job) {
@@ -353,6 +355,10 @@ public class HeatMapPlot {
         this.adaptiveSampleRatio = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.01f);
       }
       this.smooth = job.getBoolean("smooth", false);
+      this.scale2 = (double) imageWidth * imageHeight
+				/ (this.drawMbr.getWidth() * this.drawMbr.getHeight());
+      this.scale = Math.sqrt(scale2);
+      this.radius = this.radius / scale;
     }
 
     @Override
@@ -379,9 +385,9 @@ public class HeatMapPlot {
             int centerx = (int) Math.round((center.x - drawMbr.x1) * imageWidth / drawMbr.getWidth());
             int centery = (int) Math.round((center.y - drawMbr.y1) * imageHeight / drawMbr.getHeight());
             if(smooth) {
-            	frequencyMap.addGaussianPoint(centerx, centery, radius);
+            	frequencyMap.addGaussianPoint(centerx, centery, (int) Math.ceil(radius));
             } else {
-                frequencyMap.addPoint(centerx, centery, radius);
+                frequencyMap.addPoint(centerx, centery, (int) Math.ceil(radius));
             }
           
     	}
@@ -397,7 +403,11 @@ public class HeatMapPlot {
     /**Range of values to do the gradient of the heat map*/
     private MinMax valueRange;
     private boolean skipZeros;
-    private int radius;
+    private double radius;
+    private double scale2;
+    private double scale;
+    private int imageWidth;
+    private int imageHeight;
 
     @Override
     public void configure(JobConf job) {
@@ -415,6 +425,12 @@ public class HeatMapPlot {
         String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
         this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+      this.scale2 = (double) imageWidth * imageHeight
+				/ (this.drawMBR.getWidth() * this.drawMBR.getHeight());
+      this.scale = Math.sqrt(scale2);
+      this.radius = this.radius / scale;
     }
 
     @Override
@@ -427,7 +443,7 @@ public class HeatMapPlot {
       while (frequencies.hasNext())
         combined.combine(frequencies.next());
 
-      BufferedImage image = combined.toImage(valueRange, skipZeros, radius);
+      BufferedImage image = combined.toImage(valueRange, skipZeros, (int) Math.ceil(radius));
       output.collect(drawMBR, new ImageWritable(image));
     }
   }
@@ -524,10 +540,12 @@ public class HeatMapPlot {
     implements Reducer<IntWritable, Point, Rectangle, ImageWritable> {
     private GridInfo partitionGrid;
     private int imageWidth, imageHeight;
-    private int radius;
+    private double radius;
     private boolean skipZeros;
     private MinMax valueRange;
     private boolean smooth;
+    private double scale2;
+    private double scale;
     
     @Override
     public void configure(JobConf job) {
@@ -546,6 +564,10 @@ public class HeatMapPlot {
         this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
       this.smooth = job.getBoolean("smooth", false);
+      this.scale2 = (double) imageWidth * imageHeight
+				/ (this.partitionGrid.getWidth() * this.partitionGrid.getHeight());
+      this.scale = Math.sqrt(scale2);
+      this.radius = this.radius / scale;
     }
 
     @Override
@@ -566,12 +588,12 @@ public class HeatMapPlot {
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
         if(smooth) {
-        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        	frequencyMap.addGaussianPoint(centerx, centery, (int) Math.ceil(radius));
         } else {
-            frequencyMap.addPoint(centerx, centery, radius);
+            frequencyMap.addPoint(centerx, centery, (int) Math.ceil(radius));
         }
       }
-      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, radius);
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, (int) Math.ceil(radius));
       output.collect(cellInfo, new ImageWritable(image));
     }
   }
@@ -665,11 +687,13 @@ public class HeatMapPlot {
   implements Reducer<IntWritable, Point, Rectangle, ImageWritable> {
     private CellInfo[] cells;
     private int imageWidth, imageHeight;
-    private int radius;
+    private double radius;
     private boolean skipZeros;
     private MinMax valueRange;
     private Rectangle fileMBR;
     private boolean smooth;
+    private double scale2;
+    private double scale;
 
     @Override
     public void configure(JobConf job) {
@@ -697,6 +721,11 @@ public class HeatMapPlot {
         fileMBR.expand(cell);
       }
       this.smooth = job.getBoolean("smooth", false);
+      this.scale2 = (double) imageWidth * imageHeight
+				/ (this.fileMBR.getWidth() * this.fileMBR.getHeight());
+      this.scale = Math.sqrt(scale2);
+      this.radius = this.radius / scale;
+      
     }
 
     @Override
@@ -724,12 +753,12 @@ public class HeatMapPlot {
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
         if(smooth) {
-        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        	frequencyMap.addGaussianPoint(centerx, centery, (int) Math.ceil(radius));
         } else {
-            frequencyMap.addPoint(centerx, centery, radius);
+            frequencyMap.addPoint(centerx, centery, (int) Math.ceil(radius));
         }
       }
-      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, radius);
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, (int) Math.ceil(radius));
       output.collect(cellInfo, new ImageWritable(image));
     }
 }

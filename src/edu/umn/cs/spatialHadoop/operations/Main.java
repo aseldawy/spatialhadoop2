@@ -89,7 +89,7 @@ public class Main {
       pgd.addClass("ploth", HeatMapPlot.class,
           "Plots a heatmap of an input file of points");
       
-      pgd.addClass("plothp", PyramidHeatPlot.class,
+      pgd.addClass("plotph", PyramidHeatPlot.class,
     	  "Plots a file to a set of heat maps used with Google-Maps-like engine");
 
       pgd.addClass("hdfplot", HDFPlot.class,

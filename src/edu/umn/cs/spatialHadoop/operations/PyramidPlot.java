@@ -341,6 +341,7 @@ public class PyramidPlot {
     private double scale2;
     private Color strokeColor;
     private boolean clean;
+    private boolean buffernoclean;
     private double buffer;
     private double tolerance;
 
@@ -362,6 +363,7 @@ public class PyramidPlot {
       clean = job.getBoolean("clean", false);
       buffer = job.getInt("buffer", 3);
       tolerance = job.getInt("tolerance", 2);
+      buffernoclean = job.getBoolean("buffernoclean", false);
     }
 
     @Override
@@ -378,10 +380,6 @@ public class PyramidPlot {
       double scale = Math.sqrt(scale2);
       double currentBuffer = buffer / scale;
       double currentTolerance = tolerance / scale;
-      
-      // Calculate the correct buffer and tolerance for this level
-      LOG.info(tileIndex.level + " with buffer " + currentBuffer);
-      LOG.info(tileIndex.level + " with tolerance " + currentTolerance);
       
       try {
         // Initialize the image
@@ -446,9 +444,25 @@ public class PyramidPlot {
                		i = 0;
             	}
         	}  
-          } else {
-            s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
+          } else if(buffernoclean) {
+        	  ogcjtsshape = (OGCJTSShape) s;
+       		  Rectangle shapeMBR = s.getMBR();
+       		  if(shapeMBR == null) {
+       			  continue;
+       		  }
+       		  if(ogcjtsshape.geom == null) {
+       			  continue;
+       		  }
+       		  ogcjtsshape.geom = DouglasPeuckerSimplifier.simplify(ogcjtsshape.geom, currentTolerance);
+       		  BufferOp bufOp = new BufferOp(ogcjtsshape.geom);
+       		  bufOp.setEndCapStyle(BufferOp.CAP_SQUARE);
+       		  ogcjtsshape.geom = bufOp.getResultGeometry(currentBuffer);
+       		  ogcjtsshape.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);
+          } 
+          else {
+        	  s.draw(graphics, fileMBR, imageWidth, imageHeight, scale2);  
           }
+          
           if (i % 100 == 0) {
         	  reporter.progress();
           }
@@ -523,9 +537,10 @@ public class PyramidPlot {
 
     private boolean gradualFade;
     
+    /*
     private boolean clean;
     private double buffer;
-    private double tolerance;
+    private double tolerance; */
     
     @Override
     public void configure(JobConf job) {
@@ -558,9 +573,9 @@ public class PyramidPlot {
       this.strokeColor = new Color(job.getInt("color", 0));
       this.gradualFade = job.getBoolean("fade", false);
       
-      this.clean = job.getBoolean("clean", false);
-      this.buffer = job.getInt("buffer", 3);
-      this.tolerance = job.getInt("tolerance", 2);
+      //this.clean = job.getBoolean("clean", false);
+      //this.buffer = job.getInt("buffer", 3);
+      //this.tolerance = job.getInt("tolerance", 2);
     }
     
     @Override
@@ -1181,7 +1196,7 @@ public class PyramidPlot {
 	  }
 	  partitionStr.toLowerCase();
 	  // Get the Levels.
-	  int dataPartitioningMaxLevel = 5;
+	  int dataPartitioningMaxLevel = params.getInt("datamaxlevel", 5);
 	  String levelsRange = params.get("levels");
 	  int lowerRange = 0;
 	  int upperRange = 1;
