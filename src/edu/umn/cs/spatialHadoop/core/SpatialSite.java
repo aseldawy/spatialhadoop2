@@ -255,6 +255,7 @@ public class SpatialSite {
    * @param conf
    * @param param
    * @return
+   * @deprecated - Use {@link OperationsParams#getShape(Configuration, String)}
    */
   @Deprecated
   public static Shape getShape(Configuration conf, String param) {
