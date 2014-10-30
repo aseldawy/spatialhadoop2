@@ -591,6 +591,9 @@ public class DistributedJoin {
     }
   }
   
+  protected static long repartitionJoinStep() throws IOException{
+	  return -1;
+  }
   
   /**
    * Spatially joins two files. 
