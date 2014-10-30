@@ -77,7 +77,11 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 public class DistributedJoin {
   private static final Log LOG = LogFactory.getLog(DistributedJoin.class);
   public static RunningJob lastRunningJob;
-
+  public static int maxBytesInOneRead = 1024 * 1024 * 100; 
+  public static int maxShapesInOneRead = 2000;
+  public static boolean isOneShotReadMode = true;
+  public static boolean isGeneralRepartitionMode = true;
+  
   public static class SpatialJoinFilter extends DefaultBlockFilter {
     @Override
     public void selectCellPairs(GlobalIndex<Partition> gIndex1,
@@ -105,6 +109,7 @@ public class DistributedJoin {
         final OutputCollector<Shape, Shape> output, Reporter reporter) throws IOException {
       Shape[] objects = (Shape[])value.get();
       SpatialAlgorithms.SelfJoin_planeSweep(objects, true, output);
+      reporter.progress();
     }
   }
 
@@ -209,6 +214,7 @@ public class DistributedJoin {
         throw new RuntimeException("Cannot join " + value.first.getClass()
             + " with " + value.second.getClass());
       }
+      reporter.progress();
     }
   }
   
@@ -297,6 +303,7 @@ public class DistributedJoin {
         throw new RuntimeException("Cannot join " + value.first.getClass()
             + " with " + value.second.getClass());
       }
+      reporter.progress();
     }
   }
 
@@ -332,6 +339,7 @@ public class DistributedJoin {
     @Override
     public RecordReader<PairWritable<Rectangle>, PairWritable<ArrayWritable>> getRecordReader(
         InputSplit split, JobConf job, Reporter reporter) throws IOException {
+    	reporter.progress();
       return new DJRecordReader(job, (CombineFileSplit)split);
     }
   }
@@ -368,11 +376,14 @@ public class DistributedJoin {
     @Override
     public RecordReader<PairWritable<Rectangle>, PairWritable<RTree<S>>> getRecordReader(
         InputSplit split, JobConf job, Reporter reporter) throws IOException {
+    	reporter.progress();
       return new DJRecordReader<S>(job, (CombineFileSplit)split);
     }
   }
 
   /**
+   * @modified Ibrahim Sabek
+   * 
    * Select a file to repartition based on some heuristics.
    * If only one file is indexed, the non-indexed file is repartitioned.
    * If both files are indexed, the smaller file is repartitioned.
@@ -429,6 +440,7 @@ public class DistributedJoin {
     // Get the cells to use for repartitioning
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, files[1-file_to_repartition]);
     CellInfo[] cells = SpatialSite.cellsOf(fs, files[1-file_to_repartition]);
+    
     // Repartition the file to match the other file
     boolean isReplicated = gindex.isReplicated();
     boolean isCompact = gindex.isCompact();
@@ -444,14 +456,15 @@ public class DistributedJoin {
     
     params.set("sindex", sindex);
     
-    //Repartition the smaller file with heuristics cells info (general indexing)
-    Repartition.repartitionMapReduce(files[file_to_repartition],
-        partitioned_file, params);
-    
-    //Repartition the smaller file on the same cells of the larger file
-    /*Repartition.repartitionMapReduce(Path inFile, Path outPath,
-    	      params.getShape("shape"), long blockSize, cells, params.get("sindex"),
-    	      params.is("overwrite"))*/
+    if(isGeneralRepartitionMode){
+    	//Repartition the smaller file with heuristics cells info (general indexing)
+        Repartition.repartitionMapReduce(files[file_to_repartition],
+            partitioned_file, null, params);	
+    }else{
+    	//Repartition the smaller file on the larger file (specific indexing)
+        Repartition.repartitionMapReduce(files[file_to_repartition],
+            partitioned_file, cells, params);		
+    }
     	      
     long t2 = System.currentTimeMillis();
     System.out.println("Repartition time "+(t2-t1)+" millis");
@@ -499,15 +512,20 @@ public class DistributedJoin {
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     GlobalIndex<Partition> gindex1 = SpatialSite.getGlobalIndex(fs[0], inFiles[0]);
     GlobalIndex<Partition> gindex2 = SpatialSite.getGlobalIndex(fs[1], inFiles[1]);
-
+    
     LOG.info("Joining "+inFiles[0]+" X "+inFiles[1]);
     
     if (SpatialSite.isRTree(fs[0], inFiles[0]) && SpatialSite.isRTree(fs[1], inFiles[1])) {
       job.setInputFormat(DJInputFormatRTree.class);
     } else {
-      // Ensure all objects are read in one shot
-      job.setInt(SpatialSite.MaxBytesInOneRead, -1);
-      job.setInt(SpatialSite.MaxShapesInOneRead, -1);
+      if(isOneShotReadMode){
+    	// Ensure all objects are read in one shot
+      	job.setInt(SpatialSite.MaxBytesInOneRead, -1);
+        job.setInt(SpatialSite.MaxShapesInOneRead, -1);    	  
+      }else{
+      	job.setInt(SpatialSite.MaxBytesInOneRead, maxBytesInOneRead);
+        job.setInt(SpatialSite.MaxShapesInOneRead, maxShapesInOneRead);
+      }
       job.setInputFormat(DJInputFormatArray.class);
     }
     
@@ -534,7 +552,7 @@ public class DistributedJoin {
         job.setMapperClass(RedistributeJoinMapNoDupAvoidance.class);
       }
     }
-
+    
     Shape shape = params.getShape("shape");
     job.setMapOutputKeyClass(shape.getClass());
     job.setMapOutputValueClass(shape.getClass());
@@ -572,6 +590,7 @@ public class DistributedJoin {
       return -1;
     }
   }
+  
   
   /**
    * Spatially joins two files. 
@@ -678,9 +697,14 @@ public class DistributedJoin {
   
   private static long selfJoinLocal(Path in, Path out, OperationsParams params)
       throws IOException {
-    // Ensure all shapes are read in one shot
-    params.setInt(SpatialSite.MaxBytesInOneRead, -1);
-    params.setInt(SpatialSite.MaxShapesInOneRead, -1);
+	if(isOneShotReadMode){
+	  // Ensure all objects are read in one shot
+	  params.setInt(SpatialSite.MaxBytesInOneRead, -1);
+	  params.setInt(SpatialSite.MaxShapesInOneRead, -1);    	  
+	}else{
+	  params.setInt(SpatialSite.MaxBytesInOneRead, maxBytesInOneRead);
+	  params.setInt(SpatialSite.MaxShapesInOneRead, maxShapesInOneRead);
+	}
     ShapeArrayInputFormat inputFormat = new ShapeArrayInputFormat();
     JobConf job = new JobConf(params);
     FileInputFormat.addInputPath(job, in);
@@ -725,6 +749,8 @@ public class DistributedJoin {
     System.out.println("<input file 2> - (*) Path to the second input file");
     System.out.println("<output file> - Path to output file");
     System.out.println("repartition:<decision> - (*) Decision to repartition smaller dataset (yes|no|auto)");
+    System.out.println("all-inmemory-load:<decision> - (*) Decision to load all file blocks in memory (yes|no)");
+    System.out.println("heuristic-repartition:<decision> - (*) Decision to have a heuristic or exact repartition (yes|no)");
     System.out.println("-overwrite - Overwrite output file without notice");
     
     GenericOptionsParser.printGenericCommandUsage(System.out);
@@ -748,11 +774,20 @@ public class DistributedJoin {
       System.exit(1);
     }
     
-    String repartition = params.get("repartition", "no");
+    String repartition = params.get("repartition");
     Path[] inputPaths = params.getInputPaths();
     Path outputPath = params.getOutputPath();
 
-
+    if(params.get("heuristic-repartition").equals("no")){
+    	isGeneralRepartitionMode = false;
+    	System.out.println("heuristic-repartition is false");
+    }
+    
+    if(params.get("all-inmemory-load").equals("no")){
+    	isOneShotReadMode = false;
+    	System.out.println("all-inmemory-load is false");
+    }		
+    
     long result_size;
     if (inputPaths[0].equals(inputPaths[1])) {
       // Special case for self join
