@@ -63,7 +63,7 @@ public class ImageRasterLayer extends RasterLayer {
   public void mergeWith(RasterLayer another) {
     BufferedImage anotherImage = ((ImageRasterLayer)another).image;
     Graphics2D g = this.image.createGraphics();
-    g.drawImage(anotherImage, another.x, another.y, null);
+    g.drawImage(anotherImage, another.xOffset, another.yOffset, null);
   }
 
   /* (non-Javadoc)
