@@ -29,6 +29,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
+import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -179,12 +180,12 @@ public class SingleLevelPlot {
       Path outFile = ImageOutputFormat.getOutputPath(job);
       Rasterizer rasterizer = getRasterizer(job);
       // Create any raster layer to be able to deserialize the output files
-      RasterLayer intermediateLayer = rasterizer.create(0, 0);
+      RasterLayer intermediateLayer = rasterizer.create(1, 1);
       int width = job.getInt("width", 1000);
       int height = job.getInt("height", 1000);
       RasterLayer finalLayer = rasterizer.create(width, height);
 
-      boolean vflip = job.getBoolean("vflip", false);
+      boolean vflip = job.getBoolean("vflip", true);
 
       // Combine all images in one file
       // Rename output file
@@ -202,8 +203,7 @@ public class SingleLevelPlot {
       // Read all intermediate layers and merge into one final layer
       for (FileStatus resultFile : resultFiles) {
         FSDataInputStream inputStream = outFs.open(resultFile.getPath());
-        long offset = 0;
-        while (offset < resultFile.getLen()) {
+        while (inputStream.getPos() < resultFile.getLen()) {
           // Read next raster layer in file
           intermediateLayer.readFields(inputStream);
           finalLayer.mergeWith(intermediateLayer);
@@ -229,6 +229,60 @@ public class SingleLevelPlot {
 
       outFs.delete(temp, true);
     }
+  }
+  
+  public static void plotMapReduce(Path inFile, Path outFile,
+      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
+    Rasterizer rasterizer;
+    try {
+      rasterizer = rasterizerClass.newInstance();
+    } catch (InstantiationException e) {
+      throw new RuntimeException("Error creating rastierizer", e);
+    } catch (IllegalAccessException e) {
+      throw new RuntimeException("Error creating rastierizer", e);
+    }
+    
+    JobConf job = new JobConf(params, SingleLevelPlot.class);
+    // Set rasterizer
+    job.setClass(RasterizerClass, rasterizerClass, Rasterizer.class);
+    // Set input file MBR
+    Rectangle inputMBR = (Rectangle) params.getShape("rect");
+    if (inputMBR == null)
+      inputMBR = FileMBR.fileMBR(inFile, params);
+    OperationsParams.setShape(job, InputMBR, inputMBR);
+    
+    // Adjust width and height if aspect ratio is to be kept
+    if (params.getBoolean("keepratio", true)) {
+      int width = job.getInt("width", 1000);
+      int height = job.getInt("height", 1000);
+      // Adjust width and height to maintain aspect ratio
+      if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height) {
+        // Fix width and change height
+        height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth());
+        // Make divisible by two for compatibility with ffmpeg
+        height &= 0xfffffffe;
+        job.setInt("height", height);
+      } else {
+        width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight());
+        job.setInt("width", width);
+      }
+    }
+    
+    // Set input and output
+    job.setInputFormat(ShapeIterInputFormat.class);
+    ShapeIterInputFormat.setInputPaths(job, inFile);
+    job.setOutputFormat(RasterOutputFormat.class);
+    RasterOutputFormat.setOutputPath(job, outFile);
+    
+    // Set mapper, reducer and committer
+    job.setMapperClass(NoPartitionRasterizer.class);
+    job.setMapOutputKeyClass(IntWritable.class);
+    job.setMapOutputValueClass(rasterizer.create(1, 1).getClass());
+    job.setReducerClass(NoPartitionMerger.class);
+    job.setOutputCommitter(ImageWriter.class);
+
+    // Start the job
+    JobClient.runJob(job);
   }
 
   public static void plotLocal(Path inFile, Path outFile,

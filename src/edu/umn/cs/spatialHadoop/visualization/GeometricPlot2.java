@@ -102,7 +102,7 @@ public class GeometricPlot2 {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    SingleLevelPlot.plotLocal(inFile, outFile, GeometricRasterizer.class, params);
+    SingleLevelPlot.plotMapReduce(inFile, outFile, GeometricRasterizer.class, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

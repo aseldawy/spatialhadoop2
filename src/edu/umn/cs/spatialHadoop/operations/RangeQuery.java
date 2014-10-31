@@ -237,8 +237,6 @@ public class RangeQuery {
     JobConf job = new JobConf(params, RangeQuery.class);
     boolean overwrite = params.is("overwrite");
     Shape shape = params.getShape("shape");
-    boolean background = params.is("background");
-    
     FileSystem outFs = inFile.getFileSystem(job);
     Path outputPath = outFile;
     if (outputPath == null) {
@@ -296,7 +294,7 @@ public class RangeQuery {
     }
 
     // Submit the job
-    if (!background) {
+    if (!params.is("background")) {
       RunningJob runningJob = JobClient.runJob(job);
       Counters counters = runningJob.getCounters();
       Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
