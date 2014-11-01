@@ -697,6 +697,8 @@ public class DistributedJoin {
 			GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs,
 					indexDir);
 			CellInfo cell = SpatialSite.getCellInfo(gIndex, cellIndex.get());
+			LOG.info(indexDir);
+			LOG.info(cellIndex.get());
 			if (cell != null) {
 
 				// load shapes from the indexed dataset
@@ -706,10 +708,12 @@ public class DistributedJoin {
 					public void collect(Partition p) {
 						try {
 							Path partitionFile = new Path(indexDir, p.filename);
+							LOG.info(partitionFile.toString());
 							FileSystem partitionFS = partitionFile
 									.getFileSystem(new Configuration());
 							long partitionFileSize = partitionFS.getFileStatus(
 									partitionFile).getLen();
+							LOG.info(partitionFileSize);
 
 							// Load all shapes in this partition
 							ShapeIterRecordReader shapeReader = new ShapeIterRecordReader(
