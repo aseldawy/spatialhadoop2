@@ -76,8 +76,6 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMapNoReplication;
 import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMap;
-import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionReduce;
-import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * Performs a spatial join between two or more files using the redistribute-join
@@ -679,12 +677,14 @@ public class DistributedJoin {
 			MapReduceBase implements Reducer<IntWritable, T, Shape, Shape> {
 
 		private Path indexDir;
+		private Shape shape;
 
 		@Override
 		public void configure(JobConf job) {
 			super.configure(job);
 			indexDir = OperationsParams.getRepartitionJoinIndexPath(job,
 					RepartitionJoinIndexPath);
+			shape = OperationsParams.getShape(job, "shape");
 		}
 
 		@Override
@@ -697,8 +697,6 @@ public class DistributedJoin {
 			GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs,
 					indexDir);
 			CellInfo cell = SpatialSite.getCellInfo(gIndex, cellIndex.get());
-			LOG.info(indexDir);
-			LOG.info(cellIndex.get());
 			if (cell != null) {
 
 				// load shapes from the indexed dataset
@@ -708,17 +706,16 @@ public class DistributedJoin {
 					public void collect(Partition p) {
 						try {
 							Path partitionFile = new Path(indexDir, p.filename);
-							LOG.info(partitionFile.toString());
 							FileSystem partitionFS = partitionFile
 									.getFileSystem(new Configuration());
 							long partitionFileSize = partitionFS.getFileStatus(
 									partitionFile).getLen();
-							LOG.info(partitionFileSize);
 
 							// Load all shapes in this partition
 							ShapeIterRecordReader shapeReader = new ShapeIterRecordReader(
 									partitionFS.open(partitionFile), 0,
 									partitionFileSize);
+							shapeReader.setShape(shape);
 							Rectangle cellInfo = shapeReader.createKey();
 							ShapeIterator partitionShapes = shapeReader
 									.createValue();
