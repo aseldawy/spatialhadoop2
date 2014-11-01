@@ -15,6 +15,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
 
@@ -25,6 +26,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.ArrayWritable;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -40,6 +42,7 @@ import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.RecordReader;
+import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
@@ -54,6 +57,7 @@ import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.RTree;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
@@ -66,7 +70,14 @@ import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.RTreeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMapNoReplication;
+import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMap;
+import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionReduce;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * Performs a spatial join between two or more files using the redistribute-join
@@ -82,6 +93,8 @@ public class DistributedJoin {
 	public static int maxShapesInOneRead = 2000;
 	public static boolean isOneShotReadMode = true;
 	public static boolean isGeneralRepartitionMode = true;
+
+	private static final String RepartitionJoinIndexPath = "DJ.RepartitionJoinIndexPath";
 
 	public static class SpatialJoinFilter extends DefaultBlockFilter {
 		@Override
@@ -662,19 +675,209 @@ public class DistributedJoin {
 		}
 	}
 
+	public static class RepartitionJoinReduce<T extends Shape> extends
+			MapReduceBase implements Reducer<IntWritable, T, Shape, Shape> {
+
+		private Path indexDir;
+
+		@Override
+		public void configure(JobConf job) {
+			super.configure(job);
+			indexDir = OperationsParams.getRepartitionJoinIndexPath(job,
+					RepartitionJoinIndexPath);
+		}
+
+		@Override
+		public void reduce(IntWritable cellIndex, Iterator<T> shapes,
+				final OutputCollector<Shape, Shape> output, Reporter reporter)
+				throws IOException {
+
+			final FileSystem fs = indexDir.getFileSystem(new Configuration());
+
+			GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs,
+					indexDir);
+			CellInfo cell = SpatialSite.getCellInfo(gIndex, cellIndex.get());
+			if (cell != null) {
+
+				// load shapes from the indexed dataset
+				final ArrayList<Shape> s = new ArrayList<Shape>();
+				gIndex.rangeQuery(cell, new ResultCollector<Partition>() {
+					@Override
+					public void collect(Partition p) {
+						try {
+							Path partitionFile = new Path(indexDir, p.filename);
+							FileSystem partitionFS = partitionFile
+									.getFileSystem(new Configuration());
+							long partitionFileSize = partitionFS.getFileStatus(
+									partitionFile).getLen();
+
+							// Load all shapes in this partition
+							ShapeIterRecordReader shapeReader = new ShapeIterRecordReader(
+									partitionFS.open(partitionFile), 0,
+									partitionFileSize);
+							Rectangle cellInfo = shapeReader.createKey();
+							ShapeIterator partitionShapes = shapeReader
+									.createValue();
+							while (shapeReader.next(cellInfo, partitionShapes)) {
+								for (Shape shapeInPartition : partitionShapes) {
+									s.add(shapeInPartition);
+								}
+							}
+							shapeReader.close();
+
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+					}
+				});
+
+				// Get collected shapes from the repartition phase
+				ArrayList<Shape> r = new ArrayList<Shape>();
+				T shape = null;
+				while (shapes.hasNext()) {
+					shape = shapes.next();
+					r.add(shape);
+				}
+
+				// Join two arrays using the plane sweep algorithm
+				SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
+						new ResultCollector2<Shape, Shape>() {
+							@Override
+							public void collect(Shape r, Shape s) {
+								try {
+									output.collect(r, s);
+								} catch (IOException e) {
+									e.printStackTrace();
+								}
+							}
+						});
+
+			} else {
+				LOG.error("Can't process cell with ID " + cellIndex.get());
+			}
+
+			reporter.progress();
+		}
+
+	}
+
 	/**
+	 * Spatially joins two datasets by repartitioning the smaller dataset based
+	 * on the larger one, then apply one-to-one joining for each partition
 	 * 
+	 * @author Ibrahim Sabek
 	 * @param inputFiles
+	 *            Input datasets to be spatially joined
 	 * @param fileToRepartition
-	 * @param userOutputPath
+	 *            Index of which file will be repartitioned
+	 * @param outputFile
+	 *            Output file contains the joining results
 	 * @param params
+	 *            Job configurations
 	 * @return
 	 * @throws IOException
 	 */
 	protected static long repartitionJoinStep(final Path[] inputFiles,
-			int fileToRepartition, Path userOutputPath,
-			OperationsParams params) throws IOException {
-		return -1;
+			int fileToRepartition, Path outputFile, OperationsParams params)
+			throws IOException {
+
+		boolean overwrite = params.is("overwrite");
+		Shape stockShape = params.getShape("shape");
+
+		// Do the repartition step
+		long t1 = System.currentTimeMillis();
+
+		JobConf repartitionJoinJob = new JobConf(params, DistributedJoin.class);
+		repartitionJoinJob.setJobName("RepartitionJoin");
+
+		FileSystem fs = inputFiles[fileToRepartition].getFileSystem(params);
+
+		Path outputPath = outputFile;
+		if (outputPath == null) {
+			do {
+				outputPath = new Path(inputFiles[0].getName() + ".dj_"
+						+ (int) (Math.random() * 1000000));
+			} while (fs.exists(outputPath));
+		}
+
+		LOG.info("Repartition - Joining " + inputFiles[0] + " X "
+				+ inputFiles[1]);
+
+		// Get the cells to use for repartitioning
+		GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs,
+				inputFiles[1 - fileToRepartition]);
+		OperationsParams.setRepartitionJoinIndexPath(repartitionJoinJob,
+				RepartitionJoinIndexPath, inputFiles[1 - fileToRepartition]);
+
+		CellInfo[] cellsInfo = SpatialSite.cellsOf(fs,
+				inputFiles[1 - fileToRepartition]);
+
+		// Repartition the file to match the other file
+		boolean isReplicated = gindex.isReplicated();
+		boolean isCompact = gindex.isCompact();
+		String sindex;
+		if (isReplicated && !isCompact)
+			sindex = "grid";
+		else if (isReplicated && isCompact)
+			sindex = "r+tree";
+		else if (!isReplicated && isCompact)
+			sindex = "rtree";
+		else
+			throw new RuntimeException("Unknown index at: "
+					+ inputFiles[1 - fileToRepartition]);
+		params.set("sindex", sindex);
+
+		// Decide which map function to use based on the type of global index
+		if (sindex.equals("rtree") || sindex.equals("str")) {
+			// Repartition without replication
+			repartitionJoinJob
+					.setMapperClass(RepartitionMapNoReplication.class);
+		} else {
+			// Repartition with replication (grid and r+tree)
+			repartitionJoinJob.setMapperClass(RepartitionMap.class);
+		}
+		repartitionJoinJob.setMapOutputKeyClass(IntWritable.class);
+		repartitionJoinJob.setMapOutputValueClass(stockShape.getClass());
+		ShapeInputFormat.setInputPaths(repartitionJoinJob,
+				inputFiles[fileToRepartition]);
+		repartitionJoinJob.setInputFormat(ShapeInputFormat.class);
+
+		ClusterStatus clusterStatus = new JobClient(repartitionJoinJob)
+				.getClusterStatus();
+		repartitionJoinJob.setNumMapTasks(10 * Math.max(1,
+				clusterStatus.getMaxMapTasks()));
+
+		SpatialSite.setCells(repartitionJoinJob, cellsInfo);
+		repartitionJoinJob.setBoolean(SpatialSite.OVERWRITE, overwrite);
+
+		// set reduce function
+		repartitionJoinJob.setReducerClass(RepartitionJoinReduce.class);
+		repartitionJoinJob.setNumReduceTasks(Math.max(1, Math.min(
+				cellsInfo.length,
+				(clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
+
+		repartitionJoinJob.setOutputFormat(TextOutputFormat.class);
+		TextOutputFormat.setOutputPath(repartitionJoinJob, outputPath);
+		
+		RunningJob runningJob = JobClient.runJob(repartitionJoinJob);
+		Counters counters = runningJob.getCounters();
+		Counter outputRecordCounter = counters
+				.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
+		final long resultCount = outputRecordCounter.getValue();
+
+		// Output number of running map tasks
+		Counter mapTaskCountCounter = counters
+				.findCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
+		System.out.println("Number of map tasks "
+				+ mapTaskCountCounter.getValue());
+
+		// Delete output directory if not explicitly set by user
+		if (outputFile == null)
+			fs.delete(outputPath, true);
+		long t2 = System.currentTimeMillis();
+		System.out.println("Repartitioning and Joining time " + (t2 - t1) + " millis");
+		
+		return resultCount;
 	}
 
 	/**
@@ -855,6 +1058,8 @@ public class DistributedJoin {
 				.println("all-inmemory-load:<decision> - (*) Decision to load all file blocks in memory (yes|no)");
 		System.out
 				.println("heuristic-repartition:<decision> - (*) Decision to have a heuristic or exact repartition (yes|no)");
+		System.out
+				.println("direct-join:<decision> - (*) Decision to directly join after repartitioning (yes|no)");
 		System.out.println("-overwrite - Overwrite output file without notice");
 
 		GenericOptionsParser.printGenericCommandUsage(System.out);
@@ -894,6 +1099,11 @@ public class DistributedJoin {
 			System.out.println("all-inmemory-load is false");
 		}
 
+		if (params.get("direct-join").equals("yes")) {
+			System.out
+					.println("Reparition the smaller dataset then join the two datasets directly");
+		}
+
 		long result_size;
 		if (inputPaths[0].equals(inputPaths[1])) {
 			// Special case for self join
@@ -903,8 +1113,13 @@ public class DistributedJoin {
 			result_size = distributedJoinSmart(inputPaths, outputPath, params);
 		} else if (repartition.equals("yes")) {
 			int file_to_repartition = selectRepartition(inputPaths, params);
-			repartitionStep(inputPaths, file_to_repartition, params);
-			result_size = joinStep(inputPaths, outputPath, params);
+			if (params.get("direct-join").equals("yes")) {
+				result_size = repartitionJoinStep(inputPaths,
+						file_to_repartition, outputPath, params);
+			} else {
+				repartitionStep(inputPaths, file_to_repartition, params);
+				result_size = joinStep(inputPaths, outputPath, params);
+			}
 		} else if (repartition.equals("no")) {
 			result_size = joinStep(inputPaths, outputPath, params);
 		} else {
