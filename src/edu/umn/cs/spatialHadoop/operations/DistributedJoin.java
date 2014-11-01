@@ -168,6 +168,9 @@ public class DistributedJoin {
 						if (mbr != null && mapperMBR.isIntersected(mbr))
 							s.add(shape);
 					}
+					
+					LOG.info("s size: " + s.size());
+					LOG.info("r size: " + r.size());
 					SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 							new ResultCollector2<Shape, Shape>() {
 								@Override
@@ -725,7 +728,7 @@ public class DistributedJoin {
 								}
 							}
 							shapeReader.close();
-
+							LOG.info("s size: " + s.size());
 						} catch (IOException e) {
 							e.printStackTrace();
 						}
@@ -739,7 +742,8 @@ public class DistributedJoin {
 					shape = shapes.next();
 					r.add(shape);
 				}
-
+				LOG.info("r size: " + r.size());
+				
 				// Join two arrays using the plane sweep algorithm
 				SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 						new ResultCollector2<Shape, Shape>() {
