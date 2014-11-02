@@ -168,9 +168,7 @@ public class DistributedJoin {
 						if (mbr != null && mapperMBR.isIntersected(mbr))
 							s.add(shape);
 					}
-					
-					LOG.info("s size: " + s.size());
-					LOG.info("r size: " + r.size());
+
 					SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 							new ResultCollector2<Shape, Shape>() {
 								@Override
@@ -702,8 +700,14 @@ public class DistributedJoin {
 			CellInfo cell = SpatialSite.getCellInfo(gIndex, cellIndex.get());
 			if (cell != null) {
 
-				// load shapes from the indexed dataset
-				final ArrayList<Shape> s = new ArrayList<Shape>();
+				// Get collected shapes from the repartition phase
+				final ArrayList<Shape> r = new ArrayList<Shape>();
+				T rShape = null;
+				while (shapes.hasNext()) {
+					rShape = shapes.next();
+					r.add(rShape);
+				}
+				
 				gIndex.rangeQuery(cell, new ResultCollector<Partition>() {
 					@Override
 					public void collect(Partition p) {
@@ -722,40 +726,47 @@ public class DistributedJoin {
 							Rectangle cellInfo = shapeReader.createKey();
 							ShapeIterator partitionShapes = shapeReader
 									.createValue();
+							
+							// load shapes from the indexed dataset
+							final ArrayList<Shape> selectedSShapes = new ArrayList<Shape>();
 							while (shapeReader.next(cellInfo, partitionShapes)) {
 								for (Shape shapeInPartition : partitionShapes) {
-									s.add(shapeInPartition);
+									selectedSShapes.add(shapeInPartition);
 								}
 							}
 							shapeReader.close();
-							LOG.info("s size: " + s.size());
+
+							ArrayList<Shape> selectedRShapes = new ArrayList<Shape>();
+							for (Shape rShape : r) {
+								if (rShape.getMBR().isIntersected(p.getMBR())) {
+									selectedRShapes.add(rShape);
+								}
+							}
+
+							if (selectedRShapes.size() != 0 && selectedSShapes.size() != 0) {
+								LOG.info("r size: " + selectedRShapes.size());
+								LOG.info("s size: " + selectedSShapes.size());
+								// Join two arrays using the plane sweep
+								// algorithm
+								SpatialAlgorithms.SpatialJoin_planeSweep(
+										selectedRShapes, selectedSShapes,
+										new ResultCollector2<Shape, Shape>() {
+											@Override
+											public void collect(Shape r, Shape s) {
+												try {
+													output.collect(r, s);
+												} catch (IOException e) {
+													e.printStackTrace();
+												}
+											}
+										});
+							}
+
 						} catch (IOException e) {
 							e.printStackTrace();
 						}
 					}
 				});
-
-				// Get collected shapes from the repartition phase
-				ArrayList<Shape> r = new ArrayList<Shape>();
-				T shape = null;
-				while (shapes.hasNext()) {
-					shape = shapes.next();
-					r.add(shape);
-				}
-				LOG.info("r size: " + r.size());
-				
-				// Join two arrays using the plane sweep algorithm
-				SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
-						new ResultCollector2<Shape, Shape>() {
-							@Override
-							public void collect(Shape r, Shape s) {
-								try {
-									output.collect(r, s);
-								} catch (IOException e) {
-									e.printStackTrace();
-								}
-							}
-						});
 
 			} else {
 				LOG.error("Can't process cell with ID " + cellIndex.get());
@@ -863,7 +874,7 @@ public class DistributedJoin {
 
 		repartitionJoinJob.setOutputFormat(TextOutputFormat.class);
 		TextOutputFormat.setOutputPath(repartitionJoinJob, outputPath);
-		
+
 		RunningJob runningJob = JobClient.runJob(repartitionJoinJob);
 		Counters counters = runningJob.getCounters();
 		Counter outputRecordCounter = counters
@@ -880,8 +891,9 @@ public class DistributedJoin {
 		if (outputFile == null)
 			fs.delete(outputPath, true);
 		long t2 = System.currentTimeMillis();
-		System.out.println("Repartitioning and Joining time " + (t2 - t1) + " millis");
-		
+		System.out.println("Repartitioning and Joining time " + (t2 - t1)
+				+ " millis");
+
 		return resultCount;
 	}
 
