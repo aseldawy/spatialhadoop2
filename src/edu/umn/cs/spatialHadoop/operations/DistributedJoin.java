@@ -744,8 +744,6 @@ public class DistributedJoin {
 							}
 
 							if (selectedRShapes.size() != 0 && selectedSShapes.size() != 0) {
-								LOG.info("r size: " + selectedRShapes.size());
-								LOG.info("s size: " + selectedSShapes.size());
 								// Join two arrays using the plane sweep
 								// algorithm
 								SpatialAlgorithms.SpatialJoin_planeSweep(
