@@ -253,6 +253,7 @@
                 }, function(results, status) {
                     if (status == google.maps.GeocoderStatus.OK) {
                         bounds = results[0].geometry.bounds;
+                        alert(bounds);
                         map.fitBounds(bounds);
                         DrawRect();
                     } else {
