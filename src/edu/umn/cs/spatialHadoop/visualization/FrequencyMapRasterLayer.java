@@ -29,7 +29,7 @@ import org.apache.commons.logging.LogFactory;
 public class FrequencyMapRasterLayer extends RasterLayer {
   private static final Log LOG = LogFactory.getLog(FrequencyMapRasterLayer.class);
   
-  enum KernelType {Flat, Gaussian};
+  enum SmoothType {Flat, Gaussian};
   
   /**The kernel to use for stamping points*/
   protected float[][] kernel;
@@ -50,20 +50,23 @@ public class FrequencyMapRasterLayer extends RasterLayer {
    * @param width
    * @param height
    */
-  public FrequencyMapRasterLayer(int width, int height) {
+  public FrequencyMapRasterLayer(int xOffset, int yOffset, int width, int height, int radius, SmoothType smoothType) {
+    this.xOffset = xOffset;
+    this.yOffset = yOffset;
     this.frequencies = new float[width][height];
+    initKernel(radius, smoothType);
   }
   
   /**
    * Initialize a frequency map with the given radius and kernel type
    * @param radius
-   * @param kernelType
+   * @param smoothType
    */
-  public FrequencyMapRasterLayer(int radius, KernelType kernelType) {
+  protected void initKernel(int radius, SmoothType smoothType) {
     this.radius = radius;
     // initialize the kernel according to the radius and kernel type
     kernel = new float[radius * 2][radius * 2];
-    switch (kernelType) {
+    switch (smoothType) {
     case Flat:
       for (int dx = -radius; dx < radius; dx++) {
         for (int dy = -radius; dy < radius; dy++) {
@@ -79,8 +82,8 @@ public class FrequencyMapRasterLayer extends RasterLayer {
       // http://en.wikipedia.org/wiki/Gaussian_function#Two-dimensional_Gaussian_function
       for (int dx = -radius; dx < radius; dx++) {
         for (int dy = -radius; dy < radius; dy++) {
-          kernel[dx + radius][dy + radius] = (float) Math.pow(Math.E, -(dx * dx + dy * dy)
-              / (2 * stdev * stdev));
+          kernel[dx + radius][dy + radius] = (float) Math.exp(-(dx * dx + dy * dy)
+              / (2.0 * stdev * stdev));
         }
       }
     }
@@ -137,7 +140,6 @@ public class FrequencyMapRasterLayer extends RasterLayer {
         frequencies[x][y] = bbuffer.getFloat();
       }
     }
-
   }
   
   @Override
@@ -186,7 +188,7 @@ public class FrequencyMapRasterLayer extends RasterLayer {
     for (int dx = -radius; dx < radius; dx++) {
       for (int dy = -radius; dy < radius; dy++) {
         int imgx = cx + dx - xOffset;
-        int imgy = dy + dy - yOffset;
+        int imgy = cy + dy - yOffset;
         if (imgx >= 0 && imgx < getWidth() && imgy >= 0 && imgy < getHeight())
           frequencies[imgx][imgy] += kernel[dx + radius][dy + radius];
       }
@@ -200,56 +202,56 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   public int getHeight() {
     return frequencies == null? 0 : frequencies[0].length;
   }
-
-  protected static Color color1, color2;
-  protected static float hue1, hue2;
-  protected static float saturation1, saturation2;
-  protected static float brightness1, brightness2;
   
-  public static enum GradientType {GT_HUE, GT_COLOR};
-  public static GradientType gradientType;
+  /* The following methods are used to compute the gradient */
 
-  public static void setColor1(Color color) {
-    color1 = color;
-    float[] hsbvals = new float[3];
-    Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), hsbvals);
-    hue1 = hsbvals[0];
-    saturation1 = hsbvals[1];
-    brightness1 = hsbvals[2];
-  }
+  protected Color[] colors;
+  protected float[] hues;
+  protected float[] saturations;
+  protected float[] brightnesses;
   
-  public static void setColor2(Color color) {
-    color2 = color;
-    float[] hsbvals = new float[3];
-    Color.RGBtoHSB(color.getRed(), color.getGreen(), color.getBlue(), hsbvals);
-    hue2 = hsbvals[0];
-    saturation2 = hsbvals[1];
-    brightness2 = hsbvals[2];
+  public enum GradientType {GT_HSB, GT_RGB};
+  protected GradientType gradientType;
+  
+  public void setGradientInfor(Color color1, Color color2, GradientType gradientType) {
+    this.colors = new Color[] {color1, color2};
+    this.hues = new float[colors.length];
+    this.saturations = new float[colors.length];
+    this.brightnesses = new float[colors.length];
+    
+    for (int i = 0; i < colors.length; i++) {
+      float[] hsbvals = new float[3];
+      Color.RGBtoHSB(colors[i].getRed(), colors[i].getGreen(), colors[i].getBlue(), hsbvals);
+      hues[i] = hsbvals[0];
+      saturations[i] = hsbvals[1];
+      brightnesses[i] = hsbvals[2];
+    }
+    this.gradientType = gradientType;
   }
 
-  public static Color calculateColor(float value, float minValue, float maxValue) {
+  protected Color calculateColor(float value, float minValue, float maxValue) {
     Color color;
     if (value < minValue) {
-      color = color1;
+      color = colors[0];
     } else if (value > maxValue) {
-      color = color2;
+      color = colors[1];
     } else {
       // Interpolate between two colors according to gradient type
       float ratio = (value - minValue) / (maxValue - minValue);
-      if (gradientType == GradientType.GT_HUE) {
+      if (gradientType == GradientType.GT_HSB) {
         // Interpolate between two hues
-        float hue = hue1 * (1.0f - ratio) + hue2 * ratio;
-        float saturation = saturation1 * (1.0f - ratio) + saturation2 * ratio;
-        float brightness = brightness1 * (1.0f - ratio) + brightness2 * ratio;
+        float hue = hues[0] * (1.0f - ratio) + hues[1] * ratio;
+        float saturation = saturations[0] * (1.0f - ratio) + saturations[1] * ratio;
+        float brightness = brightnesses[0] * (1.0f - ratio) + brightnesses[1] * ratio;
         color = Color.getHSBColor(hue, saturation, brightness);
-        int alpha = (int) (color1.getAlpha() * (1.0f - ratio) + color2.getAlpha() * ratio);
+        int alpha = (int) (colors[0].getAlpha() * (1.0f - ratio) + colors[1].getAlpha() * ratio);
         color = new Color(color.getRGB() & 0xffffff | (alpha << 24), true);
-      } else if (gradientType == GradientType.GT_COLOR) {
+      } else if (gradientType == GradientType.GT_RGB) {
         // Interpolate between colors
-        int red = (int) (color1.getRed() * (1.0f - ratio) + color2.getRed() * ratio);
-        int green = (int) (color1.getGreen() * (1.0f - ratio) + color2.getGreen() * ratio);
-        int blue = (int) (color1.getBlue() * (1.0f - ratio) + color2.getBlue() * ratio);
-        int alpha = (int) (color1.getAlpha() * (1.0f - ratio) + color2.getAlpha() * ratio);
+        int red = (int) (colors[0].getRed() * (1.0f - ratio) + colors[1].getRed() * ratio);
+        int green = (int) (colors[0].getGreen() * (1.0f - ratio) + colors[1].getGreen() * ratio);
+        int blue = (int) (colors[0].getBlue() * (1.0f - ratio) + colors[1].getBlue() * ratio);
+        int alpha = (int) (colors[0].getAlpha() * (1.0f - ratio) + colors[1].getAlpha() * ratio);
         color = new Color(red, green, blue, alpha);
       } else {
         throw new RuntimeException("Unsupported gradient type: "+gradientType);

@@ -37,7 +37,7 @@ public class GeometricPlot2 {
 
     @Override
     public RasterLayer create(int width, int height) {
-      return new ImageRasterLayer(width, height);
+      return new ImageRasterLayer(0, 0, width, height);
     }
 
     @Override
@@ -52,7 +52,7 @@ public class GeometricPlot2 {
       int rasterLayerX2 = (int) Math.ceil((partitionMBR.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
       int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      RasterLayer rasterLayer = new ImageRasterLayer(rasterLayerX2 - rasterLayerX1,
+      RasterLayer rasterLayer = new ImageRasterLayer(rasterLayerX1, rasterLayerX2, rasterLayerX2 - rasterLayerX1,
           rasterLayerY2 - rasterLayerY1);
       Graphics2D g = rasterLayer.asImage().createGraphics();
       g.setColor(strokeColor);
@@ -65,6 +65,11 @@ public class GeometricPlot2 {
       g.dispose();
       
       return rasterLayer;
+    }
+
+    @Override
+    public Class<? extends RasterLayer> getRasterClass() {
+      return ImageRasterLayer.class;
     }
     
   }

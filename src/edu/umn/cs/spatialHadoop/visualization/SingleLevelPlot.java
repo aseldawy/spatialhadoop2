@@ -108,6 +108,7 @@ public class SingleLevelPlot {
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
       this.outputValue = new IntWritable(0);
       this.rasterizer = getRasterizer(job);
+      this.rasterizer.configure(job);
     }
     
     @Override
@@ -148,6 +149,7 @@ public class SingleLevelPlot {
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
       this.rasterizer = getRasterizer(job);
+      this.rasterizer.configure(job);
     }
     
     @Override
@@ -179,6 +181,7 @@ public class SingleLevelPlot {
       JobConf job = context.getJobConf();
       Path outFile = ImageOutputFormat.getOutputPath(job);
       Rasterizer rasterizer = getRasterizer(job);
+      rasterizer.configure(job);
       // Create any raster layer to be able to deserialize the output files
       RasterLayer intermediateLayer = rasterizer.create(1, 1);
       int width = job.getInt("width", 1000);
@@ -191,7 +194,7 @@ public class SingleLevelPlot {
       // Rename output file
       // Combine all output files into one file as we do with grid files
       FileSystem outFs = outFile.getFileSystem(job);
-      Path temp = new Path(outFile.toUri().getPath()+"_temp");
+      Path temp = new Path(outFile.toUri().getPath()+"_"+(int)(Math.random()*1000000)+".tmp");
       outFs.rename(outFile, temp);
       FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
         @Override
@@ -277,7 +280,7 @@ public class SingleLevelPlot {
     // Set mapper, reducer and committer
     job.setMapperClass(NoPartitionRasterizer.class);
     job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(rasterizer.create(1, 1).getClass());
+    job.setMapOutputValueClass(rasterizer.getRasterClass());
     job.setReducerClass(NoPartitionMerger.class);
     job.setOutputCommitter(ImageWriter.class);
 
@@ -296,6 +299,7 @@ public class SingleLevelPlot {
       throw new RuntimeException("Error creating rastierizer", e);
     }
     
+    rasterizer.configure(params);
     boolean vflip = params.getBoolean("vflip", true);
 
     Shape plotRange = params.getShape("rect", null);

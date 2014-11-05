@@ -17,6 +17,9 @@ import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
+
 /**
  * A raster layer that contains an image
  * @author Ahmed Eldawy
@@ -32,7 +35,9 @@ public class ImageRasterLayer extends RasterLayer {
   public ImageRasterLayer() {
   }
   
-  public ImageRasterLayer(int width, int height) {
+  public ImageRasterLayer(int xOffset, int yOffset, int width, int height) {
+    this.xOffset = xOffset;
+    this.yOffset = yOffset;
     image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
   }
 
@@ -72,6 +77,12 @@ public class ImageRasterLayer extends RasterLayer {
   @Override
   public BufferedImage asImage() {
     return image;
+  }
+  
+  public void drawShape(Shape shape, Rectangle inputMBR) {
+    // Take into consideration xOffset and yOffset
+    // Reuse Graphics2D for faster plot of multiple shapes
+    // TODO shape.draw
   }
 
 }

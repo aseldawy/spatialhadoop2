@@ -37,5 +37,11 @@ public abstract class Rasterizer {
    */
   public abstract RasterLayer rasterize(Rectangle inputMBR, int imageWidth,
       int imageHeight, Rectangle partitionMBR, Iterable<Shape> shapes);
+
+  /**
+   * Returns the raster class associated with this rasterizer
+   * @return
+   */
+  public abstract Class<? extends RasterLayer> getRasterClass();
   
 }
