@@ -56,6 +56,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  */
 public class OGCJTSShape implements Shape {
   
+  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(OGCJTSShape.class);
   
   private final WKTReader wktReader = new WKTReader();
@@ -199,7 +200,68 @@ public class OGCJTSShape implements Shape {
     Color shape_color = g.getColor();
     
     drawJTSShape(g, geom, fileMBR, imageWidth, imageHeight, scale, shape_color);
-    
+  }
+  
+  @Override
+  public void draw(Graphics g, double xscale, double yscale) {
+    drawJTSGeom(g, geom, xscale, yscale);
+  }
+
+  /**
+   * Draw the given JTS Geometry to the graphics using specific scales in x and y
+   * @param g - Graphics to draw to
+   * @param geom - The geometry to draw
+   * @param xscale - The scale of the x-axis in terms in pixels/units
+   * @param yscale - The scale of the y-axis in terms of pixels/units
+   */
+  public static void drawJTSGeom(Graphics g, Geometry geom, double xscale,
+      double yscale) {
+    if (geom instanceof GeometryCollection) {
+      GeometryCollection geom_coll = (GeometryCollection) geom;
+      for (int i = 0; i < geom_coll.getNumGeometries(); i++) {
+        Geometry sub_geom = geom_coll.getGeometryN(i);
+        // Recursive call to draw each geometry
+        drawJTSGeom(g, sub_geom, xscale, yscale);
+      }
+    } else if (geom instanceof com.vividsolutions.jts.geom.Polygon) {
+      com.vividsolutions.jts.geom.Polygon poly = (com.vividsolutions.jts.geom.Polygon) geom;
+
+      for (int i = 0; i < poly.getNumInteriorRing(); i++) {
+        LineString ring = poly.getInteriorRingN(i);
+        drawJTSGeom(g, ring, xscale, yscale);
+      }
+      
+      drawJTSGeom(g, poly.getExteriorRing(), xscale, yscale);
+    } else if (geom instanceof LineString) {
+      LineString line = (LineString) geom;
+      double geom_alpha = line.getLength() * (xscale + yscale) / 2.0;
+      int color_alpha = geom_alpha > 1.0 ? 255 : (int) Math.round(geom_alpha * 255);
+      if (color_alpha == 0)
+        return;
+      
+      int[] xpoints = new int[line.getNumPoints()];
+      int[] ypoints = new int[line.getNumPoints()];
+      int n = 0;
+
+      for (int i = 0; i < xpoints.length; i++) {
+        double px = line.getPointN(i).getX();
+        double py = line.getPointN(i).getY();
+        
+        // Transform a point in the polygon to image coordinates
+        xpoints[n] = (int) Math.round(px * xscale);
+        ypoints[n] = (int) Math.round(py * yscale);
+        // Include this point only if first point or different than previous point
+        if (n == 0 || xpoints[n] != xpoints[n-1] || ypoints[n] != ypoints[n-1])
+          n++;
+      }
+      
+      // Draw the polygon
+      //graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+      if (n == 1)
+        g.fillRect(xpoints[0], ypoints[0], 1, 1);
+      else
+        g.drawPolyline(xpoints, ypoints, n);
+    }
   }
 
   /**
@@ -211,7 +273,9 @@ public class OGCJTSShape implements Shape {
    * @param imageHeight
    * @param scale
    * @param shape_color
+   * @deprecated - use {@link #drawJTSGeom(Graphics, Geometry, double, double)}
    */
+  @Deprecated
   private static void drawJTSShape(Graphics graphics, Geometry geom,
       Rectangle fileMbr, int imageWidth, int imageHeight, double scale,
       Color shape_color) {

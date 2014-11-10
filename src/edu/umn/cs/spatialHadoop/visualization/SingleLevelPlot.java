@@ -57,7 +57,7 @@ public class SingleLevelPlot {
   private static final Log LOG = LogFactory.getLog(SingleLevelPlot.class);
 
   /**Configuration line for input file MBR*/
-  private static final String InputMBR = "SingleLevelPlot.InputMBR";
+  private static final String InputMBR = "mbr";
 
   /**Configuration line for the rasterizer class*/
   private static final String RasterizerClass = "SingleLevelPlot.Rasterizer";
@@ -87,7 +87,7 @@ public class SingleLevelPlot {
    *
    */
   public static class NoPartitionRasterizer extends MapReduceBase 
-    implements Mapper<Rectangle, Iterable<Shape>, IntWritable, RasterLayer> {
+    implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, RasterLayer> {
     
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -112,7 +112,7 @@ public class SingleLevelPlot {
     }
     
     @Override
-    public void map(Rectangle partitionMBR, Iterable<Shape> shapes,
+    public void map(Rectangle partitionMBR, Iterable<? extends Shape> shapes,
         OutputCollector<IntWritable, RasterLayer> output, Reporter reporter)
         throws IOException {
       // If input is not spatially partitioned, the MBR is taken from input

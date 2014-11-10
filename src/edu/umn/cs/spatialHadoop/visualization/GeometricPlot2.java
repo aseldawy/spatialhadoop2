@@ -8,7 +8,6 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
-import java.awt.Graphics2D;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
@@ -28,21 +27,26 @@ public class GeometricPlot2 {
   public static class GeometricRasterizer extends Rasterizer {
     
     private Color strokeColor;
+    private Rectangle inputMBR;
 
     @Override
     public void configure(Configuration conf) {
       super.configure(conf);
       this.strokeColor = OperationsParams.getColor(conf, "color", Color.BLACK);
+      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
     }
 
     @Override
     public RasterLayer create(int width, int height) {
-      return new ImageRasterLayer(0, 0, width, height);
+      ImageRasterLayer imageRasterLayer = new ImageRasterLayer(0, 0, width, height);
+      imageRasterLayer.setMBR(inputMBR);
+      imageRasterLayer.setColor(strokeColor);
+      return imageRasterLayer;
     }
 
     @Override
     public RasterLayer rasterize(Rectangle inputMBR, int imageWidth,
-        int imageHeight, Rectangle partitionMBR, Iterable<Shape> shapes) {
+        int imageHeight, Rectangle partitionMBR, Iterable<? extends Shape> shapes) {
       // Calculate the dimensions of the generated raster layer by calculating
       // the MBR in the image space
       // Note: Do not calculate from the width and height of partition MBR
@@ -52,17 +56,13 @@ public class GeometricPlot2 {
       int rasterLayerX2 = (int) Math.ceil((partitionMBR.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
       int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      RasterLayer rasterLayer = new ImageRasterLayer(rasterLayerX1, rasterLayerX2, rasterLayerX2 - rasterLayerX1,
+      ImageRasterLayer rasterLayer = new ImageRasterLayer(rasterLayerX1, rasterLayerY1, rasterLayerX2 - rasterLayerX1,
           rasterLayerY2 - rasterLayerY1);
-      Graphics2D g = rasterLayer.asImage().createGraphics();
-      g.setColor(strokeColor);
-      double scale = Math.sqrt(((double)imageWidth * imageWidth + (double) imageHeight * imageHeight) /
-          (inputMBR.getWidth() * inputMBR.getWidth() + inputMBR.getHeight() * inputMBR.getHeight()));
-      
+      rasterLayer.setMBR(inputMBR);
+      rasterLayer.setColor(strokeColor);
       for (Shape shape : shapes) {
-        shape.draw(g, inputMBR, imageWidth, imageHeight, scale);
+        rasterLayer.drawShape(shape);
       }
-      g.dispose();
       
       return rasterLayer;
     }
@@ -71,7 +71,6 @@ public class GeometricPlot2 {
     public Class<? extends RasterLayer> getRasterClass() {
       return ImageRasterLayer.class;
     }
-    
   }
   
   private static void printUsage() {

@@ -161,5 +161,12 @@ public class Point implements Shape, Comparable<Point> {
     int imageY = (int) Math.round((this.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     g.fillRect(imageX, imageY, 1, 1);  	
   }
+  
+  @Override
+  public void draw(Graphics g, double xscale, double yscale) {
+    int imgx = (int) Math.round(x * xscale);
+    int imgy = (int) Math.round(y * yscale);
+    g.fillRect(imgx, imgy, 1, 1);
+  }
 
 }

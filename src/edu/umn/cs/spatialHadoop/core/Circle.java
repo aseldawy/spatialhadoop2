@@ -137,4 +137,9 @@ public class Circle extends Arc2D.Double implements Shape {
       int imageHeight, double scale) {
     throw new RuntimeException("Not implemented yet");
   }
+  
+  @Override
+  public void draw(Graphics g, double xscale, double yscale) {
+    throw new RuntimeException("Not implemented yet");
+  }
 }

@@ -66,7 +66,7 @@ public class HeatMapPlot2 {
 
     @Override
     public RasterLayer rasterize(Rectangle inputMBR, int imageWidth,
-        int imageHeight, Rectangle partitionMBR, Iterable<Shape> shapes) {
+        int imageHeight, Rectangle partitionMBR, Iterable<? extends Shape> shapes) {
       // Calculate the dimensions of the generated raster layer by calculating
       // the MBR in the image space and adding a buffer equal to the radius
       // Note: Do not calculate from the width and height of partition MBR

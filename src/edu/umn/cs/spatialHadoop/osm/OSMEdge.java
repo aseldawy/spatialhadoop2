@@ -31,6 +31,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * @author Ahmed Eldawy
  */
 public class OSMEdge implements Shape {
+  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(OSMEdge.class);
   
   public long edgeId;
@@ -161,6 +162,23 @@ public class OSMEdge implements Shape {
     
     // Compute alpha to use based on edge length and image scale
     double geom_alpha = this.getLength() * scale;
+    int color_alpha = geom_alpha > 1.0 ? 255 : (int) Math.round(geom_alpha * 255);
+    if (color_alpha == 0)
+      return;
+
+    g.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
+    g.drawLine(x1, y1, x2, y2);
+  }
+  
+  @Override
+  public void draw(Graphics g, double xscale, double yscale) {
+    int x1 = (int) Math.round(this.lon1 * xscale);
+    int y1 = (int) Math.round(this.lat1 * yscale);
+    int x2 = (int) Math.round(this.lon2 * xscale);
+    int y2 = (int) Math.round(this.lat2 * yscale);
+    Color shape_color = g.getColor();
+    // Compute alpha to use based on edge length and image scale
+    double geom_alpha = this.getLength() * (xscale + yscale) / 2.0;
     int color_alpha = geom_alpha > 1.0 ? 255 : (int) Math.round(geom_alpha * 255);
     if (color_alpha == 0)
       return;

@@ -7,6 +7,7 @@
 
 package edu.umn.cs.spatialHadoop.visualization;
 
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -31,16 +32,45 @@ public class ImageRasterLayer extends RasterLayer {
    * The underlying image
    */
   protected BufferedImage image;
+
+  /**
+   * The graphics associated with the image if the image is in draw mode.
+   * If the image is not in draw mode, graphics will be null.
+   */
+  protected Graphics2D graphics;
+
+  /**The MBR of the input area associated with this image*/
+  protected Rectangle mbr;
   
-  public ImageRasterLayer() {
-  }
+  /**The scale of the image on the x-axis in terms of pixels per input units*/
+  protected double xscale;
+
+  /**The scale of the image on the y-axis in terms of pixels per input units*/
+  protected double yscale;
+
+  /**Default color to use with underlying graphics*/
+  private Color color;
+
+  public ImageRasterLayer() {}
   
   public ImageRasterLayer(int xOffset, int yOffset, int width, int height) {
     this.xOffset = xOffset;
     this.yOffset = yOffset;
     image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
   }
-
+  
+  /**
+   * Sets the minimal bounding rectangle of the input area associated with this image
+   * @param MBR
+   */
+  public void setMBR(Rectangle mbr) {
+    this.mbr = mbr.clone();
+  }
+  
+  public void setColor(Color color) {
+    this.color = color;
+  }
+  
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);
@@ -61,28 +91,40 @@ public class ImageRasterLayer extends RasterLayer {
     this.image = ImageIO.read(new ByteArrayInputStream(bytes));
   }
 
-  /* (non-Javadoc)
-   * @see edu.umn.cs.spatialHadoop.visualization.RasterLayer#mergeWith(edu.umn.cs.spatialHadoop.visualization.RasterLayer)
-   */
   @Override
   public void mergeWith(RasterLayer another) {
     BufferedImage anotherImage = ((ImageRasterLayer)another).image;
-    Graphics2D g = this.image.createGraphics();
-    g.drawImage(anotherImage, another.xOffset, another.yOffset, null);
+    getOrCreateGrahics(false).drawImage(anotherImage, another.xOffset, another.yOffset, null);
   }
 
-  /* (non-Javadoc)
-   * @see edu.umn.cs.spatialHadoop.visualization.RasterLayer#asImage()
-   */
   @Override
   public BufferedImage asImage() {
+    if (graphics != null) {
+      graphics.dispose();
+      graphics = null;
+    }
     return image;
   }
   
-  public void drawShape(Shape shape, Rectangle inputMBR) {
-    // Take into consideration xOffset and yOffset
-    // Reuse Graphics2D for faster plot of multiple shapes
-    // TODO shape.draw
+  protected Graphics2D getOrCreateGrahics(boolean translate) {
+    if (graphics == null) {
+      // Create graphics for the first time
+      graphics = image.createGraphics();
+      if (translate) {
+        // Calculate the scale of the image in terms of pixels per unit
+        xscale = image.getWidth() / mbr.getWidth();
+        yscale = image.getHeight() / mbr.getHeight();
+        // Translate the graphics to adjust its origin with the input origin
+        graphics.translate(-mbr.x1 * xscale, -mbr.y1 * yscale);
+        graphics.setColor(color);
+      }
+    }
+    return graphics;
+  }
+  
+  public void drawShape(Shape shape) {
+    Graphics2D g = getOrCreateGrahics(true);
+    shape.draw(g, xscale, yscale);
   }
 
 }
