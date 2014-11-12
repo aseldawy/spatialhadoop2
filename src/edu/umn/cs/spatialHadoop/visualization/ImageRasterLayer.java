@@ -39,9 +39,6 @@ public class ImageRasterLayer extends RasterLayer {
    */
   protected Graphics2D graphics;
 
-  /**The MBR of the input area associated with this image*/
-  protected Rectangle mbr;
-  
   /**The scale of the image on the x-axis in terms of pixels per input units*/
   protected double xscale;
 
@@ -51,20 +48,21 @@ public class ImageRasterLayer extends RasterLayer {
   /**Default color to use with underlying graphics*/
   private Color color;
 
+  /**Default constructor is necessary to be able to deserialize it*/
   public ImageRasterLayer() {}
-  
-  public ImageRasterLayer(int xOffset, int yOffset, int width, int height) {
-    this.xOffset = xOffset;
-    this.yOffset = yOffset;
-    image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-  }
-  
+
   /**
-   * Sets the minimal bounding rectangle of the input area associated with this image
-   * @param MBR
+   * Creates a raster layer of the given size for a given (portion of) input
+   * data.
+   * @param inputMBR - the MBR of the input area to rasterize
+   * @param width - width the of the image to generate in pixels
+   * @param height - height of the image to generate in pixels
    */
-  public void setMBR(Rectangle mbr) {
-    this.mbr = mbr.clone();
+ public ImageRasterLayer(Rectangle inputMBR, int width, int height) {
+    this.inputMBR = inputMBR;
+    this.width = width;
+    this.height = height;
+    image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
   }
   
   public void setColor(Color color) {
@@ -91,13 +89,10 @@ public class ImageRasterLayer extends RasterLayer {
     this.image = ImageIO.read(new ByteArrayInputStream(bytes));
   }
 
-  @Override
-  public void mergeWith(RasterLayer another) {
-    BufferedImage anotherImage = ((ImageRasterLayer)another).image;
-    getOrCreateGrahics(false).drawImage(anotherImage, another.xOffset, another.yOffset, null);
+  public void mergeWith(int xOffset, int yOffset, ImageRasterLayer another) {
+    getOrCreateGrahics(false).drawImage(another.image, xOffset, yOffset, null);
   }
 
-  @Override
   public BufferedImage asImage() {
     if (graphics != null) {
       graphics.dispose();
@@ -112,10 +107,10 @@ public class ImageRasterLayer extends RasterLayer {
       graphics = image.createGraphics();
       if (translate) {
         // Calculate the scale of the image in terms of pixels per unit
-        xscale = image.getWidth() / mbr.getWidth();
-        yscale = image.getHeight() / mbr.getHeight();
+        xscale = image.getWidth() / getInputMBR().getWidth();
+        yscale = image.getHeight() / getInputMBR().getHeight();
         // Translate the graphics to adjust its origin with the input origin
-        graphics.translate(-mbr.x1 * xscale, -mbr.y1 * yscale);
+        graphics.translate(-getInputMBR().x1 * xscale, -getInputMBR().y1 * yscale);
         graphics.setColor(color);
       }
     }

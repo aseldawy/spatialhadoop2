@@ -8,6 +8,7 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
@@ -27,49 +28,48 @@ public class GeometricPlot2 {
   public static class GeometricRasterizer extends Rasterizer {
     
     private Color strokeColor;
-    private Rectangle inputMBR;
 
     @Override
     public void configure(Configuration conf) {
       super.configure(conf);
       this.strokeColor = OperationsParams.getColor(conf, "color", Color.BLACK);
-      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
     }
 
     @Override
-    public RasterLayer create(int width, int height) {
-      ImageRasterLayer imageRasterLayer = new ImageRasterLayer(0, 0, width, height);
-      imageRasterLayer.setMBR(inputMBR);
+    public RasterLayer create(int width, int height, Rectangle mbr) {
+      ImageRasterLayer imageRasterLayer = new ImageRasterLayer(mbr, width, height);
       imageRasterLayer.setColor(strokeColor);
       return imageRasterLayer;
     }
 
     @Override
-    public RasterLayer rasterize(Rectangle inputMBR, int imageWidth,
-        int imageHeight, Rectangle partitionMBR, Iterable<? extends Shape> shapes) {
-      // Calculate the dimensions of the generated raster layer by calculating
-      // the MBR in the image space
-      // Note: Do not calculate from the width and height of partition MBR
-      // because it will cause round-off errors between adjacent partitions
-      // which might leave gaps in the final generated image
-      int rasterLayerX1 = (int) Math.floor((partitionMBR.x1 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
-      int rasterLayerX2 = (int) Math.ceil((partitionMBR.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
-      int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      ImageRasterLayer rasterLayer = new ImageRasterLayer(rasterLayerX1, rasterLayerY1, rasterLayerX2 - rasterLayerX1,
-          rasterLayerY2 - rasterLayerY1);
-      rasterLayer.setMBR(inputMBR);
-      rasterLayer.setColor(strokeColor);
+    public void rasterize(RasterLayer rasterLayer, Iterable<? extends Shape> shapes) {
+      ImageRasterLayer imgLayer = (ImageRasterLayer) rasterLayer;
+      imgLayer.setColor(strokeColor);
       for (Shape shape : shapes) {
-        rasterLayer.drawShape(shape);
+        imgLayer.drawShape(shape);
       }
-      
-      return rasterLayer;
     }
 
     @Override
     public Class<? extends RasterLayer> getRasterClass() {
       return ImageRasterLayer.class;
+    }
+
+    @Override
+    public void mergeLayers(RasterLayer finalLayer,
+        RasterLayer intermediateLayer) {
+      // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
+      Rectangle finalMBR = finalLayer.getInputMBR();
+      Rectangle intermediateLayerMBR = intermediateLayer.getInputMBR();
+      int xOffset = (int) Math.floor((intermediateLayerMBR.x1 - finalMBR.x1) * finalLayer.getWidth() / finalMBR.getWidth());
+      int yOffset = (int) Math.floor((intermediateLayerMBR.y1 - finalMBR.y1) * finalLayer.getHeight() / finalMBR.getHeight());
+      ((ImageRasterLayer)finalLayer).mergeWith(xOffset, yOffset, (ImageRasterLayer) intermediateLayer);
+    }
+
+    @Override
+    public BufferedImage toImage(RasterLayer layer) {
+      return ((ImageRasterLayer)layer).asImage();
     }
   }
   

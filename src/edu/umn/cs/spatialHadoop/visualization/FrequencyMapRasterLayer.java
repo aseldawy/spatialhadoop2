@@ -21,6 +21,8 @@ import java.util.zip.GZIPOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+
 /**
  * A frequency map that can be used to visualize data as heat maps
  * @author Ahmed Eldawy
@@ -50,9 +52,10 @@ public class FrequencyMapRasterLayer extends RasterLayer {
    * @param width
    * @param height
    */
-  public FrequencyMapRasterLayer(int xOffset, int yOffset, int width, int height, int radius, SmoothType smoothType) {
-    this.xOffset = xOffset;
-    this.yOffset = yOffset;
+  public FrequencyMapRasterLayer(Rectangle inputMBR, int width, int height, int radius, SmoothType smoothType) {
+    this.inputMBR = inputMBR;
+    this.width = width;
+    this.height = height;
     this.frequencies = new float[width][height];
     initKernel(radius, smoothType);
   }
@@ -142,22 +145,19 @@ public class FrequencyMapRasterLayer extends RasterLayer {
     }
   }
   
-  @Override
-  public void mergeWith(RasterLayer another) {
-    FrequencyMapRasterLayer anotherFM = (FrequencyMapRasterLayer) another;
-    int xmin = Math.max(this.xOffset, anotherFM.xOffset);
-    int ymin = Math.max(this.yOffset, anotherFM.yOffset);
-    int xmax = Math.min(this.xOffset + this.getWidth(), anotherFM.xOffset + anotherFM.getWidth());
-    int ymax = Math.min(this.yOffset + this.getHeight(), anotherFM.yOffset + anotherFM.getHeight());
+  public void mergeWith(int xOffset, int yOffset, FrequencyMapRasterLayer another) {
+    int xmin = Math.max(0, xOffset);
+    int ymin = Math.max(0, yOffset);
+    int xmax = Math.min(this.getWidth(), another.getWidth() + xOffset);
+    int ymax = Math.min(this.getHeight(), another.getHeight() + yOffset);
     for (int x = xmin; x < xmax; x++) {
       for (int y = ymin; y < ymax; y++) {
-        this.frequencies[x-xOffset][y-yOffset] +=
-            anotherFM.frequencies[x - anotherFM.xOffset][y - anotherFM.yOffset];
+        this.frequencies[x][y] +=
+            another.frequencies[x - xOffset][y - yOffset];
       }
     }
   }
   
-  @Override
   public BufferedImage asImage() {
     float min = Float.MAX_VALUE, max = -Float.MAX_VALUE;
     for (int x = 0; x < this.getWidth(); x++) {
@@ -187,8 +187,8 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   public void addPoint(int cx, int cy) {
     for (int dx = -radius; dx < radius; dx++) {
       for (int dy = -radius; dy < radius; dy++) {
-        int imgx = cx + dx - xOffset;
-        int imgy = cy + dy - yOffset;
+        int imgx = cx + dx;
+        int imgy = cy + dy;
         if (imgx >= 0 && imgx < getWidth() && imgy >= 0 && imgy < getHeight())
           frequencies[imgx][imgy] += kernel[dx + radius][dy + radius];
       }
