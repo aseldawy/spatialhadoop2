@@ -17,6 +17,27 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 /**An abstract interface for a component that rasterizes shapes*/
 public abstract class Rasterizer {
   
+  /**Configuration line for the rasterizer class*/
+  private static final String RasterizerClass = "SingleLevelPlot.Rasterizer";
+  
+  public static void setRasterizer(Configuration job, Class<? extends Rasterizer> rasterizerClass) {
+    job.setClass(RasterizerClass, rasterizerClass, Rasterizer.class);
+  }
+  
+  public static Rasterizer getRasterizer(Configuration job) {
+    try {
+      Class<? extends Rasterizer> rasterizerClass =
+          job.getClass(RasterizerClass, null, Rasterizer.class);
+      if (rasterizerClass == null)
+        throw new RuntimeException("Rasterizer class not set in job");
+      return rasterizerClass.newInstance();
+    } catch (InstantiationException e) {
+      throw new RuntimeException("Error creating rasterizer", e);
+    } catch (IllegalAccessException e) {
+      throw new RuntimeException("Error constructing rasterizer", e);
+    }
+  }
+  
   public void configure(Configuration conf) {
   }
   
@@ -28,17 +49,25 @@ public abstract class Rasterizer {
    * @return
    */
   public abstract RasterLayer create(int width, int height, Rectangle mbr);
-  
+
   /**
-   * Creates a raster layer that represents the given list of shapes
-   * @param inputMBR - the MBR of the input file
-   * @param imageHeight - Total width for the output image
-   * @param imageWidth - Total height for the output image
-   * @param partitionMBR - The MBR of the partition to rasterize
-   * @param shapes - The shapes to rasterize
-   * @return
+   * Rasterizes a set of shapes to the given layer
+   * @param layer - the layer to rasterize to. This layer has to be created
+   * using the method {@link #create(int, int, Rectangle)}.
+   * @param shapes - a set of shapes to rasterize
    */
-  public abstract void rasterize(RasterLayer layer, Iterable<? extends Shape> shapes);
+  public void rasterize(RasterLayer layer, Iterable<? extends Shape> shapes) {
+    for (Shape shape : shapes)
+      rasterize(layer, shape);
+  }
+
+  /**
+   * Rasterizes one shape to the given layer
+   * @param layer - the layer to rasterize to. This layer has to be created
+   * using the method {@link #create(int, int, Rectangle)}.
+   * @param shape - the shape to rasterize
+   */
+  public abstract void rasterize(RasterLayer layer, Shape shape);
 
   /**
    * Returns the raster class associated with this rasterizer

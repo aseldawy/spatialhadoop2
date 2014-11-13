@@ -18,7 +18,6 @@ import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -59,24 +58,6 @@ public class SingleLevelPlot {
   /**Configuration line for input file MBR*/
   private static final String InputMBR = "mbr";
 
-  /**Configuration line for the rasterizer class*/
-  private static final String RasterizerClass = "SingleLevelPlot.Rasterizer";
-  
-  static Rasterizer getRasterizer(Configuration job) {
-    try {
-      Class<? extends Rasterizer> rasterizerClass =
-          job.getClass(RasterizerClass, null, Rasterizer.class);
-      if (rasterizerClass == null)
-        throw new RuntimeException("Rasterizer class not set in job");
-      return rasterizerClass.newInstance();
-    } catch (InstantiationException e) {
-      throw new RuntimeException("Error creating rasterizer", e);
-    } catch (IllegalAccessException e) {
-      throw new RuntimeException("Error constructing rasterizer", e);
-    }
-  }
-
-
   /**
    * Mapper of the plot for the case when the data is not repartitioned.
    * The input key is the MBR of the input partition
@@ -107,7 +88,7 @@ public class SingleLevelPlot {
       this.imageHeight = job.getInt("height", 1000);
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
       this.outputValue = new IntWritable(0);
-      this.rasterizer = getRasterizer(job);
+      this.rasterizer = Rasterizer.getRasterizer(job);
       this.rasterizer.configure(job);
     }
     
@@ -161,7 +142,7 @@ public class SingleLevelPlot {
       super.configure(job);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
-      this.rasterizer = getRasterizer(job);
+      this.rasterizer = Rasterizer.getRasterizer(job);
       this.rasterizer.configure(job);
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
     }
@@ -194,7 +175,7 @@ public class SingleLevelPlot {
       super.commitJob(context);
       JobConf job = context.getJobConf();
       Path outFile = ImageOutputFormat.getOutputPath(job);
-      Rasterizer rasterizer = getRasterizer(job);
+      Rasterizer rasterizer = Rasterizer.getRasterizer(job);
       rasterizer.configure(job);
       // Create any raster layer to be able to deserialize the output files
       RasterLayer intermediateLayer = rasterizer.create(1, 1, new Rectangle());
@@ -261,8 +242,9 @@ public class SingleLevelPlot {
     }
     
     JobConf job = new JobConf(params, SingleLevelPlot.class);
+    job.setJobName("SingleLevelPlot");
     // Set rasterizer
-    job.setClass(RasterizerClass, rasterizerClass, Rasterizer.class);
+    Rasterizer.setRasterizer(job, rasterizerClass);
     // Set input file MBR
     Rectangle inputMBR = (Rectangle) params.getShape("rect");
     if (inputMBR == null)

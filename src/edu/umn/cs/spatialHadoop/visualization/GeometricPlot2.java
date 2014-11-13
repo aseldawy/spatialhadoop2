@@ -43,12 +43,10 @@ public class GeometricPlot2 {
     }
 
     @Override
-    public void rasterize(RasterLayer rasterLayer, Iterable<? extends Shape> shapes) {
+    public void rasterize(RasterLayer rasterLayer, Shape shape) {
       ImageRasterLayer imgLayer = (ImageRasterLayer) rasterLayer;
       imgLayer.setColor(strokeColor);
-      for (Shape shape : shapes) {
-        imgLayer.drawShape(shape);
-      }
+      imgLayer.drawShape(shape);
     }
 
     @Override
@@ -106,7 +104,11 @@ public class GeometricPlot2 {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    SingleLevelPlot.plotMapReduce(inFile, outFile, GeometricRasterizer.class, params);
+    if (params.getBoolean("pyramid", false)) {
+      MultilevelPlot.plotMapReduce(inFile, outFile, GeometricRasterizer.class, params);
+    } else {
+      SingleLevelPlot.plotMapReduce(inFile, outFile, GeometricRasterizer.class, params);
+    }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

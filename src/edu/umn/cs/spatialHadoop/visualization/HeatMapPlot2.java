@@ -59,26 +59,24 @@ public class HeatMapPlot2 {
     }
 
     @Override
-    public void rasterize(RasterLayer rasterLayer, Iterable<? extends Shape> shapes) {
+    public void rasterize(RasterLayer rasterLayer, Shape shape) {
       FrequencyMapRasterLayer frequencyMap = (FrequencyMapRasterLayer) rasterLayer;
-      Rectangle inputMBR = rasterLayer.getInputMBR();
-      for (Shape shape : shapes) {
-        Point center;
-        if (shape instanceof Point) {
-          center = (Point) shape;
-        } else if (shape instanceof Rectangle) {
-          center = ((Rectangle) shape).getCenterPoint();
-        } else {
-          Rectangle shapeMBR = shape.getMBR();
-          if (shapeMBR == null)
-            continue;
-          center = shapeMBR.getCenterPoint();
-        }
-        int centerx = (int) Math.round((center.x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
-        int centery = (int) Math.round((center.y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
-
-        frequencyMap.addPoint(centerx, centery);
+      Point center;
+      if (shape instanceof Point) {
+        center = (Point) shape;
+      } else if (shape instanceof Rectangle) {
+        center = ((Rectangle) shape).getCenterPoint();
+      } else {
+        Rectangle shapeMBR = shape.getMBR();
+        if (shapeMBR == null)
+          return;
+        center = shapeMBR.getCenterPoint();
       }
+      Rectangle inputMBR = rasterLayer.getInputMBR();
+      int centerx = (int) Math.round((center.x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
+      int centery = (int) Math.round((center.y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+
+      frequencyMap.addPoint(centerx, centery);
     }
 
     @Override
