@@ -88,4 +88,14 @@ public abstract class Rasterizer {
    * @return
    */
   public abstract BufferedImage toImage(RasterLayer layer);
+  
+  /**
+   * Returns the radius in pixels that one object might affect in the image.
+   * This is used to ensure that each image is generated correctly by using
+   * all records in the buffer area.
+   * @return
+   */
+  public int getRadius() {
+    return 0;
+  }
 }

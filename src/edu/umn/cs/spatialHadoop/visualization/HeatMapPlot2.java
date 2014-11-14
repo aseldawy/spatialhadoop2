@@ -40,6 +40,9 @@ public class HeatMapPlot2 {
     private Color color2;
     /**Type of gradient to use between minimum and maximum values*/
     private GradientType gradientType;
+    
+    /**Minimum and maximum values to be used while drawing the heat map*/
+    private float minValue, maxValue;
 
     @Override
     public void configure(Configuration conf) {
@@ -49,12 +52,23 @@ public class HeatMapPlot2 {
       this.color1 = OperationsParams.getColor(conf, "color1", new Color(0, 0, 255, 0));
       this.color2 = OperationsParams.getColor(conf, "color2", new Color(255, 0, 0, 255));
       this.gradientType = conf.get("gradient", "hsb").equals("hsb") ? GradientType.GT_HSB : GradientType.GT_RGB;
+      String rangeStr = conf.get("valuerange");
+      if (rangeStr != null) {
+        String[] parts = rangeStr.split(",");
+        this.minValue = Float.parseFloat(parts[0]);
+        this.maxValue = Float.parseFloat(parts[1]);
+      } else {
+        this.minValue = 0;
+        this.maxValue = -1;
+      }
     }
     
     @Override
     public RasterLayer create(int width, int height, Rectangle mbr) {
       FrequencyMapRasterLayer rasterLayer = new FrequencyMapRasterLayer(mbr, width, height, radius, smoothType);
       rasterLayer.setGradientInfor(color1, color2, gradientType);
+      if (this.minValue <= maxValue)
+        rasterLayer.setValueRange(minValue, maxValue);
       return rasterLayer;
     }
 
@@ -99,6 +113,11 @@ public class HeatMapPlot2 {
     public BufferedImage toImage(RasterLayer layer) {
       return ((FrequencyMapRasterLayer)layer).asImage();
     }
+    
+    @Override
+    public int getRadius() {
+      return this.radius;
+    }
   }
   
   private static void printUsage() {
@@ -134,8 +153,11 @@ public class HeatMapPlot2 {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    SingleLevelPlot.plotMapReduce(inFile, outFile, HeatMapRasterizer.class, params);
-//    SingleLevelPlot.plotLocal(inFile, outFile, HeatMapRasterizer.class, params);
+    if (params.getBoolean("pyramid", false)) {
+      MultilevelPlot.plotMapReduce(inFile, outFile, HeatMapRasterizer.class, params);
+    } else {
+      SingleLevelPlot.plotMapReduce(inFile, outFile, HeatMapRasterizer.class, params);
+    }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

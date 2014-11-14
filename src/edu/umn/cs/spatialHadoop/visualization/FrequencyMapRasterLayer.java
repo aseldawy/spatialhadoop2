@@ -29,6 +29,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  *
  */
 public class FrequencyMapRasterLayer extends RasterLayer {
+  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(FrequencyMapRasterLayer.class);
   
   enum SmoothType {Flat, Gaussian};
@@ -41,6 +42,12 @@ public class FrequencyMapRasterLayer extends RasterLayer {
 
   /**Radius to smooth nearboy points*/
   private int radius;
+
+  /**The minimum value to be used while drawing the heat map*/
+  private float min;
+
+  /**The maximum value to be used while drawing the heat map*/
+  private float max;
   
   /**
    * Initialize an empty frequency map to be used to deserialize 
@@ -57,6 +64,7 @@ public class FrequencyMapRasterLayer extends RasterLayer {
     this.width = width;
     this.height = height;
     this.frequencies = new float[width][height];
+    this.min = -1; this.max = -2;
     initKernel(radius, smoothType);
   }
   
@@ -90,6 +98,16 @@ public class FrequencyMapRasterLayer extends RasterLayer {
         }
       }
     }
+  }
+  
+  /**
+   * Sets the range of value to be used while drawing the heat map
+   * @param min
+   * @param max
+   */
+  public void setValueRange(float min, float max) {
+    this.min = min;
+    this.max = max;
   }
   
   @Override
@@ -159,16 +177,19 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   }
   
   public BufferedImage asImage() {
-    float min = Float.MAX_VALUE, max = -Float.MAX_VALUE;
-    for (int x = 0; x < this.getWidth(); x++) {
-      for (int y = 0; y < this.getHeight(); y++) {
-        if (frequencies[x][y] < min)
-          min = frequencies[x][y];
-        if (frequencies[x][y] > max)
-          max = frequencies[x][y];
+    if (min >= max) {
+      // Values not set. Autodetect
+      min = Float.MAX_VALUE;
+      max = -Float.MAX_VALUE;
+      for (int x = 0; x < this.getWidth(); x++) {
+        for (int y = 0; y < this.getHeight(); y++) {
+          if (frequencies[x][y] < min)
+            min = frequencies[x][y];
+          if (frequencies[x][y] > max)
+            max = frequencies[x][y];
+        }
       }
     }
-    LOG.info("Using the value range: "+min+","+max);
     BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
     for (int x = 0; x < this.getWidth(); x++) {
       for (int y = 0; y < this.getHeight(); y++) {

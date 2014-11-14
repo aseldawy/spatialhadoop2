@@ -26,6 +26,7 @@ import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -73,6 +74,11 @@ public class MultilevelPlot {
     /**Fixed height for one tile */
     private int tileHeight;
     
+    /**Buffer size that should be taken in the maximum level*/
+    private double bufferSizeXMaxLevel;
+
+    private double bufferSizeYMaxLevel;
+    
     @Override
     public void configure(JobConf job) {
       super.configure(job);
@@ -91,6 +97,9 @@ public class MultilevelPlot {
       this.tileHeight = job.getInt("tileheight", 256);
       this.rasterizer = Rasterizer.getRasterizer(job);
       this.rasterizer.configure(job);
+      int radius = rasterizer.getRadius();
+      this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
+      this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
     }
     
     @Override
@@ -104,7 +113,7 @@ public class MultilevelPlot {
         if (shapeMBR == null)
           continue;
         java.awt.Rectangle overlappingCells =
-            bottomGrid.getOverlappingCells(shapeMBR);
+            bottomGrid.getOverlappingCells(shapeMBR.buffer(bufferSizeXMaxLevel, bufferSizeYMaxLevel));
         // Iterate over levels from bottom up
         for (key.level = maxLevel; key.level >= minLevel; key.level--) {
           for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
@@ -288,6 +297,9 @@ public class MultilevelPlot {
     job.setMapOutputValueClass(rasterizer.getRasterClass());
     job.setReducerClass(DataPartitionReduce.class);
     job.setOutputCommitter(MultiLevelOutputCommitter.class);
+    
+    // Use multithreading in case the job is running locally
+    job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
     // Start the job
     JobClient.runJob(job);
