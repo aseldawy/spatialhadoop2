@@ -381,11 +381,11 @@ public class MultilevelPlot {
         throws IOException {
       // Find first and last levels to generate in this reducer
       int level1 = Math.max(tileID.level, minLevel);
-      int level2 = Math.min(tileID.level + maxLevelsPerMachine, maxLevel);
-      
+      int level2 = Math.min(tileID.level + maxLevelsPerMachine - 1, maxLevel);
+
       // Portion of the bottom grid that falls under the given tile
-      int tileOffsetX = tileID.x << tileID.level;
-      int tileOffsetY = tileID.y << tileID.level;
+      int tileOffsetX = tileID.x << (level2 - tileID.level);
+      int tileOffsetY = tileID.y << (level2 - tileID.level);
       GridInfo bottomGrid = new GridInfo();
       int gridSize = 1 << tileID.level;
       bottomGrid.x1 = (inputMBR.x1 * (gridSize - tileID.x) + inputMBR.x2 * tileID.x) / gridSize;
