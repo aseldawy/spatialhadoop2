@@ -53,6 +53,10 @@ public class ShapeIterRecordReader extends SpatialRecordReader<Rectangle, ShapeI
       throws IOException {
     super(is, offset, endOffset);
   }
+  
+  public void setShape(Shape shape) {
+    this.shape = shape;
+  }
 
   @Override
   public boolean next(Rectangle key, ShapeIterator shapeIter) throws IOException {

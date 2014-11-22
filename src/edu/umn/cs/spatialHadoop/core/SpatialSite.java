@@ -45,7 +45,8 @@ import org.apache.hadoop.mapred.JobConf;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 
 /**
  * Combines all the configuration needed for SpatialHadoop.
@@ -96,7 +97,6 @@ public class SpatialSite {
   
   public static final String OUTPUT_CELLS = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.CellsInfo";
   public static final String OVERWRITE = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.Overwrite";
-  public static final String RTREE = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.RTree";
 
   
   private static final CompressionCodecFactory compressionCodecs =
@@ -295,13 +295,16 @@ public class SpatialSite {
         }
       }
       if (masterFile != null) {
-        ShapeRecordReader<Partition> reader = new ShapeRecordReader<Partition>(
+        ShapeIterRecordReader reader = new ShapeIterRecordReader(
             fs.open(masterFile.getPath()), 0, masterFile.getLen());
-        CellInfo dummy = new CellInfo();
-        Partition partition = new Partition();
+        Rectangle dummy = reader.createKey();
+        reader.setShape(new Partition());
+        ShapeIterator values = reader.createValue();
         ArrayList<Partition> partitions = new ArrayList<Partition>();
-        while (reader.next(dummy, partition)) {
-          partitions.add(partition.clone());
+        while (reader.next(dummy, values)) {
+          for (Shape value : values) {
+            partitions.add((Partition) value.clone());
+          }
         }
         GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
         globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
@@ -562,4 +565,12 @@ public class SpatialSite {
     return cells.values().toArray(new CellInfo[cells.size()]);
   }
 
+  public static <S extends Shape> RTree<S> loadRTree(FileSystem fs, Path file, S shape) throws IOException {
+    RTree<S> rtree = new RTree<S>();
+    rtree.setStockObject(shape);
+    FSDataInputStream input = fs.open(file);
+    input.skip(8); // Skip the 8 bytes that contains the signature
+    rtree.readFields(input);
+    return rtree;
+  }
 }

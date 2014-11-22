@@ -49,9 +49,12 @@ import com.esri.core.geometry.ogc.OGCGeometryCollection;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 
 /**
@@ -253,22 +256,24 @@ public class CatUnion {
     FileSystem fs1 = shapeFile.getFileSystem(new Configuration());
     long file_size1 = fs1.getFileStatus(shapeFile).getLen();
     
-    ShapeRecordReader<OGCESRIShape> shapeReader =
-        new ShapeRecordReader<OGCESRIShape>(fs1.open(shapeFile), 0, file_size1);
-    CellInfo cellInfo = new CellInfo();
-    OGCESRIShape shape = new OGCESRIShape();
+    ShapeIterRecordReader shapeReader =
+        new ShapeIterRecordReader(fs1.open(shapeFile), 0, file_size1);
+    Rectangle cellInfo = shapeReader.createKey();
+    ShapeIterator shapes = shapeReader.createValue();
 
-    while (shapeReader.next(cellInfo, shape)) {
-      //int shape_zip = Integer.parseInt(shape.extra.split(",", 7)[5]);
-      //Integer category = idToCategory.get(shape_zip);
-      Integer category = null;
-      if (category != null) {
-        Vector<OGCGeometry> geometries = categoryShapes.get(category);
-        if (geometries == null) {
-          geometries = new Vector<OGCGeometry>();
-          categoryShapes.put(category, geometries);
+    while (shapeReader.next(cellInfo, shapes)) {
+      for (Shape shape : shapes) {
+        //int shape_zip = Integer.parseInt(shape.extra.split(",", 7)[5]);
+        //Integer category = idToCategory.get(shape_zip);
+        Integer category = null;
+        if (category != null) {
+          Vector<OGCGeometry> geometries = categoryShapes.get(category);
+          if (geometries == null) {
+            geometries = new Vector<OGCGeometry>();
+            categoryShapes.put(category, geometries);
+          }
+          geometries.add(((OGCESRIShape)shape).geom);
         }
-        geometries.add(shape.geom);
       }
     }
     
