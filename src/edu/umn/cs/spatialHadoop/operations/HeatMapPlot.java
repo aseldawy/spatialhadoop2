@@ -31,7 +31,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
@@ -58,8 +57,8 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
@@ -120,6 +119,7 @@ public class HeatMapPlot {
       ByteBuffer bbuffer = ByteBuffer.allocate(getHeight() * 4 + 8);
       bbuffer.putInt(getWidth());
       bbuffer.putInt(getHeight());
+      
       gzos.write(bbuffer.array(), 0, bbuffer.position());
       for (int x = 0; x < getWidth(); x++) {
         bbuffer.clear();
@@ -321,7 +321,7 @@ public class HeatMapPlot {
    *
    */
   public static class DataPartitionMap extends MapReduceBase 
-    implements Mapper<Rectangle, ArrayWritable, NullWritable, FrequencyMap> {
+    implements Mapper<Rectangle, ShapeIterator, NullWritable, FrequencyMap> {
 
     /**Only objects inside this query range are drawn*/
     private Shape queryRange;
@@ -331,11 +331,13 @@ public class HeatMapPlot {
     /**Used to output values*/
     private FrequencyMap frequencyMap;
     /**Radius to use for smoothing the heat map*/
-    private int radius;
+    private double radius;
     private boolean adaptiveSample;
     private float adaptiveSampleRatio;
     /**Use smoothing or not*/
     private boolean smooth;
+    private double scale2;
+    private double scale;
     
     @Override
     public void configure(JobConf job) {
@@ -353,37 +355,42 @@ public class HeatMapPlot {
         this.adaptiveSampleRatio = job.getFloat(GeometricPlot.AdaptiveSampleRatio, 0.01f);
       }
       this.smooth = job.getBoolean("smooth", false);
+      this.scale2 = (double) imageWidth * imageHeight
+				/ (this.drawMbr.getWidth() * this.drawMbr.getHeight());
+      this.scale = Math.sqrt(scale2);
+      this.radius = this.radius / scale;
     }
 
     @Override
-    public void map(Rectangle dummy, ArrayWritable shapesAr,
+    public void map(Rectangle dummy, ShapeIterator shapesAr,
         OutputCollector<NullWritable, FrequencyMap> output, Reporter reporter)
         throws IOException {
-      for (Writable w : shapesAr.get()) {
-        Shape s = (Shape) w;
-        if (adaptiveSample && s instanceof Point
-            && Math.random() > adaptiveSampleRatio)
-            continue;
-        Point center;
-        if (s instanceof Point) {
-          center = (Point) s;
-        } else if (s instanceof Rectangle) {
-          center = ((Rectangle) s).getCenterPoint();
-        } else {
-          Rectangle shapeMBR = s.getMBR();
-          if (shapeMBR == null)
-            continue;
-          center = shapeMBR.getCenterPoint();
-        }
-        int centerx = (int) Math.round((center.x - drawMbr.x1) * imageWidth / drawMbr.getWidth());
-        int centery = (int) Math.round((center.y - drawMbr.y1) * imageHeight / drawMbr.getHeight());
-        if(smooth) {
-        	frequencyMap.addGaussianPoint(centerx, centery, radius);
-        } else {
-            frequencyMap.addPoint(centerx, centery, radius);
-        }
-      }
-      
+    	
+    	while(shapesAr.hasNext()) {
+    		Shape s = shapesAr.next();
+            if (adaptiveSample && s instanceof Point
+                && Math.random() > adaptiveSampleRatio)
+                continue;
+            Point center;
+            if (s instanceof Point) {
+              center = (Point) s;
+            } else if (s instanceof Rectangle) {
+              center = ((Rectangle) s).getCenterPoint();
+            } else {
+              Rectangle shapeMBR = s.getMBR();
+              if (shapeMBR == null)
+                continue;
+              center = shapeMBR.getCenterPoint();
+            }
+            int centerx = (int) Math.round((center.x - drawMbr.x1) * imageWidth / drawMbr.getWidth());
+            int centery = (int) Math.round((center.y - drawMbr.y1) * imageHeight / drawMbr.getHeight());
+            if(smooth) {
+            	frequencyMap.addGaussianPoint(centerx, centery, (int) Math.ceil(radius));
+            } else {
+                frequencyMap.addPoint(centerx, centery, (int) Math.ceil(radius));
+            }
+          
+    	}
       output.collect(NullWritable.get(), frequencyMap);
     }
     
@@ -396,7 +403,11 @@ public class HeatMapPlot {
     /**Range of values to do the gradient of the heat map*/
     private MinMax valueRange;
     private boolean skipZeros;
-    private int radius;
+    private double radius;
+    private double scale2;
+    private double scale;
+    private int imageWidth;
+    private int imageHeight;
 
     @Override
     public void configure(JobConf job) {
@@ -414,6 +425,12 @@ public class HeatMapPlot {
         String[] parts = valueRangeStr.contains("..") ? valueRangeStr.split("\\.\\.", 2) : valueRangeStr.split(",", 2);
         this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+      this.scale2 = (double) imageWidth * imageHeight
+				/ (this.drawMBR.getWidth() * this.drawMBR.getHeight());
+      this.scale = Math.sqrt(scale2);
+      this.radius = this.radius / scale;
     }
 
     @Override
@@ -426,7 +443,7 @@ public class HeatMapPlot {
       while (frequencies.hasNext())
         combined.combine(frequencies.next());
 
-      BufferedImage image = combined.toImage(valueRange, skipZeros, radius);
+      BufferedImage image = combined.toImage(valueRange, skipZeros, (int) Math.ceil(radius));
       output.collect(drawMBR, new ImageWritable(image));
     }
   }
@@ -442,7 +459,7 @@ public class HeatMapPlot {
    *
    */
   public static class GridPartitionMap extends MapReduceBase 
-  implements Mapper<Rectangle, ArrayWritable, IntWritable, Point> {
+  implements Mapper<Rectangle, ShapeIterator, IntWritable, Point> {
     
     /**The grid used to partition the space*/
     private GridInfo partitionGrid;
@@ -474,41 +491,42 @@ public class HeatMapPlot {
     }
     
     @Override
-    public void map(Rectangle dummy, ArrayWritable value,
+    public void map(Rectangle dummy, ShapeIterator value,
         OutputCollector<IntWritable, Point> output, Reporter reporter)
         throws IOException {
     	
-      for(Shape s : (Shape[]) value.get()) {
-    	  if (adaptiveSample && s instanceof Point
-    			  && Math.random() > adaptiveSampleRatio)
-    		  continue;
+    	while(value.hasNext()) {
+    		Shape s = value.next();
+      	  if (adaptiveSample && s instanceof Point
+      			  && Math.random() > adaptiveSampleRatio)
+      		  continue;
 
-    	  Point center;
-    	  if (s instanceof Point) {
-    		  center = new Point((Point)s);
-    	  } else if (s instanceof Rectangle) {
-    		  center = ((Rectangle) s).getCenterPoint();
-    	  } else {
-    		  Rectangle shapeMBR = s.getMBR();
-    		  if (shapeMBR == null)
-    			  continue;
-    		  center = shapeMBR.getCenterPoint();
-    	  }
-    	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
-    	  // Skip shapes outside query range if query range is set
-    	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-    		  continue;
-    	  // Replicate to all overlapping cells
-    	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMBR);
-    	  for (int i = 0; i < overlappingCells.width; i++) {
-    		  int x = overlappingCells.x + i;
-    		  for (int j = 0; j < overlappingCells.height; j++) {
-    			  int y = overlappingCells.y + j;
-    			  cellNumber.set(y * partitionGrid.columns + x + 1);
-    			  output.collect(cellNumber, center);
-    		  }
-    	  }
-      }
+      	  Point center;
+      	  if (s instanceof Point) {
+      		  center = new Point((Point)s);
+      	  } else if (s instanceof Rectangle) {
+      		  center = ((Rectangle) s).getCenterPoint();
+      	  } else {
+      		  Rectangle shapeMBR = s.getMBR();
+      		  if (shapeMBR == null)
+      			  continue;
+      		  center = shapeMBR.getCenterPoint();
+      	  }
+      	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
+      	  // Skip shapes outside query range if query range is set
+      	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
+      		  continue;
+      	  // Replicate to all overlapping cells
+      	  java.awt.Rectangle overlappingCells = partitionGrid.getOverlappingCells(shapeMBR);
+      	  for (int i = 0; i < overlappingCells.width; i++) {
+      		  int x = overlappingCells.x + i;
+      		  for (int j = 0; j < overlappingCells.height; j++) {
+      			  int y = overlappingCells.y + j;
+      			  cellNumber.set(y * partitionGrid.columns + x + 1);
+      			  output.collect(cellNumber, center);
+      		  }
+      	  }
+    	}
     }
   }
 
@@ -522,10 +540,12 @@ public class HeatMapPlot {
     implements Reducer<IntWritable, Point, Rectangle, ImageWritable> {
     private GridInfo partitionGrid;
     private int imageWidth, imageHeight;
-    private int radius;
+    private double radius;
     private boolean skipZeros;
     private MinMax valueRange;
     private boolean smooth;
+    private double scale2;
+    private double scale;
     
     @Override
     public void configure(JobConf job) {
@@ -544,6 +564,10 @@ public class HeatMapPlot {
         this.valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
       }
       this.smooth = job.getBoolean("smooth", false);
+      this.scale2 = (double) imageWidth * imageHeight
+				/ (this.partitionGrid.getWidth() * this.partitionGrid.getHeight());
+      this.scale = Math.sqrt(scale2);
+      this.radius = this.radius / scale;
     }
 
     @Override
@@ -564,12 +588,12 @@ public class HeatMapPlot {
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
         if(smooth) {
-        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        	frequencyMap.addGaussianPoint(centerx, centery, (int) Math.ceil(radius));
         } else {
-            frequencyMap.addPoint(centerx, centery, radius);
+            frequencyMap.addPoint(centerx, centery, (int) Math.ceil(radius));
         }
       }
-      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, radius);
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, (int) Math.ceil(radius));
       output.collect(cellInfo, new ImageWritable(image));
     }
   }
@@ -581,7 +605,7 @@ public class HeatMapPlot {
    *
    */
   public static class SkewedPartitionMap extends MapReduceBase 
-    implements Mapper<Rectangle, ArrayWritable, IntWritable, Point> {
+    implements Mapper<Rectangle, ShapeIterator, IntWritable, Point> {
     
     /**The cells used to partition the space*/
     private CellInfo[] cells;
@@ -622,37 +646,40 @@ public class HeatMapPlot {
     }
     
     @Override
-    public void map(Rectangle dummy, ArrayWritable value,
+    public void map(Rectangle dummy, ShapeIterator value,
         OutputCollector<IntWritable, Point> output, Reporter reporter)
         throws IOException {
     	
-      for(Shape s : (Shape[]) value.get()) {
-    	  if (adaptiveSample && s instanceof Point
-    			  && Math.random() > adaptiveSampleRatio)
-    		  continue;
+    	while(value.hasNext()) {
+    		Shape s = value.next();
 
-    	  Point center;
-    	  if (s instanceof Point) {
-    		  center = new Point((Point)s);
-    	  } else if (s instanceof Rectangle) {
-    		  center = ((Rectangle) s).getCenterPoint();
-    	  } else {
-    		  Rectangle shapeMBR = s.getMBR();
-    		  if (shapeMBR == null)
-    			  continue;
-    		  center = shapeMBR.getCenterPoint();
-    	  }
-    	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
-    	  // Skip shapes outside query range if query range is set
-    	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
-    		  continue;
-    	  for (CellInfo cell : cells) {
-    		  if (cell.isIntersected(shapeMBR)) {
-    			  cellNumber.set(cell.cellId);
-    			  output.collect(cellNumber, center);
-    		  }
-    	  }
-      }
+      	  if (adaptiveSample && s instanceof Point
+      			  && Math.random() > adaptiveSampleRatio)
+      		  continue;
+
+      	  Point center;
+      	  if (s instanceof Point) {
+      		  center = new Point((Point)s);
+      	  } else if (s instanceof Rectangle) {
+      		  center = ((Rectangle) s).getCenterPoint();
+      	  } else {
+      		  Rectangle shapeMBR = s.getMBR();
+      		  if (shapeMBR == null)
+      			  continue;
+      		  center = shapeMBR.getCenterPoint();
+      	  }
+      	  Rectangle shapeMBR = center.getMBR().buffer(radiusX, radiusY);
+      	  // Skip shapes outside query range if query range is set
+      	  if (queryRange != null && !shapeMBR.isIntersected(queryRange))
+      		  continue;
+      	  for (CellInfo cell : cells) {
+      		  if (cell.isIntersected(shapeMBR)) {
+      			  cellNumber.set(cell.cellId);
+      			  output.collect(cellNumber, center);
+      		  }
+      	  }
+        
+    	}
     }
   }
 
@@ -660,11 +687,13 @@ public class HeatMapPlot {
   implements Reducer<IntWritable, Point, Rectangle, ImageWritable> {
     private CellInfo[] cells;
     private int imageWidth, imageHeight;
-    private int radius;
+    private double radius;
     private boolean skipZeros;
     private MinMax valueRange;
     private Rectangle fileMBR;
     private boolean smooth;
+    private double scale2;
+    private double scale;
 
     @Override
     public void configure(JobConf job) {
@@ -692,6 +721,11 @@ public class HeatMapPlot {
         fileMBR.expand(cell);
       }
       this.smooth = job.getBoolean("smooth", false);
+      this.scale2 = (double) imageWidth * imageHeight
+				/ (this.fileMBR.getWidth() * this.fileMBR.getHeight());
+      this.scale = Math.sqrt(scale2);
+      this.radius = this.radius / scale;
+      
     }
 
     @Override
@@ -719,12 +753,12 @@ public class HeatMapPlot {
         int centerx = (int) Math.round((p.x - cellInfo.x1) * tile_width / cellInfo.getWidth());
         int centery = (int) Math.round((p.y - cellInfo.y1) * tile_height / cellInfo.getHeight());
         if(smooth) {
-        	frequencyMap.addGaussianPoint(centerx, centery, radius);
+        	frequencyMap.addGaussianPoint(centerx, centery, (int) Math.ceil(radius));
         } else {
-            frequencyMap.addPoint(centerx, centery, radius);
+            frequencyMap.addPoint(centerx, centery, (int) Math.ceil(radius));
         }
       }
-      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, radius);
+      BufferedImage image = frequencyMap.toImage(valueRange, skipZeros, (int) Math.ceil(radius));
       output.collect(cellInfo, new ImageWritable(image));
     }
 }
@@ -764,11 +798,11 @@ public class HeatMapPlot {
       job.setReducerClass(DataPartitionReduce.class);
       job.setMapOutputKeyClass(NullWritable.class);
       job.setMapOutputValueClass(FrequencyMap.class);
-      job.setInputFormat(ShapeArrayInputFormat.class);
+      job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
     } else if (partition.equals("space") || partition.equals("grid")) {
       FileSystem inFs = inFile.getFileSystem(job);
       GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inFile);
-      job.setInputFormat(ShapeArrayInputFormat.class);
+      job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(Point.class);
       if (gIndex == null || gIndex.size() == 1) {
@@ -792,7 +826,7 @@ public class HeatMapPlot {
           // Pack in rectangles using an RTree
           CellInfo[] cellInfos = Repartition.packInRectangles(inFile, outFile, params, fileMBR);
           SpatialSite.setCells(job, cellInfos);
-          job.setInputFormat(ShapeArrayInputFormat.class);
+          job.setInputFormat(edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat.class);
         }
       } else {
         LOG.info("Partitioned plot with an already partitioned file");

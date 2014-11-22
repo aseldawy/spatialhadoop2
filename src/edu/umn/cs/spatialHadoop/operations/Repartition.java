@@ -61,8 +61,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
-import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
+import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
 /**
  * Creates an index on an input file
@@ -306,10 +305,10 @@ public class Repartition {
     params.setLong("blocksize", blockSize);
     params.set("sindex", sindex);
     params.setBoolean("overwrite", overwrite);
-    repartitionMapReduce(inFile, outPath, params);
+    repartitionMapReduce(inFile, outPath, null, params);
   }
   
-  public static void repartitionMapReduce(Path inFile, Path outPath,
+  public static void repartitionMapReduce(Path inFile, Path outPath, CellInfo[] cellInfos, 
       OperationsParams params) throws IOException {
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
@@ -322,25 +321,26 @@ public class Repartition {
     final long blockSize = outFs.getDefaultBlockSize();
     
     // Calculate the dimensions of each partition based on gindex type
-    CellInfo[] cellInfos;
-    if (sindex.equals("grid")) {
-      Rectangle input_mbr = FileMBR.fileMBR(inFile, params);
-      long inFileSize = FileMBR.sizeOfLastProcessedFile;
-      int num_partitions = calculateNumberOfPartitions(new Configuration(),
-          inFileSize, outFs, outPath, blockSize);
+    if(cellInfos == null){
+    	if (sindex.equals("grid")) {
+    	      Rectangle input_mbr = FileMBR.fileMBR(inFile, params);
+    	      long inFileSize = FileMBR.sizeOfLastProcessedFile;
+    	      int num_partitions = calculateNumberOfPartitions(new Configuration(),
+    	          inFileSize, outFs, outPath, blockSize);
 
-      GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
-          input_mbr.x2, input_mbr.y2);
-      gridInfo.calculateCellDimensions(num_partitions);
-      cellInfos = gridInfo.getAllCells();
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
-        sindex.equals("str") || sindex.equals("str+")) {
-      // Pack in rectangles using an RTree
-      cellInfos = packInRectangles(inFile, outPath, params);
-    } else {
-      throw new RuntimeException("Unsupported spatial index: "+sindex);
+    	      GridInfo gridInfo = new GridInfo(input_mbr.x1, input_mbr.y1,
+    	          input_mbr.x2, input_mbr.y2);
+    	      gridInfo.calculateCellDimensions(num_partitions);
+    	      cellInfos = gridInfo.getAllCells();
+    	    } else if (sindex.equals("rtree") || sindex.equals("r+tree") ||
+    	        sindex.equals("str") || sindex.equals("str+")) {
+    	      // Pack in rectangles using an RTree
+    	      cellInfos = packInRectangles(inFile, outPath, params);
+    	    } else {
+    	      throw new RuntimeException("Unsupported spatial index: "+sindex);
+    	    }	
     }
-    
+        
     JobConf job = new JobConf(params, Repartition.class);
 
     job.setJobName("Repartition");
@@ -404,10 +404,8 @@ public class Repartition {
    * @param rtree
    * @param overwrite
    * @throws IOException
-   * @deprecated this method is deprecated. Use the method
    * {@link #repartitionMapReduce(Path, Path, OperationsParams)} instead.
    */
-  @Deprecated
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, CellInfo[] cellInfos, String sindex,
       boolean overwrite) throws IOException {
@@ -486,6 +484,7 @@ public class Repartition {
   public static CellInfo[] packInRectangles(Path[] files,
       Path outFile, OperationsParams params, Rectangle fileMBR)
       throws IOException {
+	  boolean clean = params.getBoolean("clean", false);
     final Vector<Point> sample = new Vector<Point>();
     
     float sample_ratio =
@@ -523,7 +522,13 @@ public class Repartition {
     GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     FileSystem outFs = outFile.getFileSystem(params);
     long blocksize = outFs.getDefaultBlockSize();
-    gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
+    if(clean) {
+        //gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)) * 1000);
+        gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
+
+    } else {
+        gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
+    }
     if (fileMBR == null)
       gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
     else
@@ -653,14 +658,12 @@ public class Repartition {
     ShapeInputFormat<S> inputFormat = new ShapeInputFormat<S>();
     InputSplit[] splits = inputFormat.getSplits(job, 1);
     for (InputSplit split : splits) {
-      ShapeIterRecordReader reader = new ShapeIterRecordReader(params, (FileSplit) split);
+      ShapeRecordReader<Shape> reader = new ShapeRecordReader<Shape>(params, (FileSplit) split);
       Rectangle c = reader.createKey();
-      ShapeIterator shapes = reader.createValue();
-      while (reader.next(c, shapes)) {
-        for (Shape s : shapes) {
-          if (s.getMBR() != null)
-            writer.write(NullWritable.get(), s);
-        }
+      
+      while (reader.next(c, shape)) {
+        if (shape.getMBR() != null)
+          writer.write(NullWritable.get(), shape);
       }
       reader.close();
     }
@@ -686,7 +689,7 @@ public class Repartition {
     if (isLocal)
       repartitionLocal(inFile, outputPath, params);
     else
-      repartitionMapReduce(inFile, outputPath, params);
+      repartitionMapReduce(inFile, outputPath, null, params);
   }
 
   private static void printUsage() {
