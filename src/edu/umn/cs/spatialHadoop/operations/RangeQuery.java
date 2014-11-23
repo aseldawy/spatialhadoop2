@@ -339,6 +339,9 @@ public class RangeQuery {
   public static <S extends Shape> long rangeQueryLocal(Path inPath,
       final Shape queryRange, final S shape,
       final OperationsParams params, final ResultCollector<S> output) throws IOException {
+    // Set MBR of query shape in job configuration to work with the spatial filter
+    OperationsParams.setShape(params, "rect", queryRange.getMBR());
+    params.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     final FileSystem inFS = inPath.getFileSystem(params);
     // 1- Split the input path/file to get splits that can be processed independently
     ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
