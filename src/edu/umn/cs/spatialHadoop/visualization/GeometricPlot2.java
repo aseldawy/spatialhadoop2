@@ -107,7 +107,7 @@ public class GeometricPlot2 {
     if (params.getBoolean("pyramid", false)) {
       MultilevelPlot.plotMapReduce(inFile, outFile, GeometricRasterizer.class, params);
     } else {
-      SingleLevelPlot.plotMapReduce(inFile, outFile, GeometricRasterizer.class, params);
+      SingleLevelPlot.plot(inFile, outFile, GeometricRasterizer.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
