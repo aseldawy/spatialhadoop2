@@ -13,6 +13,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
+import java.util.Vector;
 
 import javax.imageio.ImageIO;
 
@@ -47,6 +48,8 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 
 /**
@@ -290,26 +293,12 @@ public class SingleLevelPlot {
   }
 
   public static void plotLocal(Path inFile, Path outFile,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
-    Rasterizer rasterizer;
-    try {
-      rasterizer = rasterizerClass.newInstance();
-    } catch (InstantiationException e) {
-      throw new RuntimeException("Error creating rastierizer", e);
-    } catch (IllegalAccessException e) {
-      throw new RuntimeException("Error creating rastierizer", e);
-    }
-    
-    rasterizer.configure(params);
+      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
+
     boolean vflip = params.getBoolean("vflip", true);
 
     Shape plotRange = params.getShape("rect", null);
-    Rectangle inputMBR;
-    if (plotRange != null) {
-      inputMBR = plotRange.getMBR();
-    } else {
-      inputMBR = FileMBR.fileMBR(inFile, params);
-    }
+    final Rectangle inputMBR = plotRange == null ? FileMBR.fileMBR(inFile, params) : plotRange.getMBR();
 
     // Retrieve desired output image size and keep aspect ratio if needed
     int width = params.getInt("width", 1000);
@@ -323,9 +312,8 @@ public class SingleLevelPlot {
         width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight());
       }
     }
-
-    // Create final layer that will contain the image
-    RasterLayer finalRaster = rasterizer.create(width, height, inputMBR);
+    // Store width and height in final variables to make them accessible in parallel
+    final int fwidth = width, fheight = height;
 
     // Start reading input file
     InputSplit[] splits;
@@ -343,24 +331,61 @@ public class SingleLevelPlot {
       ShapeIterInputFormat.addInputPath(job, inFile);
       splits = inputFormat.getSplits(job, 1);
     }
-
-    for (InputSplit split : splits) {
-      RecordReader<Rectangle, ShapeIterator> reader =
-          new ShapeIterRecordReader(params, (FileSplit)split);
-      Rectangle partitionMBR = reader.createKey();
-      ShapeIterator shapes = reader.createValue();
-      
-      while (reader.next(partitionMBR, shapes)) {
-        if (!partitionMBR.isValid())
-          partitionMBR.set(inputMBR);
-        
-        // Run the rasterize step
-        
-        rasterizer.rasterize(finalRaster, shapes);
-      }
-      reader.close();
-    }
     
+    // Copy splits to a final array to be used in parallel
+    final FileSplit[] fsplits = new FileSplit[splits.length];
+    System.arraycopy(splits, 0, fsplits, 0, splits.length);
+    
+    Vector<RasterLayer> partialRasters = Parallel.forEach(splits.length, new RunnableRange<RasterLayer>() {
+      @Override
+      public RasterLayer run(int i1, int i2) {
+        Rasterizer rasterizer;
+        try {
+          rasterizer = rasterizerClass.newInstance();
+        } catch (InstantiationException e) {
+          throw new RuntimeException("Error creating rastierizer", e);
+        } catch (IllegalAccessException e) {
+          throw new RuntimeException("Error creating rastierizer", e);
+        }
+        rasterizer.configure(params);
+        // Create the partial layer that will contain the rasterization of the assigned partitions
+        RasterLayer partialRaster = rasterizer.create(fwidth, fheight, inputMBR);
+        
+        for (int i = i1; i < i2; i++) {
+          try {
+            RecordReader<Rectangle, ShapeIterator> reader =
+                new ShapeIterRecordReader(params, fsplits[i]);
+            Rectangle partitionMBR = reader.createKey();
+            ShapeIterator shapes = reader.createValue();
+            
+            while (reader.next(partitionMBR, shapes)) {
+              if (!partitionMBR.isValid())
+                partitionMBR.set(inputMBR);
+              
+              // Run the rasterize step
+              rasterizer.rasterize(partialRaster, shapes);
+            }
+            reader.close();
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
+        return partialRaster;
+      }
+    });
+    Rasterizer rasterizer;
+    try {
+      rasterizer = rasterizerClass.newInstance();
+    } catch (InstantiationException e) {
+      throw new RuntimeException("Error creating rastierizer", e);
+    } catch (IllegalAccessException e) {
+      throw new RuntimeException("Error creating rastierizer", e);
+    }
+    // Create the final raster layer that will contain the final image
+    RasterLayer finalRaster = rasterizer.create(fwidth, fheight, inputMBR);
+    for (RasterLayer partialRaster : partialRasters) {
+      rasterizer.mergeLayers(finalRaster, partialRaster);
+    }
     BufferedImage finalImage = rasterizer.toImage(finalRaster);
 
     // Flip image vertically if needed
@@ -377,5 +402,22 @@ public class SingleLevelPlot {
     OutputStream outputFile = outFs.create(outFile);
     ImageIO.write(finalImage, "png", outputFile);
     outputFile.close();
+  }
+  
+  /**
+   * Plots the given file using the provided rasterizer
+   * @param inFile
+   * @param outFile
+   * @param rasterizerClass
+   * @param params
+   * @throws IOException
+   */
+  public static void plot(Path inFile, Path outFile,
+      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
+    if (OperationsParams.isLocal(new JobConf(params), inFile)) {
+      plotLocal(inFile, outFile, rasterizerClass, params);
+    } else {
+      plotMapReduce(inFile, outFile, rasterizerClass, params);
+    }
   }
 }
