@@ -124,11 +124,6 @@ public class Repartition {
             count++;
           }
         }
-        if (count != 1) {
-          System.out.println("Yalla "+shape_mbr);
-        }
-      } else {
-        System.out.println("Yalla2 "+shape);
       }
     }
   }
