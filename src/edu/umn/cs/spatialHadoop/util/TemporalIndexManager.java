@@ -175,67 +175,102 @@ public class TemporalIndexManager {
 		for (FileStatus matchingDir : matchingDirs) {
 			String matchingDirDateString = NASADatasetUtil
 					.extractDateStringFromFileStatus(matchingDir);
-			if (existYearlyIndexes.containsKey(NASADatasetUtil.getYearFormat(matchingDirDateString))) {
-				//needs to re-build year, month and year indexes
-				existYearlyIndexes.put(NASADatasetUtil.getYearFormat(matchingDirDateString), true);
-				existMonthlyIndexes.put(NASADatasetUtil.getMonthFormat(matchingDirDateString), true);
-				existDailyIndexes.put(NASADatasetUtil.getDayFormat(matchingDirDateString), true);
-			} else if (existMonthlyIndexes.containsKey(NASADatasetUtil.getMonthFormat(matchingDirDateString))) {
-				//needs to re-build month and day indexes
-				existMonthlyIndexes.put(NASADatasetUtil.getMonthFormat(matchingDirDateString), true);
-				existDailyIndexes.put(NASADatasetUtil.getDayFormat(matchingDirDateString), true);
-			} else if (existDailyIndexes.containsKey(NASADatasetUtil.getDayFormat(matchingDirDateString))){
-				//needs to re-build day index
-				existDailyIndexes.put(NASADatasetUtil.getDayFormat(matchingDirDateString), true);
-			}else{
-				//needs to build a new index
-				existDailyIndexes.put(NASADatasetUtil.getDayFormat(matchingDirDateString), true);
-				
-				int daysCountInMonth = NASADatasetUtil.getMatchingFilesCountInPath(datasetPath, NASADatasetUtil.getMonthFormat(matchingDirDateString));
-				if(daysCountInMonth >= getNumDaysPerMonth(NASADatasetUtil.extractMonthFromDate(matchingDirDateString))){
-						 existMonthlyIndexes.put(NASADatasetUtil.getMonthFormat(matchingDirDateString), true);
-					 
-					int monthsCountInYear = NASADatasetUtil.getMatchingFilesCountInPath(datasetPath, NASADatasetUtil.getYearFormat(matchingDirDateString));
-					if(monthsCountInYear >= getNumDaysPerYear(NASADatasetUtil.extractYearFromDate(matchingDirDateString))){
-							existYearlyIndexes.put(NASADatasetUtil.getYearFormat(matchingDirDateString), true);
+			if (existYearlyIndexes.containsKey(NASADatasetUtil
+					.getYearFormat(matchingDirDateString))) {
+				// needs to re-build year, month and year indexes
+				existYearlyIndexes.put(
+						NASADatasetUtil.getYearFormat(matchingDirDateString),
+						true);
+				existMonthlyIndexes.put(
+						NASADatasetUtil.getMonthFormat(matchingDirDateString),
+						true);
+				existDailyIndexes.put(
+						NASADatasetUtil.getDayFormat(matchingDirDateString),
+						true);
+			} else if (existMonthlyIndexes.containsKey(NASADatasetUtil
+					.getMonthFormat(matchingDirDateString))) {
+				// needs to re-build month and day indexes
+				existMonthlyIndexes.put(
+						NASADatasetUtil.getMonthFormat(matchingDirDateString),
+						true);
+				existDailyIndexes.put(
+						NASADatasetUtil.getDayFormat(matchingDirDateString),
+						true);
+			} else if (existDailyIndexes.containsKey(NASADatasetUtil
+					.getDayFormat(matchingDirDateString))) {
+				// needs to re-build day index
+				existDailyIndexes.put(
+						NASADatasetUtil.getDayFormat(matchingDirDateString),
+						true);
+			} else {
+				// needs to build a new index
+				existDailyIndexes.put(
+						NASADatasetUtil.getDayFormat(matchingDirDateString),
+						true);
+
+				int daysCountInMonth = NASADatasetUtil
+						.getMatchingFilesCountInPath(datasetPath,
+								NASADatasetUtil
+										.getMonthFormat(matchingDirDateString));
+				if (daysCountInMonth >= getNumDaysPerMonth(NASADatasetUtil
+						.extractMonthFromDate(matchingDirDateString))) {
+					existMonthlyIndexes.put(NASADatasetUtil
+							.getMonthFormat(matchingDirDateString), true);
+
+					int monthsCountInYear = NASADatasetUtil
+							.getMatchingFilesCountInPath(
+									datasetPath,
+									NASADatasetUtil
+											.getYearFormat(matchingDirDateString));
+					if (monthsCountInYear >= getNumDaysPerYear(NASADatasetUtil
+							.extractYearFromDate(matchingDirDateString))) {
+						existYearlyIndexes.put(NASADatasetUtil
+								.getYearFormat(matchingDirDateString), true);
 					}
 				}
 			}
-			
-		}		
+
+		}
 		convertNeededIndexesListIntoArrays();
 	}
 
 	private void convertNeededIndexesListIntoArrays() {
-		neededDailyIndexes = convertFromMapToArray(existDailyIndexes, datasetPath);
-		neededMonthlyIndexes = convertFromMapToArray(existMonthlyIndexes, monthlyIndexesHomePath);
-		neededYearlyIndexes = convertFromMapToArray(existYearlyIndexes, yearlyIndexesHomePath);
+		neededDailyIndexes = convertFromMapToArray(existDailyIndexes,
+				datasetPath);
+		neededMonthlyIndexes = convertFromMapToArray(existMonthlyIndexes,
+				monthlyIndexesHomePath);
+		neededYearlyIndexes = convertFromMapToArray(existYearlyIndexes,
+				yearlyIndexesHomePath);
 	}
 
-	private Path[] convertFromMapToArray(HashMap<String, Boolean> pathsMap, Path homePath){
+	private Path[] convertFromMapToArray(HashMap<String, Boolean> pathsMap,
+			Path homePath) {
 		Path[] pathsArr = new Path[pathsMap.size()];
 		int count = 0;
-		for(String pathsMapKey: pathsMap.keySet()){
-			 boolean pathsMapValue = pathsMap.get(pathsMapKey);
-			 if(pathsMapValue){
-				 pathsArr[count] = new Path(homePath.toString() + "/" + pathsMapKey);
-				 count++;
-			 }
+		for (String pathsMapKey : pathsMap.keySet()) {
+			boolean pathsMapValue = pathsMap.get(pathsMapKey);
+			if (pathsMapValue) {
+				pathsArr[count] = new Path(homePath.toString() + "/"
+						+ pathsMapKey);
+				count++;
+			}
 		}
 		return pathsArr;
 	}
-	
+
 	@SuppressWarnings("unused")
-	private int getMatchingCountFromNeededIndexes(ArrayList<Path> neededIndexesList, String inputDateString) {
+	private int getMatchingCountFromNeededIndexes(
+			ArrayList<Path> neededIndexesList, String inputDateString) {
 		int count = 0;
-		for(Path currPath: neededIndexesList){
+		for (Path currPath : neededIndexesList) {
 			String currPathString = currPath.toString();
 			int start = currPathString.lastIndexOf("/") + 1;
 			int end = currPathString.length();
 			String currDateString = currPathString.substring(start, end);
-			if(currDateString.contains(inputDateString));
-				count++;
-		}		
+			if (currDateString.contains(inputDateString))
+				;
+			count++;
+		}
 		return count;
 	}
 
@@ -252,7 +287,8 @@ public class TemporalIndexManager {
 		FileStatus[] dailyIndexes = fileSystem.listStatus(dailyIndexesHomePath);
 		for (FileStatus dailyIndex : dailyIndexes) {
 			if (dailyIndex.isDir()) {
-				existDailyIndexes.put(NASADatasetUtil.extractDateStringFromFileStatus(dailyIndex), false);
+				existDailyIndexes.put(NASADatasetUtil
+						.extractDateStringFromFileStatus(dailyIndex), false);
 			}
 		}
 
@@ -261,7 +297,8 @@ public class TemporalIndexManager {
 				.listStatus(monthlyIndexesHomePath);
 		for (FileStatus monthlyIndex : monthlyIndexes) {
 			if (monthlyIndex.isDir()) {
-				existMonthlyIndexes.put(NASADatasetUtil.extractDateStringFromFileStatus(monthlyIndex), false);
+				existMonthlyIndexes.put(NASADatasetUtil
+						.extractDateStringFromFileStatus(monthlyIndex), false);
 			}
 		}
 
@@ -270,14 +307,15 @@ public class TemporalIndexManager {
 				.listStatus(yearlyIndexesHomePath);
 		for (FileStatus yearlyIndex : yearlyIndexes) {
 			if (yearlyIndex.isDir()) {
-				existYearlyIndexes.put(NASADatasetUtil.extractDateStringFromFileStatus(yearlyIndex), false);
+				existYearlyIndexes.put(NASADatasetUtil
+						.extractDateStringFromFileStatus(yearlyIndex), false);
 			}
 		}
 
 	}
-	
+
 	@SuppressWarnings("unused")
-	private Date getYearDate(String fullDateString){
+	private Date getYearDate(String fullDateString) {
 		String yearDateString = NASADatasetUtil.getYearFormat(fullDateString);
 		try {
 			return yearFormat.parse(yearDateString);
@@ -286,9 +324,9 @@ public class TemporalIndexManager {
 			return null;
 		}
 	}
-	
+
 	@SuppressWarnings("unused")
-	private Date getMonthDate(String fullDateString){
+	private Date getMonthDate(String fullDateString) {
 		String monthDateString = NASADatasetUtil.getMonthFormat(fullDateString);
 		try {
 			return monthFormat.parse(monthDateString);
@@ -297,9 +335,9 @@ public class TemporalIndexManager {
 			return null;
 		}
 	}
-	
+
 	@SuppressWarnings("unused")
-	private Date getDayDate(String fullDateString){
+	private Date getDayDate(String fullDateString) {
 		String dayDateString = NASADatasetUtil.getDayFormat(fullDateString);
 		try {
 			return dayFormat.parse(dayDateString);
@@ -308,12 +346,12 @@ public class TemporalIndexManager {
 			return null;
 		}
 	}
-	
+
 	private int getNumDaysPerMonth(int month) {
 		if (month == 1) {
-			return 31;  
+			return 31;
 		} else if (month == 2) {
-			return 28; 
+			return 28;
 		} else if (month == 3) {
 			return 31;
 		} else if (month == 4) {
@@ -340,7 +378,7 @@ public class TemporalIndexManager {
 	}
 
 	private int getNumDaysPerYear(int year) {
-		return 365; 
+		return 365;
 	}
 
 	public Path[] getNeededDailyIndexes() {
@@ -354,7 +392,7 @@ public class TemporalIndexManager {
 	public Path[] getNeededYearlyIndexes() {
 		return neededYearlyIndexes;
 	}
-	
+
 	public Path getDailyIndexesHomePath() {
 		return dailyIndexesHomePath;
 	}
@@ -367,37 +405,62 @@ public class TemporalIndexManager {
 		return yearlyIndexesHomePath;
 	}
 
+	private static void printUsage() {
+		System.out
+				.println("Performs a temporal indexing for data stored in hadoop");
+		System.out.println("Parameters: (* marks required parameters)");
+		System.out.println("<dataset path> - (*) Path to input dataset");
+		System.out.println("<index path> - (*) Path to index output");
+		System.out.println("time:yyyy.mm.dd..yyyy.mm.dd - (*) Time range");
+		System.out.println("-overwrite - Overwrite output file without notice");
+		GenericOptionsParser.printGenericCommandUsage(System.out);
+	}
+
 	public static void main(String[] args) throws IOException, ParseException {
 		// Parse parameters
 		OperationsParams params = new OperationsParams(
 				new GenericOptionsParser(args));
-		String timeRange = params.get("time"); //time range
-		Path datasetPath = params.getPaths()[0]; //dataset path
-		Path indexesPath = params.getPaths()[1]; //index path
+		final Path[] paths = params.getPaths();
+		if (paths.length <= 1 && !params.checkInput()) {
+			printUsage();
+			System.exit(1);
+		}
+		if (paths.length >= 2 && !params.checkInputOutput()) {
+			printUsage();
+			System.exit(1);
+		}
+		if (params.get("time") == null) {
+			System.err.println("You must provide a time range");
+			printUsage();
+			System.exit(1);
+		}
+
+		Path datasetPath = paths[0]; // dataset path
+		Path indexesPath = paths[1]; // index path
+		String timeRange = params.get("time"); // time range
 
 		TemporalIndexManager temporalIndexManager = new TemporalIndexManager(
 				datasetPath, indexesPath);
 		temporalIndexManager.prepareNeededIndexes(timeRange);
-		
+
 		Path[] dailyIndexes = temporalIndexManager.getNeededDailyIndexes();
 		System.out.println("Daily Indexes: ");
-		for(Path path: dailyIndexes){
+		for (Path path : dailyIndexes) {
 			System.out.println(path.toString());
 		}
-		
+
 		System.out.println("Monthly Indexes: ");
 		Path[] monthlyIndexes = temporalIndexManager.getNeededMontlyIndexes();
-		for(Path path: monthlyIndexes){
+		for (Path path : monthlyIndexes) {
 			System.out.println(path.toString());
 		}
-		
+
 		System.out.println("Yearly Indexes: ");
 		Path[] yearlyIndexes = temporalIndexManager.getNeededYearlyIndexes();
-		for(Path path: yearlyIndexes){
+		for (Path path : yearlyIndexes) {
 			System.out.println(path.toString());
 		}
-		
-		
+
 	}
 
 }
