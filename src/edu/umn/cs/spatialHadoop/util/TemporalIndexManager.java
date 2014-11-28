@@ -243,17 +243,20 @@ public class TemporalIndexManager {
 
 	private Path[] convertFromMapToArray(HashMap<String, Boolean> pathsMap,
 			Path homePath) {
-		Path[] pathsArr = new Path[pathsMap.size()];
+		ArrayList<Path> pathsArrayList = new ArrayList<Path>();
 		int count = 0;
 		for (String pathsMapKey : pathsMap.keySet()) {
 			boolean pathsMapValue = pathsMap.get(pathsMapKey);
 			if (pathsMapValue) {
-				pathsArr[count] = new Path(homePath.toString() + "/"
-						+ pathsMapKey);
+				pathsArrayList.add(new Path(homePath.toString() + "/"
+						+ pathsMapKey));
 				count++;
 			}
 		}
-		return pathsArr;
+		
+		//Path[] pathsArr = new Path[count];
+		return (Path[]) pathsArrayList.toArray();
+		//return pathsArr;
 	}
 
 	private int getMatchesCountFromMap(HashMap<String, Boolean> pathsMap,
