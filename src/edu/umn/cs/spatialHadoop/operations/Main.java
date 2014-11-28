@@ -20,6 +20,7 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
+import edu.umn.cs.spatialHadoop.nasa.DistributedSpatioTemporalIndexer;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
@@ -28,106 +29,110 @@ import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
 
 /**
  * The main entry point to all queries.
+ * 
  * @author eldawy
  *
  */
 public class Main {
-  
-  static {
-    // Load configuration from files
-    Configuration.addDefaultResource("spatial-default.xml");
-    Configuration.addDefaultResource("spatial-site.xml");
-  }
-  
-  public static void main(String[] args) {
-    int exitCode = -1;
-    ProgramDriver pgd = new ProgramDriver();
-    try {
-      ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-      System.out.println("Mappers "+clusterStatus.getMaxMapTasks());
-      System.out.println("Reducers "+clusterStatus.getMaxReduceTasks());
-      
-      
-      pgd.addClass("rangequery", RangeQuery.class,
-          "Finds all objects in the query range given by a rectangle");
 
-      pgd.addClass("knn", KNN.class,
-          "Finds the k nearest neighbor in a file to a point");
+	static {
+		// Load configuration from files
+		Configuration.addDefaultResource("spatial-default.xml");
+		Configuration.addDefaultResource("spatial-site.xml");
+	}
 
-      pgd.addClass("dj", DistributedJoin.class,
-          "Computes the spatial join between two input files using the " +
-          "distributed join algorithm");
-      
-      pgd.addClass("sjmr", SJMR.class,
-          "Computes the spatial join between two input files using the " +
-          "SJMR algorithm");
-      
-      pgd.addClass("index", Repartition.class,
-          "Builds an index on an input file");
-      
-      pgd.addClass("mbr", FileMBR.class,
-          "Finds the minimal bounding rectangle of an input file");
-      
-      pgd.addClass("readfile", ReadFile.class,
-          "Retrieve some information about the index of a file");
+	public static void main(String[] args) {
+		int exitCode = -1;
+		ProgramDriver pgd = new ProgramDriver();
+		try {
+			ClusterStatus clusterStatus = new JobClient(new JobConf())
+					.getClusterStatus();
+			System.out.println("Mappers " + clusterStatus.getMaxMapTasks());
+			System.out.println("Reducers " + clusterStatus.getMaxReduceTasks());
 
-      pgd.addClass("sample", Sampler.class,
-          "Reads a random sample from the input file");
+			pgd.addClass("rangequery", RangeQuery.class,
+					"Finds all objects in the query range given by a rectangle");
 
-      pgd.addClass("generate", RandomSpatialGenerator.class,
-          "Generates a random file containing spatial data");
+			pgd.addClass("knn", KNN.class,
+					"Finds the k nearest neighbor in a file to a point");
 
-      pgd.addClass("union", Union.class,
-          "Computes the union of input shapes");
+			pgd.addClass("dj", DistributedJoin.class,
+					"Computes the spatial join between two input files using the "
+							+ "distributed join algorithm");
 
-      pgd.addClass("plot", GeometricPlot.class,
-          "Plots a file to an image");
+			pgd.addClass("sjmr", SJMR.class,
+					"Computes the spatial join between two input files using the "
+							+ "SJMR algorithm");
 
-      pgd.addClass("plotp", PyramidPlot.class,
-          "Plots a file to a set of images used with Google-Maps-like engine");
+			pgd.addClass("index", Repartition.class,
+					"Builds an index on an input file");
 
-      pgd.addClass("ploth", HeatMapPlot.class,
-          "Plots a heatmap of an input file of points");
+			pgd.addClass("mbr", FileMBR.class,
+					"Finds the minimal bounding rectangle of an input file");
 
-      pgd.addClass("hdfplot", HDFPlot.class,
-          "Plots NASA datasets in the spatiotemporal range provided by user");
-      
-      pgd.addClass("makevideo", MakeHDFVideo.class,
-          "Creates a video out of a set of HDF files");
-      
-      pgd.addClass("hdfx", HDFToText.class,
-          "Extracts data from a set of HDF files to text files");
+			pgd.addClass("readfile", ReadFile.class,
+					"Retrieve some information about the index of a file");
 
-      pgd.addClass("skyline", Skyline.class,
-          "Computes the skyline of an input set of points");
-      
-      pgd.addClass("convexhull", ConvexHull.class,
-          "Computes the convex hull of an input set of points");
+			pgd.addClass("sample", Sampler.class,
+					"Reads a random sample from the input file");
 
-      pgd.addClass("farthestpair", FarthestPair.class,
-          "Computes the farthest pair of point of an input set of points");
+			pgd.addClass("generate", RandomSpatialGenerator.class,
+					"Generates a random file containing spatial data");
 
-      pgd.addClass("closestpair", ClosestPair.class,
-          "Computes the closest pair of point of an input set of points");
+			pgd.addClass("union", Union.class,
+					"Computes the union of input shapes");
 
-      pgd.addClass("distcp", DistributedCopy.class,
-          "Copies a directory or file using a MapReduce job");
-      
-      pgd.addClass("vizserver", VisualizationServer.class,
-          "Starts a server that handles visualization requests");
+			pgd.addClass("plot", GeometricPlot.class,
+					"Plots a file to an image");
 
-      pgd.addClass("staggquery", SpatioTemporalAggregateQuery.class,
-          "Runs a spatio temporal aggregate query on HDF files");
-      
-      pgd.driver(args);
-      
-      // Success
-      exitCode = 0;
-    }
-    catch(Throwable e){
-      e.printStackTrace();
-    }
-    
-    System.exit(exitCode);
-  }
+			pgd.addClass("plotp", PyramidPlot.class,
+					"Plots a file to a set of images used with Google-Maps-like engine");
+
+			pgd.addClass("ploth", HeatMapPlot.class,
+					"Plots a heatmap of an input file of points");
+
+			pgd.addClass("hdfplot", HDFPlot.class,
+					"Plots NASA datasets in the spatiotemporal range provided by user");
+
+			pgd.addClass("makevideo", MakeHDFVideo.class,
+					"Creates a video out of a set of HDF files");
+
+			pgd.addClass("hdfx", HDFToText.class,
+					"Extracts data from a set of HDF files to text files");
+
+			pgd.addClass("skyline", Skyline.class,
+					"Computes the skyline of an input set of points");
+
+			pgd.addClass("convexhull", ConvexHull.class,
+					"Computes the convex hull of an input set of points");
+
+			pgd.addClass("farthestpair", FarthestPair.class,
+					"Computes the farthest pair of point of an input set of points");
+
+			pgd.addClass("closestpair", ClosestPair.class,
+					"Computes the closest pair of point of an input set of points");
+
+			pgd.addClass("distcp", DistributedCopy.class,
+					"Copies a directory or file using a MapReduce job");
+
+			pgd.addClass("vizserver", VisualizationServer.class,
+					"Starts a server that handles visualization requests");
+
+			pgd.addClass("staggquery", SpatioTemporalAggregateQuery.class,
+					"Runs a spatio temporal aggregate query on HDF files");
+
+			pgd.addClass("stindex",
+					DistributedSpatioTemporalIndexer.class,
+					"Runs a spatio-temporal indexing on HDF files");
+
+			pgd.driver(args);
+
+			// Success
+			exitCode = 0;
+		} catch (Throwable e) {
+			e.printStackTrace();
+		}
+
+		System.exit(exitCode);
+	}
 }
