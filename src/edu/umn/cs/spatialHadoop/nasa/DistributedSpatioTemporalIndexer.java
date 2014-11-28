@@ -206,9 +206,8 @@ public class DistributedSpatioTemporalIndexer {
 
 		// Indexes need to be built or re-built using AggregateQuadTreeMapReduce
 		Path[] dailyIndexes = temporalIndexManager.getNeededDailyIndexes();
-		LOG.info(dailyIndexes.length);
+		LOG.info("Needs to index/re-index " + dailyIndexes.length + " days");
 		for (Path dailyIndexPath : dailyIndexes) {
-			LOG.info(dailyIndexPath.toString());
 			FileSystem currFileSystem = dailyIndexPath.getFileSystem(params);
 			Path[] dailyIndexHDFFiles = NASADatasetUtil
 					.getFilesListInPath(dailyIndexPath);
@@ -225,13 +224,14 @@ public class DistributedSpatioTemporalIndexer {
 			currFileSystem.mkdirs(dailyIndexOutputPath);
 
 			DistributedSpatioTemporalIndexer.setIndexPath(dailyIndexOutputPath);
-			// aggregateQuadTreeMapReduce(dailyIndexDictionaryPath, params);
+			aggregateQuadTreeMapReduce(dailyIndexDictionaryPath, params);
 
 			currFileSystem.delete(dailyIndexDictionaryPath, false);
 		}
 
 		// Indexes need to be merged or re-merged
 		Path[] monthlyIndexes = temporalIndexManager.getNeededMontlyIndexes();
+		LOG.info("Needs to index/re-index " + monthlyIndexes.length + " months");
 		for (Path monthlyIndexPath : monthlyIndexes) {
 			FileSystem currFileSystem = monthlyIndexPath
 					.getFileSystem(new Configuration());
@@ -252,13 +252,14 @@ public class DistributedSpatioTemporalIndexer {
 								+ NASADatasetUtil
 										.getHDFfilePattern(currDailyIndexHDFFiles[0]
 												.toString()) + ".hdf");
-				// AggregateQuadTree.merge(new Configuration(),
-				// currDailyIndexHDFFiles, currMonthlyIndexHDFFilePath);
+				AggregateQuadTree.merge(new Configuration(),
+						currDailyIndexHDFFiles, currMonthlyIndexHDFFilePath);
 			}
 		}
 
 		// Indexes need to be merged or re-merged
 		Path[] yearlyIndexes = temporalIndexManager.getNeededYearlyIndexes();
+		LOG.info("Needs to index/re-index " + yearlyIndexes.length + " years");
 		for (Path yearlyIndexPath : yearlyIndexes) {
 			FileSystem currFileSystem = yearlyIndexPath
 					.getFileSystem(new Configuration());
@@ -279,8 +280,8 @@ public class DistributedSpatioTemporalIndexer {
 								+ NASADatasetUtil
 										.getHDFfilePattern(currMonthlyIndexHDFFiles[0]
 												.toString()) + ".hdf");
-				// AggregateQuadTree.merge(new Configuration(),
-				// currMonthlyIndexHDFFiles, currYearlyIndexHDFFilePath);
+				AggregateQuadTree.merge(new Configuration(),
+						currMonthlyIndexHDFFiles, currYearlyIndexHDFFilePath);
 			}
 		}
 
