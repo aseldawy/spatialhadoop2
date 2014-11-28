@@ -205,7 +205,7 @@ public class DistributedSpatioTemporalIndexer {
 		temporalIndexManager.prepareNeededIndexes(timeRange);
 
 		// Indexes need to be built or re-built using AggregateQuadTreeMapReduce
-		Path[] dailyIndexes = temporalIndexManager.getNeededDailyIndexes();
+		/*Path[] dailyIndexes = temporalIndexManager.getNeededDailyIndexes();
 		LOG.info("Needs to index/re-index " + dailyIndexes.length + " days");
 		for (Path dailyIndexPath : dailyIndexes) {
 			FileSystem currFileSystem = dailyIndexPath.getFileSystem(params);
@@ -227,7 +227,7 @@ public class DistributedSpatioTemporalIndexer {
 			aggregateQuadTreeMapReduce(dailyIndexDictionaryPath, params);
 
 			currFileSystem.delete(dailyIndexDictionaryPath, false);
-		}
+		}*/
 
 		// Indexes need to be merged or re-merged
 		Path[] monthlyIndexes = temporalIndexManager.getNeededMontlyIndexes();
