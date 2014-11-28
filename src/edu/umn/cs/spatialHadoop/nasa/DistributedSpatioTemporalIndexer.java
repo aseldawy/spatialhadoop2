@@ -206,6 +206,7 @@ public class DistributedSpatioTemporalIndexer {
 
 		// Indexes need to be built or re-built using AggregateQuadTreeMapReduce
 		Path[] dailyIndexes = temporalIndexManager.getNeededDailyIndexes();
+		LOG.info(dailyIndexes.length);
 		for (Path dailyIndexPath : dailyIndexes) {
 			LOG.info(dailyIndexPath.toString());
 			FileSystem currFileSystem = dailyIndexPath.getFileSystem(params);
