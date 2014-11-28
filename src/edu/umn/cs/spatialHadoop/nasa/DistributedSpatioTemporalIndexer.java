@@ -104,6 +104,19 @@ public class DistributedSpatioTemporalIndexer {
 		}
 	}
 
+	
+	private static void printUsage() {
+		System.out
+				.println("Performs a spatio-temporal indexing for data stored in hadoop");
+		System.out.println("Parameters: (* marks required parameters)");
+		System.out.println("<dataset path> - (*) Path to input dataset");
+		System.out.println("<index path> - (*) Path to index output");
+		System.out.println("time:yyyy.mm.dd..yyyy.mm.dd - (*) Time range");
+		System.out.println("-overwrite - Overwrite output file without notice");
+		GenericOptionsParser.printGenericCommandUsage(System.out);
+	}
+
+	
 	/**
 	 * Build a bunch of AggregateQuadTrees using a Map-Reduce job
 	 * 
@@ -169,9 +182,25 @@ public class DistributedSpatioTemporalIndexer {
 
 		OperationsParams params = new OperationsParams(
 				new GenericOptionsParser(args), false);
-		String timeRange = params.get("time"); //time range
-		Path datasetPath = params.getPaths()[0]; //dataset path
-		Path indexesPath = params.getPaths()[1]; //index path
+		
+		final Path[] paths = params.getPaths();
+		if (paths.length <= 1 && !params.checkInput()) {
+			printUsage();
+			System.exit(1);
+		}
+		if (paths.length >= 2 && paths[1] == null) {
+			printUsage();
+			System.exit(1);
+		}
+		if (params.get("time") == null) {
+			System.err.println("You must provide a time range");
+			printUsage();
+			System.exit(1);
+		}
+
+		Path datasetPath = paths[0]; // dataset path
+		Path indexesPath = paths[1]; // index path
+		String timeRange = params.get("time"); // time range
 
 		TemporalIndexManager temporalIndexManager = new TemporalIndexManager(
 				datasetPath, indexesPath);
@@ -194,7 +223,7 @@ public class DistributedSpatioTemporalIndexer {
 			currFileSystem.mkdirs(dailyIndexOutputPath);
 			
 			DistributedSpatioTemporalIndexer.setIndexPath(dailyIndexOutputPath);
-			aggregateQuadTreeMapReduce(dailyIndexDictionaryPath, params);
+			//aggregateQuadTreeMapReduce(dailyIndexDictionaryPath, params);
 
 			currFileSystem.delete(dailyIndexDictionaryPath, false);
 		}
@@ -214,7 +243,7 @@ public class DistributedSpatioTemporalIndexer {
 			for(Path[] currDailyIndexHDFFiles: pathsArrList){
 				Path currMonthlyIndexHDFFilePath = new Path(monthlyIndexPath.toString() + 
 						"/" + NASADatasetUtil.getHDFfilePattern(currDailyIndexHDFFiles[0].toString()) +".hdf");
-				AggregateQuadTree.merge(new Configuration(), currDailyIndexHDFFiles, currMonthlyIndexHDFFilePath);
+				//AggregateQuadTree.merge(new Configuration(), currDailyIndexHDFFiles, currMonthlyIndexHDFFilePath);
 			}			
 		}
 
@@ -233,7 +262,7 @@ public class DistributedSpatioTemporalIndexer {
 			for(Path[] currMonthlyIndexHDFFiles: pathsArrList){
 				Path currYearlyIndexHDFFilePath = new Path(yearlyIndexPath.toString() + 
 						"/" + NASADatasetUtil.getHDFfilePattern(currMonthlyIndexHDFFiles[0].toString()) +".hdf");
-				AggregateQuadTree.merge(new Configuration(), currMonthlyIndexHDFFiles, currYearlyIndexHDFFilePath);
+				//AggregateQuadTree.merge(new Configuration(), currMonthlyIndexHDFFiles, currYearlyIndexHDFFilePath);
 			}			
 		}
 

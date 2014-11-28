@@ -207,23 +207,21 @@ public class TemporalIndexManager {
 				existDailyIndexes.put(
 						NASADatasetUtil.getDayFormat(matchingDirDateString),
 						true);
+				
+				int daysCountInMonth = getMatchesCountFromMap(
+						existDailyIndexes,
+						NASADatasetUtil.getMonthFormat(matchingDirDateString));
 
-				int daysCountInMonth = NASADatasetUtil
-						.getMatchingFilesCountInPath(datasetPath,
-								NASADatasetUtil
-										.getMonthFormat(matchingDirDateString));
 				if (daysCountInMonth >= getNumDaysPerMonth(NASADatasetUtil
 						.extractMonthFromDate(matchingDirDateString))) {
 					existMonthlyIndexes.put(NASADatasetUtil
 							.getMonthFormat(matchingDirDateString), true);
 
-					int monthsCountInYear = NASADatasetUtil
-							.getMatchingFilesCountInPath(
-									datasetPath,
-									NASADatasetUtil
-											.getYearFormat(matchingDirDateString));
-					if (monthsCountInYear >= getNumDaysPerYear(NASADatasetUtil
-							.extractYearFromDate(matchingDirDateString))) {
+					int monthsCountInYear = getMatchesCountFromMap(
+							existMonthlyIndexes,
+							NASADatasetUtil
+									.getYearFormat(matchingDirDateString));
+					if (monthsCountInYear >= getNumMonthsPerYear()) {
 						existYearlyIndexes.put(NASADatasetUtil
 								.getYearFormat(matchingDirDateString), true);
 					}
@@ -258,6 +256,17 @@ public class TemporalIndexManager {
 		return pathsArr;
 	}
 
+	private int getMatchesCountFromMap(HashMap<String, Boolean> pathsMap,
+			String matchingString) {
+		int matchesCount = 0;
+		for (String pathsMapKey : pathsMap.keySet()) {
+			if (pathsMapKey.contains(matchingString)) {
+				matchesCount++;
+			}
+		}
+		return matchesCount;
+	}
+
 	@SuppressWarnings("unused")
 	private int getMatchingCountFromNeededIndexes(
 			ArrayList<Path> neededIndexesList, String inputDateString) {
@@ -268,8 +277,7 @@ public class TemporalIndexManager {
 			int end = currPathString.length();
 			String currDateString = currPathString.substring(start, end);
 			if (currDateString.contains(inputDateString))
-				;
-			count++;
+				count++;
 		}
 		return count;
 	}
@@ -349,9 +357,9 @@ public class TemporalIndexManager {
 
 	private int getNumDaysPerMonth(int month) {
 		if (month == 1) {
-			return 31;
+			return 31; 
 		} else if (month == 2) {
-			return 28;
+			return 28; 
 		} else if (month == 3) {
 			return 31;
 		} else if (month == 4) {
@@ -377,6 +385,11 @@ public class TemporalIndexManager {
 		}
 	}
 
+	private int getNumMonthsPerYear() {
+		return 12; 
+	}
+
+	@SuppressWarnings("unused")
 	private int getNumDaysPerYear(int year) {
 		return 365;
 	}
@@ -425,7 +438,7 @@ public class TemporalIndexManager {
 			printUsage();
 			System.exit(1);
 		}
-		if (paths.length >= 2 && !params.checkInputOutput()) {
+		if (paths.length >= 2 && paths[1] == null) {
 			printUsage();
 			System.exit(1);
 		}
