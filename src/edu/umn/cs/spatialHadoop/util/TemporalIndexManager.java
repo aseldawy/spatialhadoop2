@@ -207,7 +207,7 @@ public class TemporalIndexManager {
 				existDailyIndexes.put(
 						NASADatasetUtil.getDayFormat(matchingDirDateString),
 						true);
-				
+
 				int daysCountInMonth = getMatchesCountFromMap(
 						existDailyIndexes,
 						NASADatasetUtil.getMonthFormat(matchingDirDateString));
@@ -253,10 +253,12 @@ public class TemporalIndexManager {
 				count++;
 			}
 		}
-		
-		//Path[] pathsArr = new Path[count];
-		return (Path[]) pathsArrayList.toArray();
-		//return pathsArr;
+
+		Path[] pathsArr = new Path[count];
+		for (int i = 0; i < count; i++) {
+			pathsArr[i] = pathsArrayList.get(i);
+		}
+		return pathsArr;
 	}
 
 	private int getMatchesCountFromMap(HashMap<String, Boolean> pathsMap,
@@ -360,9 +362,9 @@ public class TemporalIndexManager {
 
 	private int getNumDaysPerMonth(int month) {
 		if (month == 1) {
-			return 31; 
+			return 31;
 		} else if (month == 2) {
-			return 28; 
+			return 28;
 		} else if (month == 3) {
 			return 31;
 		} else if (month == 4) {
@@ -389,7 +391,7 @@ public class TemporalIndexManager {
 	}
 
 	private int getNumMonthsPerYear() {
-		return 12; 
+		return 12;
 	}
 
 	@SuppressWarnings("unused")
