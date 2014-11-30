@@ -20,12 +20,13 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
-import edu.umn.cs.spatialHadoop.nasa.DistributedSpatioTemporalIndexer;
+import edu.umn.cs.spatialHadoop.nasa.DistributedAggregateSpatioTemporalIndexer;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
 import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
 import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
+import edu.umn.cs.spatialHadoop.temporal.RepartitionTemporal;
 
 /**
  * The main entry point to all queries.
@@ -118,12 +119,15 @@ public class Main {
 			pgd.addClass("vizserver", VisualizationServer.class,
 					"Starts a server that handles visualization requests");
 
+			pgd.addClass("stindex", RepartitionTemporal.class,
+					"Builds a spatio-temporal indexing for an input set of files");
+			
 			pgd.addClass("staggquery", SpatioTemporalAggregateQuery.class,
 					"Runs a spatio temporal aggregate query on HDF files");
 
-			pgd.addClass("stindex",
-					DistributedSpatioTemporalIndexer.class,
-					"Runs a spatio-temporal indexing on HDF files");
+			pgd.addClass("aggregatestindex",
+					DistributedAggregateSpatioTemporalIndexer.class,
+					"Builds an aggregate spatio-temporal indexing on HDF files");
 
 			pgd.driver(args);
 

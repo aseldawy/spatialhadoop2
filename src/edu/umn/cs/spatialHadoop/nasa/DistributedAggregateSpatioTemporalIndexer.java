@@ -42,19 +42,19 @@ import edu.umn.cs.spatialHadoop.util.NASADatasetUtil;
 import edu.umn.cs.spatialHadoop.util.TemporalIndexManager;
 
 /**
- * Distributed version of Spatio-Temporal Indexer based on AggregateQuadTree.
+ * Distributed version of the spatio-temporal indexer of SHAHED (AggregateQuadTree).
  * Hadoop Map-Reduce framework is used to implement the distribution algorithm.
  * 
  * @author ibrahimsabek
  *
  */
-public class DistributedSpatioTemporalIndexer {
+public class DistributedAggregateSpatioTemporalIndexer {
 
 	/** Logger */
 	private static final Log LOG = LogFactory
-			.getLog(DistributedSpatioTemporalIndexer.class);
+			.getLog(DistributedAggregateSpatioTemporalIndexer.class);
 
-	private static final String HDFSIndexPath = "DistributedSpatioTemporalIndexer.HDFSIndexPath";
+	private static final String HDFSIndexPath = "DistributedAggregateSpatioTemporalIndexer.HDFSIndexPath";
 
 	private static Path hdfsIndexPath = null;
 
@@ -128,7 +128,7 @@ public class DistributedSpatioTemporalIndexer {
 
 		// configure a map-reduce job
 		JobConf job = new JobConf(params,
-				DistributedSpatioTemporalIndexer.class);
+				DistributedAggregateSpatioTemporalIndexer.class);
 
 		Path outputPath;
 		String outputPathPrefix = "aggQuadTree_";
@@ -173,7 +173,7 @@ public class DistributedSpatioTemporalIndexer {
 	 * @param hdfsIndexPath
 	 */
 	public static void setIndexPath(Path hdfsIndexPath) {
-		DistributedSpatioTemporalIndexer.hdfsIndexPath = hdfsIndexPath;
+		DistributedAggregateSpatioTemporalIndexer.hdfsIndexPath = hdfsIndexPath;
 	}
 
 	public static void main(String[] args) throws IOException, ParseException {
@@ -205,11 +205,11 @@ public class DistributedSpatioTemporalIndexer {
 		temporalIndexManager.prepareNeededIndexes(timeRange);
 
 		// Indexes need to be built or re-built using AggregateQuadTreeMapReduce
-		/*Path[] dailyIndexes = temporalIndexManager.getNeededDailyIndexes();
+		Path[] dailyIndexes = temporalIndexManager.getNeededDailyIndexes();
 		LOG.info("Needs to index/re-index " + dailyIndexes.length + " days");
 		for (Path dailyIndexPath : dailyIndexes) {
 			FileSystem currFileSystem = dailyIndexPath.getFileSystem(params);
-			Path[] dailyIndexHDFFiles = NASADatasetUtil
+			Path[] dailyIndexHDFFiles = FileUtil
 					.getFilesListInPath(dailyIndexPath);
 			Path dailyIndexDictionaryPath = FileUtil.writePathsToHDFSFile(
 					params, dailyIndexHDFFiles);
@@ -223,14 +223,14 @@ public class DistributedSpatioTemporalIndexer {
 			}
 			currFileSystem.mkdirs(dailyIndexOutputPath);
 
-			DistributedSpatioTemporalIndexer.setIndexPath(dailyIndexOutputPath);
+			DistributedAggregateSpatioTemporalIndexer.setIndexPath(dailyIndexOutputPath);
 			aggregateQuadTreeMapReduce(dailyIndexDictionaryPath, params);
 
 			currFileSystem.delete(dailyIndexDictionaryPath, false);
-		}*/
+		}
 
 		// Indexes need to be merged or re-merged
-		Path[] monthlyIndexes = temporalIndexManager.getNeededMontlyIndexes();
+		Path[] monthlyIndexes = temporalIndexManager.getNeededMonthlyIndexes();
 		LOG.info("Needs to index/re-index " + monthlyIndexes.length + " months");
 		for (Path monthlyIndexPath : monthlyIndexes) {
 			FileSystem currFileSystem = monthlyIndexPath

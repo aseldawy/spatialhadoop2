@@ -201,4 +201,21 @@ public final class FileUtil {
 		out.close();
 	}
 
+	/**
+	 * function to list files in a certain directory
+	 * 
+	 * @author ibrahimsabek
+	 * @param path
+	 * @return
+	 * @throws IOException
+	 */
+	public static Path[] getFilesListInPath(Path path) throws IOException{
+		FileSystem fileSystem = path.getFileSystem(new Configuration());
+		FileStatus[] matchingDirs = fileSystem.listStatus(path);
+		Path[] pathsArr = new Path[matchingDirs.length];
+		for(int i = 0; i < matchingDirs.length; i++){
+			pathsArr[i] = matchingDirs[i].getPath();
+		}
+		return pathsArr;
+	}
 }

@@ -123,15 +123,7 @@ public final class NASADatasetUtil {
 		return pathsArr;
 	}
 	
-	public static Path[] getFilesListInPath(Path path) throws IOException{
-		FileSystem fileSystem = path.getFileSystem(new Configuration());
-		FileStatus[] matchingDirs = fileSystem.listStatus(path);
-		Path[] pathsArr = new Path[matchingDirs.length];
-		for(int i = 0; i < matchingDirs.length; i++){
-			pathsArr[i] = matchingDirs[i].getPath();
-		}
-		return pathsArr;
-	}
+	
 	
 	public static ArrayList<Path[]> getSortedTuplesInPath(Path parentHomePath, String dateString) throws IOException{
 		ArrayList<Path[]> pairedPaths = new ArrayList<Path[]>();

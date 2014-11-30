@@ -127,7 +127,7 @@ public class TemporalIndexManager {
 	 * and yearly getters to return paths required to be indexed.
 	 * 
 	 * @param timeRange
-	 * @return
+	 * @return`
 	 * @throws IOException
 	 * @throws ParseException
 	 */
@@ -234,7 +234,7 @@ public class TemporalIndexManager {
 
 	private void convertNeededIndexesListIntoArrays() {
 		neededDailyIndexes = convertFromMapToArray(existDailyIndexes,
-				datasetPath);
+				dailyIndexesHomePath);
 		neededMonthlyIndexes = convertFromMapToArray(existMonthlyIndexes,
 				monthlyIndexesHomePath);
 		neededYearlyIndexes = convertFromMapToArray(existYearlyIndexes,
@@ -403,7 +403,7 @@ public class TemporalIndexManager {
 		return neededDailyIndexes;
 	}
 
-	public Path[] getNeededMontlyIndexes() {
+	public Path[] getNeededMonthlyIndexes() {
 		return neededMonthlyIndexes;
 	}
 
@@ -468,7 +468,7 @@ public class TemporalIndexManager {
 		}
 
 		System.out.println("Monthly Indexes: ");
-		Path[] monthlyIndexes = temporalIndexManager.getNeededMontlyIndexes();
+		Path[] monthlyIndexes = temporalIndexManager.getNeededMonthlyIndexes();
 		for (Path path : monthlyIndexes) {
 			System.out.println(path.toString());
 		}
