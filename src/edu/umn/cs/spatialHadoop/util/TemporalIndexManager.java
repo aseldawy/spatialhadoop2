@@ -362,7 +362,7 @@ public class TemporalIndexManager {
 
 	private int getNumDaysPerMonth(int month) {
 		if (month == 1) {
-			return 31;
+			return 6; //31
 		} else if (month == 2) {
 			return 28;
 		} else if (month == 3) {

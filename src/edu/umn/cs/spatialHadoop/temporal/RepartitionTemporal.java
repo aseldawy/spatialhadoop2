@@ -224,11 +224,10 @@ public class RepartitionTemporal extends Repartition {
 				+ inputPathFileName);
 		return indexPath;
 	}
-	
+
 	private static void bulkLoadSpatioTemporalIndexesLevel(
-			Path[] inputPathDirs, String indexLevel, OperationsParams params)
-			throws IOException {
-		// Indexes need to be built or re-built on the yearly level
+			Path indexLevelHomePath, Path[] inputPathDirs, String indexLevel,
+			OperationsParams params) throws IOException {
 		LOG.info("Needs to index/re-index " + inputPathDirs.length + " "
 				+ indexLevel);
 
@@ -241,9 +240,8 @@ public class RepartitionTemporal extends Repartition {
 			currFileSystem.mkdirs(inputPathDir);
 
 			ArrayList<Path[]> pathsArrList = NASADatasetUtil
-					.getSortedTuplesInPath(params.getPaths()[0],
-							NASADatasetUtil
-									.extractDateStringFromPath(inputPathDir));
+					.getSortedTuplesInPath(indexLevelHomePath, NASADatasetUtil
+							.extractDateStringFromPath(inputPathDir));
 
 			Path indexPath = generateIndexPath(pathsArrList.get(0)[0],
 					inputPathDir);
@@ -260,12 +258,14 @@ public class RepartitionTemporal extends Repartition {
 			TemporalIndexManager temporalIndexManager, OperationsParams params)
 			throws IOException {
 
-		bulkLoadSpatioTemporalIndexesLevel(
+		bulkLoadSpatioTemporalIndexesLevel(params.getPaths()[0],
 				temporalIndexManager.getNeededDailyIndexes(), "daily", params);
 		bulkLoadSpatioTemporalIndexesLevel(
+				temporalIndexManager.getDailyIndexesHomePath(),
 				temporalIndexManager.getNeededMonthlyIndexes(), "monthly",
 				params);
 		bulkLoadSpatioTemporalIndexesLevel(
+				temporalIndexManager.getMonthlyIndexesHomePath(),
 				temporalIndexManager.getNeededYearlyIndexes(), "yearly", params);
 	}
 
