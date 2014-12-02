@@ -19,6 +19,9 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+
 /**
  * Writes raster layers to a binary output file
  * @author Ahmed Eldawy
@@ -36,21 +39,32 @@ public class RasterOutputFormat extends FileOutputFormat<NullWritable, RasterLay
     private Progressable progress;
     /**The output file where all raster layers are written*/
     private FSDataOutputStream outFile;
+    /**Rasterizer used to merge intermediate raster layers*/
+    private Rasterizer rasterizer;
+    /**The raster layer resulting of merging all written raster layers*/
+    private RasterLayer mergedRasterLayer;
 
     public RasterRecordWriter(FileSystem fs, Path taskOutputPath, JobConf job,
         Progressable progress) throws IOException {
       this.progress = progress;
       this.outFile = fs.create(taskOutputPath);
+      this.rasterizer = Rasterizer.getRasterizer(job);
+      int imageWidth = job.getInt("width", 1000);
+      int imageHeight = job.getInt("height", 1000);
+      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+      this.mergedRasterLayer = rasterizer.create(imageWidth, imageHeight, inputMBR);
     }
 
     @Override
     public void write(NullWritable dummy, RasterLayer r) throws IOException {
-      r.write(outFile);
+      rasterizer.mergeLayers(mergedRasterLayer, r);
       progress.progress();
     }
     
     @Override
     public void close(Reporter reporter) throws IOException {
+      // Write the merged raster layer
+      mergedRasterLayer.write(outFile);
       outFile.close();
     }
   }

@@ -159,4 +159,8 @@ public class GridInfo extends Rectangle {
     double yend = (row == rows - 1)? y2 : (y1 + (y2 - y1) * (row + 1) / rows);
     return new CellInfo(cellId, xstart, ystart, xend, yend);
   }
+  
+  public int getCellId(int column, int row) {
+    return (row * columns + row) + 1;
+  }
 }

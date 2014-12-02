@@ -8,6 +8,7 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.image.BufferedImage;
+import java.util.Iterator;
 
 import org.apache.hadoop.conf.Configuration;
 
@@ -59,6 +60,11 @@ public abstract class Rasterizer {
   public void rasterize(RasterLayer layer, Iterable<? extends Shape> shapes) {
     for (Shape shape : shapes)
       rasterize(layer, shape);
+  }
+
+  public void rasterize(RasterLayer layer, Iterator<? extends Shape> shapes) {
+    while (shapes.hasNext())
+      rasterize(layer, shapes.next());
   }
 
   /**

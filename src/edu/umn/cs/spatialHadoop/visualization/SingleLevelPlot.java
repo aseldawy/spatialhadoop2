@@ -13,6 +13,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Iterator;
+import java.util.Random;
 import java.util.Vector;
 
 import javax.imageio.ImageIO;
@@ -42,7 +43,11 @@ import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GridPartitioner;
+import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
@@ -63,16 +68,17 @@ public class SingleLevelPlot {
   private static final String InputMBR = "mbr";
 
   /**
-   * Mapper of the plot for the case when the data is not repartitioned.
-   * The input key is the MBR of the input partition
-   * The input value is the list of shapes to draw
-   * The output key is an integer to allow combining intermediate layers
-   * The output value is the raster layer that represents that partition
+   * Visualizes a dataset using the existing partitioning of a file.
+   * The mapper creates a partial raster layer for each partition while the reducer
+   * merges the partial rasters together into the final raster layer.
+   * The final raster layer is then written to the output.
+   * 
    * @author Ahmed Eldawy
    *
    */
-  public static class NoPartitionRasterizer extends MapReduceBase 
-    implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, RasterLayer> {
+  public static class NoPartitionPlot extends MapReduceBase 
+    implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, RasterLayer>,
+    Reducer<IntWritable, RasterLayer, NullWritable, RasterLayer> {
     
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -84,6 +90,10 @@ public class SingleLevelPlot {
     private Rasterizer rasterizer;
     /**Value for the output*/
     private IntWritable outputValue;
+    /**Number of reduce jobs*/
+    private int numReducers;
+    /**Random number generator to send the raster layer to a random reducer*/
+    private Random random;
 
     @Override
     public void configure(JobConf job) {
@@ -94,6 +104,8 @@ public class SingleLevelPlot {
       this.outputValue = new IntWritable(0);
       this.rasterizer = Rasterizer.getRasterizer(job);
       this.rasterizer.configure(job);
+      this.numReducers = job.getNumReduceTasks();
+      this.random = new Random();
     }
     
     @Override
@@ -120,35 +132,8 @@ public class SingleLevelPlot {
       // to allow multiple reducers to collaborate in merging intermediate
       // layers. We will need to run a follow up merge process that runs
       // on a single machine in the OutputCommitter function.
-      // TODO use different values for multiple reducers and compare the difference
+      outputValue.set(random.nextInt(numReducers));
       output.collect(outputValue, rasterLayer);
-    }
-  }
-
-  /**
-   * Merges intermediate raster layers to create final output raster layers 
-   * @author Ahmed Eldawy
-   *
-   */
-  public static class NoPartitionMerger extends MapReduceBase 
-    implements Reducer<IntWritable, RasterLayer, NullWritable, RasterLayer> {
-
-    /**The component that rasterizes the shapes*/
-    private Rasterizer rasterizer;
-    /**Generated image width in pixels*/
-    private int imageWidth;
-    /**Generated image height in pixels*/
-    private int imageHeight;
-    private Rectangle inputMBR;
-
-    @Override
-    public void configure(JobConf job) {
-      super.configure(job);
-      this.imageWidth = job.getInt("width", 1000);
-      this.imageHeight = job.getInt("height", 1000);
-      this.rasterizer = Rasterizer.getRasterizer(job);
-      this.rasterizer.configure(job);
-      this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
     }
     
     @Override
@@ -166,6 +151,77 @@ public class SingleLevelPlot {
       output.collect(NullWritable.get(), finalLayer);
     }
   }
+
+  /**
+   * A
+   * @author eldawy
+   *
+   */
+  public static class RepartitionPlot extends MapReduceBase 
+    implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape>,
+    Reducer<IntWritable, Shape, NullWritable, RasterLayer> {
+
+    /**The partitioner used to partitioner the data across reducers*/
+    private Partitioner partitioner;
+    
+    /**The component that rasterizes the shapes*/
+    private Rasterizer rasterizer;
+
+    /**MBR of the input file*/
+    private Rectangle inputMBR;
+    
+    /**Generated image width in pixels*/
+    private int imageWidth;
+    /**Generated image height in pixels*/
+    private int imageHeight;
+
+
+    @Override
+    public void configure(JobConf job) {
+      super.configure(job);
+      this.partitioner = Partitioner.getPartitioner(job);
+      this.rasterizer = Rasterizer.getRasterizer(job);
+      this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
+      this.imageWidth = job.getInt("width", 1000);
+      this.imageHeight = job.getInt("height", 1000);
+
+    }
+    
+    @Override
+    public void map(Rectangle dummy, Iterable<? extends Shape> shapes,
+        final OutputCollector<IntWritable, Shape> output, Reporter reporter)
+        throws IOException {
+      final IntWritable partitionID = new IntWritable();
+      for (final Shape shape : shapes) {
+        partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
+          @Override
+          public void collect(Integer r) {
+            partitionID.set(r);
+            try {
+              output.collect(partitionID, shape);
+            } catch (IOException e) {
+              LOG.warn("Error checking overlapping partitions", e);
+            }
+          }
+        });
+      }
+    }
+
+    @Override
+    public void reduce(IntWritable partitionID, Iterator<Shape> shapes,
+        OutputCollector<NullWritable, RasterLayer> output, Reporter reporter)
+        throws IOException {
+      CellInfo partition = partitioner.getPartition(partitionID.get());
+      int rasterLayerX1 = (int) Math.floor((partition.x1 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
+      int rasterLayerX2 = (int) Math.ceil((partition.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
+      int rasterLayerY1 = (int) Math.floor((partition.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
+      int rasterLayerY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
+      RasterLayer rasterLayer = rasterizer.create(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
+      rasterizer.rasterize(rasterLayer, shapes);
+      output.collect(NullWritable.get(), rasterLayer);
+    }
+  }
+
   
   /**
    * Writes the final image by doing any remaining merges then generating
@@ -181,12 +237,9 @@ public class SingleLevelPlot {
       Path outFile = ImageOutputFormat.getOutputPath(job);
       Rasterizer rasterizer = Rasterizer.getRasterizer(job);
       rasterizer.configure(job);
-      // Create any raster layer to be able to deserialize the output files
-      RasterLayer intermediateLayer = rasterizer.create(1, 1, new Rectangle());
       int width = job.getInt("width", 1000);
       int height = job.getInt("height", 1000);
       Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
-      RasterLayer finalLayer = rasterizer.create(width, height, inputMBR);
 
       boolean vflip = job.getBoolean("vflip", true);
 
@@ -204,6 +257,11 @@ public class SingleLevelPlot {
       });
       
       // Read all intermediate layers and merge into one final layer
+      // Create any raster layer to be able to deserialize the output files
+      RasterLayer intermediateLayer = rasterizer.create(1, 1, new Rectangle());
+      // The final raster layer contains the merge of all intermediate layers
+      RasterLayer finalLayer = rasterizer.create(width, height, inputMBR);
+      LOG.info("Merging "+resultFiles.length+" layers into one");
       for (FileStatus resultFile : resultFiles) {
         FSDataInputStream inputStream = outFs.open(resultFile.getPath());
         while (inputStream.getPos() < resultFile.getLen()) {
@@ -214,6 +272,7 @@ public class SingleLevelPlot {
         inputStream.close();
       }
       
+      LOG.info("Converting the final raster layer into an image");
       // Convert the final layer to image
       BufferedImage finalImage = rasterizer.toImage(finalLayer);
       // Flip image vertically if needed
@@ -278,11 +337,27 @@ public class SingleLevelPlot {
     job.setOutputFormat(RasterOutputFormat.class);
     RasterOutputFormat.setOutputPath(job, outFile);
     
-    // Set mapper, reducer and committer
-    job.setMapperClass(NoPartitionRasterizer.class);
-    job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(rasterizer.getRasterClass());
-    job.setReducerClass(NoPartitionMerger.class);
+    // Set mapper and reducer based on the partitioning scheme
+    String partition = job.get("partition", "none");
+    if (partition.equalsIgnoreCase("none")) {
+      job.setMapperClass(NoPartitionPlot.class);
+      job.setMapOutputKeyClass(IntWritable.class);
+      job.setMapOutputValueClass(rasterizer.getRasterClass());
+      job.setReducerClass(NoPartitionPlot.class);
+    } else {
+      Partitioner partitioner;
+      if (partition.equalsIgnoreCase("grid")) {
+        partitioner = new GridPartitioner(inFile, job);
+      } else {
+        throw new RuntimeException("Unknown partitioning scheme '"+partition+"'");
+      }
+      Shape shape = params.getShape("shape");
+      job.setMapperClass(RepartitionPlot.class);
+      job.setMapOutputKeyClass(IntWritable.class);
+      job.setMapOutputValueClass(shape.getClass());
+      job.setReducerClass(RepartitionPlot.class);
+      Partitioner.setPartitioner(job, partitioner);
+    }
     job.setOutputCommitter(ImageWriter.class);
     
     // Use multithreading in case the job is running locally
@@ -363,7 +438,7 @@ public class SingleLevelPlot {
                 partitionMBR.set(inputMBR);
               
               // Run the rasterize step
-              rasterizer.rasterize(partialRaster, shapes);
+              rasterizer.rasterize(partialRaster, (Iterable<Shape>)shapes);
             }
             reader.close();
           } catch (IOException e) {

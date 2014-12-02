@@ -73,7 +73,7 @@ public class ImageRasterLayer extends RasterLayer {
   public void write(DataOutput out) throws IOException {
     super.write(out);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    ImageIO.write(this.image, "png", baos);
+    ImageIO.write(asImage(), "png", baos);
     baos.close();
     byte[] bytes = baos.toByteArray();
     out.writeInt(bytes.length);
