@@ -34,7 +34,6 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -68,10 +67,9 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 public class SJMR {
   
   /**Class logger*/
-  @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(SJMR.class);
   private static final String PartitionGrid = "SJMR.PartitionGrid";
-  public static final String PartitioiningGridParam = "SJMRPartitioiningGrid";
+  public static final String PartitioiningGridParam = "partition-grid-factor";
   
   public static class IndexedText implements Writable {
     public byte index;
@@ -230,6 +228,9 @@ public class SJMR {
   
   public static class SJMRReduce<S extends Shape> extends MapReduceBase implements
   Reducer<IntWritable, IndexedText, S, S> {
+	 /**Class logger*/
+	 private static final Log sjmrReduceLOG = LogFactory.getLog(SJMRReduce.class);
+	  
     /**Number of files in the input*/
     private int inputFileCount;
     
@@ -244,17 +245,20 @@ public class SJMR {
       grid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
       shape = (S) SpatialSite.createStockShape(job);
       inputFileCount = FileInputFormat.getInputPaths(job).length;
+      sjmrReduceLOG.info("configured the reduced task");
     }
 
     @Override
     public void reduce(IntWritable cellId, Iterator<IndexedText> values,
         final OutputCollector<S, S> output, Reporter reporter)
         throws IOException {
+
+      long t1 = System.currentTimeMillis();	
+      
       // Extract CellInfo (MBR) for duplicate avoidance checking
       final CellInfo cellInfo = grid.getCell(cellId.get());
       
       // Partition retrieved shapes (values) into lists for each file
-      @SuppressWarnings("unchecked")
       List<S>[] shapeLists = new List[inputFileCount];
       for (int i = 0; i < shapeLists.length; i++) {
         shapeLists[i] = new Vector<S>();
@@ -268,6 +272,7 @@ public class SJMR {
       }
       
       // Perform spatial join between the two lists
+      sjmrReduceLOG.info("Joining (" + shapeLists[0].size() +" X "+ shapeLists[1].size()+ ")...");
       SpatialAlgorithms.SpatialJoin_planeSweep(shapeLists[0], shapeLists[1], new ResultCollector2<S, S>() {
         @Override
         public void collect(S x, S y) {
@@ -285,6 +290,10 @@ public class SJMR {
           }
         }
       });
+      
+      long t2 = System.currentTimeMillis();
+      System.out.println("Reducer finished in: "+(t2-t1)+" millis");
+
     }
   }
 
@@ -292,6 +301,7 @@ public class SJMR {
       Path userOutputPath, OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, SJMR.class);
     
+    LOG.info("SJMR journey starts ....");
     FileSystem inFs = inFiles[0].getFileSystem(job);
     Path outputPath = userOutputPath;
     if (outputPath == null) {
@@ -339,10 +349,14 @@ public class SJMR {
     }
     // If the largest file is globally indexed, use its partitions
     int sjmrPartitioningGridFactor = 20;
-    if (params.getSJMRGridPartitioiningFactor(PartitioiningGridParam) > 0);
-    	sjmrPartitioningGridFactor = (int) params.getSJMRGridPartitioiningFactor("SJMRPartitioningGrid");
+    if(params.getSJMRGridPartitioiningFactor(PartitioiningGridParam) > 0){
+    	sjmrPartitioningGridFactor = (int)(params.getSJMRGridPartitioiningFactor(PartitioiningGridParam));
+        LOG.info("SJMRPartitioningGrid is configured");
+    }
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
     int num_cells = (int) (total_size / outFs.getDefaultBlockSize() * sjmrPartitioningGridFactor);
+    LOG.info("Number of cells is configured to be " + num_cells);
+
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(num_cells);
     OperationsParams.setShape(job, PartitionGrid, gridInfo);
@@ -352,8 +366,6 @@ public class SJMR {
     if (OperationsParams.isLocal(job, inFiles)) {
       // Enforce local execution if explicitly set by user or for small files
       job.set("mapred.job.tracker", "local");
-      // Use multithreading too
-      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     }
     
     // Start the job
@@ -371,7 +383,7 @@ public class SJMR {
     System.out.println("<input file 1> - (*) Path to the first input file");
     System.out.println("<input file 2> - (*) Path to the second input file");
     System.out.println("<output file> - Path to output file");
-    System.out.println("-SJMRPartitioiningGrid:<value> - Patitioning grid factor (its default value is 20)");
+    System.out.println("partition-grid-factor:<value> - Patitioning grid factor (its default value is 20)");
     System.out.println("-overwrite - Overwrite output file without notice");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
@@ -381,7 +393,7 @@ public class SJMR {
    * @throws IOException 
    */
   public static void main(String[] args) throws IOException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+	OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] allFiles = params.getPaths();
     if (allFiles.length < 2) {
       System.err.println("Input files are missing");
@@ -405,7 +417,7 @@ public class SJMR {
       printUsage();
       throw new RuntimeException("Input file does not exist");
     }
-
+    
     Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
     long t1 = System.currentTimeMillis();
     long resultSize = sjmr(inputFiles, outputPath, params);
