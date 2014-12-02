@@ -67,7 +67,7 @@ public class GeometricPlot2 {
 
     @Override
     public BufferedImage toImage(RasterLayer layer) {
-      return ((ImageRasterLayer)layer).asImage();
+      return ((ImageRasterLayer)layer).getImage();
     }
   }
   

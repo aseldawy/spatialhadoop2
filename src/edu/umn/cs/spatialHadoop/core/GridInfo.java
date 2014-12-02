@@ -161,6 +161,6 @@ public class GridInfo extends Rectangle {
   }
   
   public int getCellId(int column, int row) {
-    return (row * columns + row) + 1;
+    return (row * columns + column) + 1;
   }
 }

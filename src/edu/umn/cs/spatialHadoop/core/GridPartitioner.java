@@ -46,18 +46,9 @@ public class GridPartitioner extends Partitioner {
    * @param params
    */
   public GridPartitioner(Path inFile, JobConf job) {
-    try {
-      FileSystem inFS = inFile.getFileSystem(job);
-      long inFileLen = inFS.getFileStatus(inFile).getLen();
-      Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-      Path outFile = FileOutputFormat.getOutputPath(job);
-      FileSystem outFS = outFile.getFileSystem(job);
-      long outBlockSize = outFS.getDefaultBlockSize(outFile);
-      this.gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
-      this.gridInfo.calculateCellDimensions(inFileLen, outBlockSize);
-    } catch (IOException e) {
-      LOG.warn("Error partitioning file into grid", e);
-    }
+    Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+    this.gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
+    this.gridInfo.calculateCellDimensions(job.getNumReduceTasks());
   }
 
   @Override

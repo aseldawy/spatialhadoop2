@@ -73,7 +73,7 @@ public class ImageRasterLayer extends RasterLayer {
   public void write(DataOutput out) throws IOException {
     super.write(out);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    ImageIO.write(asImage(), "png", baos);
+    ImageIO.write(getImage(), "png", baos);
     baos.close();
     byte[] bytes = baos.toByteArray();
     out.writeInt(bytes.length);
@@ -90,10 +90,10 @@ public class ImageRasterLayer extends RasterLayer {
   }
 
   public void mergeWith(int xOffset, int yOffset, ImageRasterLayer another) {
-    getOrCreateGrahics(false).drawImage(another.image, xOffset, yOffset, null);
+    getOrCreateGrahics(false).drawImage(another.getImage(), xOffset, yOffset, null);
   }
 
-  public BufferedImage asImage() {
+  public BufferedImage getImage() {
     if (graphics != null) {
       graphics.dispose();
       graphics = null;
