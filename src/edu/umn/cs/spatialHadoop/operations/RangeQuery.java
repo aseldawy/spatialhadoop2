@@ -25,6 +25,8 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
@@ -48,7 +50,14 @@ import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
+import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
 
 /**
  * Performs a range query over a spatial file.
@@ -232,7 +241,7 @@ public class RangeQuery {
     }
   }
   
-  private static long rangeQueryMapReduce(Path inFile, Path outFile, Shape query,
+  public static long rangeQueryMapReduce(Path inFile, Path outFile, Shape query,
       OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, RangeQuery.class);
     boolean overwrite = params.is("overwrite");
@@ -313,17 +322,72 @@ public class RangeQuery {
   }
   
   /**
-   * Performs a range query against the given file
-   * @param input
-   * @param outFile
+   * Runs a range query on the local machine (no MapReduce) and the output is
+   * streamed to the provided result collector. The query might run in parallel
+   * which makes it necessary to design the result collector to accept parallel
+   * calls to the method {@link ResultCollector#collect(Object)}.
+   * You can use {@link ResultCollectorSynchronizer} to synchronize calls to
+   * your ResultCollector if you cannot design yours to be thread safe.
+   * @param inFile
    * @param params
+   * @param output
    * @return
-   * @throws IOException 
+   * @throws IOException
    */
-  public static<S extends Shape> long rangeQuery(Path inFile, Path outFile,
-      Shape query, OperationsParams params) throws IOException {
-    // Either a directory of file or a large file
-    return rangeQueryMapReduce(inFile, outFile, query, params);
+  public static <S extends Shape> long rangeQueryLocal(Path inPath,
+      final Shape queryRange, final S shape,
+      final OperationsParams params, final ResultCollector<S> output) throws IOException {
+    // Set MBR of query shape in job configuration to work with the spatial filter
+    OperationsParams.setShape(params, "rect", queryRange.getMBR());
+    params.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+    final FileSystem inFS = inPath.getFileSystem(params);
+    // 1- Split the input path/file to get splits that can be processed independently
+    ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
+    JobConf job = new JobConf(params);
+    ShapeIterInputFormat.setInputPaths(job, inPath);
+    final InputSplit[] splits = inputFormat.getSplits(job, Runtime.getRuntime().availableProcessors());
+    
+    // 2- Process splits in parallel
+    Vector<Long> results = Parallel.forEach(splits.length, new RunnableRange<Long>() {
+      @Override
+      public Long run(int i1, int i2) {
+        S privateShape = (S) shape.clone();
+        long results = 0;
+        for (int i = i1; i < i2; i++) {
+          try {
+            FileSplit fsplit = (FileSplit) splits[i];
+            if (fsplit.getStart() == 0 && SpatialSite.isRTree(inFS, fsplit.getPath())) {
+              // Handle an RTree
+              RTree<S> rtree = SpatialSite.loadRTree(inFS, fsplit.getPath(), privateShape);
+              results += rtree.search(queryRange, output);
+              rtree.close();
+            } else {
+              // Handle a heap file
+              ShapeIterRecordReader reader = new ShapeIterRecordReader(params, fsplit);
+              reader.setShape(privateShape);
+              Rectangle key = reader.createKey();
+              ShapeIterator shapes = reader.createValue();
+              while (reader.next(key, shapes)) {
+                for (Shape s : shapes) {
+                  if (queryRange.isIntersected(s)) {
+                    results++;
+                    output.collect((S) s);
+                  }
+                }
+              }
+              reader.close();
+            }
+          } catch (IOException e) {
+            LOG.error("Error processing split "+splits[i], e);
+          }
+        }
+        return results;
+      }
+    });
+    long totalResultSize = 0;
+    for (long result : results)
+      totalResultSize += result;
+    return totalResultSize;
   }
   
   private static void printUsage() {
@@ -376,7 +440,7 @@ public class RangeQuery {
         public void run() {
             try {
               int thread_i = threads.indexOf(this);
-              long result_count = rangeQuery(inPath, outPath,
+              long result_count = rangeQueryMapReduce(inPath, outPath,
                   queryRanges[thread_i], params);
               results[thread_i] = result_count;
             } catch (IOException e) {
