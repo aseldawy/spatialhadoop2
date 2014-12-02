@@ -104,7 +104,6 @@ public class MultilevelPlot {
       this.tileWidth = job.getInt("tilewidth", 256);
       this.tileHeight = job.getInt("tileheight", 256);
       this.rasterizer = Rasterizer.getRasterizer(job);
-      this.rasterizer.configure(job);
       int radius = rasterizer.getRadius();
       this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
@@ -172,7 +171,6 @@ public class MultilevelPlot {
       super.configure(job);
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
       this.rasterizer = Rasterizer.getRasterizer(job);
-      this.rasterizer.configure(job);
       this.tileWidth = job.getInt("tilewidth", 256);
       this.tileHeight = job.getInt("tileheight", 256);
     }
@@ -298,7 +296,6 @@ public class MultilevelPlot {
       int tileWidth = job.getInt("tilewidth", 256);
       int tileHeight = job.getInt("tileheight", 256);
       this.rasterizer = Rasterizer.getRasterizer(job);
-      this.rasterizer.configure(job);
       int radius = rasterizer.getRadius();
       this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
@@ -376,7 +373,6 @@ public class MultilevelPlot {
       this.tileWidth = job.getInt("tilewidth", 256);
       this.tileHeight = job.getInt("tileheight", 256);
       this.rasterizer = Rasterizer.getRasterizer(job);
-      this.rasterizer.configure(job);
       this.radius = rasterizer.getRadius();
     }
 

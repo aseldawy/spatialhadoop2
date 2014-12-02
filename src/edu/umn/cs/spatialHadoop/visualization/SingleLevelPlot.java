@@ -103,7 +103,6 @@ public class SingleLevelPlot {
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
       this.outputValue = new IntWritable(0);
       this.rasterizer = Rasterizer.getRasterizer(job);
-      this.rasterizer.configure(job);
       this.numReducers = job.getNumReduceTasks();
       this.random = new Random();
     }
@@ -236,7 +235,6 @@ public class SingleLevelPlot {
       JobConf job = context.getJobConf();
       Path outFile = ImageOutputFormat.getOutputPath(job);
       Rasterizer rasterizer = Rasterizer.getRasterizer(job);
-      rasterizer.configure(job);
       int width = job.getInt("width", 1000);
       int height = job.getInt("height", 1000);
       Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);

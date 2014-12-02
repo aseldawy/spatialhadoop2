@@ -63,7 +63,10 @@ public class GridPartitioner extends Partitioner {
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
-    java.awt.Rectangle overlappingCells = this.gridInfo.getOverlappingCells(shape.getMBR());
+    Rectangle shapeMBR = shape.getMBR();
+    if (shapeMBR == null)
+      return;
+    java.awt.Rectangle overlappingCells = this.gridInfo.getOverlappingCells(shapeMBR);
     for (int x = overlappingCells.x; x < overlappingCells.x + overlappingCells.width; x++) {
       for (int y = overlappingCells.y; y < overlappingCells.y + overlappingCells.height; y++) {
         matcher.collect(this.gridInfo.getCellId(x, y));

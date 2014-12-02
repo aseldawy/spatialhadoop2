@@ -31,7 +31,9 @@ public abstract class Rasterizer {
           job.getClass(RasterizerClass, null, Rasterizer.class);
       if (rasterizerClass == null)
         throw new RuntimeException("Rasterizer class not set in job");
-      return rasterizerClass.newInstance();
+      Rasterizer rasterizer = rasterizerClass.newInstance();
+      rasterizer.configure(job);
+      return rasterizer;
     } catch (InstantiationException e) {
       throw new RuntimeException("Error creating rasterizer", e);
     } catch (IllegalAccessException e) {
