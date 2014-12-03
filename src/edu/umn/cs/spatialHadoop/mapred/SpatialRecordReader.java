@@ -163,6 +163,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     codec = new CompressionCodecFactory(job).getCodec(this.path);
 
     if (isCompressedInput()) {
+      decompressor = CodecPool.getDecompressor(codec);
       in = codec.createInputStream(directIn, decompressor);
       filePosition = directIn;
     } else {
