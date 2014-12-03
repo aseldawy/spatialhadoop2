@@ -201,17 +201,8 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
     if (file.getName().toLowerCase().endsWith(".hdf"))
       return false;
     final CompressionCodec codec = compressionCodecs.getCodec(file);
-    if (codec != null) {
-      Class<?> klass = null;
-      try {
-        klass = Class.forName("org.apache.hadoop.io.compress.SplittableCompressionCodec");
-      } catch (ClassNotFoundException e1) {
-      }
-      
-      if (klass != null && klass.isAssignableFrom(codec.getClass()))
-        return false;
-    }
-    
+    if (codec != null)
+      return false;
 
     try {
       // For performance reasons, skip checking isRTree if the file is on http
