@@ -484,6 +484,7 @@ public class Repartition {
   public static CellInfo[] packInRectangles(Path[] files,
       Path outFile, OperationsParams params, Rectangle fileMBR)
       throws IOException {
+	  boolean clean = params.getBoolean("clean", false);
     final Vector<Point> sample = new Vector<Point>();
     
     float sample_ratio =
@@ -521,7 +522,13 @@ public class Repartition {
     GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     FileSystem outFs = outFile.getFileSystem(params);
     long blocksize = outFs.getDefaultBlockSize();
-    gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
+    if(clean) {
+        //gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)) * 1000);
+        gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
+
+    } else {
+        gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
+    }
     if (fileMBR == null)
       gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
     else

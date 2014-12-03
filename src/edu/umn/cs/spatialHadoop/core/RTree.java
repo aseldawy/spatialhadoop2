@@ -12,6 +12,7 @@
  */
 package edu.umn.cs.spatialHadoop.core;
 
+import java.io.Closeable;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -55,7 +56,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
  * @author Ahmed Eldawy
  *
  */
-public class RTree<T extends Shape> implements Writable, Iterable<T> {
+public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(RTree.class);
   
@@ -1403,5 +1404,11 @@ public class RTree<T extends Shape> implements Writable, Iterable<T> {
     }
     int nodeCount = (int) ((Math.pow(degree, height) - 1) / (degree - 1));
     return TreeHeaderSize + nodeCount * NodeSize;
+  }
+
+  @Override
+  public void close() throws IOException {
+    if (data != null)
+      data.close();
   }
 }

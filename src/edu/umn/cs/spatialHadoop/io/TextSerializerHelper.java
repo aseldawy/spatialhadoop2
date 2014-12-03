@@ -21,6 +21,7 @@ import org.apache.hadoop.io.Text;
 import com.esri.core.geometry.ogc.OGCGeometry;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.impl.PackedCoordinateSequenceFactory;
 import com.vividsolutions.jts.io.ParseException;
 import com.vividsolutions.jts.io.WKBReader;
 import com.vividsolutions.jts.io.WKTReader;
@@ -503,7 +504,7 @@ public final class TextSerializerHelper {
       text.append(new byte[] {(byte) toAppend}, 0, 1);
   }
   
-  private static final WKTReader wktReader = new WKTReader(new GeometryFactory());
+  private static final WKTReader wktReader = new WKTReader(new GeometryFactory(PackedCoordinateSequenceFactory.DOUBLE_FACTORY));
   private static final WKBReader wkbReader = new WKBReader(new GeometryFactory());
   
   public static void serializeGeometry(Text text, Geometry geom, char toAppend) {
