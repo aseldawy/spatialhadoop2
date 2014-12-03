@@ -97,7 +97,6 @@ public class SpatialSite {
   
   public static final String OUTPUT_CELLS = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.CellsInfo";
   public static final String OVERWRITE = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.Overwrite";
-  public static final String RTREE = "edu.umn.cs.spatial.mapReduce.GridOutputFormat.RTree";
 
   
   private static final CompressionCodecFactory compressionCodecs =
@@ -566,4 +565,12 @@ public class SpatialSite {
     return cells.values().toArray(new CellInfo[cells.size()]);
   }
 
+  public static <S extends Shape> RTree<S> loadRTree(FileSystem fs, Path file, S shape) throws IOException {
+    RTree<S> rtree = new RTree<S>();
+    rtree.setStockObject(shape);
+    FSDataInputStream input = fs.open(file);
+    input.skip(8); // Skip the 8 bytes that contains the signature
+    rtree.readFields(input);
+    return rtree;
+  }
 }
