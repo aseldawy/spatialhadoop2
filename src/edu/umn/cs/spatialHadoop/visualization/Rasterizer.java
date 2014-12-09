@@ -60,8 +60,9 @@ public abstract class Rasterizer {
    * @param shapes - a set of shapes to rasterize
    */
   public void rasterize(RasterLayer layer, Iterable<? extends Shape> shapes) {
-    for (Shape shape : shapes)
+    for (Shape shape : shapes) {
       rasterize(layer, shape);
+    }
   }
 
   public void rasterize(RasterLayer layer, Iterator<? extends Shape> shapes) {

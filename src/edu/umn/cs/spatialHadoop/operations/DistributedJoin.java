@@ -74,8 +74,8 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMapNoReplication;
 import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMap;
+import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMapNoReplication;
 
 /**
  * Performs a spatial join between two or more files using the redistribute-join
