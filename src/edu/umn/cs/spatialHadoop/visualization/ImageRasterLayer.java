@@ -90,7 +90,12 @@ public class ImageRasterLayer extends RasterLayer {
     this.image = ImageIO.read(new ByteArrayInputStream(bytes));
   }
 
-  public void mergeWith(int xOffset, int yOffset, ImageRasterLayer another) {
+  public void mergeWith(ImageRasterLayer another) {
+    // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
+    Rectangle finalMBR = this.getInputMBR();
+    Rectangle intermediateLayerMBR = another.getInputMBR();
+    int xOffset = (int) Math.floor((intermediateLayerMBR.x1 - finalMBR.x1) * this.getWidth() / finalMBR.getWidth());
+    int yOffset = (int) Math.floor((intermediateLayerMBR.y1 - finalMBR.y1) * this.getHeight() / finalMBR.getHeight());
     getOrCreateGrahics(false).drawImage(another.getImage(), xOffset, yOffset, null);
   }
 

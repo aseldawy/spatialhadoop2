@@ -101,12 +101,7 @@ public class HeatMapPlot2 {
     @Override
     public void mergeLayers(RasterLayer finalLayer,
         RasterLayer intermediateLayer) {
-      // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
-      Rectangle finalMBR = finalLayer.getInputMBR();
-      Rectangle intermediateLayerMBR = intermediateLayer.getInputMBR();
-      int xOffset = (int) Math.floor((intermediateLayerMBR.x1 - finalMBR.x1) * finalLayer.getWidth() / finalMBR.getWidth());
-      int yOffset = (int) Math.floor((intermediateLayerMBR.y1 - finalMBR.y1) * finalLayer.getHeight() / finalMBR.getHeight());
-      ((FrequencyMapRasterLayer)finalLayer).mergeWith(xOffset, yOffset, (FrequencyMapRasterLayer) intermediateLayer);
+      ((FrequencyMapRasterLayer)finalLayer).mergeWith((FrequencyMapRasterLayer) intermediateLayer);
     }
 
     @Override

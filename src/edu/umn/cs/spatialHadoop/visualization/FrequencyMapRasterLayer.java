@@ -163,7 +163,13 @@ public class FrequencyMapRasterLayer extends RasterLayer {
     }
   }
   
-  public void mergeWith(int xOffset, int yOffset, FrequencyMapRasterLayer another) {
+  public void mergeWith(FrequencyMapRasterLayer another) {
+    // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
+    Rectangle finalMBR = this.getInputMBR();
+    Rectangle intermediateLayerMBR = another.getInputMBR();
+    int xOffset = (int) Math.floor((intermediateLayerMBR.x1 - finalMBR.x1) * this.getWidth() / finalMBR.getWidth());
+    int yOffset = (int) Math.floor((intermediateLayerMBR.y1 - finalMBR.y1) * this.getHeight() / finalMBR.getHeight());
+
     int xmin = Math.max(0, xOffset);
     int ymin = Math.max(0, yOffset);
     int xmax = Math.min(this.getWidth(), another.getWidth() + xOffset);

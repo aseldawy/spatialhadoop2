@@ -18,7 +18,6 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
  * @author Ahmed Eldawy
@@ -57,12 +56,7 @@ public class GeometricPlot2 {
     @Override
     public void mergeLayers(RasterLayer finalLayer,
         RasterLayer intermediateLayer) {
-      // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
-      Rectangle finalMBR = finalLayer.getInputMBR();
-      Rectangle intermediateLayerMBR = intermediateLayer.getInputMBR();
-      int xOffset = (int) Math.floor((intermediateLayerMBR.x1 - finalMBR.x1) * finalLayer.getWidth() / finalMBR.getWidth());
-      int yOffset = (int) Math.floor((intermediateLayerMBR.y1 - finalMBR.y1) * finalLayer.getHeight() / finalMBR.getHeight());
-      ((ImageRasterLayer)finalLayer).mergeWith(xOffset, yOffset, (ImageRasterLayer) intermediateLayer);
+      ((ImageRasterLayer)finalLayer).mergeWith((ImageRasterLayer) intermediateLayer);
     }
 
     @Override
