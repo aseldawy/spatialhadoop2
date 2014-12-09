@@ -8,6 +8,7 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
+import java.awt.Point;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -164,20 +165,15 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   }
   
   public void mergeWith(FrequencyMapRasterLayer another) {
-    // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
-    Rectangle finalMBR = this.getInputMBR();
-    Rectangle intermediateLayerMBR = another.getInputMBR();
-    int xOffset = (int) Math.floor((intermediateLayerMBR.x1 - finalMBR.x1) * this.getWidth() / finalMBR.getWidth());
-    int yOffset = (int) Math.floor((intermediateLayerMBR.y1 - finalMBR.y1) * this.getHeight() / finalMBR.getHeight());
-
-    int xmin = Math.max(0, xOffset);
-    int ymin = Math.max(0, yOffset);
-    int xmax = Math.min(this.getWidth(), another.getWidth() + xOffset);
-    int ymax = Math.min(this.getHeight(), another.getHeight() + yOffset);
+    Point offset = projectToImageSpace(another.getInputMBR().x1, another.getInputMBR().y1);
+    int xmin = Math.max(0, offset.x);
+    int ymin = Math.max(0, offset.y);
+    int xmax = Math.min(this.getWidth(), another.getWidth() + offset.x);
+    int ymax = Math.min(this.getHeight(), another.getHeight() + offset.y);
     for (int x = xmin; x < xmax; x++) {
       for (int y = ymin; y < ymax; y++) {
         this.frequencies[x][y] +=
-            another.frequencies[x - xOffset][y - yOffset];
+            another.frequencies[x - offset.x][y - offset.y];
       }
     }
   }

@@ -9,6 +9,7 @@ package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -91,12 +92,8 @@ public class ImageRasterLayer extends RasterLayer {
   }
 
   public void mergeWith(ImageRasterLayer another) {
-    // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
-    Rectangle finalMBR = this.getInputMBR();
-    Rectangle intermediateLayerMBR = another.getInputMBR();
-    int xOffset = (int) Math.floor((intermediateLayerMBR.x1 - finalMBR.x1) * this.getWidth() / finalMBR.getWidth());
-    int yOffset = (int) Math.floor((intermediateLayerMBR.y1 - finalMBR.y1) * this.getHeight() / finalMBR.getHeight());
-    getOrCreateGrahics(false).drawImage(another.getImage(), xOffset, yOffset, null);
+    Point offset = projectToImageSpace(another.getInputMBR().x1, another.getInputMBR().y1);
+    getOrCreateGrahics(false).drawImage(another.getImage(), offset.x, offset.y, null);
   }
 
   public BufferedImage getImage() {

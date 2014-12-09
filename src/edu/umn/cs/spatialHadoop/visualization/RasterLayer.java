@@ -7,6 +7,7 @@
 
 package edu.umn.cs.spatialHadoop.visualization;
 
+import java.awt.Point;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -61,5 +62,19 @@ public abstract class RasterLayer implements Writable {
   
   public int getHeight() {
     return height;
+  }
+  
+  /**
+   * Project a point from input space to image space.
+   * @param x
+   * @param y
+   * @return
+   */
+  public Point projectToImageSpace(double x, double y) {
+    // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
+    Rectangle finalMBR = this.getInputMBR();
+    int imageX = (int) Math.floor((x - finalMBR.x1) * this.getWidth() / finalMBR.getWidth());
+    int imageY = (int) Math.floor((y - finalMBR.y1) * this.getHeight() / finalMBR.getHeight());
+    return new Point(imageX, imageY);
   }
 }
