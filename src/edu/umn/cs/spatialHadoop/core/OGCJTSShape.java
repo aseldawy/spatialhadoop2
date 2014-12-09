@@ -204,7 +204,7 @@ public class OGCJTSShape implements Shape {
   
   @Override
   public void draw(Graphics g, double xscale, double yscale) {
-    drawJTSGeom(g, geom, xscale, yscale);
+    drawJTSGeom(g, geom, xscale, yscale, false);
   }
 
   /**
@@ -215,23 +215,23 @@ public class OGCJTSShape implements Shape {
    * @param yscale - The scale of the y-axis in terms of pixels/units
    */
   public static void drawJTSGeom(Graphics g, Geometry geom, double xscale,
-      double yscale) {
+      double yscale, boolean fill) {
     if (geom instanceof GeometryCollection) {
       GeometryCollection geom_coll = (GeometryCollection) geom;
       for (int i = 0; i < geom_coll.getNumGeometries(); i++) {
         Geometry sub_geom = geom_coll.getGeometryN(i);
         // Recursive call to draw each geometry
-        drawJTSGeom(g, sub_geom, xscale, yscale);
+        drawJTSGeom(g, sub_geom, xscale, yscale, fill);
       }
     } else if (geom instanceof com.vividsolutions.jts.geom.Polygon) {
       com.vividsolutions.jts.geom.Polygon poly = (com.vividsolutions.jts.geom.Polygon) geom;
 
       for (int i = 0; i < poly.getNumInteriorRing(); i++) {
         LineString ring = poly.getInteriorRingN(i);
-        drawJTSGeom(g, ring, xscale, yscale);
+        drawJTSGeom(g, ring, xscale, yscale, fill);
       }
       
-      drawJTSGeom(g, poly.getExteriorRing(), xscale, yscale);
+      drawJTSGeom(g, poly.getExteriorRing(), xscale, yscale, fill);
     } else if (geom instanceof LineString) {
       LineString line = (LineString) geom;
       double geom_alpha = line.getLength() * (xscale + yscale) / 2.0;
@@ -259,8 +259,10 @@ public class OGCJTSShape implements Shape {
       //graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
       if (n == 1)
         g.fillRect(xpoints[0], ypoints[0], 1, 1);
-      else
+      else if (!fill)
         g.drawPolyline(xpoints, ypoints, n);
+      else
+        g.fillPolygon(xpoints, ypoints, n);
     }
   }
 

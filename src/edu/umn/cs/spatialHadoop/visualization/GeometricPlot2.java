@@ -18,6 +18,7 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
  * @author Ahmed Eldawy
@@ -45,7 +46,6 @@ public class GeometricPlot2 {
     @Override
     public void rasterize(RasterLayer rasterLayer, Shape shape) {
       ImageRasterLayer imgLayer = (ImageRasterLayer) rasterLayer;
-      imgLayer.setColor(strokeColor);
       imgLayer.drawShape(shape);
     }
 

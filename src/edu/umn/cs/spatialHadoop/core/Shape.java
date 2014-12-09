@@ -13,6 +13,7 @@
 package edu.umn.cs.spatialHadoop.core;
 
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 
 import org.apache.hadoop.io.Writable;
 

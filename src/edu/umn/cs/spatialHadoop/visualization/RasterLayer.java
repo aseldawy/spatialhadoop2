@@ -26,6 +26,15 @@ public abstract class RasterLayer implements Writable {
   /**Height of this layer in pixels*/
   protected int height;
   
+  public RasterLayer() {}
+  
+  public RasterLayer(Rectangle inputMBR, int width, int height) {
+    super();
+    this.inputMBR = inputMBR;
+    this.width = width;
+    this.height = height;
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     inputMBR.getMBR().write(out);

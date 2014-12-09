@@ -58,11 +58,12 @@ public class ImageRasterLayer extends RasterLayer {
    * @param width - width the of the image to generate in pixels
    * @param height - height of the image to generate in pixels
    */
- public ImageRasterLayer(Rectangle inputMBR, int width, int height) {
-    this.inputMBR = inputMBR;
-    this.width = width;
-    this.height = height;
+  public ImageRasterLayer(Rectangle inputMBR, int width, int height) {
+    super(inputMBR, width, height);
     image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    // Calculate the scale of the image in terms of pixels per unit
+    xscale = image.getWidth() / getInputMBR().getWidth();
+    yscale = image.getHeight() / getInputMBR().getHeight();
   }
   
   public void setColor(Color color) {
@@ -106,9 +107,6 @@ public class ImageRasterLayer extends RasterLayer {
       // Create graphics for the first time
       graphics = image.createGraphics();
       if (translate) {
-        // Calculate the scale of the image in terms of pixels per unit
-        xscale = image.getWidth() / getInputMBR().getWidth();
-        yscale = image.getHeight() / getInputMBR().getHeight();
         // Translate the graphics to adjust its origin with the input origin
         graphics.translate(-getInputMBR().x1 * xscale, -getInputMBR().y1 * yscale);
         graphics.setColor(color);
