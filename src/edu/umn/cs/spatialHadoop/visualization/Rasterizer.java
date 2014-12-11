@@ -41,6 +41,10 @@ public abstract class Rasterizer {
     }
   }
   
+  /**
+   * Configures this rasterizer according to the MapReduce program.
+   * @param conf
+   */
   public void configure(Configuration conf) {
   }
   
@@ -51,18 +55,17 @@ public abstract class Rasterizer {
    * @param mbr - The minimal bounding rectangle of the layer in the input
    * @return
    */
-  public abstract RasterLayer create(int width, int height, Rectangle mbr);
+  public abstract RasterLayer createRaster(int width, int height, Rectangle mbr);
 
   /**
    * Rasterizes a set of shapes to the given layer
    * @param layer - the layer to rasterize to. This layer has to be created
-   * using the method {@link #create(int, int, Rectangle)}.
+   * using the method {@link #createRaster(int, int, Rectangle)}.
    * @param shapes - a set of shapes to rasterize
    */
   public void rasterize(RasterLayer layer, Iterable<? extends Shape> shapes) {
-    for (Shape shape : shapes) {
+    for (Shape shape : shapes)
       rasterize(layer, shape);
-    }
   }
 
   public void rasterize(RasterLayer layer, Iterator<? extends Shape> shapes) {
@@ -73,7 +76,7 @@ public abstract class Rasterizer {
   /**
    * Rasterizes one shape to the given layer
    * @param layer - the layer to rasterize to. This layer has to be created
-   * using the method {@link #create(int, int, Rectangle)}.
+   * using the method {@link #createRaster(int, int, Rectangle)}.
    * @param shape - the shape to rasterize
    */
   public abstract void rasterize(RasterLayer layer, Shape shape);
@@ -82,21 +85,23 @@ public abstract class Rasterizer {
    * Returns the raster class associated with this rasterizer
    * @return
    */
-  public abstract Class<? extends RasterLayer> getRasterClass();
+  public Class<? extends RasterLayer> getRasterClass() {
+    return this.createRaster(0, 0, new Rectangle()).getClass();
+  }
   
   /**
    * Merges an intermediate layer into the final layer based on its location
    * @param finalLayer
    * @param intermediateLayer
    */
-  public abstract void mergeLayers(RasterLayer finalLayer, RasterLayer intermediateLayer);
+  public abstract void merge(RasterLayer finalLayer, RasterLayer intermediateLayer);
 
   /**
    * Converts a raster layer to an image.
    * @param layer
    * @return
    */
-  public abstract BufferedImage toImage(RasterLayer layer);
+  public abstract BufferedImage write(RasterLayer layer);
   
   /**
    * Returns the radius in pixels that one object might affect in the image.

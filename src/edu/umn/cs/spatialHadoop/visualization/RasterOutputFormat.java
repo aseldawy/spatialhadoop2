@@ -52,12 +52,12 @@ public class RasterOutputFormat extends FileOutputFormat<NullWritable, RasterLay
       int imageWidth = job.getInt("width", 1000);
       int imageHeight = job.getInt("height", 1000);
       Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-      this.mergedRasterLayer = rasterizer.create(imageWidth, imageHeight, inputMBR);
+      this.mergedRasterLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
     }
 
     @Override
     public void write(NullWritable dummy, RasterLayer r) throws IOException {
-      rasterizer.mergeLayers(mergedRasterLayer, r);
+      rasterizer.merge(mergedRasterLayer, r);
       progress.progress();
     }
     

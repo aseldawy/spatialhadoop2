@@ -36,7 +36,7 @@ public class GeometricPlot2 {
     }
 
     @Override
-    public RasterLayer create(int width, int height, Rectangle mbr) {
+    public RasterLayer createRaster(int width, int height, Rectangle mbr) {
       ImageRasterLayer imageRasterLayer = new ImageRasterLayer(mbr, width, height);
       imageRasterLayer.setColor(strokeColor);
       return imageRasterLayer;
@@ -54,13 +54,13 @@ public class GeometricPlot2 {
     }
 
     @Override
-    public void mergeLayers(RasterLayer finalLayer,
+    public void merge(RasterLayer finalLayer,
         RasterLayer intermediateLayer) {
       ((ImageRasterLayer)finalLayer).mergeWith((ImageRasterLayer) intermediateLayer);
     }
 
     @Override
-    public BufferedImage toImage(RasterLayer layer) {
+    public BufferedImage write(RasterLayer layer) {
       return ((ImageRasterLayer)layer).getImage();
     }
   }

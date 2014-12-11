@@ -64,7 +64,7 @@ public class HeatMapPlot2 {
     }
     
     @Override
-    public RasterLayer create(int width, int height, Rectangle mbr) {
+    public RasterLayer createRaster(int width, int height, Rectangle mbr) {
       FrequencyMapRasterLayer rasterLayer = new FrequencyMapRasterLayer(mbr, width, height, radius, smoothType);
       rasterLayer.setGradientInfor(color1, color2, gradientType);
       if (this.minValue <= maxValue)
@@ -99,13 +99,13 @@ public class HeatMapPlot2 {
     }
 
     @Override
-    public void mergeLayers(RasterLayer finalLayer,
+    public void merge(RasterLayer finalLayer,
         RasterLayer intermediateLayer) {
       ((FrequencyMapRasterLayer)finalLayer).mergeWith((FrequencyMapRasterLayer) intermediateLayer);
     }
 
     @Override
-    public BufferedImage toImage(RasterLayer layer) {
+    public BufferedImage write(RasterLayer layer) {
       return ((FrequencyMapRasterLayer)layer).asImage();
     }
     

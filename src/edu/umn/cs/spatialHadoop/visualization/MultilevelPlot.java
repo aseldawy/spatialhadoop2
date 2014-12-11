@@ -134,7 +134,7 @@ public class MultilevelPlot {
                 tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x+1)) / gridSize;
                 tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
                 tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y+1)) / gridSize;
-                rasterLayer = rasterizer.create(tileWidth, tileHeight, tileMBR);
+                rasterLayer = rasterizer.createRaster(tileWidth, tileHeight, tileMBR);
                 rasterLayers.put(key.clone(), rasterLayer);
               }
               rasterizer.rasterize(rasterLayer, shape);
@@ -168,12 +168,12 @@ public class MultilevelPlot {
       tileMBR.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
       tileMBR.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y+1)) / gridSize;
 
-      RasterLayer finalLayer = rasterizer.create(tileWidth, tileHeight, tileMBR);
+      RasterLayer finalLayer = rasterizer.createRaster(tileWidth, tileHeight, tileMBR);
       while (intermediateLayers.hasNext()) {
-        rasterizer.mergeLayers(finalLayer, intermediateLayers.next());
+        rasterizer.merge(finalLayer, intermediateLayers.next());
       }
       
-      BufferedImage image = rasterizer.toImage(finalLayer);
+      BufferedImage image = rasterizer.write(finalLayer);
       output.collect(tileID, image);
     }
   }
@@ -374,7 +374,7 @@ public class MultilevelPlot {
                 tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x+1)) / gridSize;
                 tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
                 tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y+1)) / gridSize;
-                rasterLayer = rasterizer.create(tileWidth, tileHeight, tileMBR);
+                rasterLayer = rasterizer.createRaster(tileWidth, tileHeight, tileMBR);
                 rasterLayers.put(key.clone(), rasterLayer);
               }
               rasterizer.rasterize(rasterLayer, shape);
@@ -394,7 +394,7 @@ public class MultilevelPlot {
       }
       // Write all created layers to the output as images
       for (Map.Entry<TileIndex, RasterLayer> entry : rasterLayers.entrySet()) {
-        BufferedImage image = rasterizer.toImage(entry.getValue());
+        BufferedImage image = rasterizer.write(entry.getValue());
         output.collect(entry.getKey(), image);
       }
     }

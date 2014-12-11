@@ -124,7 +124,7 @@ public class SingleLevelPlot {
       int rasterLayerX2 = (int) Math.ceil((partitionMBR.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
       int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      RasterLayer rasterLayer = rasterizer.create(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partitionMBR);
+      RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partitionMBR);
       rasterizer.rasterize(rasterLayer, shapes);
       // If we set the output value to one constant, all intermediate layers
       // will be merged in one machine. Alternatively, We can set it to several values
@@ -139,11 +139,11 @@ public class SingleLevelPlot {
     public void reduce(IntWritable key, Iterator<RasterLayer> intermediateLayers,
         OutputCollector<NullWritable, RasterLayer> output, Reporter reporter)
         throws IOException {
-      RasterLayer finalLayer = rasterizer.create(imageWidth, imageHeight, inputMBR);
+      RasterLayer finalLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
       
       while (intermediateLayers.hasNext()) {
         RasterLayer intermediateLayer = intermediateLayers.next();
-        rasterizer.mergeLayers(finalLayer, intermediateLayer);
+        rasterizer.merge(finalLayer, intermediateLayer);
         reporter.progress(); // Indicate progress to avoid reducer timeout
       }
       
@@ -215,7 +215,7 @@ public class SingleLevelPlot {
       int rasterLayerX2 = (int) Math.ceil((partition.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
       int rasterLayerY1 = (int) Math.floor((partition.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      RasterLayer rasterLayer = rasterizer.create(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
+      RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
       rasterizer.rasterize(rasterLayer, shapes);
       output.collect(NullWritable.get(), rasterLayer);
     }
@@ -256,23 +256,23 @@ public class SingleLevelPlot {
       
       // Read all intermediate layers and merge into one final layer
       // Create any raster layer to be able to deserialize the output files
-      RasterLayer intermediateLayer = rasterizer.create(1, 1, new Rectangle());
+      RasterLayer intermediateLayer = rasterizer.createRaster(1, 1, new Rectangle());
       // The final raster layer contains the merge of all intermediate layers
-      RasterLayer finalLayer = rasterizer.create(width, height, inputMBR);
+      RasterLayer finalLayer = rasterizer.createRaster(width, height, inputMBR);
       LOG.info("Merging "+resultFiles.length+" layers into one");
       for (FileStatus resultFile : resultFiles) {
         FSDataInputStream inputStream = outFs.open(resultFile.getPath());
         while (inputStream.getPos() < resultFile.getLen()) {
           // Read next raster layer in file
           intermediateLayer.readFields(inputStream);
-          rasterizer.mergeLayers(finalLayer, intermediateLayer);
+          rasterizer.merge(finalLayer, intermediateLayer);
         }
         inputStream.close();
       }
       
       LOG.info("Converting the final raster layer into an image");
       // Convert the final layer to image
-      BufferedImage finalImage = rasterizer.toImage(finalLayer);
+      BufferedImage finalImage = rasterizer.write(finalLayer);
       // Flip image vertically if needed
       if (vflip) {
         AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
@@ -422,7 +422,7 @@ public class SingleLevelPlot {
         }
         rasterizer.configure(params);
         // Create the partial layer that will contain the rasterization of the assigned partitions
-        RasterLayer partialRaster = rasterizer.create(fwidth, fheight, inputMBR);
+        RasterLayer partialRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
         
         for (int i = i1; i < i2; i++) {
           try {
@@ -455,11 +455,11 @@ public class SingleLevelPlot {
       throw new RuntimeException("Error creating rastierizer", e);
     }
     // Create the final raster layer that will contain the final image
-    RasterLayer finalRaster = rasterizer.create(fwidth, fheight, inputMBR);
+    RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
     for (RasterLayer partialRaster : partialRasters) {
-      rasterizer.mergeLayers(finalRaster, partialRaster);
+      rasterizer.merge(finalRaster, partialRaster);
     }
-    BufferedImage finalImage = rasterizer.toImage(finalRaster);
+    BufferedImage finalImage = rasterizer.write(finalRaster);
 
     // Flip image vertically if needed
     if (vflip) {
