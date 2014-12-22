@@ -26,6 +26,7 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -201,24 +202,18 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
     if (file.getName().toLowerCase().endsWith(".hdf"))
       return false;
     final CompressionCodec codec = compressionCodecs.getCodec(file);
-    if (codec != null) {
-      Class<?> klass = null;
-      try {
-        klass = Class.forName("org.apache.hadoop.io.compress.SplittableCompressionCodec");
-      } catch (ClassNotFoundException e1) {
-      }
-      
-      if (klass != null && klass.isAssignableFrom(codec.getClass()))
-        return false;
-    }
+    if (codec != null && !(codec instanceof SplittableCompressionCodec))
+      return false;
     
-
     try {
-      // For performance reasons, skip checking isRTree if the file is on http
-      // isRTree needs to open the file and reads the first 8 bytes. Doing this
-      // in the input format means it will open all files in input which is
-      // very costly.
-      return !(fs instanceof HTTPFileSystem) && !SpatialSite.isRTree(fs, file);
+      // To avoid opening the file and checking the first 8-bytes to look for
+      // an R-tree signature, we never split a file read over HTTP
+      if (fs instanceof HTTPFileSystem)
+        return false;
+      // ... and never split a file less than 150MB to perform better with many small files
+      if (fs.getFileStatus(file).getLen() < 150 * 1024 * 1024)
+        return false;
+      return !SpatialSite.isRTree(fs, file);
     } catch (IOException e) {
       return super.isSplitable(fs, file);
     }
