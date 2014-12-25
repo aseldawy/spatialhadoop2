@@ -50,8 +50,6 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
-import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
@@ -391,6 +389,7 @@ public class SingleLevelPlot {
     // Start reading input file
     InputSplit[] splits;
     FileSystem inFs = inFile.getFileSystem(params);
+    final ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
     FileStatus inFStatus = inFs.getFileStatus(inFile);
     if (inFStatus != null && !inFStatus.isDir()) {
       // One file, retrieve it immediately.
@@ -400,7 +399,6 @@ public class SingleLevelPlot {
       splits = new InputSplit[] {new FileSplit(inFile, 0, inFStatus.getLen(), new String[0])};
     } else {
       JobConf job = new JobConf(params);
-      ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
       ShapeIterInputFormat.addInputPath(job, inFile);
       splits = inputFormat.getSplits(job, 1);
     }
@@ -426,10 +424,10 @@ public class SingleLevelPlot {
         
         for (int i = i1; i < i2; i++) {
           try {
-            RecordReader<Rectangle, ShapeIterator> reader =
-                new ShapeIterRecordReader(params, fsplits[i]);
+            RecordReader<Rectangle, Iterable<? extends Shape>> reader =
+                inputFormat.getRecordReader(fsplits[i], new JobConf(params), null);
             Rectangle partitionMBR = reader.createKey();
-            ShapeIterator shapes = reader.createValue();
+            Iterable<? extends Shape> shapes = reader.createValue();
             
             while (reader.next(partitionMBR, shapes)) {
               if (!partitionMBR.isValid())
@@ -449,6 +447,7 @@ public class SingleLevelPlot {
     Rasterizer rasterizer;
     try {
       rasterizer = rasterizerClass.newInstance();
+      rasterizer.configure(params);
     } catch (InstantiationException e) {
       throw new RuntimeException("Error creating rastierizer", e);
     } catch (IllegalAccessException e) {
