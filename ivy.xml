@@ -2,15 +2,12 @@
     <info organisation="org.apache" module="dependee"/>
 	<configurations>
   	<conf name="common" description="Common libraries to all versions"/>
-  	<conf name="hadoop0" description="Hadoop 0.x libraries"/>
   	<conf name="hadoop1" description="Hadoop 1.x libraries"/>
   	<conf name="hadoop2" description="Hadoop 2.x libraries"/>
 	</configurations>
     
   <dependencies>
     <dependency org="org.apache.hadoop" name="hadoop-core" rev="1.2.1" conf="hadoop1->default"/>
-    <dependency org="org.apache.hadoop" name="hadoop-core" rev="0.20.205.0" conf="hadoop0->default"/>
-    
     
     <dependency org="org.apache.hadoop" name="hadoop-common" rev="2.4.0" conf="hadoop2->default"/>
     <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="2.4.0" conf="hadoop2->default"/>
