@@ -185,4 +185,11 @@ public class NASARectangle extends Rectangle implements NASAShape {
   public long getTimestamp() {
     return this.timestamp;
   }
+  
+  @Override
+  public Rectangle clone() {
+    NASARectangle c = new NASARectangle(this);
+    c.value = this.value;
+    return c;
+  }
 }

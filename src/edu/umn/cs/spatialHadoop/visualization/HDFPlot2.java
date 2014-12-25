@@ -19,27 +19,23 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.visualization.FrequencyMapRasterLayer.GradientType;
-import edu.umn.cs.spatialHadoop.visualization.FrequencyMapRasterLayer.SmoothType;
+import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 
 /**
+ * Draws a heat map for a NASA dataset
  * @author Ahmed Eldawy
  *
  */
-public class HeatMapPlot2 {
+public class HDFPlot2 {
 
-  public static class HeatMapRasterizer extends Rasterizer {
+  public static class HDFRasterizer extends Rasterizer {
 
-    /**Radius of the heat map smooth in pixels*/
-    private int radius;
-    /**Type of smoothing to use in the frequency map*/
-    private SmoothType smoothType;
     /**Color associated with minimum value*/
     private Color color1;
     /**Color associated with maximum value*/
     private Color color2;
     /**Type of gradient to use between minimum and maximum values*/
-    private GradientType gradientType;
+    private HDFRasterLayer.GradientType gradientType;
     
     /**Minimum and maximum values to be used while drawing the heat map*/
     private float minValue, maxValue;
@@ -47,11 +43,10 @@ public class HeatMapPlot2 {
     @Override
     public void configure(Configuration conf) {
       super.configure(conf);
-      this.radius = conf.getInt("radius", 5);
-      this.smoothType = conf.getBoolean("smooth", true)? SmoothType.Gaussian : SmoothType.Flat;
       this.color1 = OperationsParams.getColor(conf, "color1", new Color(0, 0, 255, 0));
       this.color2 = OperationsParams.getColor(conf, "color2", new Color(255, 0, 0, 255));
-      this.gradientType = conf.get("gradient", "hsb").equals("hsb") ? GradientType.GT_HSB : GradientType.GT_RGB;
+      this.gradientType = conf.get("gradient", "hsb").equals("hsb") ?
+          HDFRasterLayer.GradientType.GT_HSB : HDFRasterLayer.GradientType.GT_RGB;
       String rangeStr = conf.get("valuerange");
       if (rangeStr != null) {
         String[] parts = rangeStr.split(",");
@@ -65,7 +60,7 @@ public class HeatMapPlot2 {
     
     @Override
     public RasterLayer createRaster(int width, int height, Rectangle mbr) {
-      FrequencyMapRasterLayer rasterLayer = new FrequencyMapRasterLayer(mbr, width, height, radius, smoothType);
+      HDFRasterLayer rasterLayer = new HDFRasterLayer(mbr, width, height);
       rasterLayer.setGradientInfor(color1, color2, gradientType);
       if (this.minValue <= maxValue)
         rasterLayer.setValueRange(minValue, maxValue);
@@ -74,23 +69,27 @@ public class HeatMapPlot2 {
 
     @Override
     public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      FrequencyMapRasterLayer frequencyMap = (FrequencyMapRasterLayer) rasterLayer;
-      Point center;
+      HDFRasterLayer frequencyMap = (HDFRasterLayer) rasterLayer;
+      double x, y;
       if (shape instanceof Point) {
-        center = (Point) shape;
+        Point np = (Point) shape;
+        x = np.x;
+        y = np.y;
       } else if (shape instanceof Rectangle) {
-        center = ((Rectangle) shape).getCenterPoint();
+        Rectangle r = (Rectangle) shape;
+        x = (r.x1 + r.x2)/2;
+        y = (r.y1 + r.y2)/2;
       } else {
-        Rectangle shapeMBR = shape.getMBR();
-        if (shapeMBR == null)
-          return;
-        center = shapeMBR.getCenterPoint();
+        Rectangle r = shape.getMBR();
+        x = (r.x1 + r.x2)/2;
+        y = (r.y1 + r.y2)/2;
       }
+      
       Rectangle inputMBR = rasterLayer.getInputMBR();
-      int centerx = (int) Math.round((center.x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
-      int centery = (int) Math.round((center.y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+      int centerx = (int) Math.round((x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
+      int centery = (int) Math.round((y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
 
-      frequencyMap.addPoint(centerx, centery);
+      frequencyMap.addPoint(centerx, centery, ((NASAShape)shape).getValue());
     }
 
     @Override
@@ -101,22 +100,17 @@ public class HeatMapPlot2 {
     @Override
     public void merge(RasterLayer finalLayer,
         RasterLayer intermediateLayer) {
-      ((FrequencyMapRasterLayer)finalLayer).mergeWith((FrequencyMapRasterLayer) intermediateLayer);
+      ((HDFRasterLayer)finalLayer).mergeWith((HDFRasterLayer) intermediateLayer);
     }
 
     @Override
     public BufferedImage write(RasterLayer layer) {
-      return ((FrequencyMapRasterLayer)layer).asImage();
-    }
-    
-    @Override
-    public int getRadius() {
-      return this.radius;
+      return ((HDFRasterLayer)layer).asImage();
     }
   }
   
   private static void printUsage() {
-    System.out.println("Plots all shapes to an image");
+    System.out.println("Plots NASA data in HDFS files");
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
@@ -149,9 +143,9 @@ public class HeatMapPlot2 {
 
     long t1 = System.currentTimeMillis();
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFile, outFile, HeatMapRasterizer.class, params);
+      MultilevelPlot.plot(inFile, outFile, HDFRasterizer.class, params);
     } else {
-      SingleLevelPlot.plot(inFile, outFile, HeatMapRasterizer.class, params);
+      SingleLevelPlot.plot(inFile, outFile, HDFRasterizer.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");

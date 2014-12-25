@@ -25,24 +25,18 @@ import org.apache.commons.logging.LogFactory;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 /**
- * A frequency map that can be used to visualize data as heat maps
+ * A frequency map that can be used to draw a weighted heat map for NASA data
  * @author Ahmed Eldawy
  *
  */
-public class FrequencyMapRasterLayer extends RasterLayer {
+public class HDFRasterLayer extends RasterLayer {
   @SuppressWarnings("unused")
-  private static final Log LOG = LogFactory.getLog(FrequencyMapRasterLayer.class);
+  private static final Log LOG = LogFactory.getLog(HDFRasterLayer.class);
   
-  enum SmoothType {Flat, Gaussian};
-  
-  /**The kernel to use for stamping points*/
-  protected float[][] kernel;
-  
-  /**Frequencies*/
-  protected float[][] frequencies;
-
-  /**Radius to smooth nearboy points*/
-  private int radius;
+  /**Sum of temperatures*/
+  protected long[][] sum;
+  /**Count of temperatures*/
+  protected long[][] count;
 
   /**The minimum value to be used while drawing the heat map*/
   private float min;
@@ -53,52 +47,20 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   /**
    * Initialize an empty frequency map to be used to deserialize 
    */
-  public FrequencyMapRasterLayer() { }
+  public HDFRasterLayer() { }
 
   /**
    * Initializes a frequency map with the given dimensions
    * @param width
    * @param height
    */
-  public FrequencyMapRasterLayer(Rectangle inputMBR, int width, int height, int radius, SmoothType smoothType) {
+  public HDFRasterLayer(Rectangle inputMBR, int width, int height) {
     this.inputMBR = inputMBR;
     this.width = width;
     this.height = height;
-    this.frequencies = new float[width][height];
+    this.sum = new long[width][height];
+    this.count = new long[width][height];
     this.min = -1; this.max = -2;
-    initKernel(radius, smoothType);
-  }
-  
-  /**
-   * Initialize a frequency map with the given radius and kernel type
-   * @param radius
-   * @param smoothType
-   */
-  protected void initKernel(int radius, SmoothType smoothType) {
-    this.radius = radius;
-    // initialize the kernel according to the radius and kernel type
-    kernel = new float[radius * 2][radius * 2];
-    switch (smoothType) {
-    case Flat:
-      for (int dx = -radius; dx < radius; dx++) {
-        for (int dy = -radius; dy < radius; dy++) {
-          if (dx * dx + dy * dy < radius * radius) {
-            kernel[dx + radius][dy + radius] = 1.0f;
-          }
-        }
-      }
-      break;
-    case Gaussian:
-      int stdev = 8;
-      // Apply two-dimensional Gaussian function
-      // http://en.wikipedia.org/wiki/Gaussian_function#Two-dimensional_Gaussian_function
-      for (int dx = -radius; dx < radius; dx++) {
-        for (int dy = -radius; dy < radius; dy++) {
-          kernel[dx + radius][dy + radius] = (float) Math.exp(-(dx * dx + dy * dy)
-              / (2.0 * stdev * stdev));
-        }
-      }
-    }
   }
   
   /**
@@ -116,14 +78,15 @@ public class FrequencyMapRasterLayer extends RasterLayer {
     super.write(out);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     GZIPOutputStream gzos = new GZIPOutputStream(baos);
-    ByteBuffer bbuffer = ByteBuffer.allocate(getHeight() * 4 + 8);
+    ByteBuffer bbuffer = ByteBuffer.allocate(getHeight() * 2 * 8 + 8);
     bbuffer.putInt(getWidth());
     bbuffer.putInt(getHeight());
     gzos.write(bbuffer.array(), 0, bbuffer.position());
     for (int x = 0; x < getWidth(); x++) {
       bbuffer.clear();
       for (int y = 0; y < getHeight(); y++) {
-        bbuffer.putFloat(frequencies[x][y]);
+        bbuffer.putLong(sum[x][y]);
+        bbuffer.putLong(count[x][y]);
       }
       gzos.write(bbuffer.array(), 0, bbuffer.position());
     }
@@ -149,9 +112,11 @@ public class FrequencyMapRasterLayer extends RasterLayer {
     int width = bbuffer.getInt();
     int height = bbuffer.getInt();
     // Reallocate memory only if needed
-    if (width != this.getWidth() || height != this.getHeight())
-      frequencies = new float[width][height];
-    buffer = new byte[getHeight() * 4];
+    if (width != this.getWidth() || height != this.getHeight()) {
+      sum = new long[width][height];
+      count = new long[width][height];
+    }
+    buffer = new byte[getHeight() * 2 * 8];
     for (int x = 0; x < getWidth(); x++) {
       int size = 0;
       while (size < buffer.length) {
@@ -159,12 +124,13 @@ public class FrequencyMapRasterLayer extends RasterLayer {
       }
       bbuffer = ByteBuffer.wrap(buffer);
       for (int y = 0; y < getHeight(); y++) {
-        frequencies[x][y] = bbuffer.getFloat();
+        sum[x][y] = bbuffer.getLong();
+        count[x][y] = bbuffer.getLong();
       }
     }
   }
   
-  public void mergeWith(FrequencyMapRasterLayer another) {
+  public void mergeWith(HDFRasterLayer another) {
     Point offset = projectToImageSpace(another.getInputMBR().x1, another.getInputMBR().y1);
     int xmin = Math.max(0, offset.x);
     int ymin = Math.max(0, offset.y);
@@ -172,31 +138,37 @@ public class FrequencyMapRasterLayer extends RasterLayer {
     int ymax = Math.min(this.getHeight(), another.getHeight() + offset.y);
     for (int x = xmin; x < xmax; x++) {
       for (int y = ymin; y < ymax; y++) {
-        this.frequencies[x][y] +=
-            another.frequencies[x - offset.x][y - offset.y];
+        this.sum[x][y] += another.sum[x - offset.x][y - offset.y];
+        this.count[x][y] += another.count[x - offset.x][y - offset.y];
       }
     }
   }
   
   public BufferedImage asImage() {
-    System.setProperty("java.awt.headless", "true");
+    // Calculate the average
+    float[][] avg = new float[getWidth()][getHeight()];
+    for (int x = 0; x < this.getWidth(); x++) {
+      for (int y = 0; y < this.getHeight(); y++) {
+        avg[x][y] = (float)sum[x][y] / count[x][y];
+      }
+    }
     if (min >= max) {
       // Values not set. Autodetect
       min = Float.MAX_VALUE;
       max = -Float.MAX_VALUE;
       for (int x = 0; x < this.getWidth(); x++) {
         for (int y = 0; y < this.getHeight(); y++) {
-          if (frequencies[x][y] < min)
-            min = frequencies[x][y];
-          if (frequencies[x][y] > max)
-            max = frequencies[x][y];
+          if (avg[x][y] < min)
+            min = avg[x][y];
+          if (avg[x][y] > max)
+            max = avg[x][y];
         }
       }
     }
     BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
     for (int x = 0; x < this.getWidth(); x++) {
       for (int y = 0; y < this.getHeight(); y++) {
-        Color color = calculateColor(frequencies[x][y], min, max);
+        Color color = calculateColor(avg[x][y], min, max);
         image.setRGB(x, y, color.getRGB());
       }
     }
@@ -208,23 +180,19 @@ public class FrequencyMapRasterLayer extends RasterLayer {
    * @param cx
    * @param cy
    */
-  public void addPoint(int cx, int cy) {
-    for (int dx = -radius; dx < radius; dx++) {
-      for (int dy = -radius; dy < radius; dy++) {
-        int imgx = cx + dx;
-        int imgy = cy + dy;
-        if (imgx >= 0 && imgx < getWidth() && imgy >= 0 && imgy < getHeight())
-          frequencies[imgx][imgy] += kernel[dx + radius][dy + radius];
-      }
+  public void addPoint(int cx, int cy, int weight) {
+    if (cx >= 0 && cy >= 0 && cx < getWidth() && cy < getHeight()) {
+      sum[cx][cy] += weight;
+      count[cx][cy]++;
     }
   }
 
   public int getWidth() {
-    return frequencies == null? 0 : frequencies.length;
+    return sum == null? 0 : sum.length;
   }
 
   public int getHeight() {
-    return frequencies == null? 0 : frequencies[0].length;
+    return sum == null? 0 : sum[0].length;
   }
   
   /* The following methods are used to compute the gradient */

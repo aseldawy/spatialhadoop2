@@ -1094,16 +1094,19 @@ public class GeometricPlot {
     for (InputSplit split : splits) {
       if (hdfDataset != null) {
         // Read points from the HDF file
-        RecordReader<NASADataset, NASAShape> reader = new HDFRecordReader(params,
+        RecordReader<NASADataset, Iterable<NASAShape>> reader = new HDFRecordReader(params,
             (FileSplit)split, hdfDataset, true);
         NASADataset dataset = reader.createKey();
+        Iterable<NASAShape> v = reader.createValue();
 
-        while (reader.next(dataset, (NASAShape)shape)) {
-          // Skip with a fixed ratio if adaptive sample is set
-          if (adaptiveSample && Math.random() > adaptiveSampleRatio)
-            continue;
-          if (plotRange == null || shape.isIntersected(shape)) {
-            shape.draw(graphics, fileMbr, width, height, 0.0);
+        while (reader.next(dataset, v)) {
+          for (NASAShape val : v) {
+            // Skip with a fixed ratio if adaptive sample is set
+            if (adaptiveSample && Math.random() > adaptiveSampleRatio)
+              continue;
+            if (plotRange == null || shape.isIntersected(shape)) {
+              val.draw(graphics, fileMbr, width, height, 0.0);
+            }
           }
         }
         reader.close();

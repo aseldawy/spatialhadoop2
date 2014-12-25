@@ -26,6 +26,7 @@ import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
 import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
 import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
 import edu.umn.cs.spatialHadoop.visualization.GeometricPlot2;
+import edu.umn.cs.spatialHadoop.visualization.HDFPlot2;
 import edu.umn.cs.spatialHadoop.visualization.HeatMapPlot2;
 
 /**
@@ -92,6 +93,9 @@ public class Main {
           "Plots a heatmap of an input file of points");
 
       pgd.addClass("hdfplot", HDFPlot.class,
+          "Plots NASA datasets in the spatiotemporal range provided by user");
+
+      pgd.addClass("hdfplot2", HDFPlot2.class,
           "Plots NASA datasets in the spatiotemporal range provided by user");
       
       pgd.addClass("makevideo", MakeHDFVideo.class,

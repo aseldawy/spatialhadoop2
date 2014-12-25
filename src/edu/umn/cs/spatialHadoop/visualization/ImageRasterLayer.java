@@ -61,6 +61,7 @@ public class ImageRasterLayer extends RasterLayer {
    */
   public ImageRasterLayer(Rectangle inputMBR, int width, int height) {
     super(inputMBR, width, height);
+    System.setProperty("java.awt.headless", "true");
     image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
     // Calculate the scale of the image in terms of pixels per unit
     xscale = image.getWidth() / getInputMBR().getWidth();
