@@ -69,7 +69,7 @@ public class HDFPlot2 {
 
     @Override
     public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      HDFRasterLayer frequencyMap = (HDFRasterLayer) rasterLayer;
+      HDFRasterLayer hdfMap = (HDFRasterLayer) rasterLayer;
       double x, y;
       if (shape instanceof Point) {
         Point np = (Point) shape;
@@ -89,12 +89,12 @@ public class HDFPlot2 {
       int centerx = (int) Math.round((x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
       int centery = (int) Math.round((y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
 
-      frequencyMap.addPoint(centerx, centery, ((NASAShape)shape).getValue());
+      hdfMap.addPoint(centerx, centery, ((NASAShape)shape).getValue());
     }
 
     @Override
     public Class<? extends RasterLayer> getRasterClass() {
-      return FrequencyMapRasterLayer.class;
+      return HDFRasterLayer.class;
     }
 
     @Override
