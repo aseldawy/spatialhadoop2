@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -356,6 +357,11 @@ public class SingleLevelPlot {
     }
     job.setOutputCommitter(ImageWriter.class);
     
+    // Set number of mappers and reducers
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+    
     // Use multithreading in case the job is running locally
     job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
@@ -434,7 +440,7 @@ public class SingleLevelPlot {
                 partitionMBR.set(inputMBR);
               
               // Run the rasterize step
-              rasterizer.rasterize(partialRaster, (Iterable<Shape>)shapes);
+              rasterizer.rasterize(partialRaster, shapes);
             }
             reader.close();
           } catch (IOException e) {

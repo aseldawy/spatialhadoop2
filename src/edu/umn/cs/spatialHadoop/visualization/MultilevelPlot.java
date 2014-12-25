@@ -24,6 +24,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -461,6 +462,11 @@ public class MultilevelPlot {
     }
     job.setOutputCommitter(MultiLevelOutputCommitter.class);
     
+    // Set number of mappers and reducers
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+
     // Use multithreading in case the job is running locally
     job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
