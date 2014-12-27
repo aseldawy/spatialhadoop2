@@ -53,7 +53,9 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   /**
    * Initialize an empty frequency map to be used to deserialize 
    */
-  public FrequencyMapRasterLayer() { }
+  public FrequencyMapRasterLayer() {
+    System.setProperty("java.awt.headless", "true");
+  }
 
   /**
    * Initializes a frequency map with the given dimensions
@@ -61,6 +63,7 @@ public class FrequencyMapRasterLayer extends RasterLayer {
    * @param height
    */
   public FrequencyMapRasterLayer(Rectangle inputMBR, int width, int height, int radius, SmoothType smoothType) {
+    System.setProperty("java.awt.headless", "true");
     this.inputMBR = inputMBR;
     this.width = width;
     this.height = height;
@@ -179,7 +182,6 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   }
   
   public BufferedImage asImage() {
-    System.setProperty("java.awt.headless", "true");
     if (min >= max) {
       // Values not set. Autodetect
       min = Float.MAX_VALUE;

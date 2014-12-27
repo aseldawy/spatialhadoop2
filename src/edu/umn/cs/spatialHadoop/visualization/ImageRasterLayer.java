@@ -50,7 +50,9 @@ public class ImageRasterLayer extends RasterLayer {
   private Color color;
 
   /**Default constructor is necessary to be able to deserialize it*/
-  public ImageRasterLayer() {}
+  public ImageRasterLayer() {
+    System.setProperty("java.awt.headless", "true");
+  }
 
   /**
    * Creates a raster layer of the given size for a given (portion of) input
