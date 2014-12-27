@@ -118,7 +118,7 @@ public class ImageRasterLayer extends RasterLayer {
       }
       if (translate) {
         // Translate the graphics to adjust its origin with the input origin
-        graphics.translate(-getInputMBR().x1 * xscale, -getInputMBR().y1 * yscale);
+        graphics.translate((int)(-getInputMBR().x1 * xscale), (int)(-getInputMBR().y1 * yscale));
         graphics.setColor(color);
       }
     }
