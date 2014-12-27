@@ -50,6 +50,13 @@ public class GridPartitioner extends Partitioner {
     this.gridInfo.calculateCellDimensions(numOfPartitions);
   }
 
+  public GridPartitioner(Path inFile, JobConf job, int width, int height) {
+    Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+    this.gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
+    this.gridInfo.columns = width;
+    this.gridInfo.rows = height;
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     this.gridInfo.write(out);
