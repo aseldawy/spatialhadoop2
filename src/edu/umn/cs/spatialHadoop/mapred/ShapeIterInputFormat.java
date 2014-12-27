@@ -19,17 +19,17 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
+import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * Reads a file stored as a list of RTrees
  * @author eldawy
  *
  */
-public class ShapeIterInputFormat extends SpatialInputFormat<Rectangle, ShapeIterator> {
+public class ShapeIterInputFormat extends SpatialInputFormat<Rectangle, Iterable<? extends Shape>> {
 
 	@Override
-	public RecordReader<Rectangle, ShapeIterator> getRecordReader(InputSplit split,
+	public RecordReader<Rectangle, Iterable<? extends Shape>> getRecordReader(InputSplit split,
 	    JobConf job, Reporter reporter) throws IOException {
 	  if (reporter != null)
 	    reporter.setStatus(split.toString());

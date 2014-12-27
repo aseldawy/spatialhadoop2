@@ -51,7 +51,7 @@ public class Parallel {
   
   public static <T> Vector<T> forEach(int size, RunnableRange<T> r) {
     try {
-      int parallelism = Runtime.getRuntime().availableProcessors() * 2;
+      int parallelism = Math.min(size, Runtime.getRuntime().availableProcessors());
       final int[] partitions = new int[parallelism + 1];
       for (int i_thread = 0; i_thread <= parallelism; i_thread++)
         partitions[i_thread] = i_thread * size / parallelism;

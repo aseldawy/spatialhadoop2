@@ -53,7 +53,6 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
@@ -245,8 +244,6 @@ public class RangeQuery {
     JobConf job = new JobConf(params, RangeQuery.class);
     boolean overwrite = params.is("overwrite");
     Shape shape = params.getShape("shape");
-    boolean background = params.is("background");
-    
     FileSystem outFs = inFile.getFileSystem(job);
     Path outputPath = outFile;
     if (outputPath == null) {
@@ -302,7 +299,7 @@ public class RangeQuery {
     }
 
     // Submit the job
-    if (!background) {
+    if (!params.is("background")) {
       RunningJob runningJob = JobClient.runJob(job);
       Counters counters = runningJob.getCounters();
       Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);

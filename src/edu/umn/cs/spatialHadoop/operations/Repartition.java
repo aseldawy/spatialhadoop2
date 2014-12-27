@@ -112,22 +112,12 @@ public class Repartition {
       // This ensures that a replicated shape in an already partitioned file
       // doesn't get send to output from all partitions
       if (!cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
-        int count = 0;
-        if (shape.distanceTo(342.05006382500676,0.3955442636904839) < 0.001) {
-          System.out.println("yalllllllllla");
-        }
         for (int cellIndex = 0; cellIndex < cellInfos.length; cellIndex++) {
           if (cellInfos[cellIndex].isIntersected(shape_mbr)) {
             cellId.set((int) cellInfos[cellIndex].cellId);
             output.collect(cellId, shape);
-            count++;
           }
         }
-        if (count != 1) {
-          System.out.println("Yalla "+shape_mbr);
-        }
-      } else {
-        System.out.println("Yalla2 "+shape);
       }
     }
   }

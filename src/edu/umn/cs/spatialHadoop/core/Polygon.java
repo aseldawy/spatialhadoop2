@@ -128,4 +128,9 @@ public class Polygon extends java.awt.Polygon implements Shape {
       int imageHeight, double scale) {
     throw new RuntimeException("Not implemented yet");
   }
+  
+  @Override
+  public void draw(Graphics g, double xscale, double yscale) {
+    throw new RuntimeException("Not implemented yet");
+  }
 }

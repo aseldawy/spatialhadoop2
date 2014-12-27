@@ -329,6 +329,15 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
     g.fillRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
   }
   
+  @Override
+  public void draw(Graphics g, double xscale, double yscale) {
+    int imgx1 = (int) Math.round(this.x1 * xscale);
+    int imgy1 = (int) Math.round(this.y1 * yscale);
+    int imgx2 = (int) Math.round(this.x2 * xscale);
+    int imgy2 = (int) Math.round(this.y2 * yscale);
+    g.fillRect(imgx1, imgy1, imgx2 - imgx1 + 1, imgy2 - imgy1 + 1);
+  }
+  
   public Rectangle buffer(double dw, double dh) {
     return new Rectangle(this.x1 - dw, this.y1 - dh, this.x2 + dw, this.y2 + dh);
   }
