@@ -19,6 +19,7 @@ import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
@@ -110,7 +111,11 @@ public class ImageRasterLayer extends RasterLayer {
   protected Graphics2D getOrCreateGrahics(boolean translate) {
     if (graphics == null) {
       // Create graphics for the first time
-      graphics = image.createGraphics();
+      try {
+        graphics = image.createGraphics();
+      } catch (Throwable e) {
+        graphics = new SimpleGraphics(image);
+      }
       if (translate) {
         // Translate the graphics to adjust its origin with the input origin
         graphics.translate(-getInputMBR().x1 * xscale, -getInputMBR().y1 * yscale);
