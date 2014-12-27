@@ -542,16 +542,15 @@ public class SimpleGraphics extends Graphics2D {
 
   @Override
   public void drawPolyline(int[] xPoints, int[] yPoints, int nPoints) {
-    throw new RuntimeException("Not implemented");
-    
+    for (int i = 1; i < nPoints; i++)
+      drawLine(xPoints[i-1], yPoints[i-1], xPoints[i], yPoints[i]);
   }
 
   @Override
   public void drawPolygon(int[] xPoints, int[] yPoints, int nPoints) {
     // Do not apply the transformation here as drawLine will apply it
-    for (int i = 1; i < nPoints; i++) {
+    for (int i = 1; i < nPoints; i++)
       drawLine(xPoints[i-1], yPoints[i-1], xPoints[i], yPoints[i]);
-    }
     drawLine(xPoints[nPoints-1], yPoints[nPoints-1], xPoints[0], yPoints[0]);
   }
 
