@@ -312,9 +312,9 @@ public class SingleLevelPlot {
     OperationsParams.setShape(job, InputMBR, inputMBR);
     
     // Adjust width and height if aspect ratio is to be kept
+    int width = job.getInt("width", 1000);
+    int height = job.getInt("height", 1000);
     if (params.getBoolean("keepratio", true)) {
-      int width = job.getInt("width", 1000);
-      int height = job.getInt("height", 1000);
       // Adjust width and height to maintain aspect ratio
       if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height) {
         // Fix width and change height
@@ -345,6 +345,9 @@ public class SingleLevelPlot {
       Partitioner partitioner;
       if (partition.equalsIgnoreCase("grid")) {
         partitioner = new GridPartitioner(inFile, job);
+      } else if (partition.equalsIgnoreCase("pixel")) {
+        // Use pixel level partitioning (one partition per pixel)
+        partitioner = new GridPartitioner(inFile, job, width, height);
       } else {
         throw new RuntimeException("Unknown partitioning scheme '"+partition+"'");
       }
