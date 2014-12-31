@@ -69,6 +69,8 @@ public class GridPartitioner extends Partitioner {
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
+    if (shape == null)
+      return;
     Rectangle shapeMBR = shape.getMBR();
     if (shapeMBR == null)
       return;
