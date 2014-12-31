@@ -47,9 +47,6 @@ public class Main {
     ProgramDriver pgd = new ProgramDriver();
     try {
       ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-      System.out.println("Mappers "+clusterStatus.getMaxMapTasks());
-      System.out.println("Reducers "+clusterStatus.getMaxReduceTasks());
-      
       
       pgd.addClass("rangequery", RangeQuery.class,
           "Finds all objects in the query range given by a rectangle");

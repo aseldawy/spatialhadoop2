@@ -88,6 +88,8 @@ public class MultilevelPlot {
     private double bufferSizeXMaxLevel;
 
     private double bufferSizeYMaxLevel;
+
+    private boolean writeOutput;
     
     @Override
     public void configure(JobConf job) {
@@ -109,6 +111,8 @@ public class MultilevelPlot {
       int radius = rasterizer.getRadius();
       this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
+      // Whether to write the final image or not
+      this.writeOutput = job.getBoolean("output", true);
     }
     
     @Override
@@ -175,7 +179,8 @@ public class MultilevelPlot {
       }
       
       BufferedImage image = rasterizer.write(finalLayer);
-      output.collect(tileID, image);
+      if (writeOutput)
+        output.collect(tileID, image);
     }
   }
 
@@ -195,6 +200,7 @@ public class MultilevelPlot {
       Path outPath = PyramidOutputFormat.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
 
+      System.out.println("Writing default empty image");
       // Write a default empty image to be displayed for non-generated tiles
       int tileWidth = job.getInt("tilewidth", 256);
       int tileHeight = job.getInt("tileheight", 256);
@@ -221,6 +227,7 @@ public class MultilevelPlot {
       }
 
       // Add an HTML file that visualizes the result using Google Maps
+      System.out.println("Writing the HTML viewer file");
       LineReader templateFileReader = new LineReader(getClass()
           .getResourceAsStream("/zoom_view.html"));
       PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath,
@@ -269,6 +276,7 @@ public class MultilevelPlot {
     private int tileWidth, tileHeight;
     /**Radius of effect of each shape*/
     private int radius;
+    private boolean writeOutput;
 
     @Override
     public void configure(JobConf job) {
@@ -295,6 +303,8 @@ public class MultilevelPlot {
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevelToReplicate));
       this.tileWidth = job.getInt("tilewidth", 256);
       this.tileHeight = job.getInt("tileheight", 256);
+      // Whether to write the final image or not
+      this.writeOutput = job.getBoolean("output", true);
     }
     
     @Override
@@ -396,7 +406,8 @@ public class MultilevelPlot {
       // Write all created layers to the output as images
       for (Map.Entry<TileIndex, RasterLayer> entry : rasterLayers.entrySet()) {
         BufferedImage image = rasterizer.write(entry.getValue());
-        output.collect(entry.getKey(), image);
+        if (writeOutput)
+          output.collect(entry.getKey(), image);
       }
     }
 

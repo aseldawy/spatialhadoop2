@@ -258,7 +258,7 @@ public class SingleLevelPlot {
       RasterLayer intermediateLayer = rasterizer.createRaster(1, 1, new Rectangle());
       // The final raster layer contains the merge of all intermediate layers
       RasterLayer finalLayer = rasterizer.createRaster(width, height, inputMBR);
-      LOG.info("Merging "+resultFiles.length+" layers into one");
+      System.out.println("Merging "+resultFiles.length+" layers into one");
       for (FileStatus resultFile : resultFiles) {
         FSDataInputStream inputStream = outFs.open(resultFile.getPath());
         while (inputStream.getPos() < resultFile.getLen()) {
@@ -269,7 +269,7 @@ public class SingleLevelPlot {
         inputStream.close();
       }
       
-      LOG.info("Converting the final raster layer into an image");
+      System.out.println("Converting the final raster layer into an image");
       // Convert the final layer to image
       BufferedImage finalImage = rasterizer.write(finalLayer);
       // Flip image vertically if needed
@@ -281,7 +281,7 @@ public class SingleLevelPlot {
       }
       
       // Finally, write the resulting image to the given output path
-      LOG.info("Writing final image");
+      System.out.println("Writing final image");
       OutputStream outputFile = outFs.create(outFile);
       ImageIO.write(finalImage, "png", outputFile);
       outputFile.close();
@@ -337,11 +337,13 @@ public class SingleLevelPlot {
     // Set mapper and reducer based on the partitioning scheme
     String partition = job.get("partition", "none");
     if (partition.equalsIgnoreCase("none")) {
+      LOG.info("Using no-partition plot");
       job.setMapperClass(NoPartitionPlot.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(rasterizer.getRasterClass());
       job.setReducerClass(NoPartitionPlot.class);
     } else {
+      LOG.info("Using repartition plot");
       Partitioner partitioner;
       if (partition.equalsIgnoreCase("grid")) {
         partitioner = new GridPartitioner(inFile, job);
