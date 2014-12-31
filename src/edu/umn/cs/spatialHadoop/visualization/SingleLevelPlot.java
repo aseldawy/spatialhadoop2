@@ -182,7 +182,6 @@ public class SingleLevelPlot {
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
-
     }
     
     @Override
@@ -190,6 +189,7 @@ public class SingleLevelPlot {
         final OutputCollector<IntWritable, Shape> output, Reporter reporter)
         throws IOException {
       final IntWritable partitionID = new IntWritable();
+      int i = 0;
       for (final Shape shape : shapes) {
         partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
           @Override
@@ -202,6 +202,9 @@ public class SingleLevelPlot {
             }
           }
         });
+        if (((++i) & 0xffff) == 0) {
+          reporter.progress();
+        }
       }
     }
 
