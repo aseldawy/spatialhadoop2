@@ -91,6 +91,7 @@ public class DistributedJoin {
 	public static int maxShapesInOneRead = 2000;
 	public static boolean isOneShotReadMode = true;
 	public static boolean isGeneralRepartitionMode = true;
+	public static boolean isReduceInactive = false;
 
 	private static final String RepartitionJoinIndexPath = "DJ.RepartitionJoinIndexPath";
 
@@ -692,7 +693,7 @@ public class DistributedJoin {
 		public void reduce(IntWritable cellIndex, Iterator<T> shapes,
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
 				throws IOException {
-
+			
 			final FileSystem fs = indexDir.getFileSystem(new Configuration());
 
 			GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs,
