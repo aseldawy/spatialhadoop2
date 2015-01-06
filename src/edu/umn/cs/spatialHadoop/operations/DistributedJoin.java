@@ -1082,7 +1082,6 @@ public class DistributedJoin {
 	}
 
 	public static void main(String[] args) throws IOException {
-		isReduceInactive = true;
 		OperationsParams params = new OperationsParams(
 				new GenericOptionsParser(args));
 		Path[] allFiles = params.getPaths();
@@ -1119,6 +1118,10 @@ public class DistributedJoin {
 		if (params.get("direct-join").equals("yes")) {
 			System.out
 					.println("Reparition the smaller dataset then join the two datasets directly");
+		}
+		
+		if (params.get("repartition-only").equals("yes")) {
+			isReduceInactive = true;
 		}
 
 		long result_size;
