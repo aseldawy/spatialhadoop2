@@ -70,6 +70,8 @@ public class SJMR {
   private static final Log LOG = LogFactory.getLog(SJMR.class);
   private static final String PartitionGrid = "SJMR.PartitionGrid";
   public static final String PartitioiningGridParam = "partition-grid-factor";
+  private static final String InactiveMode = "SJMR.InactiveMode";
+  public static boolean isReduceInactive = false;
   
   public static class IndexedText implements Writable {
     public byte index;
@@ -236,7 +238,7 @@ public class SJMR {
     
     /**List of cells used by the reducer*/
     private GridInfo grid;
-
+    private boolean inactiveMode;
     private S shape;
     
     @Override
@@ -245,6 +247,7 @@ public class SJMR {
       grid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
       shape = (S) SpatialSite.createStockShape(job);
       inputFileCount = FileInputFormat.getInputPaths(job).length;
+      inactiveMode = OperationsParams.getInactiveModeFlag(job, InactiveMode);
       sjmrReduceLOG.info("configured the reduced task");
     }
 
@@ -252,7 +255,8 @@ public class SJMR {
     public void reduce(IntWritable cellId, Iterator<IndexedText> values,
         final OutputCollector<S, S> output, Reporter reporter)
         throws IOException {
-
+     if(!inactiveMode){
+ 	  LOG.info("Start reduce() logic now !!!"); 
       long t1 = System.currentTimeMillis();	
       
       // Extract CellInfo (MBR) for duplicate avoidance checking
@@ -294,7 +298,10 @@ public class SJMR {
       long t2 = System.currentTimeMillis();
       System.out.println("Reducer finished in: "+(t2-t1)+" millis");
 
+    }else{
+      LOG.info("Nothing to do !!!");	
     }
+   }
   }
 
   public static <S extends Shape> long sjmr(Path[] inFiles,
@@ -357,6 +364,8 @@ public class SJMR {
     int num_cells = (int) (total_size / outFs.getDefaultBlockSize() * sjmrPartitioningGridFactor);
     LOG.info("Number of cells is configured to be " + num_cells);
 
+    OperationsParams.setInactiveModeFlag(job, InactiveMode, isReduceInactive);
+    
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(num_cells);
     OperationsParams.setShape(job, PartitionGrid, gridInfo);
@@ -417,6 +426,11 @@ public class SJMR {
       printUsage();
       throw new RuntimeException("Input file does not exist");
     }
+    
+    if (params.get("repartition-only").equals("yes")) {
+		System.out.println("Repartition-only is true");
+		isReduceInactive = true;
+	}
     
     Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
     long t1 = System.currentTimeMillis();
