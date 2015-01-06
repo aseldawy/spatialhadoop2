@@ -1121,6 +1121,7 @@ public class DistributedJoin {
 		}
 		
 		if (params.get("repartition-only").equals("yes")) {
+			System.out.println("Repartition-only is true");
 			isReduceInactive = true;
 		}
 
