@@ -510,6 +510,25 @@ public class OperationsParams extends Configuration {
 		return sjmrPartitioningGrid;
 	}
 
+	public static boolean getInactiveModeFlag(Configuration conf,
+			String key) {
+		String inactiveModeFlag_str = conf.get(key);
+		if (inactiveModeFlag_str == null)
+			LOG.error("Your inactiveModeFlag is not set");
+		return Boolean.parseBoolean(inactiveModeFlag_str);
+	}
+	
+	public static void setInactiveModeFlag(Configuration conf,
+			String param, boolean inactiveModeFlag) {
+		String str = null;
+		if (inactiveModeFlag){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
 	public static Path getRepartitionJoinIndexPath(Configuration conf,
 			String key) {
 		String repartitionJoinIndexPath_str = conf.get(key);

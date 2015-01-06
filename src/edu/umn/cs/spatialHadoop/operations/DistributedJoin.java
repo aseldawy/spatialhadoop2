@@ -94,7 +94,8 @@ public class DistributedJoin {
 	public static boolean isReduceInactive = false;
 
 	private static final String RepartitionJoinIndexPath = "DJ.RepartitionJoinIndexPath";
-
+	private static final String InactiveMode = "DJ.InactiveMode";
+	
 	public static class SpatialJoinFilter extends DefaultBlockFilter {
 		@Override
 		public void selectCellPairs(GlobalIndex<Partition> gIndex1,
@@ -680,6 +681,7 @@ public class DistributedJoin {
 
 		private Path indexDir;
 		private Shape shape;
+		private boolean inactiveMode;
 
 		@Override
 		public void configure(JobConf job) {
@@ -687,13 +689,14 @@ public class DistributedJoin {
 			indexDir = OperationsParams.getRepartitionJoinIndexPath(job,
 					RepartitionJoinIndexPath);
 			shape = OperationsParams.getShape(job, "shape");
+			inactiveMode = OperationsParams.getInactiveModeFlag(job, InactiveMode);
 		}
 
 		@Override
 		public void reduce(IntWritable cellIndex, Iterator<T> shapes,
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
 				throws IOException {
-		 if(isReduceInactive == false){
+		 if(!inactiveMode){
 			LOG.info("Start reduce() logic now !!!");
 			final FileSystem fs = indexDir.getFileSystem(new Configuration());
 
@@ -826,7 +829,8 @@ public class DistributedJoin {
 				inputFiles[1 - fileToRepartition]);
 		OperationsParams.setRepartitionJoinIndexPath(repartitionJoinJob,
 				RepartitionJoinIndexPath, inputFiles[1 - fileToRepartition]);
-
+		OperationsParams.setInactiveModeFlag(repartitionJoinJob, InactiveMode, isReduceInactive);
+		
 		CellInfo[] cellsInfo = SpatialSite.cellsOf(fs,
 				inputFiles[1 - fileToRepartition]);
 
@@ -1124,6 +1128,7 @@ public class DistributedJoin {
 		}
 		
 		if (params.get("repartition-only").equals("yes")) {
+			System.out.println("Repartition-only is true");
 			isReduceInactive = true;
 		}
 
