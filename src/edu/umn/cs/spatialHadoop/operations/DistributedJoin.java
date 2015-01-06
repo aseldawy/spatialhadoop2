@@ -693,7 +693,8 @@ public class DistributedJoin {
 		public void reduce(IntWritable cellIndex, Iterator<T> shapes,
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
 				throws IOException {
-		 if(!isReduceInactive){
+		 if(isReduceInactive == false){
+			LOG.info("Start reduce() logic now !!!");
 			final FileSystem fs = indexDir.getFileSystem(new Configuration());
 
 			GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs,
@@ -772,6 +773,8 @@ public class DistributedJoin {
 			}
 
 			reporter.progress();
+		}else{
+			LOG.info("Nothing to do !!!");
 		}
 	  }
 	}
@@ -1121,7 +1124,6 @@ public class DistributedJoin {
 		}
 		
 		if (params.get("repartition-only").equals("yes")) {
-			System.out.println("Repartition-only is true");
 			isReduceInactive = true;
 		}
 
