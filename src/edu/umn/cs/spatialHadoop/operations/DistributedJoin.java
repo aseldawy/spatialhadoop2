@@ -693,7 +693,7 @@ public class DistributedJoin {
 		public void reduce(IntWritable cellIndex, Iterator<T> shapes,
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
 				throws IOException {
-			
+		 if(!isReduceInactive){
 			final FileSystem fs = indexDir.getFileSystem(new Configuration());
 
 			GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs,
@@ -773,7 +773,7 @@ public class DistributedJoin {
 
 			reporter.progress();
 		}
-
+	  }
 	}
 
 	/**
@@ -1082,6 +1082,7 @@ public class DistributedJoin {
 	}
 
 	public static void main(String[] args) throws IOException {
+		isReduceInactive = true;
 		OperationsParams params = new OperationsParams(
 				new GenericOptionsParser(args));
 		Path[] allFiles = params.getPaths();
