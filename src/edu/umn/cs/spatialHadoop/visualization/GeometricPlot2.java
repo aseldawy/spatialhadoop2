@@ -8,8 +8,13 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
+import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
+import java.io.DataOutputStream;
 import java.io.IOException;
+
+import javax.imageio.ImageIO;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -60,8 +65,18 @@ public class GeometricPlot2 {
     }
 
     @Override
-    public BufferedImage write(RasterLayer layer) {
-      return ((ImageRasterLayer)layer).getImage();
+    public void writeImage(RasterLayer layer, DataOutputStream out,
+        boolean vflip) throws IOException {
+      BufferedImage img =  ((FrequencyMapRasterLayer)layer).asImage();
+      // Flip image vertically if needed
+      if (vflip) {
+        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
+        tx.translate(0, -img.getHeight());
+        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
+        img = op.filter(img, null);
+      }
+      
+      ImageIO.write(img, "png", out);
     }
   }
   

@@ -64,7 +64,7 @@ public class MultilevelPlot {
   
   public static class FlatPartition extends MapReduceBase 
     implements Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, RasterLayer>,
-    Reducer<TileIndex, RasterLayer, TileIndex, BufferedImage> {
+    Reducer<TileIndex, RasterLayer, TileIndex, RasterLayer> {
     
     /**Minimum and maximum levels of the pyramid to plot (inclusive and zero-based)*/
     private int minLevel, maxLevel;
@@ -164,7 +164,7 @@ public class MultilevelPlot {
     
     @Override
     public void reduce(TileIndex tileID, Iterator<RasterLayer> intermediateLayers,
-        OutputCollector<TileIndex, BufferedImage> output, Reporter reporter)
+        OutputCollector<TileIndex, RasterLayer> output, Reporter reporter)
         throws IOException {
       Rectangle tileMBR = new Rectangle();
       int gridSize = 1 << tileID.level;
@@ -178,9 +178,8 @@ public class MultilevelPlot {
         rasterizer.merge(finalLayer, intermediateLayers.next());
       }
       
-      BufferedImage image = rasterizer.write(finalLayer);
       if (writeOutput)
-        output.collect(tileID, image);
+        output.collect(tileID, finalLayer);
     }
   }
 
@@ -258,7 +257,7 @@ public class MultilevelPlot {
    */
   public static class PyramidPartition extends MapReduceBase 
     implements Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Shape>,
-    Reducer<TileIndex, Shape, TileIndex, BufferedImage> {
+    Reducer<TileIndex, Shape, TileIndex, RasterLayer> {
 
     private int minLevel, maxLevel;
     /**Maximum level to replicate to*/
@@ -340,7 +339,7 @@ public class MultilevelPlot {
     
     @Override
     public void reduce(TileIndex tileID, Iterator<Shape> shapes,
-        OutputCollector<TileIndex, BufferedImage> output, Reporter reporter)
+        OutputCollector<TileIndex, RasterLayer> output, Reporter reporter)
         throws IOException {
       // Find first and last levels to generate in this reducer
       int level1 = Math.max(tileID.level, minLevel);
@@ -409,9 +408,8 @@ public class MultilevelPlot {
       LOG.info("Rasterized "+count+" records");
       // Write all created layers to the output as images
       for (Map.Entry<TileIndex, RasterLayer> entry : rasterLayers.entrySet()) {
-        BufferedImage image = rasterizer.write(entry.getValue());
         if (writeOutput)
-          output.collect(entry.getKey(), image);
+          output.collect(entry.getKey(), entry.getValue());
       }
       LOG.info("Wrote "+rasterLayers.size()+ " images to output");
     }

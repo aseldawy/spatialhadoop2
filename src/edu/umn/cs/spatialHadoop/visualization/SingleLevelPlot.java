@@ -7,20 +7,15 @@
 
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.util.Iterator;
 import java.util.Random;
 import java.util.Vector;
 
-import javax.imageio.ImageIO;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -272,21 +267,13 @@ public class SingleLevelPlot {
         inputStream.close();
       }
       
-      System.out.println("Converting the final raster layer into an image");
-      // Convert the final layer to image
-      BufferedImage finalImage = rasterizer.write(finalLayer);
-      // Flip image vertically if needed
-      if (vflip) {
-        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-        tx.translate(0, -finalImage.getHeight());
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        finalImage = op.filter(finalImage, null);
-      }
-      
       // Finally, write the resulting image to the given output path
       System.out.println("Writing final image");
-      OutputStream outputFile = outFs.create(outFile);
-      ImageIO.write(finalImage, "png", outputFile);
+      FSDataOutputStream outputFile = outFs.create(outFile);
+
+      // Convert the final layer to image
+      rasterizer.writeImage(finalLayer, outputFile, vflip);
+
       outputFile.close();
 
       outFs.delete(temp, true);
@@ -469,25 +456,26 @@ public class SingleLevelPlot {
     }
     // Create the final raster layer that will contain the final image
     RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
-    for (RasterLayer partialRaster : partialRasters) {
+    for (RasterLayer partialRaster : partialRasters)
       rasterizer.merge(finalRaster, partialRaster);
-    }
-    BufferedImage finalImage = rasterizer.write(finalRaster);
+    
+    // Finally, write the resulting image to the given output path
+    LOG.info("Writing final image");
+    FileSystem outFs = outFile.getFileSystem(params);
+    FSDataOutputStream outputFile = outFs.create(outFile);
+
+    rasterizer.writeImage(finalRaster, outputFile, vflip);
+    outputFile.close();
 
     // Flip image vertically if needed
-    if (vflip) {
+    /*if (vflip) {
       AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
       tx.translate(0, -finalImage.getHeight());
       AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
       finalImage = op.filter(finalImage, null);
     }
     
-    // Finally, write the resulting image to the given output path
-    LOG.info("Writing final image");
-    FileSystem outFs = outFile.getFileSystem(params);
-    OutputStream outputFile = outFs.create(outFile);
-    ImageIO.write(finalImage, "png", outputFile);
-    outputFile.close();
+    ImageIO.write(finalImage, "png", outputFile);*/
   }
   
   /**

@@ -7,7 +7,8 @@
 
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.awt.image.BufferedImage;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.util.Iterator;
 
 import org.apache.hadoop.conf.Configuration;
@@ -96,12 +97,15 @@ public abstract class Rasterizer {
    */
   public abstract void merge(RasterLayer finalLayer, RasterLayer intermediateLayer);
 
+
   /**
-   * Converts a raster layer to an image.
-   * @param layer
-   * @return
+   * Writes a raster layer as an image to the output.
+   * @param layer - the layer to be written to the output as an image
+   * @param out - the output stream to which the image will be written
+   * @param vflip - if <code>true</code>, the image is vertically flipped before written
    */
-  public abstract BufferedImage write(RasterLayer layer);
+  public abstract void writeImage(RasterLayer layer, DataOutputStream out,
+      boolean vflip) throws IOException;
   
   /**
    * Returns the radius in pixels that one object might affect in the image.
