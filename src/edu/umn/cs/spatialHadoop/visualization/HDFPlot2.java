@@ -111,7 +111,7 @@ public class HDFPlot2 {
     @Override
     public void writeImage(RasterLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
-      BufferedImage img =  ((FrequencyMapRasterLayer)layer).asImage();
+      BufferedImage img =  ((HDFRasterLayer)layer).asImage();
       // Flip image vertically if needed
       if (vflip) {
         AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
