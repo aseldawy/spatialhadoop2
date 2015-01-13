@@ -55,6 +55,7 @@ public class SVGRasterLayer extends RasterLayer {
     xscale = width / getInputMBR().getWidth();
     yscale = height / getInputMBR().getHeight();
     this.svgGraphics = new SVGGraphics(width, height);
+    this.svgGraphics.translate((int)(-getInputMBR().x1 * xscale), (int)(-getInputMBR().y1 * yscale));
   }
 
   @Override

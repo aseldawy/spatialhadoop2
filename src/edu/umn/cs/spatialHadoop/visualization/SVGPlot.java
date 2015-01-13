@@ -43,14 +43,14 @@ public class SVGPlot {
 
     @Override
     public RasterLayer createRaster(int width, int height, Rectangle mbr) {
-      SVGRasterLayer imageRasterLayer = new SVGRasterLayer(mbr, width, height);
-      return imageRasterLayer;
+      SVGRasterLayer svgRasterLayer = new SVGRasterLayer(mbr, width, height);
+      return svgRasterLayer;
     }
 
     @Override
     public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      SVGRasterLayer imgLayer = (SVGRasterLayer) rasterLayer;
-      imgLayer.drawShape(shape);
+      SVGRasterLayer svgLayer = (SVGRasterLayer) rasterLayer;
+      svgLayer.drawShape(shape);
     }
 
     @Override
