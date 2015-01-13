@@ -87,6 +87,8 @@ public class SingleLevelPlot {
     private int numReducers;
     /**Random number generator to send the raster layer to a random reducer*/
     private Random random;
+    /**Whether the configured rasterizer defines a smooth function or not*/
+    private boolean smooth;
 
     @Override
     public void configure(JobConf job) {
@@ -96,6 +98,7 @@ public class SingleLevelPlot {
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
       this.outputValue = new IntWritable(0);
       this.rasterizer = Rasterizer.getRasterizer(job);
+      this.smooth = rasterizer.isSmooth();
       this.numReducers = Math.max(1, job.getNumReduceTasks());
       this.random = new Random();
     }
@@ -118,6 +121,8 @@ public class SingleLevelPlot {
       int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partitionMBR);
+      if (smooth)
+        shapes = rasterizer.smooth(shapes);
       rasterizer.rasterize(rasterLayer, shapes);
       // If we set the output value to one constant, all intermediate layers
       // will be merged in one machine. Alternatively, We can set it to several values
@@ -167,12 +172,16 @@ public class SingleLevelPlot {
     /**Generated image height in pixels*/
     private int imageHeight;
 
+    /**Whether the configured rasterizer defines a smooth function or not*/
+    private boolean smooth;
+
 
     @Override
     public void configure(JobConf job) {
       super.configure(job);
       this.partitioner = Partitioner.getPartitioner(job);
       this.rasterizer = Rasterizer.getRasterizer(job);
+      this.smooth = rasterizer.isSmooth();
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
       this.imageWidth = job.getInt("width", 1000);
       this.imageHeight = job.getInt("height", 1000);
@@ -212,6 +221,16 @@ public class SingleLevelPlot {
       int rasterLayerY1 = (int) Math.floor((partition.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
+      if (smooth) {
+        final Iterator<Shape> inputShapes = shapes;
+        shapes = rasterizer.smooth(new Iterable<Shape>() {
+          @Override
+          public Iterator<Shape> iterator() {
+            return inputShapes;
+          }
+        }).iterator();
+      }
+
       rasterizer.rasterize(rasterLayer, shapes);
       output.collect(NullWritable.get(), rasterLayer);
     }

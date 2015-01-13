@@ -90,6 +90,9 @@ public class MultilevelPlot {
 
     private boolean writeOutput;
     
+    /**Whether the configured rasterize supports smooth or not*/
+    private boolean smooth;
+    
     @Override
     public void configure(JobConf job) {
       super.configure(job);
@@ -107,6 +110,7 @@ public class MultilevelPlot {
       this.tileWidth = job.getInt("tilewidth", 256);
       this.tileHeight = job.getInt("tileheight", 256);
       this.rasterizer = Rasterizer.getRasterizer(job);
+      this.smooth = rasterizer.isSmooth();
       int radius = rasterizer.getRadius();
       this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
@@ -115,12 +119,14 @@ public class MultilevelPlot {
     }
     
     @Override
-    public void map(Rectangle partitionMBR, Iterable<? extends Shape> points,
+    public void map(Rectangle partitionMBR, Iterable<? extends Shape> shapes,
         OutputCollector<TileIndex, RasterLayer> output, Reporter reporter)
         throws IOException {
+      if (smooth)
+        shapes = rasterizer.smooth(shapes);
       TileIndex key = new TileIndex();
       Map<TileIndex, RasterLayer> rasterLayers = new HashMap<TileIndex, RasterLayer>();
-      for (Shape shape : points) {
+      for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
           continue;
@@ -275,6 +281,8 @@ public class MultilevelPlot {
     /**Radius of effect of each shape*/
     private int radius;
     private boolean writeOutput;
+    /**Whether the configured rasterizer defines a smooth function or not*/
+    private boolean smooth;
 
     @Override
     public void configure(JobConf job) {
@@ -296,6 +304,7 @@ public class MultilevelPlot {
       int tileWidth = job.getInt("tilewidth", 256);
       int tileHeight = job.getInt("tileheight", 256);
       this.rasterizer = Rasterizer.getRasterizer(job);
+      this.smooth = rasterizer.isSmooth();
       this.radius = rasterizer.getRadius();
       this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevelToReplicate));
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevelToReplicate));
@@ -362,6 +371,15 @@ public class MultilevelPlot {
       
       LOG.info("Rasterizing");
       int count = 0;
+      if (smooth) {
+        final Iterator<Shape> inputShapes = shapes;
+        shapes = rasterizer.smooth(new Iterable<Shape>() {
+          @Override
+          public Iterator<Shape> iterator() {
+            return inputShapes;
+          }
+        }).iterator();
+      }
       while (shapes.hasNext()) {
         count++;
         Shape shape = shapes.next();

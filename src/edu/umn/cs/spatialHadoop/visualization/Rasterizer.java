@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.visualization;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Vector;
 
 import org.apache.hadoop.conf.Configuration;
 
@@ -69,6 +70,11 @@ public abstract class Rasterizer {
       rasterize(layer, shape);
   }
 
+  /**
+   * Rasterize a set of records by calling the rasterize function on each one.
+   * @param layer
+   * @param shapes
+   */
   public void rasterize(RasterLayer layer, Iterator<? extends Shape> shapes) {
     while (shapes.hasNext())
       rasterize(layer, shapes.next());
@@ -97,7 +103,6 @@ public abstract class Rasterizer {
    */
   public abstract void merge(RasterLayer finalLayer, RasterLayer intermediateLayer);
 
-
   /**
    * Writes a raster layer as an image to the output.
    * @param layer - the layer to be written to the output as an image
@@ -115,5 +120,30 @@ public abstract class Rasterizer {
    */
   public int getRadius() {
     return 0;
+  }
+  
+  /**
+   * Smooth a set of records that are spatially close to each other and returns
+   * a new set of smoothed records. This method is called on the original
+   * raw data before it is visualized. The results of this function are the
+   * records that are visualized.
+   * @param r
+   * @return
+   */
+  public <S extends Shape> Iterable<S> smooth(Iterable<S> r) {
+    throw new RuntimeException("Not implemented");
+  }
+  
+  /**
+   * Tells whether this rasterizer supports a smooth function or not.
+   * @return
+   */
+  public boolean isSmooth() {
+    try {
+      smooth(new Vector<Shape>());
+      return true;
+    } catch (RuntimeException e) {
+      return false;
+    }
   }
 }
