@@ -29,6 +29,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.visualization.SimpleGraphics;
 
 /**
  * An output format that is used to plot ImageWritable to PNG image.

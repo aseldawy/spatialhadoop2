@@ -7,8 +7,13 @@
 
 package edu.umn.cs.spatialHadoop.visualization;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.io.PrintStream;
+
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
+import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * A raster layer that contains a set of vector data.
@@ -24,6 +29,9 @@ import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
  */
 public class SVGRasterLayer extends RasterLayer {
 
+  /**Underlying SVG Graphics*/
+  protected SVGGraphics svgGraphics;
+  
   /**The scale of the image on the x-axis in terms of pixels per input units*/
   protected double xscale;
 
@@ -32,6 +40,7 @@ public class SVGRasterLayer extends RasterLayer {
 
   /**Default constructor is necessary to be able to deserialize it*/
   public SVGRasterLayer() {
+    svgGraphics = new SVGGraphics();
   }
 
   /**
@@ -45,10 +54,32 @@ public class SVGRasterLayer extends RasterLayer {
     super(inputMBR, width, height);
     xscale = width / getInputMBR().getWidth();
     yscale = height / getInputMBR().getHeight();
+    this.svgGraphics = new SVGGraphics(width, height);
   }
 
-  public void drawShape(OSMPolygon shape) {
+  @Override
+  public void write(DataOutput out) throws IOException {
+    super.write(out);
+    svgGraphics.write(out);
+  }
+  
+  @Override
+  public void readFields(DataInput in) throws IOException {
+    super.readFields(in);
+    svgGraphics.readFields(in);
+  }
+  
+  public void drawShape(Shape shape) {
+    shape.draw(svgGraphics, xscale, yscale);
     
+  }
+
+  public void mergeWith(SVGRasterLayer intermediateLayer) {
+    this.svgGraphics.mergeWith(intermediateLayer.svgGraphics);
+  }
+
+  public void writeToFile(PrintStream ps) {
+    svgGraphics.writeAsSVG(ps);
   }
 
 }

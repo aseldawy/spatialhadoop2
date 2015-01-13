@@ -19,7 +19,6 @@ import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
-import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
@@ -93,6 +92,9 @@ public class ImageRasterLayer extends RasterLayer {
     byte[] bytes = new byte[length];
     in.readFully(bytes);
     this.image = ImageIO.read(new ByteArrayInputStream(bytes));
+    // Calculate the scale of the image in terms of pixels per unit
+    xscale = image.getWidth() / getInputMBR().getWidth();
+    yscale = image.getHeight() / getInputMBR().getHeight();
   }
 
   public void mergeWith(ImageRasterLayer another) {

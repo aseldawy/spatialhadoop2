@@ -7,14 +7,9 @@
 
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.awt.Color;
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
-import java.awt.image.BufferedImage;
 import java.io.DataOutputStream;
 import java.io.IOException;
-
-import javax.imageio.ImageIO;
+import java.io.PrintStream;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -48,40 +43,34 @@ public class SVGPlot {
 
     @Override
     public RasterLayer createRaster(int width, int height, Rectangle mbr) {
-      ImageRasterLayer imageRasterLayer = new ImageRasterLayer(mbr, width, height);
+      SVGRasterLayer imageRasterLayer = new SVGRasterLayer(mbr, width, height);
       return imageRasterLayer;
     }
 
     @Override
     public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      ImageRasterLayer imgLayer = (ImageRasterLayer) rasterLayer;
+      SVGRasterLayer imgLayer = (SVGRasterLayer) rasterLayer;
       imgLayer.drawShape(shape);
     }
 
     @Override
     public Class<? extends RasterLayer> getRasterClass() {
-      return ImageRasterLayer.class;
+      return SVGRasterLayer.class;
     }
 
     @Override
     public void merge(RasterLayer finalLayer,
         RasterLayer intermediateLayer) {
-      ((ImageRasterLayer)finalLayer).mergeWith((ImageRasterLayer) intermediateLayer);
+      ((SVGRasterLayer)finalLayer).mergeWith((SVGRasterLayer) intermediateLayer);
     }
 
     @Override
     public void writeImage(RasterLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
-      BufferedImage img =  ((ImageRasterLayer)layer).getImage();
-      // Flip image vertically if needed
-      if (vflip) {
-        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-        tx.translate(0, -img.getHeight());
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        img = op.filter(img, null);
-      }
-      
-      ImageIO.write(img, "png", out);
+      out.flush();
+      PrintStream ps = new PrintStream(out);
+      ((SVGRasterLayer)layer).writeToFile(ps);
+      ps.flush();
     }
   }
   
@@ -119,9 +108,9 @@ public class SVGPlot {
 
     long t1 = System.currentTimeMillis();
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFile, outFile, GeometricRasterizer.class, params);
+      MultilevelPlot.plot(inFile, outFile, SVGRasterizer.class, params);
     } else {
-      SingleLevelPlot.plot(inFile, outFile, GeometricRasterizer.class, params);
+      SingleLevelPlot.plot(inFile, outFile, SVGRasterizer.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");

@@ -10,7 +10,7 @@
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and limitations under the License.
  */
-package edu.umn.cs.spatialHadoop;
+package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
 import java.awt.Composite;
@@ -39,7 +39,6 @@ import java.io.IOException;
 import java.text.AttributedCharacterIterator;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.Vector;
 
 import javax.imageio.ImageIO;
 
@@ -49,129 +48,151 @@ import javax.imageio.ImageIO;
  * @author eldawy
  *
  */
-public class SVGGraphics extends Graphics2D {
-
-  /**All x coordinates of all linestrings*/
-  protected int[] xs;
-  /**All y coordinates of all linestrings*/
-  protected int[] ys;
-  /**The end index of all linestrings*/
-  protected int[] ends;
-  /**Number of linestrings currently stored*/
-  protected int numOfLinestrings;
-  /**Translation amount in pixels*/
-  protected int tx, ty;
+public class SimpleGraphics extends Graphics2D {
   
-  public SVGGraphics() {
-    xs = new int[16];
-    ys = new int[16];
-    ends = new int[16];
-    numOfLinestrings = 0;
+  /**
+   * The underlying image on which all draw commands go
+   */
+  private final BufferedImage image;
+  private Color background;
+  private Color color;
+  private int[] pixels;
+  /**Amount of translation along the x-axis*/
+  private int tx;
+  /**Amount of translation along the y-axis*/
+  private int ty;
+
+  public SimpleGraphics(BufferedImage image) {
+    this.image = image;
+    this.pixels = new int[image.getWidth() * image.getHeight()];
+    image.getRGB(0, 0, image.getWidth(), image.getHeight(), pixels, 0,
+        image.getWidth());
   }
 
   @Override
   public void draw(Shape s) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public boolean drawImage(Image img, AffineTransform xform, ImageObserver obs) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void drawImage(BufferedImage img, BufferedImageOp op, int x, int y) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void drawRenderedImage(RenderedImage img, AffineTransform xform) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void drawRenderableImage(RenderableImage img, AffineTransform xform) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void drawString(String str, int x, int y) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void drawString(String str, float x, float y) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void drawString(AttributedCharacterIterator iterator, int x, int y) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void drawString(AttributedCharacterIterator iterator, float x, float y) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void drawGlyphVector(GlyphVector g, float x, float y) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void fill(Shape s) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public boolean hit(Rectangle rect, Shape s, boolean onStroke) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public GraphicsConfiguration getDeviceConfiguration() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setComposite(Composite comp) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setPaint(Paint paint) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setStroke(Stroke s) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setRenderingHint(Key hintKey, Object hintValue) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public Object getRenderingHint(Key hintKey) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setRenderingHints(Map<?, ?> hints) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void addRenderingHints(Map<?, ?> hints) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public RenderingHints getRenderingHints() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
@@ -193,131 +214,154 @@ public class SVGGraphics extends Graphics2D {
   @Override
   public void rotate(double theta, double x, double y) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void scale(double sx, double sy) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void shear(double shx, double shy) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void transform(AffineTransform Tx) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setTransform(AffineTransform Tx) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public AffineTransform getTransform() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public Paint getPaint() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public Composite getComposite() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setBackground(Color color) {
-    throw new RuntimeException("Not implemented");
+    this.background = color;
+    
   }
 
   @Override
   public Color getBackground() {
-    throw new RuntimeException("Not implemented");
+    return background;
   }
 
   @Override
   public Stroke getStroke() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void clip(Shape s) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public FontRenderContext getFontRenderContext() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public Graphics create() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public Color getColor() {
-    throw new RuntimeException("Not implemented");
+    return this.color;    
   }
 
   @Override
   public void setColor(Color c) {
-    throw new RuntimeException("Not implemented");
+    this.color = c;
   }
 
   @Override
   public void setPaintMode() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setXORMode(Color c1) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public Font getFont() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setFont(Font font) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public FontMetrics getFontMetrics(Font f) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public Rectangle getClipBounds() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void clipRect(int x, int y, int width, int height) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setClip(int x, int y, int width, int height) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public Shape getClip() {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
   public void setClip(Shape clip) {
     throw new RuntimeException("Not implemented");
+    
   }
 
   @Override
@@ -326,12 +370,32 @@ public class SVGGraphics extends Graphics2D {
   }
   
   protected void setPixel(int x, int y, int rgb) {
-    throw new RuntimeException("Not implemented");
+    x += tx; y += ty;
+    if (x >= 0 && y >= 0 && x < image.getWidth() && y < image.getHeight()) {
+      int offset = y * image.getWidth() + x;
+      int d_alpha = pixels[offset] >>> 24;
+      int s_alpha = rgb >>> 24;
+      if (d_alpha == 0) {
+        pixels[offset] = rgb;
+      } else if (s_alpha != 0) {
+        int r_alpha = s_alpha + d_alpha * (255 - s_alpha) / 256;
+        int r_pixel = 0;
+        for (int i = 0; i < 3; i++) {
+          int s_component = (rgb >>> (8 * i)) & 0xff;
+          int d_component = (pixels[offset] >>> (8 * i)) & 0xff;
+          int merge_component = (s_component * s_alpha +
+              d_component * d_alpha * (255-s_alpha) / 256)
+              / r_alpha;
+          r_pixel |= merge_component << (8 * i);
+        }
+        r_pixel |= r_alpha << 24;
+        pixels[offset] = r_pixel;
+      }
+    }
   }
 
   @Override
   public void drawLine(int x1, int y1, int x2, int y2) {
-    expand(1, 1);
     x1 += tx; y1 += ty;
     x2 += tx; y2 += ty;
     if (y1 == y2 || x1 == x2) {
@@ -397,32 +461,6 @@ public class SVGGraphics extends Graphics2D {
             p += dx;
         }
       }
-    }
-  }
-
-  /**
-   * Expand the underlying arrays to ensure it can store the additional
-   * linestrings and points
-   * @param additionalLinestrings
-   * @param additionalPoints
-   */
-  private void expand(int additionalLinestrings, int additionalPoints) {
-    if (ends.length - numOfLinestrings < additionalLinestrings) {
-      int newLength = Math.max(ends.length * 2, numOfLinestrings + additionalLinestrings);
-      int[] newEnds = new int[newLength];
-      System.arraycopy(ends, 0, newEnds, 0, numOfLinestrings);
-      this.ends = newEnds;
-    }
-    
-    if (numOfLinestrings > 0 && xs.length - ends[numOfLinestrings-1] < additionalPoints) {
-      int newLength = Math.max(xs.length * 2, ends[numOfLinestrings-1] + additionalPoints);
-      int[] new_coords = new int[newLength];
-      System.arraycopy(xs, 0, new_coords, 0, ends[numOfLinestrings-1]);
-      xs = new_coords;
-      
-      new_coords = new int[newLength];
-      System.arraycopy(ys, 0, new_coords, 0, ends[numOfLinestrings-1]);
-      ys = new_coords;
     }
   }
 
@@ -649,7 +687,7 @@ public class SVGGraphics extends Graphics2D {
 
   public static void main(String[] args) throws IOException {
     BufferedImage image = new BufferedImage(100, 100, BufferedImage.TYPE_INT_ARGB);
-    Graphics2D g = new SVGGraphics(image);
+    Graphics2D g = new SimpleGraphics(image);
 //    Graphics2D g = image.createGraphics();
     g.setBackground(new Color(255, 0, 0, 128));
     g.translate(20, 15);

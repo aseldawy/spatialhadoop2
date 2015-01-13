@@ -57,7 +57,6 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
@@ -79,6 +78,7 @@ import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
+import edu.umn.cs.spatialHadoop.visualization.SimpleGraphics;
 
 /**
  * Draws an image of all shapes in an input file.

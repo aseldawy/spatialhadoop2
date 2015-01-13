@@ -58,7 +58,6 @@ import org.apache.hadoop.util.LineReader;
 import edu.umn.cs.spatialHadoop.ImageWritable;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
-import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -75,6 +74,7 @@ import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
+import edu.umn.cs.spatialHadoop.visualization.SimpleGraphics;
 
 /**
  * Plots all tile images needed to naviagte through the image using Google Maps.
