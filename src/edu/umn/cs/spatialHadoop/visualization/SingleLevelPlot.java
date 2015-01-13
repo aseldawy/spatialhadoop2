@@ -37,7 +37,6 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 
-import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridPartitioner;
@@ -97,7 +96,7 @@ public class SingleLevelPlot {
       this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
       this.outputValue = new IntWritable(0);
       this.rasterizer = Rasterizer.getRasterizer(job);
-      this.numReducers = job.getNumReduceTasks();
+      this.numReducers = Math.max(1, job.getNumReduceTasks());
       this.random = new Random();
     }
     
@@ -230,7 +229,7 @@ public class SingleLevelPlot {
     public void commitJob(JobContext context) throws IOException {
       super.commitJob(context);
       JobConf job = context.getJobConf();
-      Path outFile = ImageOutputFormat.getOutputPath(job);
+      Path outFile = RasterOutputFormat.getOutputPath(job);
       Rasterizer rasterizer = Rasterizer.getRasterizer(job);
       int width = job.getInt("width", 1000);
       int height = job.getInt("height", 1000);
@@ -318,20 +317,31 @@ public class SingleLevelPlot {
       }
     }
     
+    boolean merge = job.getBoolean("merge", true);
     // Set input and output
     job.setInputFormat(ShapeIterInputFormat.class);
     ShapeIterInputFormat.setInputPaths(job, inFile);
-    job.setOutputFormat(RasterOutputFormat.class);
+    if (merge)
+      job.setOutputFormat(RasterOutputFormat.class);
+    else
+      job.setOutputFormat(ImageOutputFormat.class);
     RasterOutputFormat.setOutputPath(job, outFile);
     
     // Set mapper and reducer based on the partitioning scheme
+    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
+    job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
     String partition = job.get("partition", "none");
     if (partition.equalsIgnoreCase("none")) {
       LOG.info("Using no-partition plot");
       job.setMapperClass(NoPartitionPlot.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(rasterizer.getRasterClass());
-      job.setReducerClass(NoPartitionPlot.class);
+      if (merge) {
+        job.setReducerClass(NoPartitionPlot.class);
+        job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));        
+      } else {
+        job.setNumReduceTasks(0);
+      }
     } else {
       LOG.info("Using repartition plot");
       Partitioner partitioner;
@@ -348,14 +358,11 @@ public class SingleLevelPlot {
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(shape.getClass());
       job.setReducerClass(RepartitionPlot.class);
+      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));        
       Partitioner.setPartitioner(job, partitioner);
     }
-    job.setOutputCommitter(ImageWriter.class);
-    
-    // Set number of mappers and reducers
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+    if (merge)
+      job.setOutputCommitter(ImageWriter.class);
     
     // Use multithreading in case the job is running locally
     job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
@@ -445,6 +452,7 @@ public class SingleLevelPlot {
         return partialRaster;
       }
     });
+    boolean merge = params.getBoolean("merge", true);
     Rasterizer rasterizer;
     try {
       rasterizer = rasterizerClass.newInstance();
@@ -454,28 +462,31 @@ public class SingleLevelPlot {
     } catch (IllegalAccessException e) {
       throw new RuntimeException("Error creating rastierizer", e);
     }
-    // Create the final raster layer that will contain the final image
-    RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
-    for (RasterLayer partialRaster : partialRasters)
-      rasterizer.merge(finalRaster, partialRaster);
-    
-    // Finally, write the resulting image to the given output path
-    LOG.info("Writing final image");
-    FileSystem outFs = outFile.getFileSystem(params);
-    FSDataOutputStream outputFile = outFs.create(outFile);
-
-    rasterizer.writeImage(finalRaster, outputFile, vflip);
-    outputFile.close();
-
-    // Flip image vertically if needed
-    /*if (vflip) {
-      AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-      tx.translate(0, -finalImage.getHeight());
-      AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-      finalImage = op.filter(finalImage, null);
+    if (merge) {
+      // Create the final raster layer that will contain the final image
+      RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
+      for (RasterLayer partialRaster : partialRasters)
+        rasterizer.merge(finalRaster, partialRaster);
+      
+      // Finally, write the resulting image to the given output path
+      LOG.info("Writing final image");
+      FileSystem outFs = outFile.getFileSystem(params);
+      FSDataOutputStream outputFile = outFs.create(outFile);
+      
+      rasterizer.writeImage(finalRaster, outputFile, vflip);
+      outputFile.close();
+    } else {
+      // No merge
+      LOG.info("Writing partial images");
+      FileSystem outFs = outFile.getFileSystem(params);
+      for (int i = 0; i < partialRasters.size(); i++) {
+        Path filename = new Path(outFile, String.format("part-%05d.png", i));
+        FSDataOutputStream outputFile = outFs.create(filename);
+        
+        rasterizer.writeImage(partialRasters.get(i), outputFile, vflip);
+        outputFile.close();
+      }
     }
-    
-    ImageIO.write(finalImage, "png", outputFile);*/
   }
   
   /**

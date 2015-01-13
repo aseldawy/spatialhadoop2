@@ -22,49 +22,50 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 /**
- * Writes raster layers to a binary output file
+ * Writes raster layers as images to the output file
  * @author Ahmed Eldawy
  *
  */
-public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
+public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
 
   /**
    * Writes raster layers to a file
    * @author Ahmed Eldawy
    *
    */
-  class RasterRecordWriter implements RecordWriter<Object, RasterLayer> {
+  class ImageRecordWriter implements RecordWriter<Object, RasterLayer> {
     /**Progress of the output format*/
     private Progressable progress;
-    /**The output file where all raster layers are written*/
-    private FSDataOutputStream outFile;
     /**Rasterizer used to merge intermediate raster layers*/
     private Rasterizer rasterizer;
-    /**The raster layer resulting of merging all written raster layers*/
-    private RasterLayer mergedRasterLayer;
+    private Path outPath;
+    private FileSystem outFS;
+    private int rasterLayersWritten;
+    private boolean vflip;
 
-    public RasterRecordWriter(FileSystem fs, Path taskOutputPath, JobConf job,
+    public ImageRecordWriter(FileSystem fs, Path taskOutputPath, JobConf job,
         Progressable progress) throws IOException {
       this.progress = progress;
-      this.outFile = fs.create(taskOutputPath);
       this.rasterizer = Rasterizer.getRasterizer(job);
-      int imageWidth = job.getInt("width", 1000);
-      int imageHeight = job.getInt("height", 1000);
-      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-      this.mergedRasterLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
+      this.outPath = taskOutputPath;
+      this.outFS = this.outPath.getFileSystem(job);
+      this.rasterLayersWritten = 0;
+      this.vflip = job.getBoolean("vflip", true);
     }
 
     @Override
     public void write(Object dummy, RasterLayer r) throws IOException {
-      rasterizer.merge(mergedRasterLayer, r);
+      String suffix = String.format("-%05d.png", rasterLayersWritten++);
+      Path p = new Path(outPath.getParent(), outPath.getName()+suffix);
+      FSDataOutputStream outFile = outFS.create(p);
+      // Write the merged raster layer
+      rasterizer.writeImage(r, outFile, this.vflip);
+      outFile.close();
       progress.progress();
     }
     
     @Override
     public void close(Reporter reporter) throws IOException {
-      // Write the merged raster layer
-      mergedRasterLayer.write(outFile);
-      outFile.close();
     }
   }
   
@@ -73,7 +74,7 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
       FileSystem fs, JobConf job, String name, Progressable progress)
       throws IOException {
     Path taskOutputPath = getTaskOutputPath(job, name);
-    return new RasterRecordWriter(fs, taskOutputPath, job, progress);
+    return new ImageRecordWriter(fs, taskOutputPath, job, progress);
   }
 
 }
