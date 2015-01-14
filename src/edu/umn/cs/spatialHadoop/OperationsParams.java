@@ -523,9 +523,9 @@ public class OperationsParams extends Configuration {
 			String param, int joiningThresholdPerOnce) {
 		String str = null;
 		if (joiningThresholdPerOnce < 0){
-			str = joiningThresholdPerOnce + "";	
+			str = "50000";				
 		}else{
-			str = "50000";
+			str = joiningThresholdPerOnce + "";
 		}
 		conf.set(param, str);
 	}
