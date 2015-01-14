@@ -274,19 +274,20 @@ public class SingleLevelPlot {
       RasterLayer intermediateLayer = rasterizer.createRaster(1, 1, new Rectangle());
       // The final raster layer contains the merge of all intermediate layers
       RasterLayer finalLayer = rasterizer.createRaster(width, height, inputMBR);
-      System.out.println("Merging "+resultFiles.length+" layers into one");
+      System.out.println(System.currentTimeMillis()+": Merging "+resultFiles.length+" layers into one");
       for (FileStatus resultFile : resultFiles) {
         FSDataInputStream inputStream = outFs.open(resultFile.getPath());
         while (inputStream.getPos() < resultFile.getLen()) {
           // Read next raster layer in file
           intermediateLayer.readFields(inputStream);
           rasterizer.merge(finalLayer, intermediateLayer);
+          System.out.println(System.currentTimeMillis());
         }
         inputStream.close();
       }
       
       // Finally, write the resulting image to the given output path
-      System.out.println("Writing final image");
+      System.out.println(System.currentTimeMillis()+": Writing final image");
       FSDataOutputStream outputFile = outFs.create(outFile);
 
       // Convert the final layer to image
