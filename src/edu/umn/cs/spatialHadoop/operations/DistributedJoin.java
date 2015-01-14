@@ -57,7 +57,6 @@ import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.RTree;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
@@ -92,9 +91,11 @@ public class DistributedJoin {
 	public static boolean isOneShotReadMode = true;
 	public static boolean isGeneralRepartitionMode = true;
 	public static boolean isReduceInactive = false;
+	public static int joiningThresholdPerOnce = 50000;
 
 	private static final String RepartitionJoinIndexPath = "DJ.RepartitionJoinIndexPath";
 	private static final String InactiveMode = "DJ.InactiveMode";
+	private static final String JoiningThresholdPerOnce = "DJ.JoiningThresholdPerOnce";
 	
 	public static class SpatialJoinFilter extends DefaultBlockFilter {
 		@Override
@@ -682,7 +683,8 @@ public class DistributedJoin {
 		private Path indexDir;
 		private Shape shape;
 		private boolean inactiveMode;
-
+		private int rShapesThresholdPerOnce;
+		
 		@Override
 		public void configure(JobConf job) {
 			super.configure(job);
@@ -690,6 +692,7 @@ public class DistributedJoin {
 					RepartitionJoinIndexPath);
 			shape = OperationsParams.getShape(job, "shape");
 			inactiveMode = OperationsParams.getInactiveModeFlag(job, InactiveMode);
+			rShapesThresholdPerOnce = OperationsParams.getJoiningThresholdPerOnce(job, JoiningThresholdPerOnce);
 		}
 
 		@Override
@@ -697,85 +700,70 @@ public class DistributedJoin {
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
 				throws IOException {
 		 if(!inactiveMode){
+			
 			LOG.info("Start reduce() logic now !!!");
 			final FileSystem fs = indexDir.getFileSystem(new Configuration());
-
 			GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs,
 					indexDir);
-			CellInfo cell = SpatialSite.getCellInfo(gIndex, cellIndex.get());
-			if (cell != null) {
+			
+			for (Partition p : gIndex) {
+				if (p.cellId == cellIndex.get()) {
+					LOG.info("Joining with partition: "+p);
+					Path partitionFile = new Path(indexDir, p.filename);
+					FileSystem partitionFS = partitionFile
+							.getFileSystem(new Configuration());
 
-				// Get collected shapes from the repartition phase
-				final ArrayList<Shape> r = new ArrayList<Shape>();
-				T rShape = null;
-				while (shapes.hasNext()) {
-					rShape = shapes.next();
-					r.add(rShape);
-				}
-				
-				gIndex.rangeQuery(cell, new ResultCollector<Partition>() {
-					@Override
-					public void collect(Partition p) {
-						try {
-							Path partitionFile = new Path(indexDir, p.filename);
-							FileSystem partitionFS = partitionFile
-									.getFileSystem(new Configuration());
-							long partitionFileSize = partitionFS.getFileStatus(
-									partitionFile).getLen();
+					// Load all shapes in this partition
+					ShapeIterRecordReader shapeReader = new ShapeIterRecordReader(
+							partitionFS.open(partitionFile), 0, p.size);
+					shapeReader.setShape(shape);
+					Rectangle cellInfo = shapeReader.createKey();
+					ShapeIterator partitionShapes = shapeReader
+							.createValue();
 
-							// Load all shapes in this partition
-							ShapeIterRecordReader shapeReader = new ShapeIterRecordReader(
-									partitionFS.open(partitionFile), 0,
-									partitionFileSize);
-							shapeReader.setShape(shape);
-							Rectangle cellInfo = shapeReader.createKey();
-							ShapeIterator partitionShapes = shapeReader
-									.createValue();
-							
-							// load shapes from the indexed dataset
-							final ArrayList<Shape> selectedSShapes = new ArrayList<Shape>();
-							while (shapeReader.next(cellInfo, partitionShapes)) {
-								for (Shape shapeInPartition : partitionShapes) {
-									selectedSShapes.add(shapeInPartition);
-								}
-							}
-							shapeReader.close();
-
-							ArrayList<Shape> selectedRShapes = new ArrayList<Shape>();
-							for (Shape rShape : r) {
-								if (rShape.getMBR().isIntersected(p.getMBR())) {
-									selectedRShapes.add(rShape);
-								}
-							}
-
-							if (selectedRShapes.size() != 0 && selectedSShapes.size() != 0) {
-								// Join two arrays using the plane sweep
-								// algorithm
-								SpatialAlgorithms.SpatialJoin_planeSweep(
-										selectedRShapes, selectedSShapes,
-										new ResultCollector2<Shape, Shape>() {
-											@Override
-											public void collect(Shape r, Shape s) {
-												try {
-													output.collect(r, s);
-												} catch (IOException e) {
-													e.printStackTrace();
-												}
-											}
-										});
-							}
-
-						} catch (IOException e) {
-							e.printStackTrace();
+					// load shapes from the indexed dataset
+					final ArrayList<Shape> selectedSShapes = new ArrayList<Shape>();
+					while (shapeReader.next(cellInfo, partitionShapes)) {
+						for (Shape shapeInPartition : partitionShapes) {
+							selectedSShapes.add(shapeInPartition.clone());
 						}
 					}
-				});
+					shapeReader.close();
+					LOG.info("Read "+selectedSShapes.size()+" shapes from partition");
 
-			} else {
-				LOG.error("Can't process cell with ID " + cellIndex.get());
-			}
-
-			reporter.progress();
+					
+					// Get collected shapes from the repartition phase
+					while (shapes.hasNext()) {
+							int currRShapes = 0;
+							final ArrayList<Shape> r = new ArrayList<Shape>();
+							do{
+								T rShape = shapes.next();
+								r.add(rShape.clone());	
+								currRShapes++;
+							} while(shapes.hasNext() && currRShapes < rShapesThresholdPerOnce);
+							
+							// Join two arrays using the plane sweep
+							// algorithm
+							SpatialAlgorithms.SpatialJoin_planeSweep(
+									r, selectedSShapes,
+									new ResultCollector2<Shape, Shape>() {
+										@Override
+										public void collect(Shape r, Shape s) {
+											try {
+												output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}
+										}
+									});		
+					}
+					LOG.info("Finished joining of "+p);
+				}
+				reporter.progress();
+			}	
+			
+			
+					
 		}else{
 			LOG.info("Nothing to do !!!");
 		}
@@ -830,7 +818,8 @@ public class DistributedJoin {
 		OperationsParams.setRepartitionJoinIndexPath(repartitionJoinJob,
 				RepartitionJoinIndexPath, inputFiles[1 - fileToRepartition]);
 		OperationsParams.setInactiveModeFlag(repartitionJoinJob, InactiveMode, isReduceInactive);
-		
+		OperationsParams.setJoiningThresholdPerOnce(repartitionJoinJob, JoiningThresholdPerOnce, joiningThresholdPerOnce);
+
 		CellInfo[] cellsInfo = SpatialSite.cellsOf(fs,
 				inputFiles[1 - fileToRepartition]);
 
@@ -884,7 +873,7 @@ public class DistributedJoin {
 		RunningJob runningJob = JobClient.runJob(repartitionJoinJob);
 		Counters counters = runningJob.getCounters();
 		Counter outputRecordCounter = counters
-				.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
+				.findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
 		final long resultCount = outputRecordCounter.getValue();
 
 		// Output number of running map tasks
@@ -1132,6 +1121,11 @@ public class DistributedJoin {
 			isReduceInactive = true;
 		}
 
+		if (params.get("joining-per-once") != null) {
+			System.out.println("joining-per-once is set to: " + params.get("joining-per-once"));
+			joiningThresholdPerOnce = Integer.parseInt(params.get("joining-per-once"));
+		}
+		
 		long result_size;
 		if (inputPaths[0].equals(inputPaths[1])) {
 			// Special case for self join

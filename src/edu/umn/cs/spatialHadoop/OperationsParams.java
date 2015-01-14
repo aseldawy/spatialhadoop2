@@ -510,6 +510,27 @@ public class OperationsParams extends Configuration {
 		return sjmrPartitioningGrid;
 	}
 
+	
+	public static int getJoiningThresholdPerOnce(Configuration conf,
+			String key) {
+		String joiningThresholdPerOnce_str = conf.get(key);
+		if (joiningThresholdPerOnce_str == null)
+			LOG.error("Your joiningThresholdPerOnce is not set");
+		return Integer.parseInt(joiningThresholdPerOnce_str);
+	}
+
+	public static void setJoiningThresholdPerOnce(Configuration conf,
+			String param, int joiningThresholdPerOnce) {
+		String str = null;
+		if (joiningThresholdPerOnce < 0){
+			str = joiningThresholdPerOnce + "";	
+		}else{
+			str = "50000";
+		}
+		conf.set(param, str);
+	}
+	
+	
 	public static boolean getInactiveModeFlag(Configuration conf,
 			String key) {
 		String inactiveModeFlag_str = conf.get(key);
