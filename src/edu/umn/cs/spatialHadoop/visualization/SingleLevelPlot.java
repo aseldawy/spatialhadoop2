@@ -247,52 +247,82 @@ public class SingleLevelPlot {
     @Override
     public void commitJob(JobContext context) throws IOException {
       super.commitJob(context);
-      JobConf job = context.getJobConf();
+      final JobConf job = context.getJobConf();
       Path outFile = RasterOutputFormat.getOutputPath(job);
-      Rasterizer rasterizer = Rasterizer.getRasterizer(job);
-      int width = job.getInt("width", 1000);
-      int height = job.getInt("height", 1000);
-      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
+      
+      final int width = job.getInt("width", 1000);
+      final int height = job.getInt("height", 1000);
+      final Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
 
       boolean vflip = job.getBoolean("vflip", true);
 
-      // Combine all images in one file
-      // Rename output file
-      // Combine all output files into one file as we do with grid files
-      FileSystem outFs = outFile.getFileSystem(job);
+      // List all output files resulting from reducers
+      final FileSystem outFs = outFile.getFileSystem(job);
       Path temp = new Path(outFile.toUri().getPath()+"_"+(int)(Math.random()*1000000)+".tmp");
       outFs.rename(outFile, temp);
-      FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
+      final FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
         @Override
         public boolean accept(Path path) {
           return path.toUri().getPath().contains("part-");
         }
       });
       
-      // Read all intermediate layers and merge into one final layer
-      // Create any raster layer to be able to deserialize the output files
-      RasterLayer intermediateLayer = rasterizer.createRaster(1, 1, new Rectangle());
-      // The final raster layer contains the merge of all intermediate layers
-      RasterLayer finalLayer = rasterizer.createRaster(width, height, inputMBR);
       System.out.println(System.currentTimeMillis()+": Merging "+resultFiles.length+" layers into one");
-      for (FileStatus resultFile : resultFiles) {
-        FSDataInputStream inputStream = outFs.open(resultFile.getPath());
-        while (inputStream.getPos() < resultFile.getLen()) {
-          // Read next raster layer in file
-          intermediateLayer.readFields(inputStream);
-          rasterizer.merge(finalLayer, intermediateLayer);
-          System.out.println(System.currentTimeMillis());
+      Vector<RasterLayer> intermediateLayers = Parallel.forEach(resultFiles.length, new Parallel.RunnableRange<RasterLayer>() {
+        @Override
+        public RasterLayer run(int i1, int i2) {
+          Rasterizer rasterizer = Rasterizer.getRasterizer(job);
+          int layerCount = 0;
+          // The raster layer that contains the merge of all assigned layers
+          RasterLayer finalLayer = null;
+          RasterLayer tempLayer = rasterizer.createRaster(1, 1, new Rectangle());
+          for (int i = i1; i < i2; i++) {
+            FileStatus resultFile = resultFiles[i];
+            try {
+              FSDataInputStream inputStream = outFs.open(resultFile.getPath());
+              while (inputStream.getPos() < resultFile.getLen()) {
+                tempLayer.readFields(inputStream);
+                if (layerCount == 0) {
+                  // Assign this layer as a final layer
+                  finalLayer = tempLayer;
+                } else if (layerCount == 1) {
+                  // Only one layer. Create a new final layer and merge both
+                  RasterLayer newFinalLayer = rasterizer.createRaster(width, height, inputMBR);
+                  rasterizer.merge(newFinalLayer, finalLayer);
+                  rasterizer.merge(newFinalLayer, tempLayer);
+                  finalLayer = newFinalLayer;
+                } else {
+                  rasterizer.merge(finalLayer, tempLayer);
+                }
+                layerCount++;
+                System.out.println(System.currentTimeMillis()+": Merged "+layerCount);
+              }
+              inputStream.close();
+            } catch (IOException e) {
+              System.err.println("Error reading "+resultFile);
+              e.printStackTrace();
+            }
+          }
+          return finalLayer;
         }
-        inputStream.close();
+      });
+      
+      // Merge all intermediate layers into one final layer
+      Rasterizer rasterizer = Rasterizer.getRasterizer(job);
+      RasterLayer finalLayer;
+      if (intermediateLayers.size() == 1) {
+        finalLayer = intermediateLayers.elementAt(0);
+      } else {
+        finalLayer = rasterizer.createRaster(width, height, inputMBR);
+        for (RasterLayer intermediateLayer : intermediateLayers) {
+          rasterizer.merge(finalLayer, intermediateLayer);
+        }
       }
       
       // Finally, write the resulting image to the given output path
       System.out.println(System.currentTimeMillis()+": Writing final image");
       FSDataOutputStream outputFile = outFs.create(outFile);
-
-      // Convert the final layer to image
       rasterizer.writeImage(finalLayer, outputFile, vflip);
-
       outputFile.close();
 
       outFs.delete(temp, true);
