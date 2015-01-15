@@ -531,6 +531,44 @@ public class OperationsParams extends Configuration {
 	}
 	
 	
+	public static void setSpatialJoinOutputMode(Configuration conf,
+			String param, boolean spatialJoinOutputMode) {
+		String str = null;
+		if (spatialJoinOutputMode){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
+	public static boolean getSpatialJoinOutputMode(Configuration conf,
+			String key) {
+		String spatialJoinOutputModeFlag = conf.get(key);
+		if (spatialJoinOutputModeFlag == null)
+			LOG.error("Your spatialJoinOutputMode is not set");
+		return Boolean.parseBoolean(spatialJoinOutputModeFlag);
+	}
+	
+	public static void setFilterOnlyModeFlag(Configuration conf,
+			String param, boolean filterOnlyMode) {
+		String str = null;
+		if (filterOnlyMode){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
+	public static boolean getFilterOnlyModeFlag(Configuration conf,
+			String key) {
+		String filterOnlyModeFlag = conf.get(key);
+		if (filterOnlyModeFlag == null)
+			LOG.error("Your filterOnlyMode is not set");
+		return Boolean.parseBoolean(filterOnlyModeFlag);
+	}
+	
 	public static boolean getInactiveModeFlag(Configuration conf,
 			String key) {
 		String inactiveModeFlag_str = conf.get(key);

@@ -91,10 +91,14 @@ public class DistributedJoin {
 	public static boolean isOneShotReadMode = true;
 	public static boolean isGeneralRepartitionMode = true;
 	public static boolean isReduceInactive = false;
+	public static boolean isSpatialJoinOutputRequired = true;
+	public static boolean isFilterOnly = false;
 	public static int joiningThresholdPerOnce = 50000;
 
 	private static final String RepartitionJoinIndexPath = "DJ.RepartitionJoinIndexPath";
 	private static final String InactiveMode = "DJ.InactiveMode";
+	private static final String SpatialJoinOutputMode = "DJ.SpatialJoinOutputMode";
+	private static final String isFilterOnlyMode = "DJ.FilterOnlyMode";
 	private static final String JoiningThresholdPerOnce = "DJ.JoiningThresholdPerOnce";
 	
 	public static class SpatialJoinFilter extends DefaultBlockFilter {
@@ -137,6 +141,16 @@ public class DistributedJoin {
 			implements
 			Mapper<PairWritable<Rectangle>, PairWritable<? extends Writable>, Shape, Shape> {
 
+		private boolean isFilterOnly;
+		private boolean isSpatialJoinOutputRequired;
+		
+		@Override
+		public void configure(JobConf job) {
+			super.configure(job);
+			isSpatialJoinOutputRequired = OperationsParams.getSpatialJoinOutputMode(job, SpatialJoinOutputMode);
+			isFilterOnly = OperationsParams.getFilterOnlyModeFlag(job, isFilterOnlyMode);
+		}
+		
 		public void map(final PairWritable<Rectangle> key,
 				final PairWritable<? extends Writable> value,
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
@@ -171,26 +185,52 @@ public class DistributedJoin {
 						if (mbr != null && mapperMBR.isIntersected(mbr))
 							s.add(shape);
 					}
-
-					SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
-							new ResultCollector2<Shape, Shape>() {
-								@Override
-								public void collect(Shape r, Shape s) {
-									try {
-										double intersectionX = Math.max(
-												r.getMBR().x1, s.getMBR().x1);
-										double intersectionY = Math.max(
-												r.getMBR().y1, s.getMBR().y1);
-										// Employ reference point duplicate
-										// avoidance technique
-										if (mapperMBR.contains(intersectionX,
-												intersectionY))
-											output.collect(r, s);
-									} catch (IOException e) {
-										e.printStackTrace();
+					
+					if(isFilterOnly){
+						SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(r, s,
+								new ResultCollector2<Shape, Shape>() {
+									@Override
+									public void collect(Shape r, Shape s) {
+										if(isSpatialJoinOutputRequired){
+											try {
+												double intersectionX = Math.max(
+														r.getMBR().x1, s.getMBR().x1);
+												double intersectionY = Math.max(
+														r.getMBR().y1, s.getMBR().y1);
+												// Employ reference point duplicate
+												// avoidance technique
+												if (mapperMBR.contains(intersectionX,
+														intersectionY))
+													output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}	
+										}
 									}
-								}
-							});
+								});	
+					}else{
+						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
+								new ResultCollector2<Shape, Shape>() {
+									@Override
+									public void collect(Shape r, Shape s) {
+										if(isSpatialJoinOutputRequired){
+											try {
+												double intersectionX = Math.max(
+														r.getMBR().x1, s.getMBR().x1);
+												double intersectionY = Math.max(
+														r.getMBR().y1, s.getMBR().y1);
+												// Employ reference point duplicate
+												// avoidance technique
+												if (mapperMBR.contains(intersectionX,
+														intersectionY))
+													output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}	
+										}
+									}
+								});	
+					}
 				} else {
 
 					ArrayList<Shape> r = new ArrayList<Shape>();
@@ -207,17 +247,35 @@ public class DistributedJoin {
 							s.add(shape);
 					}
 
-					SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
-							new ResultCollector2<Shape, Shape>() {
-								@Override
-								public void collect(Shape r, Shape s) {
-									try {
-										output.collect(r, s);
-									} catch (IOException e) {
-										e.printStackTrace();
+					if(isFilterOnly){
+						SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(r, s,
+								new ResultCollector2<Shape, Shape>() {
+									@Override
+									public void collect(Shape r, Shape s) {
+										if(isSpatialJoinOutputRequired){
+											try {
+												output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}
+										}
 									}
-								}
-							});
+								});
+					}else{
+						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
+								new ResultCollector2<Shape, Shape>() {
+									@Override
+									public void collect(Shape r, Shape s) {
+										if(isSpatialJoinOutputRequired){
+											try {
+												output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}
+										}
+									}
+						});
+					}
 				}
 			} else if (value.first instanceof RTree
 					&& value.second instanceof RTree) {
@@ -229,26 +287,28 @@ public class DistributedJoin {
 				RTree.spatialJoin(r1, r2, new ResultCollector2<Shape, Shape>() {
 					@Override
 					public void collect(Shape r, Shape s) {
-						try {
-							if (mapperMBR == null) {
-								output.collect(r, s);
-							} else {
-								// Reference point duplicate avoidance technique
-								// The reference point is the lowest corner of
-								// the intersection
-								// rectangle (the point with the least
-								// dimensions of both x and
-								// y in the intersection rectangle)
-								double intersectionX = Math.max(r.getMBR().x1,
-										s.getMBR().x1);
-								double intersectionY = Math.max(r.getMBR().y1,
-										s.getMBR().y1);
-								if (mapperMBR.contains(intersectionX,
-										intersectionY))
+						if(isSpatialJoinOutputRequired){
+							try {
+								if (mapperMBR == null) {
 									output.collect(r, s);
-							}
-						} catch (IOException e) {
-							e.printStackTrace();
+								} else {
+									// Reference point duplicate avoidance technique
+									// The reference point is the lowest corner of
+									// the intersection
+									// rectangle (the point with the least
+									// dimensions of both x and
+									// y in the intersection rectangle)
+									double intersectionX = Math.max(r.getMBR().x1,
+											s.getMBR().x1);
+									double intersectionY = Math.max(r.getMBR().y1,
+											s.getMBR().y1);
+									if (mapperMBR.contains(intersectionX,
+											intersectionY))
+										output.collect(r, s);
+								}
+							} catch (IOException e) {
+								e.printStackTrace();
+							}	
 						}
 					}
 				});
@@ -265,6 +325,16 @@ public class DistributedJoin {
 			implements
 			Mapper<PairWritable<Rectangle>, PairWritable<? extends Writable>, Shape, Shape> {
 
+		private boolean isFilterOnly;
+		private boolean isSpatialJoinOutputRequired;
+		
+		@Override
+		public void configure(JobConf job) {
+			super.configure(job);
+			isSpatialJoinOutputRequired = OperationsParams.getSpatialJoinOutputMode(job, SpatialJoinOutputMode);
+			isFilterOnly = OperationsParams.getFilterOnlyModeFlag(job, isFilterOnlyMode);
+		}
+		
 		public void map(final PairWritable<Rectangle> key,
 				final PairWritable<? extends Writable> value,
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
@@ -299,17 +369,36 @@ public class DistributedJoin {
 						if (mbr != null && mapperMBR.isIntersected(mbr))
 							s.add(shape);
 					}
-					SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
-							new ResultCollector2<Shape, Shape>() {
-								@Override
-								public void collect(Shape r, Shape s) {
-									try {
-										output.collect(r, s);
-									} catch (IOException e) {
-										e.printStackTrace();
+					
+					if(isFilterOnly){
+						SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(r, s,
+								new ResultCollector2<Shape, Shape>() {
+									@Override
+									public void collect(Shape r, Shape s) {
+										if(isSpatialJoinOutputRequired){
+											try {
+												output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}	
+										}
 									}
-								}
-							});
+								});	
+					}else{
+						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
+								new ResultCollector2<Shape, Shape>() {
+									@Override
+									public void collect(Shape r, Shape s) {
+										if(isSpatialJoinOutputRequired){
+											try {
+												output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}	
+										}
+									}
+								});	
+					}
 				} else {
 					ArrayList<Shape> r = new ArrayList<Shape>();
 					ArrayList<Shape> s = new ArrayList<Shape>();
@@ -325,17 +414,35 @@ public class DistributedJoin {
 							s.add(shape);
 					}
 
-					SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
-							new ResultCollector2<Shape, Shape>() {
-								@Override
-								public void collect(Shape r, Shape s) {
-									try {
-										output.collect(r, s);
-									} catch (IOException e) {
-										e.printStackTrace();
+					if(isFilterOnly){
+						SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(r, s,
+								new ResultCollector2<Shape, Shape>() {
+									@Override
+									public void collect(Shape r, Shape s) {
+										if(isSpatialJoinOutputRequired){
+											try {
+												output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}	
+										}
 									}
-								}
-							});
+								});	
+					}else{
+						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
+								new ResultCollector2<Shape, Shape>() {
+									@Override
+									public void collect(Shape r, Shape s) {
+										if(isSpatialJoinOutputRequired){
+											try {
+												output.collect(r, s);
+											} catch (IOException e) {
+												e.printStackTrace();
+											}	
+										}
+									}
+								});
+					}
 				}
 			} else if (value.first instanceof RTree
 					&& value.second instanceof RTree) {
@@ -347,10 +454,12 @@ public class DistributedJoin {
 				RTree.spatialJoin(r1, r2, new ResultCollector2<Shape, Shape>() {
 					@Override
 					public void collect(Shape r, Shape s) {
-						try {
-							output.collect(r, s);
-						} catch (IOException e) {
-							e.printStackTrace();
+						if(isSpatialJoinOutputRequired){
+							try {
+								output.collect(r, s);
+							} catch (IOException e) {
+								e.printStackTrace();
+							}	
 						}
 					}
 				});
@@ -594,6 +703,9 @@ public class DistributedJoin {
 		GlobalIndex<Partition> gindex2 = SpatialSite.getGlobalIndex(fs[1],
 				inFiles[1]);
 
+		OperationsParams.setSpatialJoinOutputMode(job, SpatialJoinOutputMode, isSpatialJoinOutputRequired);
+		OperationsParams.setFilterOnlyModeFlag(job, isFilterOnlyMode, isFilterOnly);
+		
 		LOG.info("Joining " + inFiles[0] + " X " + inFiles[1]);
 
 		if (SpatialSite.isRTree(fs[0], inFiles[0])
@@ -683,7 +795,9 @@ public class DistributedJoin {
 		private Path indexDir;
 		private Shape shape;
 		private boolean inactiveMode;
-		private int rShapesThresholdPerOnce;
+		private boolean isSpatialJoinOutputRequired;
+		private boolean isFilterOnly;
+		private int shapesThresholdPerOnce;
 		
 		@Override
 		public void configure(JobConf job) {
@@ -692,7 +806,9 @@ public class DistributedJoin {
 					RepartitionJoinIndexPath);
 			shape = OperationsParams.getShape(job, "shape");
 			inactiveMode = OperationsParams.getInactiveModeFlag(job, InactiveMode);
-			rShapesThresholdPerOnce = OperationsParams.getJoiningThresholdPerOnce(job, JoiningThresholdPerOnce);
+			isSpatialJoinOutputRequired = OperationsParams.getSpatialJoinOutputMode(job, SpatialJoinOutputMode);
+			isFilterOnly = OperationsParams.getFilterOnlyModeFlag(job, isFilterOnlyMode);
+			shapesThresholdPerOnce = OperationsParams.getJoiningThresholdPerOnce(job, JoiningThresholdPerOnce);
 		}
 
 		@Override
@@ -706,62 +822,90 @@ public class DistributedJoin {
 			GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs,
 					indexDir);
 			
-			for (Partition p : gIndex) {
-				if (p.cellId == cellIndex.get()) {
-					LOG.info("Joining with partition: "+p);
-					Path partitionFile = new Path(indexDir, p.filename);
-					FileSystem partitionFS = partitionFile
-							.getFileSystem(new Configuration());
-
-					// Load all shapes in this partition
-					ShapeIterRecordReader shapeReader = new ShapeIterRecordReader(
-							partitionFS.open(partitionFile), 0, p.size);
-					shapeReader.setShape(shape);
-					Rectangle cellInfo = shapeReader.createKey();
-					ShapeIterator partitionShapes = shapeReader
-							.createValue();
-
-					// load shapes from the indexed dataset
-					final ArrayList<Shape> selectedSShapes = new ArrayList<Shape>();
-					while (shapeReader.next(cellInfo, partitionShapes)) {
-						for (Shape shapeInPartition : partitionShapes) {
-							selectedSShapes.add(shapeInPartition.clone());
-						}
-					}
-					shapeReader.close();
-					LOG.info("Read "+selectedSShapes.size()+" shapes from partition");
+			
+			// Get collected shapes from the repartition phase
+			while (shapes.hasNext()) {
+					int currRShapes = 0;
+					final ArrayList<Shape> r = new ArrayList<Shape>();
+					do{
+						T rShape = shapes.next();
+						r.add(rShape.clone());	
+						currRShapes++;
+					} while(shapes.hasNext() && currRShapes < shapesThresholdPerOnce);
 
 					
-					// Get collected shapes from the repartition phase
-					while (shapes.hasNext()) {
-							int currRShapes = 0;
-							final ArrayList<Shape> r = new ArrayList<Shape>();
-							do{
-								T rShape = shapes.next();
-								r.add(rShape.clone());	
-								currRShapes++;
-							} while(shapes.hasNext() && currRShapes < rShapesThresholdPerOnce);
-							
-							// Join two arrays using the plane sweep
-							// algorithm
-							SpatialAlgorithms.SpatialJoin_planeSweep(
-									r, selectedSShapes,
-									new ResultCollector2<Shape, Shape>() {
-										@Override
-										public void collect(Shape r, Shape s) {
-											try {
-												output.collect(r, s);
-											} catch (IOException e) {
-												e.printStackTrace();
-											}
-										}
-									});		
-					}
-					LOG.info("Finished joining of "+p);
-				}
-				reporter.progress();
-			}	
+					for (Partition p : gIndex) {
+						if (p.cellId == cellIndex.get()) {
+							LOG.info("Joining with partition: "+p);
+							Path partitionFile = new Path(indexDir, p.filename);
+							FileSystem partitionFS = partitionFile
+									.getFileSystem(new Configuration());
+
+							// Load all shapes in this partition
+							ShapeIterRecordReader shapeReader = new ShapeIterRecordReader(
+									partitionFS.open(partitionFile), 0, p.size);
+							shapeReader.setShape(shape);
+							Rectangle cellInfo = shapeReader.createKey();
+							ShapeIterator partitionShapes = shapeReader
+									.createValue();
+
+							// load shapes from the indexed dataset
+							while (shapeReader.next(cellInfo, partitionShapes)) {
+								while(partitionShapes.hasNext()){
+									final ArrayList<Shape> selectedSShapes = new ArrayList<Shape>();
+									int currSShapes = 0;
+									do{
+										Shape shapeInPartition = partitionShapes.next();
+										selectedSShapes.add(shapeInPartition.clone());
+										currSShapes++;
+									} while(partitionShapes.hasNext() && currSShapes < shapesThresholdPerOnce);
+									LOG.info("Read "+selectedSShapes.size()+" shapes from partition");
+									
+									// Join two arrays using the plane sweep
+									// algorithm
+									if(isFilterOnly){
+										SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(
+												r, selectedSShapes,
+												new ResultCollector2<Shape, Shape>() {
+													@Override
+													public void collect(Shape r, Shape s) {
+														if(isSpatialJoinOutputRequired){
+															try {
+																output.collect(r, s);
+															} catch (IOException e) {
+																e.printStackTrace();
+															}	
+														}
+													}
+												});
+									}else{
+										SpatialAlgorithms.SpatialJoin_planeSweep(
+												r, selectedSShapes,
+												new ResultCollector2<Shape, Shape>() {
+													@Override
+													public void collect(Shape r, Shape s) {
+														if(isSpatialJoinOutputRequired){
+															try {
+																output.collect(r, s);
+															} catch (IOException e) {
+																e.printStackTrace();
+															}	
+														}
+													}
+												});										
+									}
+									
 			
+									reporter.progress();	
+								}
+							}	
+							shapeReader.close();
+							
+
+							LOG.info("Finished joining of "+p);
+						}
+					}	
+			}
 			
 					
 		}else{
@@ -819,7 +963,8 @@ public class DistributedJoin {
 				RepartitionJoinIndexPath, inputFiles[1 - fileToRepartition]);
 		OperationsParams.setInactiveModeFlag(repartitionJoinJob, InactiveMode, isReduceInactive);
 		OperationsParams.setJoiningThresholdPerOnce(repartitionJoinJob, JoiningThresholdPerOnce, joiningThresholdPerOnce);
-
+		OperationsParams.setSpatialJoinOutputMode(repartitionJoinJob, SpatialJoinOutputMode, isSpatialJoinOutputRequired);
+		OperationsParams.setFilterOnlyModeFlag(repartitionJoinJob, isFilterOnlyMode, isFilterOnly);
 		CellInfo[] cellsInfo = SpatialSite.cellsOf(fs,
 				inputFiles[1 - fileToRepartition]);
 
@@ -1124,6 +1269,24 @@ public class DistributedJoin {
 		if (params.get("joining-per-once") != null) {
 			System.out.println("joining-per-once is set to: " + params.get("joining-per-once"));
 			joiningThresholdPerOnce = Integer.parseInt(params.get("joining-per-once"));
+		}
+		
+		if (params.get("filter-only") != null) {
+			System.out.println("filer-only mode is set to: " + params.get("filter-only"));
+			if (params.get("filter-only").equals("yes")) {
+				isFilterOnly = true;
+			}else{
+				isFilterOnly = false;
+			}
+		}
+		
+		if (params.get("no-output") != null) {
+			System.out.println("no-output mode is set to: " + params.get("no-output"));
+			if (params.get("no-output").equals("yes")){
+				isSpatialJoinOutputRequired = false;
+			}else{
+				isSpatialJoinOutputRequired = true;
+			}
 		}
 		
 		long result_size;

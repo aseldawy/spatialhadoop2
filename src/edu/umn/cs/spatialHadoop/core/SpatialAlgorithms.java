@@ -73,6 +73,73 @@ class TOPK {
 
 public class SpatialAlgorithms {
   public static final Log LOG = LogFactory.getLog(SpatialAlgorithms.class);
+
+  
+  public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweepFilterOnly(
+	      List<S1> R, List<S2> S, ResultCollector2<S1, S2> output)
+	      throws IOException {
+	    int count = 0;
+
+	    Comparator<Shape> comparator = new Comparator<Shape>() {
+	      @Override
+	      public int compare(Shape o1, Shape o2) {
+	    	if (o1.getMBR().x1 == o2.getMBR().x1)
+	    		return 0;
+	        return o1.getMBR().x1 < o2.getMBR().x1 ? -1 : 1;
+	      }
+	    };
+
+	    long t1 = System.currentTimeMillis();
+	    LOG.info("Joining lists "+ R.size()+" with "+S.size());
+	    Collections.sort(R, comparator);
+	    Collections.sort(S, comparator);
+
+			int i = 0, j = 0;
+
+	    try {
+	      while (i < R.size() && j < S.size()) {
+	        S1 r;
+	        S2 s;
+	        if (comparator.compare(R.get(i), S.get(j)) < 0) {
+	          r = R.get(i);
+	          int jj = j;
+
+	          while ((jj < S.size())
+	              && ((s = S.get(jj)).getMBR().x1 <= r.getMBR().x2)) {
+	            // Check if r and s are overlapping but not the same object
+	            // for self join
+	            if (r.getMBR().isIntersected(s.getMBR())) {
+	              if (output != null)
+	                output.collect(r, s);
+	              count++;
+	            }
+	            jj++;
+	          }
+	          i++;
+	        } else {
+	          s = S.get(j);
+	          int ii = i;
+
+	          while ((ii < R.size())
+	              && ((r = R.get(ii)).getMBR().x1 <= s.getMBR().x2)) {
+	            if (r.getMBR().isIntersected(s.getMBR())) {
+	              if (output != null)
+	                output.collect(r, s);
+	              count++;
+	            }
+	            ii++;
+	          }
+	          j++;
+	        }
+	      }
+	    } catch (RuntimeException e) {
+	      e.printStackTrace();
+	    }
+	    long t2 = System.currentTimeMillis();
+	    LOG.info("Finished plane sweep filter only in "+(t2-t1)+" millis and found "+count+" pairs");
+	    return count;
+		}
+
   
   /**
    * @param R
@@ -146,6 +213,70 @@ public class SpatialAlgorithms {
     return count;
 	}
 
+  
+  public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweepFilterOnly(
+	      final S1[] R, final S2[] S, ResultCollector2<S1, S2> output) {
+	    int count = 0;
+
+	    final Comparator<Shape> comparator = new Comparator<Shape>() {
+	      @Override
+	      public int compare(Shape o1, Shape o2) {
+	    	if (o1.getMBR().x1 == o2.getMBR().x1)
+	    		return 0;
+	        return o1.getMBR().x1 < o2.getMBR().x1 ? -1 : 1;
+	      }
+	    };
+	    
+	    long t1 = System.currentTimeMillis();
+	    LOG.info("Joining arrays "+ R.length+" with "+S.length);
+	    Arrays.sort(R, comparator);
+	    Arrays.sort(S, comparator);
+
+	    int i = 0, j = 0;
+
+	    try {
+	      while (i < R.length && j < S.length) {
+	        S1 r;
+	        S2 s;
+	        if (comparator.compare(R[i], S[j]) < 0) {
+	          r = R[i];
+	          int jj = j;
+
+	          while ((jj < S.length)
+	              && ((s = S[jj]).getMBR().x1 <= r.getMBR().x2)) {
+	            if (r.getMBR().isIntersected(s.getMBR())) {
+	              if (output != null)
+	                output.collect(r, s);
+	              count++;
+	            }
+	            jj++;
+	          }
+	          i++;
+	        } else {
+	          s = S[j];
+	          int ii = i;
+
+	          while ((ii < R.length)
+	              && ((r = R[ii]).getMBR().x1 <= s.getMBR().x2)) {
+	            if (r.getMBR().isIntersected(s.getMBR())) {
+	              if (output != null)
+	                output.collect(r, s);
+	              count++;
+	            }
+	            ii++;
+	          }
+	          j++;
+	        }
+	      }
+	    } catch (RuntimeException e) {
+	      e.printStackTrace();
+	    }
+	    long t2 = System.currentTimeMillis();
+	    LOG.info("Finished plane sweep filter only in "+(t2-t1)+" millis and found "+count+" pairs");
+	    return count;
+	  }
+
+  
   public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweep(
       final S1[] R, final S2[] S, ResultCollector2<S1, S2> output) {
     int count = 0;
