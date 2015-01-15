@@ -89,7 +89,7 @@ public class IntArray implements Writable {
     int newSize = in.readInt();
     expand(newSize);
     byte[] buffer = new byte[1024*1024];
-    int size = 0;
+    size = 0;
     while (size < newSize) {
       in.readFully(buffer, 0, Math.min(buffer.length, (newSize - size) * 4));
       ByteBuffer bb = ByteBuffer.wrap(buffer);

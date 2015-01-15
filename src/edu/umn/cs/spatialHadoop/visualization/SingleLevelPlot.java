@@ -428,6 +428,7 @@ public class SingleLevelPlot {
 
     Shape plotRange = params.getShape("rect", null);
     final Rectangle inputMBR = plotRange == null ? FileMBR.fileMBR(inFile, params) : plotRange.getMBR();
+    OperationsParams.setShape(params, InputMBR, inputMBR);
 
     // Retrieve desired output image size and keep aspect ratio if needed
     int width = params.getInt("width", 1000);
@@ -492,7 +493,8 @@ public class SingleLevelPlot {
                 partitionMBR.set(inputMBR);
               
               // Run the rasterize step
-              rasterizer.rasterize(partialRaster, shapes);
+              rasterizer.rasterize(partialRaster,
+                  rasterizer.isSmooth() ? rasterizer.smooth(shapes) : shapes);
             }
             reader.close();
           } catch (IOException e) {

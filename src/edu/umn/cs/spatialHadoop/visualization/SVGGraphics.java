@@ -95,8 +95,6 @@ public class SVGGraphics extends Graphics2D implements Writable {
   public void write(DataOutput out) throws IOException {
     out.writeInt(width);
     out.writeInt(height);
-    out.writeInt(tx);
-    out.writeInt(ty);
     xs.write(out);
     ys.write(out);
     linesStart.write(out);
@@ -111,8 +109,6 @@ public class SVGGraphics extends Graphics2D implements Writable {
   public void readFields(DataInput in) throws IOException {
     width = in.readInt();
     height = in.readInt();
-    tx = in.readInt();
-    ty = in.readInt();
     xs.readFields(in);
     ys.readFields(in);
     linesStart.readFields(in);
@@ -504,11 +500,11 @@ public class SVGGraphics extends Graphics2D implements Writable {
    * Merge all objects in the given svgGraphics with this one
    * @param other
    */
-  public void mergeWith(SVGGraphics other) {
+  public void mergeWith(SVGGraphics other, int tx, int ty) {
     // 1- Merge points
     int pointsShift = this.xs.size();
-    this.xs.append(other.xs);
-    this.ys.append(other.ys);
+    this.xs.append(other.xs, tx);
+    this.ys.append(other.ys, ty);
     
     // 2- Merge lines
     this.linesStart.append(other.linesStart, pointsShift);
@@ -577,16 +573,16 @@ public class SVGGraphics extends Graphics2D implements Writable {
       }
       p.printf("</g>\n");
       
-      // 3- Draw all rectangles
-      if (rectanglesStart.size() > 0) {
-        p.printf("<g style='stroke:rgb(0,0,0); fill:none;'>\n");
-        for (int i = 0; i < rectanglesStart.size(); i++) {
-          int rectStart = rectanglesStart.get(i);
-          p.printf("<rect x='%d' y='%d' width='%d' height='%d'/>\n",
-              xs[rectStart], ys[rectStart], xs[rectStart+1], ys[rectStart+1]);
-        }
-        p.printf("</g>\n");
+    }
+    // 4- Draw all rectangles
+    if (rectanglesStart.size() > 0) {
+      p.printf("<g style='stroke:rgb(0,0,0); fill:none;'>\n");
+      for (int i = 0; i < rectanglesStart.size(); i++) {
+        int rectStart = rectanglesStart.get(i);
+        p.printf("<rect x='%d' y='%d' width='%d' height='%d'/>\n",
+            xs[rectStart], ys[rectStart], xs[rectStart+1], ys[rectStart+1]);
       }
+      p.printf("</g>\n");
     }
     
     p.println("</svg>");

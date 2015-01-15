@@ -7,6 +7,7 @@
 
 package edu.umn.cs.spatialHadoop.visualization;
 
+import java.awt.Point;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -76,7 +77,9 @@ public class SVGRasterLayer extends RasterLayer {
   }
 
   public void mergeWith(SVGRasterLayer intermediateLayer) {
-    this.svgGraphics.mergeWith(intermediateLayer.svgGraphics);
+    Point offset = projectToImageSpace(intermediateLayer.getInputMBR().x1,
+        intermediateLayer.getInputMBR().y1);
+    this.svgGraphics.mergeWith(intermediateLayer.svgGraphics, offset.x, offset.y);
   }
 
   public void writeToFile(PrintStream ps) {
