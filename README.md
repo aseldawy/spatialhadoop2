@@ -45,7 +45,7 @@ Generate a non-indexed spatial file with rectangles in a rectangular area of 1M 
 
 Build a grid index over the generated file
 
-    shadoop index test.rects sindex:grid test.grid
+    shadoop index test.rects sindex:grid test.grid shape:rect
 
 Run a range query that selects rectangles overlapping the query area defined
 by the box with the two corners (10, 20) and (2000, 3000). Results are stored
