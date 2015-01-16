@@ -264,19 +264,15 @@ public class SJMR {
         shapeLists[i] = new Vector<S>();
       }
       
-      sjmrReduceLOG.info("Start copying shapes...");
-      int tmpCounter = 0;
       while (values.hasNext()) {
         IndexedText t = values.next();
         S s = (S) shape.clone();
         s.fromText(t.text);
         shapeLists[t.index].add(s);
-        tmpCounter++;
       }
-      sjmrReduceLOG.info("End copying  " + tmpCounter + " shapes...");
       
       // Perform spatial join between the two lists
-      sjmrReduceLOG.info("Start plane sweep algorithm (" + shapeLists[0].size() +" X "+ shapeLists[1].size()+ ")...");
+      sjmrReduceLOG.info("Joining (" + shapeLists[0].size() +" X "+ shapeLists[1].size()+ ")...");
       SpatialAlgorithms.SpatialJoin_planeSweep(shapeLists[0], shapeLists[1], new ResultCollector2<S, S>() {
         @Override
         public void collect(S x, S y) {
@@ -294,7 +290,6 @@ public class SJMR {
           }
         }
       });
-      sjmrReduceLOG.info("End plane sweep algorithm ...");      
       
       long t2 = System.currentTimeMillis();
       System.out.println("Reducer finished in: "+(t2-t1)+" millis");

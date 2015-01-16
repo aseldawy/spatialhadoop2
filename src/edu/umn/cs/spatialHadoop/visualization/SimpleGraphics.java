@@ -10,7 +10,7 @@
  * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and limitations under the License.
  */
-package edu.umn.cs.spatialHadoop;
+package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
 import java.awt.Composite;
@@ -57,6 +57,10 @@ public class SimpleGraphics extends Graphics2D {
   private Color background;
   private Color color;
   private int[] pixels;
+  /**Amount of translation along the x-axis*/
+  private int tx;
+  /**Amount of translation along the y-axis*/
+  private int ty;
 
   public SimpleGraphics(BufferedImage image) {
     this.image = image;
@@ -192,21 +196,19 @@ public class SimpleGraphics extends Graphics2D {
   }
 
   @Override
-  public void translate(int x, int y) {
-    throw new RuntimeException("Not implemented");
-    
+  public void translate(int tx, int ty) {
+    this.tx += tx;
+    this.ty += ty;
   }
 
   @Override
   public void translate(double tx, double ty) {
     throw new RuntimeException("Not implemented");
-    
   }
 
   @Override
   public void rotate(double theta) {
     throw new RuntimeException("Not implemented");
-    
   }
 
   @Override
@@ -368,6 +370,7 @@ public class SimpleGraphics extends Graphics2D {
   }
   
   protected void setPixel(int x, int y, int rgb) {
+    x += tx; y += ty;
     if (x >= 0 && y >= 0 && x < image.getWidth() && y < image.getHeight()) {
       int offset = y * image.getWidth() + x;
       int d_alpha = pixels[offset] >>> 24;
@@ -393,6 +396,8 @@ public class SimpleGraphics extends Graphics2D {
 
   @Override
   public void drawLine(int x1, int y1, int x2, int y2) {
+    x1 += tx; y1 += ty;
+    x2 += tx; y2 += ty;
     if (y1 == y2 || x1 == x2) {
       if (x1 > x2) {
         x1 ^= x2;
@@ -461,15 +466,18 @@ public class SimpleGraphics extends Graphics2D {
 
   @Override
   public void fillRect(int x, int y, int width, int height) {
+    x += tx; y += ty;
     dumpRect(x, y, width, height, color);
   }
 
   @Override
   public void clearRect(int x, int y, int width, int height) {
+    x += tx; y += ty;
     dumpRect(x, y, width, height, background);
   }
   
   protected void dumpRect(int x, int y, int width, int height, Color color) {
+    // Do not apply the transformation here as it is assumed to be applied already
     if (x < 0) {
       width += x;
       x = 0;
@@ -534,15 +542,15 @@ public class SimpleGraphics extends Graphics2D {
 
   @Override
   public void drawPolyline(int[] xPoints, int[] yPoints, int nPoints) {
-    throw new RuntimeException("Not implemented");
-    
+    for (int i = 1; i < nPoints; i++)
+      drawLine(xPoints[i-1], yPoints[i-1], xPoints[i], yPoints[i]);
   }
 
   @Override
   public void drawPolygon(int[] xPoints, int[] yPoints, int nPoints) {
-    for (int i = 1; i < nPoints; i++) {
+    // Do not apply the transformation here as drawLine will apply it
+    for (int i = 1; i < nPoints; i++)
       drawLine(xPoints[i-1], yPoints[i-1], xPoints[i], yPoints[i]);
-    }
     drawLine(xPoints[nPoints-1], yPoints[nPoints-1], xPoints[0], yPoints[0]);
   }
 
@@ -554,6 +562,7 @@ public class SimpleGraphics extends Graphics2D {
 
   @Override
   public boolean drawImage(Image img, int x, int y, ImageObserver observer) {
+    // Do not apply the transformation here as drawImage will apply it
     return drawImage(img, x, y,
         img.getWidth(observer), img.getHeight(observer), observer);
   }
@@ -561,6 +570,7 @@ public class SimpleGraphics extends Graphics2D {
   @Override
   public boolean drawImage(Image img, int x, int y, int width, int height,
       ImageObserver observer) {
+    // Do not apply the transformation here as drawImage will apply it
     return drawImage(img, x, y, x + width - 1, y + height - 1, 0, 0,
         img.getWidth(observer) - 1, img.getHeight(observer) - 1, observer);
   }
@@ -580,6 +590,8 @@ public class SimpleGraphics extends Graphics2D {
   @Override
   public boolean drawImage(Image img, int dx1, int dy1, int dx2, int dy2,
       int sx1, int sy1, int sx2, int sy2, ImageObserver observer) {
+    dx1 += tx; dy1 += ty;
+    dx2 += tx; dy2 += ty;
     if (img instanceof BufferedImage) {
       BufferedImage simg = (BufferedImage) img;
       if (dx2 - dx1 != sx2 - sx1 || dy2-dy1 != sy2-sy1)
@@ -602,7 +614,29 @@ public class SimpleGraphics extends Graphics2D {
         sy2 -= diff;
         dy2 -= diff;
       }
+      if (sy1 < 0) {
+        dy1 += sy1;
+        sy1 = 0;
+      }
+      if (sx1 < 0) {
+        dx1 += sx1;
+        sx1 = 0;
+      }
+      if (sx2 >= simg.getWidth()) {
+        int diff = sx2 - simg.getWidth() + 1;
+        sx2 -= diff;
+        dx2 -= diff;
+      }
+      if (sy2 >= simg.getHeight()) {
+        int diff = sy2 - simg.getHeight() + 1;
+        sy2 -= diff;
+        dy2 -= diff;
+      }
       int offset = dy1 * image.getWidth() + dx1;
+      if ((sx2 - sx1 + 1) * (sy2 - sy1 + 1) <= 0) {
+        // No pixels in range. perhaps the whole image is clipped
+        return true;
+      }
       int[] spixels = new int[(sx2 - sx1 + 1) * (sy2 - sy1 + 1)];
       simg.getRGB(sx1, sy1, sx2 - sx1 + 1, sy2 - sy1 + 1, spixels, 0, sx2 - sx1
           + 1);
@@ -636,7 +670,7 @@ public class SimpleGraphics extends Graphics2D {
       }
       return true;
     } else {
-      throw new RuntimeException("Not implemented");
+      throw new RuntimeException("Not implemented for "+img.getClass());
     }
   }
 
@@ -656,6 +690,7 @@ public class SimpleGraphics extends Graphics2D {
     Graphics2D g = new SimpleGraphics(image);
 //    Graphics2D g = image.createGraphics();
     g.setBackground(new Color(255, 0, 0, 128));
+    g.translate(20, 15);
     g.clearRect(0, 0, 100, 100);
     g.setColor(new Color(0, 0, 0, 255));
     g.drawLine(0, 0, 50, 10);

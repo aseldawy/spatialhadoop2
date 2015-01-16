@@ -14,6 +14,7 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Stack;
 
@@ -52,7 +53,7 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
  * @author Ahmed Eldawy
  *
  */
-public class HDFRecordReader implements RecordReader<NASADataset, NASAShape> {
+public class HDFRecordReader implements RecordReader<NASADataset, Iterable<NASAShape>> {
   private static final Log LOG = LogFactory.getLog(HDFRecordReader.class);
 
   /** The HDF file being read*/
@@ -655,8 +656,7 @@ private Object interpolate(Object value1, Object value2,
     return false;
   }
 
-  @Override
-  public boolean next(NASADataset key, NASAShape shape) throws IOException {
+  protected boolean nextObject(NASADataset key, NASAShape shape) throws IOException {
     if (dataArray == null)
       return false;
     // Key doesn't need to be changed because all points in the same dataset
@@ -720,6 +720,12 @@ private Object interpolate(Object value1, Object value2,
     }
     return false;
   }
+  
+  @Override
+  public boolean next(NASADataset dataset, Iterable<NASAShape> value)
+      throws IOException {
+    return ((NASAIterator) value).hasNext();
+  }
 
   @Override
   public NASADataset createKey() {
@@ -727,10 +733,15 @@ private Object interpolate(Object value1, Object value2,
   }
 
   @Override
-  public NASAShape createValue() {
-    return value;
+  public Iterable<NASAShape> createValue() {
+    try {
+      return new NASAIterator();
+    } catch (IOException e) {
+      LOG.warn("Error creating value", e);
+      return null;
+    }
   }
-
+  
   @Override
   public long getPos() throws IOException {
     return position;
@@ -745,6 +756,49 @@ private Object interpolate(Object value1, Object value2,
   public float getProgress() throws IOException {
     return dataArray == null ? 0 : (float)position / Array.getLength(dataArray);
   }
+  
+  public class NASAIterator implements Iterable<NASAShape>, Iterator<NASAShape> {
+    
+    /**Next value to be returned*/
+    protected NASAShape next;
+    /**Last value returned*/
+    protected NASAShape last;
+
+    public NASAIterator() throws IOException {
+      last = HDFRecordReader.this.value;
+      next = (NASAShape) last.clone();
+      if (!nextObject(nasaDataset, next))
+        next = null;
+    }
+    
+    @Override
+    public Iterator<NASAShape> iterator() {
+      return this;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return next != null;
+    }
+
+    @Override
+    public NASAShape next() {
+      try {
+        last = next;
+        if (!nextObject(nasaDataset, next))
+          next = null;
+        return last;
+      } catch (IOException e) {
+        LOG.warn("Error getting next shape", e);
+        return null;
+      }
+    }
+
+    @Override
+    public void remove() {
+      throw new RuntimeException("Method not implemented");
+    }
+  }
 
   public static void main(String[] args) throws IOException {
     Configuration job = new Configuration();
@@ -756,9 +810,9 @@ private Object interpolate(Object value1, Object value2,
     job.setClass("shape", NASAPoint.class, Shape.class);
     HDFRecordReader reader = new HDFRecordReader(job, new FileSplit(file, 0, fstatus.getLen(), new String[0]), "LST_Day_1km", true);
     NASADataset key = reader.createKey();
-    NASAShape value = reader.createValue();
+    Iterable<NASAShape> v = reader.createValue();
     int count = 0;
-    while (reader.next(key, value)) {
+    while (reader.next(key, v)) {
       count++;
     }
     System.out.println(count);

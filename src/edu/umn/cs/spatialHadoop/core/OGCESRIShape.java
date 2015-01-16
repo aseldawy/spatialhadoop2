@@ -30,6 +30,7 @@ import com.esri.core.geometry.Polyline;
 import com.esri.core.geometry.ogc.OGCConcreteGeometryCollection;
 import com.esri.core.geometry.ogc.OGCGeometry;
 import com.esri.core.geometry.ogc.OGCGeometryCollection;
+import com.esri.core.geometry.ogc.OGCLineString;
 import com.esri.core.geometry.ogc.OGCPoint;
 
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
@@ -233,6 +234,31 @@ public class OGCESRIShape implements Shape {
         g.drawPolygon(xpoints, ypoints, path.getPointCount());
       else if (path instanceof Polyline)
         g.drawPolyline(xpoints, ypoints, path.getPointCount());
+    }
+  }
+  
+  @Override
+  public void draw(Graphics g, double xscale, double yscale) {
+    drawESRIGeom(g, geom, xscale, yscale);
+  }
+  
+  public void drawESRIGeom(Graphics g, OGCGeometry geom, double xscale, double yscale) {
+    if (geom instanceof OGCLineString) {
+      OGCLineString linestring = (OGCLineString) geom;
+      int[] xs = new int[linestring.numPoints()];
+      int[] ys = new int[linestring.numPoints()];
+      int n = 0;
+      for (int i = 0; i < n; i++) {
+        OGCPoint point = linestring.pointN(i);
+        xs[n] = (int) Math.round(point.X() * xscale);
+        ys[n] = (int) Math.round(point.Y() * yscale);
+        // Increment number of point if this point is different than previous ones
+        if (n == 0 || xs[n] != xs[n-1] || ys[n] != ys[n-1])
+          n++;
+      }
+      g.drawPolyline(xs, ys, n);
+    } else {
+      throw new RuntimeException("Cannot draw a shape of type "+geom.getClass());
     }
   }
 }

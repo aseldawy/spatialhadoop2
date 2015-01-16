@@ -50,6 +50,7 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 
 /**
  * Combines all the configuration needed for SpatialHadoop.
+ * 
  * @author Ahmed Eldawy
  *
  */
@@ -254,6 +255,7 @@ public class SpatialSite {
    * @param conf
    * @param param
    * @return
+   * @deprecated - Use {@link OperationsParams#getShape(Configuration, String)}
    */
   @Deprecated
   public static Shape getShape(Configuration conf, String param) {
@@ -573,4 +575,17 @@ public class SpatialSite {
     rtree.readFields(input);
     return rtree;
   }
+
+	public static CellInfo getCellInfo(GlobalIndex<Partition> gIndex, int cellID) {
+		Map<Integer, CellInfo> cells = new HashMap<Integer, CellInfo>();
+		for (Partition p : gIndex) {
+			CellInfo cell = cells.get(p.cellId);
+			if (cell == null) {
+				cells.put(p.cellId, cell = new CellInfo(p));
+			} else {
+				cell.expand(p);
+			}
+		}
+		return cells.get(cellID);
+	}
 }

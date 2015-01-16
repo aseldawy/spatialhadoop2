@@ -59,6 +59,16 @@ public interface Shape extends Writable, Cloneable, TextSerializable {
    * @param imageWidth - width of the image to draw
    * @param imageHeight - height of the image to draw
    * @param scale - the scale used to convert shape coordinates to image coordinates
+   * @deprecated - see 
    */
+  @Deprecated
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth, int imageHeight, double scale);
+  
+  /**
+   * Draws the shape to the given graphics and scale.
+   * @param g - the graphics to draw the shape to.
+   * @param xscale - scale of the image x-axis in terms of pixels per points.
+   * @param yscale - scale of the image y-axis in terms of pixels per points.
+   */
+  public void draw(Graphics g, double xscale, double yscale);
 }
