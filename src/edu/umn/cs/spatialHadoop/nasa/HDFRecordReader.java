@@ -38,7 +38,6 @@ import org.apache.hadoop.mapred.RecordReader;
 
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
@@ -84,7 +83,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, Iterable<NASAS
   private NASAShape value;
 
   /**Configuration for name of the dataset to read from HDF file*/
-  public static final String DatasetName = "HDFInputFormat.DatasetName";
+  public static final String DatasetName = "dataset";
 
   /**The configuration entry for skipping the fill value*/
   public static final String SkipFillValue = "HDFRecordReader.SkipFillValue";

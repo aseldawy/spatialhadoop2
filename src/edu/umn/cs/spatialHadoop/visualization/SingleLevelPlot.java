@@ -254,7 +254,7 @@ public class SingleLevelPlot {
       final int height = job.getInt("height", 1000);
       final Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
 
-      boolean vflip = job.getBoolean("vflip", true);
+      final boolean vflip = job.getBoolean("vflip", true);
 
       // List all output files resulting from reducers
       final FileSystem outFs = outPath.getFileSystem(job);
@@ -274,7 +274,6 @@ public class SingleLevelPlot {
         @Override
         public RasterLayer run(int i1, int i2) {
           Rasterizer rasterizer = Rasterizer.getRasterizer(job);
-          int layerCount = 0;
           // The raster layer that contains the merge of all assigned layers
           RasterLayer finalLayer = null;
           RasterLayer tempLayer = rasterizer.createRaster(1, 1, new Rectangle());
@@ -283,21 +282,21 @@ public class SingleLevelPlot {
             try {
               FSDataInputStream inputStream = outFs.open(resultFile.getPath());
               while (inputStream.getPos() < resultFile.getLen()) {
-                tempLayer.readFields(inputStream);
-                if (layerCount == 0) {
-                  // Assign this layer as a final layer
-                  finalLayer = tempLayer;
-                } else if (layerCount == 1) {
-                  // Only one layer. Create a new final layer and merge both
-                  RasterLayer newFinalLayer = rasterizer.createRaster(width, height, inputMBR);
-                  rasterizer.merge(newFinalLayer, finalLayer);
-                  rasterizer.merge(newFinalLayer, tempLayer);
-                  finalLayer = newFinalLayer;
-                } else {
+                if (tempLayer == finalLayer) {
+                  // More than one layer. Create a separate final layer to merge
+                  finalLayer = rasterizer.createRaster(width, height, inputMBR);
                   rasterizer.merge(finalLayer, tempLayer);
                 }
-                layerCount++;
-                System.out.println(System.currentTimeMillis()+": Merged "+layerCount);
+                tempLayer.readFields(inputStream);
+
+                if (finalLayer == null) {
+                  // First layer. Treat it as a final layer to avoid merging
+                  // if it is the only layer
+                  finalLayer = tempLayer;
+                } else {
+                  // More than only layer. Merge into the final layer
+                  rasterizer.merge(finalLayer, tempLayer);
+                }
               }
               inputStream.close();
             } catch (IOException e) {

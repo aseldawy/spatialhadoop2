@@ -55,7 +55,7 @@ public class HDFPlot2 {
           HDFRasterLayer.GradientType.GT_HSB : HDFRasterLayer.GradientType.GT_RGB;
       String rangeStr = conf.get("valuerange");
       if (rangeStr != null) {
-        String[] parts = rangeStr.split(",");
+        String[] parts = rangeStr.split("\\.\\.");
         this.minValue = Float.parseFloat(parts[0]);
         this.maxValue = Float.parseFloat(parts[1]);
       } else {
@@ -132,8 +132,8 @@ public class HDFPlot2 {
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("width:<w> - Maximum width of the image (1000)");
     System.out.println("height:<h> - Maximum height of the image (1000)");
-    System.out.println("color:<c> - Main color used to draw the picture (black)");
     System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
+    System.out.println("valuerange:<v1..v2> - Range of values for the generated heat map");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     GenericOptionsParser.printGenericCommandUsage(System.out);
