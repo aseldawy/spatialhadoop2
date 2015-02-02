@@ -24,6 +24,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.nasa.NASAShape;
 
 /**
@@ -129,15 +130,12 @@ public class HDFPlot2 {
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
-    System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
     System.out.println("width:<w> - Maximum width of the image (1000)");
     System.out.println("height:<h> - Maximum height of the image (1000)");
     System.out.println("color:<c> - Main color used to draw the picture (black)");
     System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
-    System.out.println("-fade: Use the gradual fade option");
-    System.out.println("-sample: Use the daptive sample option");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
@@ -147,9 +145,17 @@ public class HDFPlot2 {
    */
   public static void main(String[] args) throws IOException {
     System.setProperty("java.awt.headless", "true");
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     if (!params.checkInputOutput()) {
       printUsage();
+      System.exit(1);
+    }
+    
+    if (params.get("shape") == null) {
+      // Set the default shape value
+      params.setClass("shape", NASARectangle.class, Shape.class);
+    } else if (!(params.getShape("shape") instanceof NASAShape)) {
+      System.err.println("The specified shape "+params.get("shape")+" in not an instance of NASAShape");
       System.exit(1);
     }
 
