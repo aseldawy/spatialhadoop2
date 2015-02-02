@@ -248,7 +248,7 @@ public class SingleLevelPlot {
     public void commitJob(JobContext context) throws IOException {
       super.commitJob(context);
       final JobConf job = context.getJobConf();
-      Path outFile = RasterOutputFormat.getOutputPath(job);
+      Path outPath = RasterOutputFormat.getOutputPath(job);
       
       final int width = job.getInt("width", 1000);
       final int height = job.getInt("height", 1000);
@@ -257,10 +257,8 @@ public class SingleLevelPlot {
       boolean vflip = job.getBoolean("vflip", true);
 
       // List all output files resulting from reducers
-      final FileSystem outFs = outFile.getFileSystem(job);
-      Path temp = new Path(outFile.toUri().getPath()+"_"+(int)(Math.random()*1000000)+".tmp");
-      outFs.rename(outFile, temp);
-      final FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
+      final FileSystem outFs = outPath.getFileSystem(job);
+      final FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
         @Override
         public boolean accept(Path path) {
           return path.toUri().getPath().contains("part-");
@@ -321,11 +319,10 @@ public class SingleLevelPlot {
       
       // Finally, write the resulting image to the given output path
       System.out.println(System.currentTimeMillis()+": Writing final image");
-      FSDataOutputStream outputFile = outFs.create(outFile);
+      outFs.delete(outPath, true); // Delete old (non-combined) images
+      FSDataOutputStream outputFile = outFs.create(outPath);
       rasterizer.writeImage(finalLayer, outputFile, vflip);
       outputFile.close();
-
-      outFs.delete(temp, true);
     }
   }
   
