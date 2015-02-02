@@ -188,7 +188,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, Iterable<NASAS
       if (job.getBoolean("recoverholes", false)) {
         // Read water mask
         if (job.get(WATER_MASK_PATH) == null) {
-          LOG.warn("Could not find water mask files");
+          LOG.warn("Could not find water mask files. Please set the property "+WATER_MASK_PATH);
         } else {
           Path wmPath = new Path(job.get(WATER_MASK_PATH));
           final String tileIdentifier = String.format("h%02dv%02d", nasaDataset.h, nasaDataset.v);
@@ -798,24 +798,5 @@ private Object interpolate(Object value1, Object value2,
     public void remove() {
       throw new RuntimeException("Method not implemented");
     }
-  }
-
-  public static void main(String[] args) throws IOException {
-    Configuration job = new Configuration();
-    Path file = new Path("temperature/MOD11A1.A2000065.h21v06.005.2007176155240.hdf");
-    FileSystem fs = file.getFileSystem(job);
-    FileStatus fstatus = fs.getFileStatus(file);
-    job.set(WATER_MASK_PATH, "water_mask");
-    job.setBoolean("recoverholes", true);
-    job.setClass("shape", NASAPoint.class, Shape.class);
-    HDFRecordReader reader = new HDFRecordReader(job, new FileSplit(file, 0, fstatus.getLen(), new String[0]), "LST_Day_1km", true);
-    NASADataset key = reader.createKey();
-    Iterable<NASAShape> v = reader.createValue();
-    int count = 0;
-    while (reader.next(key, v)) {
-      count++;
-    }
-    System.out.println(count);
-    reader.close();
   }
 }
