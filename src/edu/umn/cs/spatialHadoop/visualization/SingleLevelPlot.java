@@ -329,7 +329,7 @@ public class SingleLevelPlot {
     }
   }
   
-  public static void plotMapReduce(Path inFile, Path outFile,
+  public static void plotMapReduce(Path[] inFiles, Path outFile,
       Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
     Rasterizer rasterizer;
     try {
@@ -347,7 +347,7 @@ public class SingleLevelPlot {
     // Set input file MBR
     Rectangle inputMBR = (Rectangle) params.getShape("mbr");
     if (inputMBR == null)
-      inputMBR = FileMBR.fileMBR(inFile, params);
+      inputMBR = FileMBR.fileMBR(inFiles, params);
     OperationsParams.setShape(job, InputMBR, inputMBR);
     
     // Adjust width and height if aspect ratio is to be kept
@@ -370,7 +370,7 @@ public class SingleLevelPlot {
     boolean merge = job.getBoolean("merge", true);
     // Set input and output
     job.setInputFormat(ShapeIterInputFormat.class);
-    ShapeIterInputFormat.setInputPaths(job, inFile);
+    ShapeIterInputFormat.setInputPaths(job, inFiles);
     if (merge)
       job.setOutputFormat(RasterOutputFormat.class);
     else
@@ -396,10 +396,10 @@ public class SingleLevelPlot {
       LOG.info("Using repartition plot");
       Partitioner partitioner;
       if (partition.equalsIgnoreCase("grid")) {
-        partitioner = new GridPartitioner(inFile, job);
+        partitioner = new GridPartitioner(inFiles, job);
       } else if (partition.equalsIgnoreCase("pixel")) {
         // Use pixel level partitioning (one partition per pixel)
-        partitioner = new GridPartitioner(inFile, job, width, height);
+        partitioner = new GridPartitioner(inFiles, job, width, height);
       } else {
         throw new RuntimeException("Unknown partitioning scheme '"+partition+"'");
       }
@@ -421,13 +421,13 @@ public class SingleLevelPlot {
     JobClient.runJob(job);
   }
 
-  public static void plotLocal(Path inFile, Path outFile,
+  public static void plotLocal(Path[] inFiles, Path outFile,
       final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
 
     boolean vflip = params.getBoolean("vflip", true);
 
     Shape plotRange = params.getShape("rect", null);
-    final Rectangle inputMBR = plotRange == null ? FileMBR.fileMBR(inFile, params) : plotRange.getMBR();
+    final Rectangle inputMBR = plotRange == null ? FileMBR.fileMBR(inFiles, params) : plotRange.getMBR();
     OperationsParams.setShape(params, InputMBR, inputMBR);
 
     // Retrieve desired output image size and keep aspect ratio if needed
@@ -446,27 +446,30 @@ public class SingleLevelPlot {
     final int fwidth = width, fheight = height;
 
     // Start reading input file
-    InputSplit[] splits;
-    FileSystem inFs = inFile.getFileSystem(params);
+    Vector<InputSplit> splits = new Vector<InputSplit>();
     final ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus != null && !inFStatus.isDir()) {
-      // One file, retrieve it immediately.
-      // This is useful if the input is a hidden file which is automatically
-      // skipped by FileInputFormat. We need to plot a hidden file for the case
-      // of plotting partition boundaries of a spatial index
-      splits = new InputSplit[] {new FileSplit(inFile, 0, inFStatus.getLen(), new String[0])};
-    } else {
-      JobConf job = new JobConf(params);
-      ShapeIterInputFormat.addInputPath(job, inFile);
-      splits = inputFormat.getSplits(job, 1);
+    for (Path inFile : inFiles) {
+      FileSystem inFs = inFile.getFileSystem(params);
+      FileStatus inFStatus = inFs.getFileStatus(inFile);
+      if (inFStatus != null && !inFStatus.isDir()) {
+        // One file, retrieve it immediately.
+        // This is useful if the input is a hidden file which is automatically
+        // skipped by FileInputFormat. We need to plot a hidden file for the case
+        // of plotting partition boundaries of a spatial index
+        splits.add(new FileSplit(inFile, 0, inFStatus.getLen(), new String[0]));
+      } else {
+        JobConf job = new JobConf(params);
+        ShapeIterInputFormat.addInputPath(job, inFile);
+        for (InputSplit s : inputFormat.getSplits(job, 1))
+          splits.add(s);
+      }
+      
     }
     
     // Copy splits to a final array to be used in parallel
-    final FileSplit[] fsplits = new FileSplit[splits.length];
-    System.arraycopy(splits, 0, fsplits, 0, splits.length);
+    final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
     
-    Vector<RasterLayer> partialRasters = Parallel.forEach(splits.length, new RunnableRange<RasterLayer>() {
+    Vector<RasterLayer> partialRasters = Parallel.forEach(fsplits.length, new RunnableRange<RasterLayer>() {
       @Override
       public RasterLayer run(int i1, int i2) {
         Rasterizer rasterizer;
@@ -549,12 +552,12 @@ public class SingleLevelPlot {
    * @param params
    * @throws IOException
    */
-  public static void plot(Path inFile, Path outFile,
+  public static void plot(Path[] inFiles, Path outFile,
       final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
-    if (OperationsParams.isLocal(new JobConf(params), inFile)) {
-      plotLocal(inFile, outFile, rasterizerClass, params);
+    if (OperationsParams.isLocal(new JobConf(params), inFiles)) {
+      plotLocal(inFiles, outFile, rasterizerClass, params);
     } else {
-      plotMapReduce(inFile, outFile, rasterizerClass, params);
+      plotMapReduce(inFiles, outFile, rasterizerClass, params);
     }
   }
 }

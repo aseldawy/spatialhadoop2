@@ -43,14 +43,14 @@ public class GridPartitioner extends Partitioner {
    * @param inFile
    * @param params
    */
-  public GridPartitioner(Path inFile, JobConf job) {
+  public GridPartitioner(Path[] inFiles, JobConf job) {
     Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     this.gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
     int numOfPartitions = job.getInt("m", job.getNumReduceTasks() * job.getNumReduceTasks() * 1000);
     this.gridInfo.calculateCellDimensions(numOfPartitions);
   }
 
-  public GridPartitioner(Path inFile, JobConf job, int width, int height) {
+  public GridPartitioner(Path[] inFiles, JobConf job, int width, int height) {
     Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     this.gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
     this.gridInfo.columns = width;

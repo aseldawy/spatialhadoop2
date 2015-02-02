@@ -103,14 +103,14 @@ public class SVGPlot {
       System.exit(1);
     }
 
-    Path inFile = params.getInputPath();
+    Path[] inFiles = params.getInputPaths();
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFile, outFile, SVGRasterizer.class, params);
+      MultilevelPlot.plot(inFiles, outFile, SVGRasterizer.class, params);
     } else {
-      SingleLevelPlot.plot(inFile, outFile, SVGRasterizer.class, params);
+      SingleLevelPlot.plot(inFiles, outFile, SVGRasterizer.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");

@@ -134,6 +134,9 @@ public class HDFPlot2 {
     System.out.println("height:<h> - Maximum height of the image (1000)");
     System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
     System.out.println("valuerange:<v1..v2> - Range of values for the generated heat map");
+    System.out.println("color1:<c1> - The color associated with v1");
+    System.out.println("color2:<c2> - The color associated with v2");
+    System.out.println("gradient:<rgb|hsb> - Type of gradient to use");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     GenericOptionsParser.printGenericCommandUsage(System.out);
@@ -159,14 +162,14 @@ public class HDFPlot2 {
       System.exit(1);
     }
 
-    Path inFile = params.getInputPath();
+    Path[] inFiles = params.getInputPaths();
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFile, outFile, HDFRasterizer.class, params);
+      MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
     } else {
-      SingleLevelPlot.plot(inFile, outFile, HDFRasterizer.class, params);
+      SingleLevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");

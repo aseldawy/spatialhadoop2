@@ -433,7 +433,7 @@ public class MultilevelPlot {
 
   }
 
-  public static void plotMapReduce(Path inFile, Path outFile,
+  public static void plotMapReduce(Path[] inFiles, Path outFile,
       Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
     Rasterizer rasterizer;
     try {
@@ -451,7 +451,7 @@ public class MultilevelPlot {
     // Set input file MBR
     Rectangle inputMBR = (Rectangle) params.getShape("rect");
     if (inputMBR == null)
-      inputMBR = FileMBR.fileMBR(inFile, params);
+      inputMBR = FileMBR.fileMBR(inFiles, params);
     
     // Adjust width and height if aspect ratio is to be kept
     if (params.is("keepratio", true)) {
@@ -469,7 +469,7 @@ public class MultilevelPlot {
     
     // Set input and output
     job.setInputFormat(ShapeIterInputFormat.class);
-    ShapeIterInputFormat.setInputPaths(job, inFile);
+    ShapeIterInputFormat.setInputPaths(job, inFiles);
     job.setOutputFormat(PyramidOutputFormat2.class);
     PyramidOutputFormat.setOutputPath(job, outFile);
     
@@ -505,7 +505,7 @@ public class MultilevelPlot {
     JobClient.runJob(job);
   }
   
-  public static void plot(Path inFile, Path outFile,
+  public static void plot(Path[] inFiles, Path outFile,
       Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
     // Decide how to run it based on range of levels to generate
     String[] strLevels = params.get("levels", "7").split("\\.\\.");
@@ -523,14 +523,14 @@ public class MultilevelPlot {
       flatPartitioning.set("levels", minLevel+".."+Math.min(maxLevelWithFlatPartitioning, maxLevel));
       flatPartitioning.set("partition", "flat");
       LOG.info("Using flat partitioning in levels "+flatPartitioning.get("levels"));
-      plotMapReduce(inFile, new Path(outFile, "flat"), rasterizerClass, flatPartitioning);
+      plotMapReduce(inFiles, new Path(outFile, "flat"), rasterizerClass, flatPartitioning);
     }
     if (maxLevel > maxLevelWithFlatPartitioning) {
       OperationsParams pyramidPartitioning = new OperationsParams(params);
       pyramidPartitioning.set("levels", Math.max(minLevel, maxLevelWithFlatPartitioning+1)+".."+maxLevel);
       pyramidPartitioning.set("partition", "pyramid");
       LOG.info("Using pyramid partitioning in levels "+pyramidPartitioning.get("levels"));
-      plotMapReduce(inFile, new Path(outFile, "pyramid"), rasterizerClass, pyramidPartitioning);
+      plotMapReduce(inFiles, new Path(outFile, "pyramid"), rasterizerClass, pyramidPartitioning);
     }
     // Write a new HTML file that displays both parts of the pyramid
     // Add an HTML file that visualizes the result using Google Maps
