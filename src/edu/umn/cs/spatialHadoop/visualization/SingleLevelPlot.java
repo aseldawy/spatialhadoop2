@@ -265,6 +265,10 @@ public class SingleLevelPlot {
         }
       });
       
+      if (resultFiles.length == 0) {
+        System.err.println("Error! Couldn't find any partial output. Exiting!");
+        return;
+      }
       System.out.println(System.currentTimeMillis()+": Merging "+resultFiles.length+" layers into one");
       Vector<RasterLayer> intermediateLayers = Parallel.forEach(resultFiles.length, new Parallel.RunnableRange<RasterLayer>() {
         @Override
