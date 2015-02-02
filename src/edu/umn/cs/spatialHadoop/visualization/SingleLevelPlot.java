@@ -345,7 +345,7 @@ public class SingleLevelPlot {
     // Set rasterizer
     Rasterizer.setRasterizer(job, rasterizerClass);
     // Set input file MBR
-    Rectangle inputMBR = (Rectangle) params.getShape("rect");
+    Rectangle inputMBR = (Rectangle) params.getShape("mbr");
     if (inputMBR == null)
       inputMBR = FileMBR.fileMBR(inFile, params);
     OperationsParams.setShape(job, InputMBR, inputMBR);
