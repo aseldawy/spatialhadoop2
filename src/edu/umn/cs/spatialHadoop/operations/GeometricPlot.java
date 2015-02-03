@@ -5,7 +5,7 @@
  * http://www.apache.org/licenses/LICENSE-2.0                      *
  *******************************************************************/
 
-package edu.umn.cs.spatialHadoop.visualization;
+package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
 import java.awt.geom.AffineTransform;
@@ -23,12 +23,17 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.visualization.ImageRasterLayer;
+import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
+import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
+import edu.umn.cs.spatialHadoop.visualization.Rasterizer;
+import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
 
 /**
  * @author Ahmed Eldawy
  *
  */
-public class GeometricPlot2 {
+public class GeometricPlot {
   
   public static class GeometricRasterizer extends Rasterizer {
     

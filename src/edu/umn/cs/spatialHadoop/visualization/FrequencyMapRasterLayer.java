@@ -33,7 +33,7 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(FrequencyMapRasterLayer.class);
   
-  enum SmoothType {Flat, Gaussian};
+  public static enum SmoothType {Flat, Gaussian};
   
   /**The kernel to use for stamping points*/
   protected float[][] kernel;

@@ -5,7 +5,7 @@
  * http://www.apache.org/licenses/LICENSE-2.0                      *
  *******************************************************************/
 
-package edu.umn.cs.spatialHadoop.visualization;
+package edu.umn.cs.spatialHadoop.nasa;
 
 import java.awt.Color;
 import java.awt.Point;
@@ -23,6 +23,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
 
 /**
  * A frequency map that can be used to draw a weighted heat map for NASA data

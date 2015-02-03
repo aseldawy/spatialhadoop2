@@ -32,7 +32,6 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.operations.Aggregate;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
-import edu.umn.cs.spatialHadoop.visualization.HDFPlot2;
 
 /**
  * Plots all datasets from NASA satisfying the following criteria:

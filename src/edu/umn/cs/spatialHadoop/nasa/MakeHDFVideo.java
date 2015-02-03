@@ -40,10 +40,9 @@ import org.mortbay.log.Log;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
-import edu.umn.cs.spatialHadoop.visualization.GeometricPlot2;
-import edu.umn.cs.spatialHadoop.visualization.HDFPlot2;
 
 /**
  * Create a video from a range of HDF files. It works in the following steps:
@@ -221,7 +220,7 @@ public class MakeHDFVideo {
       plotParams.clearAllPaths();
       Path overlayOutput = new Path(output, "overlay.png");
       plotParams.setClass("shape", OSMPolygon.class, Shape.class);
-      GeometricPlot2.plot(new Path[] {overlay}, overlayOutput, plotParams);
+      GeometricPlot.plot(new Path[] {overlay}, overlayOutput, plotParams);
     }
 
     String video_command;

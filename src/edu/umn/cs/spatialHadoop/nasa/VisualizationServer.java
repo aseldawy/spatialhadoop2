@@ -47,7 +47,6 @@ import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.visualization.HDFPlot2;
 
 /**
  * @author Ahmed Eldawy

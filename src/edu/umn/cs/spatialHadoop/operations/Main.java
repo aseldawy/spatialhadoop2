@@ -21,13 +21,11 @@ import org.apache.hadoop.util.ProgramDriver;
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
+import edu.umn.cs.spatialHadoop.nasa.HDFPlot2;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
 import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
 import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
-import edu.umn.cs.spatialHadoop.visualization.GeometricPlot2;
-import edu.umn.cs.spatialHadoop.visualization.HDFPlot2;
-import edu.umn.cs.spatialHadoop.visualization.HeatMapPlot2;
 
 /**
  * The main entry point to all queries.
@@ -89,10 +87,10 @@ public class Main {
       pgd.addClass("makevideo", MakeHDFVideo.class,
           "Creates a video out of a set of HDF files");
 
-      pgd.addClass("gplot2", GeometricPlot2.class,
+      pgd.addClass("gplot", GeometricPlot.class,
           "Plots a file to an image");
 
-      pgd.addClass("hplot2", HeatMapPlot2.class,
+      pgd.addClass("hplot", HeatMapPlot.class,
           "Plots a heat map to an image");
       
       pgd.addClass("hdfx", HDFToText.class,
