@@ -47,7 +47,7 @@ import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
+import edu.umn.cs.spatialHadoop.visualization.HDFPlot2;
 
 /**
  * @author Ahmed Eldawy
@@ -246,7 +246,7 @@ public class VisualizationServer extends AbstractHandler {
       plotParams.setBoolean("recoverholes", true);
       plotParams.set("dataset", datasetName);
       
-      GeometricPlot.plotMapReduce(inputURL, outputPath, plotParams);
+      HDFPlot2.plot(new Path[] {inputURL}, outputPath, plotParams);
       
       FileSystem fs = outputPath.getFileSystem(commonParams);
       if (!fs.exists(outputPath)) {

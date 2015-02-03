@@ -50,7 +50,6 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.util.WritableByteArray;
 
 /**
@@ -394,7 +393,7 @@ public class DistributedCopy {
       super.commitJob(context);
       
       JobConf job = context.getJobConf();
-      Path outPath = PyramidOutputFormat.getOutputPath(job);
+      Path outPath = BlockOutputFormat.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
 
       // Collect all output folders

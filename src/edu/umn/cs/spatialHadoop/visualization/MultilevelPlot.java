@@ -35,10 +35,10 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -201,7 +201,7 @@ public class MultilevelPlot {
       super.commitJob(context);
 
       JobConf job = context.getJobConf();
-      Path outPath = PyramidOutputFormat.getOutputPath(job);
+      Path outPath = PyramidOutputFormat2.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
 
       System.out.println("Writing default empty image");
@@ -433,7 +433,7 @@ public class MultilevelPlot {
 
   }
 
-  public static void plotMapReduce(Path[] inFiles, Path outFile,
+  public static RunningJob plotMapReduce(Path[] inFiles, Path outFile,
       Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
     Rasterizer rasterizer;
     try {
@@ -471,7 +471,7 @@ public class MultilevelPlot {
     job.setInputFormat(ShapeIterInputFormat.class);
     ShapeIterInputFormat.setInputPaths(job, inFiles);
     job.setOutputFormat(PyramidOutputFormat2.class);
-    PyramidOutputFormat.setOutputPath(job, outFile);
+    PyramidOutputFormat2.setOutputPath(job, outFile);
     
     // Set mapper, reducer and committer
     String partitionTechnique = params.get("partition", "flat");
@@ -502,10 +502,17 @@ public class MultilevelPlot {
     job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
     // Start the job
-    JobClient.runJob(job);
+    if (params.getBoolean("background", false)) {
+      // Run in background
+      JobClient jc = new JobClient(job);
+      return jc.submitJob(job);
+    } else {
+      // Run and block until it is finished
+      return JobClient.runJob(job);
+    }
   }
   
-  public static void plot(Path[] inFiles, Path outFile,
+  public static RunningJob plot(Path[] inPaths, Path outPath,
       Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
     // Decide how to run it based on range of levels to generate
     String[] strLevels = params.get("levels", "7").split("\\.\\.");
@@ -517,27 +524,31 @@ public class MultilevelPlot {
       minLevel = Integer.parseInt(strLevels[0]);
       maxLevel = Integer.parseInt(strLevels[1]);
     }
+    // Create an output directory that will hold the output of the two jobs
+    FileSystem outFS = outPath.getFileSystem(params);
+    outFS.create(outPath);
+    
     int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 4);
+    RunningJob runningJob = null;
     if (minLevel <= maxLevelWithFlatPartitioning) {
       OperationsParams flatPartitioning = new OperationsParams(params);
       flatPartitioning.set("levels", minLevel+".."+Math.min(maxLevelWithFlatPartitioning, maxLevel));
       flatPartitioning.set("partition", "flat");
       LOG.info("Using flat partitioning in levels "+flatPartitioning.get("levels"));
-      plotMapReduce(inFiles, new Path(outFile, "flat"), rasterizerClass, flatPartitioning);
+      runningJob = plotMapReduce(inPaths, new Path(outPath, "flat"), rasterizerClass, flatPartitioning);
     }
     if (maxLevel > maxLevelWithFlatPartitioning) {
       OperationsParams pyramidPartitioning = new OperationsParams(params);
       pyramidPartitioning.set("levels", Math.max(minLevel, maxLevelWithFlatPartitioning+1)+".."+maxLevel);
       pyramidPartitioning.set("partition", "pyramid");
       LOG.info("Using pyramid partitioning in levels "+pyramidPartitioning.get("levels"));
-      plotMapReduce(inFiles, new Path(outFile, "pyramid"), rasterizerClass, pyramidPartitioning);
+      runningJob = plotMapReduce(inPaths, new Path(outPath, "pyramid"), rasterizerClass, pyramidPartitioning);
     }
     // Write a new HTML file that displays both parts of the pyramid
     // Add an HTML file that visualizes the result using Google Maps
     LineReader templateFileReader = new LineReader(MultilevelPlot.class
         .getResourceAsStream("/zoom_view.html"));
-    FileSystem outFS = outFile.getFileSystem(params);
-    PrintStream htmlOut = new PrintStream(outFS.create(new Path(outFile,
+    PrintStream htmlOut = new PrintStream(outFS.create(new Path(outPath,
         "index.html")));
     Text line = new Text();
     while (templateFileReader.readLine(line) > 0) {
@@ -552,6 +563,7 @@ public class MultilevelPlot {
     }
     templateFileReader.close();
     htmlOut.close();
-
+    
+    return runningJob;
   }
 }

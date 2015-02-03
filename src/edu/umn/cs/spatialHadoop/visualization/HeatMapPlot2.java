@@ -147,6 +147,15 @@ public class HeatMapPlot2 {
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
+  public static void plot(Path[] inFiles, Path outFile, OperationsParams params)
+      throws IOException {
+    if (params.getBoolean("pyramid", false)) {
+      MultilevelPlot.plot(inFiles, outFile, HeatMapRasterizer.class, params);
+    } else {
+      SingleLevelPlot.plot(inFiles, outFile, HeatMapRasterizer.class, params);
+    }
+  }
+
   /**
    * @param args
    * @throws IOException 
@@ -163,11 +172,7 @@ public class HeatMapPlot2 {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFiles, outFile, HeatMapRasterizer.class, params);
-    } else {
-      SingleLevelPlot.plot(inFiles, outFile, HeatMapRasterizer.class, params);
-    }
+    plot(inFiles, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

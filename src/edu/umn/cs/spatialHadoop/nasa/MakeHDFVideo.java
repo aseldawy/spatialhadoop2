@@ -39,9 +39,11 @@ import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
-import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
+import edu.umn.cs.spatialHadoop.visualization.GeometricPlot2;
+import edu.umn.cs.spatialHadoop.visualization.HDFPlot2;
 
 /**
  * Create a video from a range of HDF files. It works in the following steps:
@@ -175,7 +177,7 @@ public class MakeHDFVideo {
       MinMax scaleRange = new MinMax();
       scaleRange.minValue = Integer.parseInt(parts[0]);
       scaleRange.maxValue = Integer.parseInt(parts[1]);
-      GeometricPlot.drawScale(new Path(output, "scale.png"), scaleRange, 64, imageHeight);
+      HDFPlot2.drawScale(new Path(output, "scale.png"), scaleRange, 64, imageHeight);
     }
     
     InputStream logoInputStream = MakeHDFVideo.class.getResourceAsStream("/gistic_logo.png");
@@ -209,34 +211,17 @@ public class MakeHDFVideo {
     }
 
     // Plot the overlay image
-    String overlay = params.get("overlay");
+    Path overlay = params.get("overlay") == null ? null : new Path(params.get("overlay"));
     if (overlay != null) {
-      vargs = new Vector<String>(Arrays.asList(args));
+      // Draw an overlay image
+      OperationsParams plotParams = new OperationsParams(params);
+
       // Keep all arguments except input and output which change for each call
       // to Plot or PlotPyramid
-      for (int i = 0; i < vargs.size();) {
-        if (vargs.get(i).startsWith("-") && vargs.get(i).length() > 1) {
-          i++; // Keep this argument
-        } else if (vargs.get(i).indexOf(':') != -1 && vargs.get(i).indexOf(":/") == -1) {
-          if (vargs.get(i).toLowerCase().startsWith("scale:")
-              || vargs.get(i).startsWith("shape:")
-              || vargs.get(i).startsWith("dataset:")
-              || vargs.get(i).startsWith("width:")
-              || vargs.get(i).startsWith("height:"))
-            vargs.remove(i);
-          else
-            i++; // Keep this argument
-        } else {
-          vargs.remove(i);
-        }
-      }
-      vargs.add(overlay);
-      vargs.add("width:"+imageWidth);
-      vargs.add("height:"+imageHeight);
-      vargs.add("-no-keep-ratio");
-      vargs.add(new Path(output, "overlay.png").toString());
-      vargs.add("shape:"+OSMPolygon.class.getName());
-      GeometricPlot.main(vargs.toArray(new String[vargs.size()]));
+      plotParams.clearAllPaths();
+      Path overlayOutput = new Path(output, "overlay.png");
+      plotParams.setClass("shape", OSMPolygon.class, Shape.class);
+      GeometricPlot2.plot(new Path[] {overlay}, overlayOutput, plotParams);
     }
 
     String video_command;

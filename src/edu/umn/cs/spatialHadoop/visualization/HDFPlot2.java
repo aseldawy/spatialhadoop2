@@ -8,6 +8,8 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
@@ -17,7 +19,10 @@ import java.io.IOException;
 import javax.imageio.ImageIO;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -26,6 +31,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.nasa.NASAShape;
+import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 
 /**
  * Draws a heat map for a NASA dataset
@@ -141,6 +147,58 @@ public class HDFPlot2 {
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
+  
+  /**
+   * Draws a scale used with the heat map
+   * @param output
+   * @param valueRange
+   * @param width
+   * @param height
+   * @throws IOException
+   */
+  public static void drawScale(Path output, MinMax valueRange, int width, int height) throws IOException {
+    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D g = image.createGraphics();
+    g.setBackground(Color.BLACK);
+    g.clearRect(0, 0, width, height);
+
+    // fix this part to work according to color1, color2 and gradient type
+    for (int y = 0; y < height; y++) {
+      Color color = NASARectangle.calculateColor(y);
+      g.setColor(color);
+      g.drawRect(width * 3 / 4, y, width / 4, 1);
+    }
+
+    int fontSize = 24;
+    g.setFont(new Font("Arial", Font.BOLD, fontSize));
+    int step = (valueRange.maxValue - valueRange.minValue) * fontSize * 10 / height;
+    step = (int) Math.pow(10, Math.round(Math.log10(step)));
+    int min_value = valueRange.minValue / step * step;
+    int max_value = valueRange.maxValue / step * step;
+
+    for (int value = min_value; value <= max_value; value += step) {
+      int y = fontSize + (height - fontSize) - value * (height - fontSize) /
+          (valueRange.maxValue - valueRange.minValue);
+      g.setColor(Color.WHITE);
+      g.drawString(String.valueOf(value), 5, y);
+    }
+
+    g.dispose();
+
+    FileSystem fs = output.getFileSystem(new Configuration());
+    FSDataOutputStream outStream = fs.create(output, true);
+    ImageIO.write(image, "png", outStream);
+    outStream.close();
+  }
+
+  public static RunningJob plot(Path[] inFiles, Path outFile, OperationsParams params)
+      throws IOException {
+    if (params.getBoolean("pyramid", false)) {
+      return MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
+    } else {
+      return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
+    }
+  }
 
   /**
    * @param args
@@ -166,11 +224,7 @@ public class HDFPlot2 {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
-    } else {
-      SingleLevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
-    }
+    plot(inFiles, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

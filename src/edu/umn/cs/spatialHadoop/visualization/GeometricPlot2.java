@@ -98,6 +98,21 @@ public class GeometricPlot2 {
   }
   
   /**
+   * @param inFiles
+   * @param outFile
+   * @param params
+   * @throws IOException
+   */
+  public static void plot(Path[] inFiles, Path outFile, OperationsParams params)
+      throws IOException {
+    if (params.getBoolean("pyramid", false)) {
+      MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+    } else {
+      SingleLevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+    }
+  }
+
+  /**
    * @param args
    * @throws IOException 
    */
@@ -113,11 +128,7 @@ public class GeometricPlot2 {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
-    } else {
-      SingleLevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
-    }
+    plot(inFiles, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

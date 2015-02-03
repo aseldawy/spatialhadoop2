@@ -80,15 +80,6 @@ public class Main {
       pgd.addClass("union", Union.class,
           "Computes the union of input shapes");
 
-      pgd.addClass("plot", GeometricPlot.class,
-          "Plots a file to an image");
-
-      pgd.addClass("plotp", PyramidPlot.class,
-          "Plots a file to a set of images used with Google-Maps-like engine");
-
-      pgd.addClass("ploth", HeatMapPlot.class,
-          "Plots a heatmap of an input file of points");
-
       pgd.addClass("hdfplot", HDFPlot.class,
           "Plots NASA datasets in the spatiotemporal range provided by user");
 

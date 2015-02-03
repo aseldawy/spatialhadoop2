@@ -36,6 +36,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.RunningJob;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
@@ -56,7 +57,7 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  */
 public class SingleLevelPlot {
   private static final Log LOG = LogFactory.getLog(SingleLevelPlot.class);
-
+  
   /**Configuration line for input file MBR*/
   private static final String InputMBR = "mbr";
 
@@ -329,7 +330,16 @@ public class SingleLevelPlot {
     }
   }
   
-  public static void plotMapReduce(Path[] inFiles, Path outFile,
+  /**
+   * Generates a single level using a MapReduce job and returns the created job.
+   * @param inFiles
+   * @param outFile
+   * @param rasterizerClass
+   * @param params
+   * @return
+   * @throws IOException
+   */
+  public static RunningJob plotMapReduce(Path[] inFiles, Path outFile,
       Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
     Rasterizer rasterizer;
     try {
@@ -418,7 +428,14 @@ public class SingleLevelPlot {
     job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
     // Start the job
-    JobClient.runJob(job);
+    if (params.getBoolean("background", false)) {
+      // Run in background
+      JobClient jc = new JobClient(job);
+      return jc.submitJob(job);
+    } else {
+      // Run and block until it is finished
+      return JobClient.runJob(job);
+    }
   }
 
   public static void plotLocal(Path[] inFiles, Path outFile,
@@ -552,12 +569,13 @@ public class SingleLevelPlot {
    * @param params
    * @throws IOException
    */
-  public static void plot(Path[] inFiles, Path outFile,
+  public static RunningJob plot(Path[] inFiles, Path outFile,
       final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
     if (OperationsParams.isLocal(new JobConf(params), inFiles)) {
       plotLocal(inFiles, outFile, rasterizerClass, params);
+      return null;
     } else {
-      plotMapReduce(inFiles, outFile, rasterizerClass, params);
+      return plotMapReduce(inFiles, outFile, rasterizerClass, params);
     }
   }
 }

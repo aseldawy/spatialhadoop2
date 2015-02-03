@@ -753,4 +753,8 @@ public class OperationsParams extends Configuration {
 			return MapReduceProcessing;
 		}
 	}
+
+  public void clearAllPaths() {
+    this.allPaths = null;
+  }
 }
