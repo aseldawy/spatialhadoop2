@@ -7,14 +7,9 @@
 
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.OutputStream;
 
-import javax.imageio.ImageIO;
-
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileOutputFormat;
@@ -28,38 +23,42 @@ import org.apache.hadoop.util.Progressable;
  * @author Ahmed Eldawy
  *
  */
-public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, BufferedImage> {
-  /**Used to indicate the progress*/
-  private Progressable progress;
-  private boolean vflip;
+public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLayer> {
   
-  class ImageRecordWriter implements RecordWriter<TileIndex, BufferedImage> {
+  static class ImageRecordWriter implements RecordWriter<TileIndex, RasterLayer> {
 
-    private final FileSystem outFs;
-    private final Path out;
+    private Rasterizer rasterizer;
+    private final FileSystem outFS;
+    private final Path outPath;
+    /**Number of raster layers written so far*/
+    private int rasterLayersWritten;
+    private boolean vflip;
+    /**Used to indicate progress to Hadoop*/
+    private Progressable progress;
     
-    ImageRecordWriter(Path out, FileSystem outFs) {
+    ImageRecordWriter(FileSystem outFs, Path taskOutPath, JobConf job,
+        Progressable progress) {
       System.setProperty("java.awt.headless", "true");
-      this.out = out;
-      this.outFs = outFs;
+      this.rasterizer = Rasterizer.getRasterizer(job);
+      this.outPath = taskOutPath;
+      this.outFS = outFs;
+      this.vflip = job.getBoolean("vflip", true);
+      this.progress = progress;
     }
 
     @Override
-    public void write(TileIndex tileIndex, BufferedImage image) throws IOException {
+    public void write(TileIndex tileIndex, RasterLayer r) throws IOException {
+      String suffix = rasterLayersWritten == 0? ".png" :
+        String.format("-%05d.png", rasterLayersWritten);
+      Path p = new Path(outPath.getParent(), outPath.getName()+suffix);
+      FSDataOutputStream outFile = outFS.create(p);
+      
+      // Write the merged raster layer
+      rasterizer.writeImage(r, outFile, this.vflip);
+      outFile.close();
       progress.progress();
 
-      if (vflip) {
-        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-        tx.translate(0, -image.getHeight());
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        image = op.filter(image, null);
-        tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
-      }
-      
-      Path imagePath = new Path(out, tileIndex.getImageFileName());
-      OutputStream output = outFs.create(imagePath);
-      ImageIO.write(image, "png", output);
-      output.close();
+      rasterLayersWritten++;
     }
 
 
@@ -69,14 +68,13 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, BufferedIm
   }
   
   @Override
-  public RecordWriter<TileIndex, BufferedImage> getRecordWriter(
+  public RecordWriter<TileIndex, RasterLayer> getRecordWriter(
       FileSystem ignored, JobConf job, String name, Progressable progress)
       throws IOException {
-    this.progress = progress;
-    this.vflip = job.getBoolean("vflip", true);
+    
     Path file = FileOutputFormat.getTaskOutputPath(job, name).getParent();
     FileSystem fs = file.getFileSystem(job);
 
-    return new ImageRecordWriter(file, fs);
+    return new ImageRecordWriter(fs, file, job, progress);
   }
 }
