@@ -369,7 +369,7 @@ public class MultilevelPlot {
       
       TileIndex key = new TileIndex();
       
-      LOG.info("Rasterizing");
+      LOG.info("Rasterizing tile "+tileID);
       int count = 0;
       if (smooth) {
         final Iterator<Shape> inputShapes = shapes;
@@ -449,7 +449,7 @@ public class MultilevelPlot {
     // Set rasterizer
     Rasterizer.setRasterizer(job, rasterizerClass);
     // Set input file MBR
-    Rectangle inputMBR = (Rectangle) params.getShape("rect");
+    Rectangle inputMBR = (Rectangle) params.getShape("mbr");
     if (inputMBR == null)
       inputMBR = FileMBR.fileMBR(inFiles, params);
     

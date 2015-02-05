@@ -18,9 +18,6 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 
-import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
-
 /**
  * Writes raster layers as images to the output file
  * @author Ahmed Eldawy
@@ -71,9 +68,10 @@ public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
   
   @Override
   public RecordWriter<Object, RasterLayer> getRecordWriter(
-      FileSystem fs, JobConf job, String name, Progressable progress)
+      FileSystem ignored, JobConf job, String name, Progressable progress)
       throws IOException {
     Path taskOutputPath = getTaskOutputPath(job, name);
+    FileSystem fs = taskOutputPath.getFileSystem(job);
     return new ImageRecordWriter(fs, taskOutputPath, job, progress);
   }
 

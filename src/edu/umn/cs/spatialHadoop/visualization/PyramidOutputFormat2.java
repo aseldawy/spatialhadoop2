@@ -30,8 +30,6 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLaye
     private Rasterizer rasterizer;
     private final FileSystem outFS;
     private final Path outPath;
-    /**Number of raster layers written so far*/
-    private int rasterLayersWritten;
     private boolean vflip;
     /**Used to indicate progress to Hadoop*/
     private Progressable progress;
@@ -48,17 +46,14 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLaye
 
     @Override
     public void write(TileIndex tileIndex, RasterLayer r) throws IOException {
-      String suffix = rasterLayersWritten == 0? ".png" :
-        String.format("-%05d.png", rasterLayersWritten);
-      Path p = new Path(outPath.getParent(), outPath.getName()+suffix);
-      FSDataOutputStream outFile = outFS.create(p);
-      
-      // Write the merged raster layer
+      if (vflip)
+        tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
+      Path imagePath = new Path(outPath, tileIndex.getImageFileName());
+      // Write this tile to an image
+      FSDataOutputStream outFile = outFS.create(imagePath);
       rasterizer.writeImage(r, outFile, this.vflip);
       outFile.close();
       progress.progress();
-
-      rasterLayersWritten++;
     }
 
 
@@ -71,10 +66,8 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLaye
   public RecordWriter<TileIndex, RasterLayer> getRecordWriter(
       FileSystem ignored, JobConf job, String name, Progressable progress)
       throws IOException {
-    
-    Path file = FileOutputFormat.getTaskOutputPath(job, name).getParent();
-    FileSystem fs = file.getFileSystem(job);
-
-    return new ImageRecordWriter(fs, file, job, progress);
+    Path taskOutputPath = getTaskOutputPath(job, name).getParent();
+    FileSystem fs = taskOutputPath.getFileSystem(job);
+    return new ImageRecordWriter(fs, taskOutputPath, job, progress);
   }
 }
