@@ -526,7 +526,7 @@ public class MultilevelPlot {
     }
     // Create an output directory that will hold the output of the two jobs
     FileSystem outFS = outPath.getFileSystem(params);
-    outFS.create(outPath);
+    outFS.mkdirs(outPath);
     
     int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 4);
     RunningJob runningJob = null;
