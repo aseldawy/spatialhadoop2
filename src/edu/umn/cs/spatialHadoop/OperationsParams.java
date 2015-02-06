@@ -438,6 +438,8 @@ public class OperationsParams extends Configuration {
 
 	public <S extends Shape> S[] getShapes(String key, S stock) {
 		String[] values = getArray(key);
+		if (values == null)
+		  return null;
 		S[] shapes = (S[]) Array.newInstance(stock.getClass(), values.length);
 		for (int i = 0; i < values.length; i++) {
 			shapes[i] = (S) stock.clone();

@@ -15,7 +15,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.BooleanWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -32,6 +31,7 @@ import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapred.lib.NullOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -62,9 +62,6 @@ import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
 public class RangeQuery {
   /**Logger for RangeQuery*/
   private static final Log LOG = LogFactory.getLog(RangeQuery.class);
-  
-  /**Reference to the last range query job submitted*/
-  public static RunningJob lastRunningJob;
   
   /**
    * A filter function that selects partitions overlapping with a query range.
@@ -236,7 +233,7 @@ public class RangeQuery {
     }
   }
   
-  public static long rangeQueryMapReduce(Path inFile, Path outFile, Shape query,
+  public static RunningJob rangeQueryMapReduce(Path inFile, Path outFile,
       OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, RangeQuery.class);
     boolean overwrite = params.is("overwrite");
@@ -248,6 +245,7 @@ public class RangeQuery {
         outputPath = new Path(inFile.getName()+
             ".rangequery_"+(int)(Math.random() * 1000000));
       } while (outFs.exists(outputPath));
+      job.setBoolean("output", false); // Avoid writing the output
     } else {
       if (outFs.exists(outputPath)) {
         if (overwrite) {
@@ -278,6 +276,7 @@ public class RangeQuery {
       LOG.info("Searching a non local-indexed file");
       job.setInputFormat(ShapeInputFormat.class);
     }
+    ShapeInputFormat.setInputPaths(job, inFile);
     
     GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inFile);
     if (gIndex != null && gIndex.isReplicated())
@@ -285,10 +284,13 @@ public class RangeQuery {
     else
       job.setMapperClass(RangeQueryMapNoDupAvoidance.class);
 
-    job.setOutputFormat(TextOutputFormat.class);
+    if (job.getBoolean("output", true)) {
+      job.setOutputFormat(TextOutputFormat.class);
+      TextOutputFormat.setOutputPath(job, outputPath);
+    } else {
+      job.setOutputFormat(NullOutputFormat.class);
+    }
     
-    ShapeInputFormat.setInputPaths(job, inFile);
-    TextOutputFormat.setOutputPath(job, outputPath);
 
     if (OperationsParams.isLocal(job, inFile)) {
       // Enforce local execution if explicitly set by user or for small files
@@ -300,19 +302,11 @@ public class RangeQuery {
     // Submit the job
     if (!params.is("background")) {
       RunningJob runningJob = JobClient.runJob(job);
-      Counters counters = runningJob.getCounters();
-      Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
-      final long resultCount = outputRecordCounter.getValue();
       
-      // If outputPath not set by user, automatically delete it
-      if (outFile == null)
-        outFs.delete(outputPath, true);
-      
-      return resultCount;
+      return runningJob;
     } else {
       JobClient jc = new JobClient(job);
-      lastRunningJob = jc.submitJob(job);
-      return -1;
+      return jc.submitJob(job);
     }
   }
   
@@ -406,8 +400,7 @@ public class RangeQuery {
       printUsage();
       System.exit(1);
     }
-    if (params.getShape("rect") == null &&
-        params.getFloat("ratio", -1.0f) < 0.0f) {
+    if (params.get("rect") == null) {
       System.err.println("You must provide a query range");
       printUsage();
       System.exit(1);
@@ -415,74 +408,38 @@ public class RangeQuery {
     final Path inPath = params.getInputPath();
     final Path outPath = params.getOutputPath();
     final Rectangle[] queryRanges = params.getShapes("rect", new Rectangle());
-    int concurrency = params.getInt("concurrency", 1);
 
-    final long[] results = new long[queryRanges.length];
-    final Vector<Thread> threads = new Vector<Thread>();
-
-    final BooleanWritable exceptionHappened = new BooleanWritable();
-    
-    Thread.UncaughtExceptionHandler h = new Thread.UncaughtExceptionHandler() {
-      public void uncaughtException(Thread th, Throwable ex) {
-        ex.printStackTrace();
-        exceptionHappened.set(true);
-      }
-    };
+    // All running jobs
+    Vector<Long> resultsCounts = new Vector<Long>();
+    Vector<RunningJob> jobs = new Vector<RunningJob>();
 
     for (int i = 0; i < queryRanges.length; i++) {
-      Thread t = new Thread() {
-        @Override
-        public void run() {
-            try {
-              int thread_i = threads.indexOf(this);
-              long result_count = rangeQueryMapReduce(inPath, outPath,
-                  queryRanges[thread_i], params);
-              results[thread_i] = result_count;
-            } catch (IOException e) {
-              throw new RuntimeException(e);
-            }
-        }
-      };
-      t.setUncaughtExceptionHandler(h);
-      threads.add(t);
+      OperationsParams queryParams = new OperationsParams(params);
+      queryParams.setBoolean("background", true);
+      OperationsParams.setShape(queryParams, "rect", queryRanges[i]);
+      RunningJob job = rangeQueryMapReduce(inPath, outPath, queryParams);
+      jobs.add(job);
     }
 
     long t1 = System.currentTimeMillis();
-    do {
-      // Ensure that there is at least MaxConcurrentThreads running
-      int i = 0;
-      while (i < concurrency && i < threads.size()) {
-        Thread.State state = threads.elementAt(i).getState(); 
-        if (state == Thread.State.TERMINATED) {
-          // Thread already terminated, remove from the queue
-          threads.remove(i);
-        } else if (state == Thread.State.NEW) {
-          // Start the thread and move to next one
-          threads.elementAt(i++).start();
-        } else {
-          // Thread is still running, skip over it
-          i++;
-        }
+    while (!jobs.isEmpty()) {
+      RunningJob firstJob = jobs.firstElement();
+      firstJob.waitForCompletion();
+      if (!firstJob.isSuccessful()) {
+        System.err.println("Error running job "+firstJob);
+        System.err.println("Killing all remaining jobs");
+        for (int j = 1; j < jobs.size(); j++)
+          jobs.get(j).killJob();
+        System.exit(1);
       }
-      if (!threads.isEmpty()) {
-        try {
-          // Sleep for 10 seconds or until the first thread terminates
-          threads.firstElement().join(10000);
-        } catch (InterruptedException e) {
-          e.printStackTrace();
-        }
-      }
-    } while (!threads.isEmpty());
+      Counters counters = firstJob.getCounters();
+      Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
+      resultsCounts.add(outputRecordCounter.getValue());
+      jobs.remove(0);
+    }
     long t2 = System.currentTimeMillis();
     
-    if (exceptionHappened.get())
-      throw new RuntimeException("Not all jobs finished correctly");
     System.out.println("Time for "+queryRanges.length+" jobs is "+(t2-t1)+" millis");
-    
-    System.out.print("Result size: [");
-    for (long result : results) {
-      System.out.print(result+", ");
-    }
-    System.out.println("]");
+    System.out.println("Results counts: "+resultsCounts);
   }
 }
