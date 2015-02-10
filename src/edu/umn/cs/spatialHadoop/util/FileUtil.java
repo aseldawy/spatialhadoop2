@@ -13,8 +13,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -66,21 +67,15 @@ public final class FileUtil {
 
 		FSDataInputStream in = fs.open(split.getPath());
 		in.seek(split.getStart());
+		ReadableByteChannel rbc = Channels.newChannel(in);
 
 		// Prepare output file for write
-		File tempFile = File.createTempFile(split.getPath().getName(), "hdf");
-		OutputStream out = new FileOutputStream(tempFile);
+		File tempFile = File.createTempFile(split.getPath().getName(), "tmp");
+		FileOutputStream out = new FileOutputStream(tempFile);
+		
+		out.getChannel().transferFrom(rbc, 0, length);
 
-		// A buffer used between source and destination
-		byte[] buffer = new byte[1024 * 1024];
-		while (length > 0) {
-			int numBytesRead = in.read(buffer, 0,
-					(int) Math.min(length, buffer.length));
-			out.write(buffer, 0, numBytesRead);
-			length -= numBytesRead;
-		}
-
-		in.close();
+		rbc.close();
 		out.close();
 		return tempFile.getAbsolutePath();
 	}
