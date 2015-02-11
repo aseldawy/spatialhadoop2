@@ -46,6 +46,12 @@ public abstract class Partitioner implements Writable {
   public abstract CellInfo getPartition(int partitionID);
   
   /**
+   * Returns total number of partitions
+   * @return
+   */
+  public abstract int getPartitionCount();
+  
+  /**
    * Sets the class and value of a partitioner in the given job
    * @param conf
    * @param partitioner

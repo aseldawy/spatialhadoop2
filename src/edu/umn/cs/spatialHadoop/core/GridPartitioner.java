@@ -28,6 +28,8 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
  */
 public class GridPartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(GridPartitioner.class);
+  
+  /**The information of the underlying grid*/
   private GridInfo gridInfo;
   
   /**
@@ -66,6 +68,11 @@ public class GridPartitioner extends Partitioner {
   @Override
   public void readFields(DataInput in) throws IOException {
     this.gridInfo.readFields(in);
+  }
+  
+  @Override
+  public int getPartitionCount() {
+    return gridInfo.rows * gridInfo.columns;
   }
 
   @Override
