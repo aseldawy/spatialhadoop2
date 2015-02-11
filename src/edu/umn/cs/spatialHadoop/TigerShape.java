@@ -8,9 +8,14 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+
 import org.apache.hadoop.io.Text;
 
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
+import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * A shape from tiger file.
@@ -36,5 +41,24 @@ public class TigerShape extends OGCJTSShape {
   public Text toText(Text text) {
     text.set(originalText);
     return text;
+  }
+  
+  @Override
+  public void write(DataOutput out) throws IOException {
+    out.writeUTF(originalText);
+  }
+  
+  @Override
+  public void readFields(DataInput in) throws IOException {
+    this.originalText = in.readUTF();
+    this.fromText(new Text(originalText));
+  }
+  
+  @Override
+  public Shape clone() {
+    TigerShape c = new TigerShape();
+    c.originalText = this.originalText;
+    c.geom = this.geom;
+    return c;
   }
 }
