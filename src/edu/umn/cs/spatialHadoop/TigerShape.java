@@ -45,12 +45,17 @@ public class TigerShape extends OGCJTSShape {
   
   @Override
   public void write(DataOutput out) throws IOException {
-    out.writeUTF(originalText);
+    byte[] bytes = originalText.getBytes();
+    out.writeInt(bytes.length);
+    out.write(bytes);
   }
   
   @Override
   public void readFields(DataInput in) throws IOException {
-    this.originalText = in.readUTF();
+    int length = in.readInt();
+    byte[] bytes = new byte[length];
+    in.readFully(bytes);
+    this.originalText = new String(bytes);
     this.fromText(new Text(originalText));
   }
   
