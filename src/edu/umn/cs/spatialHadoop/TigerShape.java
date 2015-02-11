@@ -18,9 +18,11 @@ import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
  *
  */
 public class TigerShape extends OGCJTSShape {
+  private String originalText;
   
   @Override
   public void fromText(Text text) {
+    originalText = text.toString();
     byte[] bytes = text.getBytes();
     int i = 0;
     while (i < text.getLength() && bytes[i] != ',') {
@@ -28,5 +30,11 @@ public class TigerShape extends OGCJTSShape {
     }
     text.set(bytes, 0, i);
     super.fromText(text);
+  }
+  
+  @Override
+  public Text toText(Text text) {
+    text.set(originalText);
+    return text;
   }
 }
