@@ -1348,7 +1348,7 @@ public class DistributedJoin {
 					.println("Reparition the smaller dataset then join the two datasets directly");
 		}
 		
-		if (params.get("repartition-only").equals("yes")) {
+		if (params.get("repartition-only", "no").equals("yes")) {
 			System.out.println("Repartition-only is true");
 			isReduceInactive = true;
 		}
