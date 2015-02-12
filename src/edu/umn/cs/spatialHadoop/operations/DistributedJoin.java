@@ -1096,8 +1096,8 @@ public class DistributedJoin {
 			System.exit(1);
 		}
 
-		Path[] inputPaths = params.getInputPaths();
-		Path outputPath = params.getOutputPath();
+		Path[] inputPaths = allFiles.length == 2 ? allFiles : params.getInputPaths();
+		Path outputPath = allFiles.length == 2 ? null : params.getOutputPath();
 
 		if (params.get("heuristic-repartition", "yes").equals("no")) {
 			isGeneralRepartitionMode = false;
