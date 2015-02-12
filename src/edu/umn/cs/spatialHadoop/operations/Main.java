@@ -16,15 +16,18 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
+import edu.umn.cs.spatialHadoop.nasa.DistributedAggregateSpatioTemporalIndexer;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot2;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
 import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
 import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
+import edu.umn.cs.spatialHadoop.temporal.RepartitionTemporal;
 
 /**
  * The main entry point to all queries.
+ * 
  * @author eldawy
  *
  */

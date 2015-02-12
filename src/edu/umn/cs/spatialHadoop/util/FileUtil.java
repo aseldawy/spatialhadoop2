@@ -95,6 +95,41 @@ public final class FileUtil {
 	}
 
 	/**
+	 * Writes paths to a HDFS file where each path is a line.
+	 * 
+	 * @author ibrahimsabek
+	 * @param paths
+	 */
+	
+	public static Path writePathsToHDFSFile(OperationsParams params, Path[] paths){
+		String tmpFileName = "pathsDictionary.txt";
+		Configuration conf = new Configuration();
+		try {
+			FileSystem fs = params.getPaths()[0].getFileSystem(conf);
+			Path hdfsFilePath = new Path(params.getPaths()[0].toString() + "/"
+					+ tmpFileName);	
+			FSDataOutputStream out = fs.create(hdfsFilePath);
+			
+			for (int i = 0; i < paths.length; i++) {
+				StringBuilder pathStringBuilder = new StringBuilder();
+				pathStringBuilder.append(paths[i].toString());
+				pathStringBuilder.append("\n");
+				
+				byte[] bytArr = pathStringBuilder.toString().getBytes();
+				out.write(bytArr);
+			}
+					
+			out.close();
+
+			return hdfsFilePath;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+		
+	}
+	
+	/**
 	 * Writes paths to a file where each path is a line.
 	 * 
 	 * @author ibrahimsabek
@@ -157,4 +192,21 @@ public final class FileUtil {
 		out.close();
 	}
 
+	/**
+	 * function to list files in a certain directory
+	 * 
+	 * @author ibrahimsabek
+	 * @param path
+	 * @return
+	 * @throws IOException
+	 */
+	public static Path[] getFilesListInPath(Path path) throws IOException{
+		FileSystem fileSystem = path.getFileSystem(new Configuration());
+		FileStatus[] matchingDirs = fileSystem.listStatus(path);
+		Path[] pathsArr = new Path[matchingDirs.length];
+		for(int i = 0; i < matchingDirs.length; i++){
+			pathsArr[i] = matchingDirs[i].getPath();
+		}
+		return pathsArr;
+	}
 }
