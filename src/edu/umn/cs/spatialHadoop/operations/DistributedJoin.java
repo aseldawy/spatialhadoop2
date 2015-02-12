@@ -1096,21 +1096,20 @@ public class DistributedJoin {
 			System.exit(1);
 		}
 
-		String repartition = params.get("repartition");
 		Path[] inputPaths = params.getInputPaths();
 		Path outputPath = params.getOutputPath();
 
-		if (params.get("heuristic-repartition").equals("no")) {
+		if (params.get("heuristic-repartition", "yes").equals("no")) {
 			isGeneralRepartitionMode = false;
 			System.out.println("heuristic-repartition is false");
 		}
 
-		if (params.get("all-inmemory-load").equals("no")) {
+		if (params.get("all-inmemory-load", "yes").equals("no")) {
 			isOneShotReadMode = false;
 			System.out.println("all-inmemory-load is false");
 		}
 
-		if (params.get("direct-join").equals("yes")) {
+		if (params.get("direct-join", "no").equals("yes")) {
 			System.out
 					.println("Reparition the smaller dataset then join the two datasets directly");
 		}
@@ -1120,6 +1119,8 @@ public class DistributedJoin {
 			// Special case for self join
 			selfJoinLocal(inputPaths[0], outputPath, params);
 		}
+		
+		String repartition = params.get("repartition", "no");
 		if (repartition.equals("auto")) {
 			result_size = distributedJoinSmart(inputPaths, outputPath, params);
 		} else if (repartition.equals("yes")) {
