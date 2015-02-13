@@ -14,10 +14,12 @@ import java.io.IOException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.JobConf;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * A partitioner that partitioner data using a uniform grid.
@@ -58,6 +60,35 @@ public class GridPartitioner extends Partitioner {
     this.gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
     this.gridInfo.columns = width;
     this.gridInfo.rows = height;
+  }
+
+  /**
+   * Constructs a new grid partitioner which is used for indexing
+   * @param inPath
+   * @param job
+   * @throws IOException 
+   */
+  public static GridPartitioner createIndexingPartitioner(Path inPath,
+      Path outPath, JobConf job) throws IOException {
+    String gridSize = job.get("grid");
+    Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+    GridInfo gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
+    if (gridSize != null) {
+      // Use user-specified grid size
+      String[] parts = gridSize.split(",");
+      gridInfo.columns = Integer.parseInt(parts[0]);
+      gridInfo.rows = Integer.parseInt(parts[1]);
+    } else {
+      // Auto-detect grid size
+      long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
+      FileSystem outFS = outPath.getFileSystem(job);
+      long outBlockSize = outFS.getDefaultBlockSize(outPath);
+      gridInfo.calculateCellDimensions(inSize, outBlockSize);
+      LOG.info("Using a grid of size "+gridInfo.columns+"x"+gridInfo.rows);
+    }
+    GridPartitioner partitioner = new GridPartitioner();
+    partitioner.gridInfo = gridInfo;
+    return partitioner;
   }
 
   @Override

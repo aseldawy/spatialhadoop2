@@ -27,6 +27,9 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * A bunch of helper functions used with files
@@ -209,4 +212,38 @@ public final class FileUtil {
 		}
 		return pathsArr;
 	}
+
+	/**
+	 * Get the actual size of all data in the given directory. If the input is
+	 * a single file, its size is returned immediately. If the input is a
+	 * directory, we returns the total size of all data in that directory.
+	 * If there is a global index, the size is retrieved from that global index.
+	 * Otherwise, we add up all the sizes of single files.
+	 * @param fs - the file system that contains the path
+	 * @param path - the path that contains the data
+	 * @return
+	 * @throws IOException 
+	 */
+  public static long getPathSize(FileSystem fs, Path path) throws IOException {
+    FileStatus fileStatus = fs.getFileStatus(path);
+    // 1- Check if the path points to a file
+    if (!fileStatus.isDir())
+      return fileStatus.getLen();
+    // 2- Check if the input is indexed and get the cached size
+    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, path);
+    if (gIndex != null) {
+      long totalSize = 0;
+      for (Partition partition : gIndex)
+        totalSize += partition.size;
+      return totalSize;
+    }
+    // 3- Get the total size of all non-hidden files
+    long totalSize = 0;
+    FileStatus[] allFiles = fs.listStatus(path, SpatialSite.NonHiddenFileFilter);
+    for (FileStatus subFile : allFiles) {
+      if (!subFile.isDir())
+        totalSize += subFile.getLen();
+    }
+    return totalSize;
+  }
 }
