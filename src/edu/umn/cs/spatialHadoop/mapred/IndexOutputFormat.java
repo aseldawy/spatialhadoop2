@@ -14,7 +14,9 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -31,6 +33,7 @@ import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
 
@@ -54,6 +57,31 @@ public class IndexOutputFormat<S extends Shape>
       e.printStackTrace();
       throw new RuntimeException("Cannot retrieve system line separator", e);
     }
+  }
+  
+  /**
+   * A list of indexes the can be optimized by packing each partition to remove
+   * empty space
+   */
+  public static final Set<String> PackedIndexes;
+  
+  /**
+   * A list of indexes in which each partition has to be expanded to fully
+   * contain all the records inside it
+   */
+  public static final Set<String> ExpandedIndexes;
+  
+  static {
+    PackedIndexes = new HashSet<String>();
+    PackedIndexes.add("heap");
+    PackedIndexes.add("rtree");
+    PackedIndexes.add("r+tree");
+    PackedIndexes.add("str");
+    PackedIndexes.add("str+");
+    ExpandedIndexes = new HashSet<String>();
+    ExpandedIndexes.add("heap");
+    ExpandedIndexes.add("rtree");
+    ExpandedIndexes.add("str");
   }
   
   public static class IndexRecordWriter<S extends Shape> implements RecordWriter<IntWritable, S> {
@@ -82,15 +110,22 @@ public class IndexOutputFormat<S extends Shape>
     private DataOutputStream masterFile;
     /**List of errors that happened by a background thread*/
     private Vector<Throwable> listOfErrors = new Vector<Throwable>();
+    /**Whether to pack the partitions or not*/
+    private boolean pack;
+    /**Whether to expand partitions or not*/
+    private boolean expand;
 
     public IndexRecordWriter(JobConf job, String reducerName, Path outPath, Progressable progress)
         throws IOException {
+      String sindex = job.get("sindex");
+      this.pack = PackedIndexes.contains(sindex);
+      this.expand = ExpandedIndexes.contains(sindex);
       this.progress = progress;
       this.outFS = outPath.getFileSystem(job);
       this.outPath = outPath;
       this.partitioner = Partitioner.getPartitioner(job);
       Path masterFilePath = new Path(outPath,
-          String.format("_master_%s_.%s", reducerName, job.get("sindex")));
+          String.format("_master_%s_.%s", reducerName, sindex));
       this.masterFile = outFS.create(masterFilePath);
     }
     
@@ -130,6 +165,14 @@ public class IndexOutputFormat<S extends Shape>
         public void run() {
           try {
             outStream.close();
+            // Adjust the MBR of the partition according to original cell size
+            // and whether pack and expand are set or not
+            Rectangle originalSize = partitioner.getPartition(id);
+            if (pack)
+              originalSize = originalSize.getIntersection(partitionInfo);
+            if (expand)
+              originalSize.expand(partitionInfo);
+            partitionInfo.set(originalSize);
             Text partitionText = partitionInfo.toText(new Text());
             synchronized (masterFile) {
               // Write partition information to the master file
@@ -178,7 +221,11 @@ public class IndexOutputFormat<S extends Shape>
         Path path = getPartitionFile(id);
         out = outFS.create(path);
         Partition partition = new Partition();
-        partition.set(this.partitioner.getPartition(id));
+        partition.cellId = id;
+        // Set the rectangle to the opposite universe so that we can keep
+        // expanding it to get the MBR of this partition
+        partition.set(Double.MAX_VALUE, Double.MAX_VALUE,
+            -Double.MAX_VALUE, -Double.MAX_VALUE);
         partition.filename = path.getName();
         // Store in the hashtables for further user
         partitionsOutput.put(id,  out);
