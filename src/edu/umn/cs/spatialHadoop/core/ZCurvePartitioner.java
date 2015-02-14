@@ -40,6 +40,8 @@ public class ZCurvePartitioner extends Partitioner {
   private Rectangle mbr;
   /**Upper bound of all partitions*/
   private long[] zSplits;
+
+  private static final int Resolution = Integer.MAX_VALUE;
   
   /**
    * A default constructor to be able to dynamically instantiate it
@@ -108,9 +110,8 @@ public class ZCurvePartitioner extends Partitioner {
    * @return
    */
   public static long computeZ(Rectangle mbr, double x, double y) {
-    final int resolution = Integer.MAX_VALUE;
-    int ix = (int) ((x - mbr.x1) * resolution / mbr.getWidth());
-    int iy = (int) ((y - mbr.y1) * resolution / mbr.getHeight());
+    int ix = (int) ((x - mbr.x1) * Resolution / mbr.getWidth());
+    int iy = (int) ((y - mbr.y1) * Resolution / mbr.getHeight());
     return computeZOrder(ix, iy);
   }
   
@@ -124,9 +125,8 @@ public class ZCurvePartitioner extends Partitioner {
     long ixy = unComputeZOrder(z);
     int ix = (int) (ixy >> 32);
     int iy = (int) (ixy & 0xffffffffL);
-    final int resolution = Integer.MAX_VALUE;
-    outPoint.x = (double)(ix) * mbr.getWidth() / resolution + mbr.x1;
-    outPoint.y = (double)(iy) * mbr.getHeight() / resolution + mbr.y1;
+    outPoint.x = (double)(ix) * mbr.getWidth() / Resolution + mbr.x1;
+    outPoint.y = (double)(iy) * mbr.getHeight() / Resolution + mbr.y1;
   }
   
   /**
@@ -146,6 +146,13 @@ public class ZCurvePartitioner extends Partitioner {
     return morton;
   }
   
+  public static java.awt.Point unComputeZOrder(long morton, java.awt.Point point) {
+    long ixy = unComputeZOrder(morton);
+    point.x = (int) (ixy >>> 32);
+    point.y = (int) (ixy & 0xffffffff);
+    return point;
+  }
+  
   public static long unComputeZOrder(long morton) {
     long x = 0, y = 0;
     for (int bitPosition = 0; bitPosition < 32; bitPosition++) {
@@ -154,6 +161,42 @@ public class ZCurvePartitioner extends Partitioner {
       x |= (morton & (mask << 1)) >> (bitPosition + 1);
     }
     return (x << 32) | y;
+  }
+  
+  /**
+   * Compute the minimal bounding rectangle MBR of a range on the Z-curve.
+   * Notice that getting the MBR of the two end points does not always work.
+   * 
+   * @param zMin
+   * @param zMax
+   * @return
+   */
+  public static java.awt.Rectangle getMBRInteger(long zMin, long zMax) {
+    long changedBits = zMin ^ zMax;
+    // The mask contains 1's for all bits that are less or equal significant
+    // to any changed bit
+    long mask = changedBits;
+    long oldMask;
+    do {
+      oldMask = mask;
+      mask |= (mask >> 1);
+    } while (mask != oldMask);
+    // Both zMin and zMax can be used in the following equations because we
+    // explicitly set all different bits
+    java.awt.Point minXY = unComputeZOrder(zMin & (~mask), new java.awt.Point());
+    java.awt.Point maxXY = unComputeZOrder(zMin | mask, new java.awt.Point());
+    java.awt.Rectangle mbr = new java.awt.Rectangle(minXY.x, minXY.y, maxXY.x - minXY.x, maxXY.y - minXY.y);
+    return mbr;
+  }
+  
+  public static Rectangle getMBR(Rectangle mbr, long zMin, long zMax) {
+    java.awt.Rectangle mbrInteger = getMBRInteger(zMin, zMax);
+    Rectangle trueMBR = new Rectangle();
+    trueMBR.x1 = (double)(mbrInteger.x) * mbr.getWidth() / Resolution + mbr.x1;
+    trueMBR.y1 = (double)(mbrInteger.y) * mbr.getHeight() / Resolution + mbr.y1;
+    trueMBR.x2 = (double)(mbrInteger.getMaxX()) * mbr.getWidth() / Resolution + mbr.x1;
+    trueMBR.y2 = (double)(mbrInteger.getMaxY()) * mbr.getHeight() / Resolution + mbr.y1;
+    return trueMBR;
   }
 
   @Override
@@ -211,16 +254,11 @@ public class ZCurvePartitioner extends Partitioner {
   public CellInfo getPartition(int id) {
     CellInfo cell = new CellInfo();
     cell.cellId = id;
-    long maxZ = zSplits[id];
-    long minZ = id == 0? 0 : zSplits[id-1];
-
-    Point pt = new Point();
-    uncomputeZ(mbr, minZ, pt);
-    cell.x1 = cell.x2 = pt.x;
-    cell.y1 = cell.y2 = pt.y;
+    long zMax = zSplits[id];
+    long zMin = id == 0? 0 : zSplits[id-1];
     
-    uncomputeZ(mbr, maxZ, pt);
-    cell.expand(pt);
+    Rectangle cellMBR = getMBR(mbr, zMin, zMax);
+    cell.set(cellMBR);
     return cell;
   }
   
@@ -238,5 +276,4 @@ public class ZCurvePartitioner extends Partitioner {
       System.out.println(p.getPartition(i).toWKT());
     }
   }
-  
 }
