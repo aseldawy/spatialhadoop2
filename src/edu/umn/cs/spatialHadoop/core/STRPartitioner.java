@@ -21,10 +21,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
@@ -44,6 +42,8 @@ public class STRPartitioner extends Partitioner {
   private double[] xSplits;
   /**Locations of horizontal strips for each vertical strip*/
   private double[] ySplits;
+  /**Whether to replicate to all overlapping cells or assign to only one cell*/
+  private boolean replicate;
   
   /**
    * A default constructor to be able to dynamically instantiate it
@@ -59,7 +59,7 @@ public class STRPartitioner extends Partitioner {
    * @throws IOException 
    */
   public static STRPartitioner createIndexingPartitioner(Path inPath,
-      Path outPath, JobConf job) throws IOException {
+      Path outPath, JobConf job, boolean replicate) throws IOException {
     String gridSize = job.get("grid");
     Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     int columns, rows;
@@ -113,6 +113,7 @@ public class STRPartitioner extends Partitioner {
       }});
     
     STRPartitioner p = new STRPartitioner();
+    p.replicate = replicate;
     p.columns = columns;
     p.rows = rows;
     p.xSplits = new double[columns];
@@ -140,7 +141,7 @@ public class STRPartitioner extends Partitioner {
       
       prev_quantile = col_quantile;
     }
- 
+    
     return p;
   }
 
@@ -194,25 +195,38 @@ public class STRPartitioner extends Partitioner {
     Rectangle shapeMBR = shape.getMBR();
     if (shapeMBR == null)
       return;
-    // Find first and last matching columns
-    int col1 = Arrays.binarySearch(xSplits, shapeMBR.x1);
-    if (col1 < 0)
-      col1 = -col1 - 1; // Adjust the position if value not found
-    int col2 = Arrays.binarySearch(xSplits, shapeMBR.x2);
-    if (col2 < 0)
-      col2 = -col2 - 1; // Adjust the position if value not found
-    
-    for (int col = col1; col <= col2; col++) {
-      // For each column, find all matching rows
-      int cell1 = Arrays.binarySearch(ySplits, col * rows, (col+1) * rows, shapeMBR.y1);
-      if (cell1 < 0)
-        cell1 = -cell1 - 1;
-      int cell2 = Arrays.binarySearch(ySplits, col * rows, (col+1) * rows, shapeMBR.y2);
-      if (cell2 < 0)
-        cell2 = -cell2 - 1;
+    if (replicate) {
+      // Replicate to all overlapping partitions
+      // Find first and last matching columns
+      int col1 = Arrays.binarySearch(xSplits, shapeMBR.x1);
+      if (col1 < 0)
+        col1 = -col1 - 1; // Adjust the position if value not found
+      int col2 = Arrays.binarySearch(xSplits, shapeMBR.x2);
+      if (col2 < 0)
+        col2 = -col2 - 1; // Adjust the position if value not found
       
-      for (int cell = cell1; cell <= cell2; cell++)
-        matcher.collect(cell);
+      for (int col = col1; col <= col2; col++) {
+        // For each column, find all matching rows
+        int cell1 = Arrays.binarySearch(ySplits, col * rows, (col+1) * rows, shapeMBR.y1);
+        if (cell1 < 0)
+          cell1 = -cell1 - 1;
+        int cell2 = Arrays.binarySearch(ySplits, col * rows, (col+1) * rows, shapeMBR.y2);
+        if (cell2 < 0)
+          cell2 = -cell2 - 1;
+        
+        for (int cell = cell1; cell <= cell2; cell++)
+          matcher.collect(cell);
+      }
+    } else {
+      // Assign to only one partition
+      Point center = shapeMBR.getCenterPoint();
+      int col = Arrays.binarySearch(xSplits, center.x);
+      if (col < 0)
+        col = -col - 1;
+      int cell = Arrays.binarySearch(ySplits, col * rows, (col+1)*rows, center.y);
+      if (cell < 0)
+        cell = -cell - 1;
+      matcher.collect(cell);
     }
   }
 
@@ -225,19 +239,5 @@ public class STRPartitioner extends Partitioner {
     double x2 = xSplits[col];
     double x1 = col == 0? mbr.x1 : xSplits[col-1];
     return new CellInfo(id, x1, y1, x2, y2);
-  }
-
-  public static void main(String[] args) throws IOException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    
-    Path inPath = params.getInputPath();
-    Path outPath = params.getOutputPath();
-
-    OperationsParams.setShape(params, "mbr", FileMBR.fileMBR(inPath, params));
-    STRPartitioner p = STRPartitioner.createIndexingPartitioner(
-        inPath, outPath, new JobConf(params));
-    for (int i = 0; i < p.getPartitionCount(); i++) {
-      System.out.println(p.getPartition(i).toWKT());
-    }
   }
 }

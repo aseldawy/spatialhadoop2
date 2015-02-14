@@ -62,7 +62,7 @@ public abstract class Partitioner implements Writable {
     Path tempFile;
     FileSystem fs = FileSystem.get(conf);
     do {
-      tempFile = new Path("cells_"+(int)(Math.random()*1000000)+".cells");
+      tempFile = new Path("cells_"+(int)(Math.random()*1000000)+".partitions");
     } while (fs.exists(tempFile));
     FSDataOutputStream out = fs.create(tempFile);
     partitioner.write(out);

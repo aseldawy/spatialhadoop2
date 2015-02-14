@@ -125,8 +125,10 @@ public class Indexer {
     Partitioner partitioner;
     if (index.equalsIgnoreCase("grid")) {
       partitioner = GridPartitioner.createIndexingPartitioner(inPath, outPath, job);
+    } else if (index.equalsIgnoreCase("str")) {
+      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job, false);
     } else if (index.equalsIgnoreCase("str+")) {
-      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job);
+      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job, true);
     } else {
       throw new RuntimeException("Unknown index type '"+index+"'");
     }
