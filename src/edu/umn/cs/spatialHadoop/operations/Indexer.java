@@ -32,6 +32,7 @@ import edu.umn.cs.spatialHadoop.core.GridPartitioner;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.STRPartitioner;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat;
@@ -124,6 +125,8 @@ public class Indexer {
     Partitioner partitioner;
     if (index.equalsIgnoreCase("grid")) {
       partitioner = GridPartitioner.createIndexingPartitioner(inPath, outPath, job);
+    } else if (index.equalsIgnoreCase("str+")) {
+      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job);
     } else {
       throw new RuntimeException("Unknown index type '"+index+"'");
     }

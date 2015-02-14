@@ -147,6 +147,7 @@ public class IndexOutputFormat<S extends Shape>
         Partition partition = partitionsInfo.get(id);
         partition.recordCount++;
         partition.size += tempText.getLength() + NEW_LINE.length;
+        partition.expand(value);
       }
       progress.progress();
     }

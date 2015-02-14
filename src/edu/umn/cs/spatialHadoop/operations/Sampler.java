@@ -215,9 +215,9 @@ public class Sampler {
     final long resultCount = outputRecordCounter.getValue();
     
     Counter outputSizeConter = counters.findCounter(Task.Counter.MAP_OUTPUT_BYTES);
-    final long resultSize = outputSizeConter.getValue();
+    final long sampleSize = outputSizeConter.getValue();
     
-    LOG.info("resultSize: "+resultSize);
+    LOG.info("resultSize: "+sampleSize);
     LOG.info("resultCount: "+resultCount);
 
     Counter inputBytesCounter = counters.findCounter(Task.Counter.MAP_INPUT_BYTES);
@@ -226,8 +226,9 @@ public class Sampler {
     // Ratio of records to return from output based on the threshold
     // Note that any number greater than or equal to one will cause all
     // elements to be returned
-    long sampleSize = job.getLong("size", 0);
-    float selectRatio = sampleSize <= 0? 2.0f : (float)sampleSize / resultSize;
+    long desiredSampleSize = job.getLong("size", 0);
+    // Fraction of drawn sample to return
+    float selectRatio = desiredSampleSize <= 0? 2.0f : (float)desiredSampleSize / sampleSize;
 
     // Read job result
     int result_size = 0;
