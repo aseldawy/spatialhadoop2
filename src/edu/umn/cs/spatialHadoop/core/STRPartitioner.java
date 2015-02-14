@@ -83,11 +83,9 @@ public class STRPartitioner extends Partitioner {
     // Draw a random sample of the input file
     final Vector<Point> vsample = new Vector<Point>();
     
-    float sample_ratio =
-        job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
-    long sample_size =
-        job.getLong(SpatialSite.SAMPLE_SIZE, 100*1024*1024);
-    
+    float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
+    long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
+
     LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
     ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
       @Override
@@ -147,36 +145,37 @@ public class STRPartitioner extends Partitioner {
 
   @Override
   public void write(DataOutput out) throws IOException {
+    out.writeBoolean(replicate);
     mbr.write(out);
-    ByteBuffer bbuffer = ByteBuffer.allocate(4 + 4 + xSplits.length * 8 +
-        ySplits.length * 8);
-    bbuffer.putInt(columns);
-    bbuffer.putInt(rows);
+    out.writeInt(columns);
+    out.writeInt(rows);
+    ByteBuffer bbuffer = ByteBuffer.allocate((xSplits.length + ySplits.length) * 8);
     for (double xSplit : xSplits)
       bbuffer.putDouble(xSplit);
     for (double ySplit : ySplits)
       bbuffer.putDouble(ySplit);
     if (bbuffer.hasRemaining())
       throw new RuntimeException("Did not calculate buffer size correctly");
-    out.writeInt(bbuffer.position());
     out.write(bbuffer.array(), bbuffer.arrayOffset(), bbuffer.position());
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
+    replicate = in.readBoolean();
     if (mbr == null)
       mbr = new Rectangle();
     mbr.readFields(in);
-    int bufferLength = in.readInt();
+    columns = in.readInt();
+    rows = in.readInt();
+    xSplits = new double[columns];
+    ySplits = new double[columns * rows];
+    
+    int bufferLength = (xSplits.length + ySplits.length) * 8;
     byte[] buffer = new byte[bufferLength];
     in.readFully(buffer);
     ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
-    columns = bbuffer.getInt();
-    rows = bbuffer.getInt();
-    xSplits = new double[columns];
     for (int i = 0; i < xSplits.length; i++)
       xSplits[i] = bbuffer.getDouble();
-    ySplits = new double[columns * rows];
     for (int i = 0; i < ySplits.length; i++)
       ySplits[i] = bbuffer.getDouble();
     if (bbuffer.hasRemaining())
