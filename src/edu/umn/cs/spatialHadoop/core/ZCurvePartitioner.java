@@ -67,7 +67,7 @@ public class ZCurvePartitioner extends Partitioner {
     LOG.info("Z-cruve to partition the space into "+partitions+" partitions");
     
     // Sample of the input file and each point is mapped to a Z-value
-    final Vector<Long> vsample = new Vector<Long>();
+    final Vector<Long> zValues = new Vector<Long>();
     
     float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
     long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
@@ -75,8 +75,8 @@ public class ZCurvePartitioner extends Partitioner {
     LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
     ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
       @Override
-      public void collect(Point value) {
-        vsample.add(computeZ(inMBR, value.x, value.y));
+      public void collect(Point p) {
+        zValues.add(computeZ(inMBR, p.x, p.y));
       }
     };
     OperationsParams params2 = new OperationsParams(job);
@@ -84,21 +84,44 @@ public class ZCurvePartitioner extends Partitioner {
     params2.setLong("size", sample_size);
     params2.setClass("outshape", Point.class, Shape.class);
     Sampler.sample(new Path[] {inPath}, resultCollector, params2);
-    LOG.info("Finished reading a sample of "+vsample.size()+" records");
+    LOG.info("Finished reading a sample of "+zValues.size()+" records");
     
+    ZCurvePartitioner p = createFromZValues(zValues, inMBR, partitions);
+    
+    return p;
+  }
+  
+  public static ZCurvePartitioner createFromPoints(final Vector<Point> points,
+      final Rectangle inMBR, int partitions) {
+    Vector<Long> zValues = new Vector<Long>(points.size());
+    for (Point p : points) {
+      zValues.add(computeZ(inMBR, p.x, p.y));
+    }
+    ZCurvePartitioner p = createFromZValues(zValues, inMBR, partitions);
+    return p;
+  }
+
+  /**
+   * Create a ZCurvePartitioner from a list of points
+   * @param vsample
+   * @param inMBR
+   * @param partitions
+   * @return
+   */
+  public static ZCurvePartitioner createFromZValues(final Vector<Long> zValues,
+      final Rectangle inMBR, int partitions) {
     // Apply the STR algorithm in two rounds
     // 1- First round, sort points by X and split into the given columns
-    Collections.sort(vsample);
+    Collections.sort(zValues);
     
     ZCurvePartitioner p = new ZCurvePartitioner();
     p.mbr = new Rectangle(inMBR);
     p.zSplits = new long[partitions];
     long maxZ = computeZ(inMBR, inMBR.x2, inMBR.y2);
     for (int i = 0; i < partitions; i++) {
-      int quantile = (i + 1) * vsample.size() / partitions;
-      p.zSplits[i] = quantile == vsample.size() ? maxZ : vsample.get(quantile);
+      int quantile = (i + 1) * zValues.size() / partitions;
+      p.zSplits[i] = quantile == zValues.size() ? maxZ : zValues.get(quantile);
     }
-    
     return p;
   }
   
