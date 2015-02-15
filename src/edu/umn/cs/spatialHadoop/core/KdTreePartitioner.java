@@ -241,7 +241,66 @@ public class KdTreePartitioner extends Partitioner {
 
   @Override
   public CellInfo getPartition(int id) {
-    throw new RuntimeException("Not implemented");
+    CellInfo cellInfo = new CellInfo(id, mbr);
+    boolean minXFound = false, minYFound = false,
+        maxXFound = false, maxYFound = false;
+    // Direction 0 means x-axis and 1 means y-axis
+    int direction = getNumberOfSignificantBits(id) & 1;
+    while (id > 1) {
+      // 0 means maximum and 1 means minimum
+      int minOrMax = id & 1;
+      id >>>= 1;
+      if (minOrMax == 0 && direction == 0 && !maxXFound) {
+        cellInfo.x2 = splits[id]; maxXFound = true;
+      } else if (minOrMax == 0 && direction == 1 && !maxYFound) {
+        cellInfo.y2 = splits[id]; maxYFound = true;
+      } else if (minOrMax == 1 && direction == 0 && !minXFound) {
+        cellInfo.x1 = splits[id]; minXFound = true;
+      } else if (minOrMax == 1 && direction == 1 && !minYFound) {
+        cellInfo.y1 = splits[id]; minYFound = true;
+      }
+      direction ^= 1;
+    }
+    return cellInfo;
+  }
+  
+  /**
+   * Get number of significant bits. In other words, get the highest position of
+   * a bit that is set to 1 and add 1 to that position. For the value zero,
+   * number of significant bits is zero.
+   * 
+   * @param x
+   * @return
+   */
+  public static int getNumberOfSignificantBits(int x) {
+    int numOfSignificantBits = 0;
+    if ((x & 0xffff0000) != 0) {
+      // There's some bit on the upper word that is not zero
+      numOfSignificantBits += 16;
+      x >>>= 16;
+    }
+    if ((x & 0xff00) != 0) {
+      // There's some non-zero bit in the upper byte
+      numOfSignificantBits += 8;
+      x >>>= 8;
+    }
+    if ((x & 0xf0) != 0) {
+      numOfSignificantBits += 4;
+      x >>>= 4;
+    }
+    if ((x & 0xC) != 0) {
+      numOfSignificantBits += 2;
+      x >>>= 2;
+    }
+    if ((x & 0x2) != 0) {
+      numOfSignificantBits += 1;
+      x >>>= 1;
+    }
+    if ((x & 0x1) != 0) {
+      numOfSignificantBits += 1;
+      //id >>>= 1; // id will always be zero
+    }
+    return numOfSignificantBits;
   }
   
   public static void main(String[] args) throws IOException {
