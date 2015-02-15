@@ -21,10 +21,8 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
@@ -283,20 +281,5 @@ public class ZCurvePartitioner extends Partitioner {
     Rectangle cellMBR = getMBR(mbr, zMin, zMax);
     cell.set(cellMBR);
     return cell;
-  }
-  
-  public static void main(String[] args) throws IOException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    
-    
-    Path inPath = params.getInputPath();
-    Path outPath = params.getOutputPath();
-
-    OperationsParams.setShape(params, "mbr", FileMBR.fileMBR(inPath, params));
-    
-    ZCurvePartitioner p = createIndexingPartitioner(inPath, outPath, new JobConf(params));
-    for (int i = 0; i < p.getPartitionCount(); i++) {
-      System.out.println(p.getPartition(i).toWKT());
-    }
   }
 }
