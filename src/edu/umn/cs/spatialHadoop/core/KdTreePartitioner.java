@@ -101,7 +101,7 @@ public class KdTreePartitioner extends Partitioner {
     return kdp;
   }
 
-  private static KdTreePartitioner createFromPoints(Rectangle inMBR, int partitions,
+  public static KdTreePartitioner createFromPoints(Rectangle inMBR, int partitions,
       Point[] points) {
     // Keep splitting the space into halves until we reach the desired number of
     // partitions
@@ -140,7 +140,7 @@ public class KdTreePartitioner extends Partitioner {
     
     KdTreePartitioner kdp = new KdTreePartitioner();
     kdp.mbr = new Rectangle(inMBR);
-    kdp.splits = new double[partitions+1];
+    kdp.splits = new double[partitions];
     
     while (!splitTasks.isEmpty()) {
       SplitTask splitTask = splitTasks.remove();
@@ -212,12 +212,31 @@ public class KdTreePartitioner extends Partitioner {
   
   @Override
   public int getPartitionCount() {
-    return splits.length - 1; // First element is dummy
+    return splits.length;
   }
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
-    throw new RuntimeException("Not implemented");
+    Point pt = shape.getMBR().getCenterPoint();
+    int partitionID = 1; // Start from the root
+    int direction = 0;
+    while (partitionID < splits.length) {
+      if (direction == 0) {
+        // The corresponding split is vertical (along the x-axis)
+        if (pt.x < splits[partitionID])
+          partitionID = partitionID * 2; // Go left
+        else
+          partitionID = partitionID * 2 + 1; // Go right
+      } else {
+        // The corresponding split is horizontal (along the y-axis)
+        if (pt.y < splits[partitionID])
+          partitionID = partitionID * 2;
+        else
+          partitionID = partitionID * 2 + 1;
+      }
+      direction ^= 1;
+    }
+    matcher.collect(partitionID);
   }
 
   @Override
