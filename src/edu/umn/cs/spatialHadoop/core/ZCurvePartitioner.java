@@ -138,8 +138,8 @@ public class ZCurvePartitioner extends Partitioner {
   public static long computeZOrder(long x, long y) {
     long morton = 0;
   
-    for (int bitPosition = 0; bitPosition < 32; bitPosition++) {
-      int mask = 1 << bitPosition;
+    for (long bitPosition = 0; bitPosition < 32; bitPosition++) {
+      long mask = 1L << bitPosition;
       morton |= (x & mask) << (bitPosition + 1);
       morton |= (y & mask) << bitPosition;
     }
@@ -155,8 +155,8 @@ public class ZCurvePartitioner extends Partitioner {
   
   public static long unComputeZOrder(long morton) {
     long x = 0, y = 0;
-    for (int bitPosition = 0; bitPosition < 32; bitPosition++) {
-      int mask = 1 << (bitPosition << 1);
+    for (long bitPosition = 0; bitPosition < 32; bitPosition++) {
+      long mask = 1L << (bitPosition << 1);
       y |= (morton & mask) >> bitPosition;
       x |= (morton & (mask << 1)) >> (bitPosition + 1);
     }
