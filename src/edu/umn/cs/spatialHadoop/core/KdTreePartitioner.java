@@ -217,6 +217,8 @@ public class KdTreePartitioner extends Partitioner {
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
+    if (shape == null || shape.getMBR() == null)
+      return;
     Point pt = shape.getMBR().getCenterPoint();
     int partitionID = 1; // Start from the root
     int direction = 0;
