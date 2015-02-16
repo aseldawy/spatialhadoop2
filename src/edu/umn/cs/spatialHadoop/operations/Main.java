@@ -43,8 +43,6 @@ public class Main {
     int exitCode = -1;
     ProgramDriver pgd = new ProgramDriver();
     try {
-      ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-      
       pgd.addClass("rangequery", RangeQuery.class,
           "Finds all objects in the query range given by a rectangle");
 
@@ -61,6 +59,9 @@ public class Main {
       
       pgd.addClass("index", Repartition.class,
           "Builds an index on an input file");
+
+      pgd.addClass("partition", Indexer.class,
+          "Spatially partition a file using a specific partitioner");
       
       pgd.addClass("mbr", FileMBR.class,
           "Finds the minimal bounding rectangle of an input file");
