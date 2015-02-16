@@ -29,11 +29,13 @@ import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GridPartitioner;
+import edu.umn.cs.spatialHadoop.core.KdTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.STRPartitioner;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.ZCurvePartitioner;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
@@ -129,6 +131,10 @@ public class Indexer {
       partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job, false);
     } else if (index.equalsIgnoreCase("str+")) {
       partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job, true);
+    } else if (index.equalsIgnoreCase("zcurve")) {
+      partitioner = ZCurvePartitioner.createIndexingPartitioner(inPath, outPath, job);
+    } else if (index.equalsIgnoreCase("kdtree")) {
+      partitioner = KdTreePartitioner.createIndexingPartitioner(inPath, outPath, job, true);
     } else {
       throw new RuntimeException("Unknown index type '"+index+"'");
     }

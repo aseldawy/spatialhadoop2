@@ -78,10 +78,12 @@ public class IndexOutputFormat<S extends Shape>
     PackedIndexes.add("r+tree");
     PackedIndexes.add("str");
     PackedIndexes.add("str+");
+    PackedIndexes.add("zcurve");
     ExpandedIndexes = new HashSet<String>();
     ExpandedIndexes.add("heap");
     ExpandedIndexes.add("rtree");
     ExpandedIndexes.add("str");
+    ExpandedIndexes.add("zcurve");
   }
   
   public static class IndexRecordWriter<S extends Shape> implements RecordWriter<IntWritable, S> {
