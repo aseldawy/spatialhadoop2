@@ -351,6 +351,15 @@ public class KdTreePartitioner extends Partitioner {
     }
     Rectangle inMBR = (Rectangle)OperationsParams.getShape(params, "mbr");
     
-    KdTreePartitioner kdp = createFromPoints(inMBR, 5, points.toArray(new Point[points.size()]));
+    KdTreePartitioner kdp = createFromPoints(inMBR, 7, points.toArray(new Point[points.size()]));
+    System.out.println("x,y,partition");
+    int[] sizes = new int[kdp.getPartitionCount()*2];
+    for (Point p : points) {
+      int partition = kdp.overlapPartition(p);
+      //System.out.println(p.x+","+p.y+","+partition);
+      sizes[partition]++;
+    }
+    for (int i = 0; i < sizes.length; i++)
+      System.out.print(sizes[i]+",");
   }
 }

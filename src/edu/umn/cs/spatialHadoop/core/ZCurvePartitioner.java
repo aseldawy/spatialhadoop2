@@ -191,6 +191,7 @@ public class ZCurvePartitioner extends Partitioner {
    * @return
    */
   public static java.awt.Rectangle getMBRInteger(long zMin, long zMax) {
+    zMax -= 1; // Because the range is exclusive
     long changedBits = zMin ^ zMax;
     // The mask contains 1's for all bits that are less or equal significant
     // to any changed bit
