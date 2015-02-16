@@ -120,6 +120,6 @@ public class Partition extends CellInfo {
   
   @Override
   public String toWKT() {
-    return super.toWKT()+","+recordCount+","+size+","+filename;
+    return super.toWKT()+","+recordCount+"\t"+size+"\t"+filename;
   }
 }

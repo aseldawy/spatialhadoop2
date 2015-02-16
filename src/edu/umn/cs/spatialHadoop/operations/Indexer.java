@@ -144,10 +144,12 @@ public class Indexer {
         PrintStream wktOut = new PrintStream(outFs.create(new Path("_partitions.wkt")));
         Text tempLine = new Text2();
         Partition tempPartition = new Partition();
+        final byte[] NewLine = new byte[] {'\n'};
         for (FileStatus f : resultFiles) {
           LineReader in = new LineReader(outFs.open(f.getPath()));
           while (in.readLine(tempLine) > 0) {
             destOut.write(tempLine.getBytes(), 0, tempLine.getLength());
+            destOut.write(NewLine);
             tempPartition.fromText(tempLine);
             wktOut.println(tempPartition.toWKT());
           }
