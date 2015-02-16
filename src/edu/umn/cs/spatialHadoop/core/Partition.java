@@ -117,4 +117,9 @@ public class Partition extends CellInfo {
     int imgy2 = (int) Math.round(this.y2 * yscale);
     g.drawRect(imgx1, imgy1, imgx2 - imgx1 + 1, imgy2 - imgy1 + 1);
   }
+  
+  @Override
+  public String toWKT() {
+    return super.toWKT()+","+recordCount+","+size+","+filename;
+  }
 }

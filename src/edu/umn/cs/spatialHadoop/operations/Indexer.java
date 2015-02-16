@@ -9,15 +9,23 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.Iterator;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
@@ -26,16 +34,19 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GridPartitioner;
 import edu.umn.cs.spatialHadoop.core.KdTreePartitioner;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.STRPartitioner;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.ZCurvePartitioner;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
@@ -101,7 +112,53 @@ public class Indexer {
       output.collect(partitionID, null);
     }
   }
+  
+  /**
+   * Output committer that concatenates all master files into one master file.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class IndexerOutputCommitter extends FileOutputCommitter {
+    @Override
+    public void commitJob(JobContext context) throws IOException {
+      super.commitJob(context);
+      
+      JobConf job = context.getJobConf();
+      Path outPath = GridOutputFormat.getOutputPath(job);
+      FileSystem outFs = outPath.getFileSystem(job);
 
+      // Concatenate all master files into one file
+      FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
+        @Override
+        public boolean accept(Path path) {
+          return path.getName().contains("_master");
+        }
+      });
+      
+      if (resultFiles.length == 0) {
+        LOG.warn("No _master files were written by reducers");
+      } else {
+        String sindex = job.get("sindex");
+        Path masterPath = new Path(outPath, "_master." + sindex);
+        OutputStream destOut = outFs.create(masterPath);
+        PrintStream wktOut = new PrintStream(outFs.create(new Path("_partitions.wkt")));
+        Text tempLine = new Text2();
+        Partition tempPartition = new Partition();
+        for (FileStatus f : resultFiles) {
+          LineReader in = new LineReader(outFs.open(f.getPath()));
+          while (in.readLine(tempLine) > 0) {
+            destOut.write(tempLine.getBytes(), 0, tempLine.getLength());
+            tempPartition.fromText(tempLine);
+            wktOut.println(tempPartition.toWKT());
+          }
+          in.close();
+          outFs.delete(f.getPath(), false); // Delete the copied file
+        }
+        destOut.close();
+      }
+    }
+  }
+  
   private static RunningJob repartitionMapReduce(Path inPath, Path outPath,
       OperationsParams params) throws IOException {
     
