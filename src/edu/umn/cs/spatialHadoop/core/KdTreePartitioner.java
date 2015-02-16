@@ -101,8 +101,14 @@ public class KdTreePartitioner extends Partitioner {
     return kdp;
   }
 
-  public static KdTreePartitioner createFromPoints(Rectangle inMBR, int partitions,
-      Point[] points) {
+  public static KdTreePartitioner createFromPoints(Rectangle inMBR,
+      int partitions, Point[] points) {
+    // Enumerate all partition IDs to be able to count leaf nodes in any split
+    // TODO do the same functionality without enumerating all IDs
+    String[] ids = new String[partitions];
+    for (int id = partitions; id < 2 * partitions; id++)
+      ids[id - partitions] = Integer.toBinaryString(id);
+    
     // Keep splitting the space into halves until we reach the desired number of
     // partitions
     @SuppressWarnings("unchecked")
@@ -144,19 +150,31 @@ public class KdTreePartitioner extends Partitioner {
     
     while (!splitTasks.isEmpty()) {
       SplitTask splitTask = splitTasks.remove();
-      quickMedian(points, splitTask.fromIndex, splitTask.toIndex,
-          comparators[splitTask.direction]);
-      Point median = points[(splitTask.fromIndex + splitTask.toIndex)/2];
+      String child1 = Integer.toBinaryString(splitTask.partitionID * 2);
+      String child2 = Integer.toBinaryString(splitTask.partitionID * 2 + 1);
+      int size_child1 = 0, size_child2 = 0;
+      for (int i = 0; i < ids.length; i++) {
+        if (ids[i].startsWith(child1))
+          size_child1++;
+        else if (ids[i].startsWith(child2))
+          size_child2++;
+      }
+      
+      // Calculate the index which partitions the subrange into sizes
+      // proportional to size_child1 and size_child2
+      int splitIndex = (size_child1 * splitTask.toIndex + size_child2 * splitTask.fromIndex)
+          / (size_child1 + size_child2);
+      partialQuickSort(points, splitTask.fromIndex, splitTask.toIndex,
+          splitIndex, comparators[splitTask.direction]);
+      Point splitValue = points[splitIndex];
       kdp.splits[splitTask.partitionID] = splitTask.direction == 0 ?
-          median.x : median.y;
+          splitValue.x : splitValue.y;
       if (splitTask.partitionID * 2 < partitions) {
-        splitTasks.add(new SplitTask(splitTask.fromIndex,
-            (splitTask.fromIndex + splitTask.toIndex) / 2,
+        splitTasks.add(new SplitTask(splitTask.fromIndex, splitIndex,
             1 - splitTask.direction, splitTask.partitionID * 2));
       }
       if (splitTask.partitionID * 2 + 1 < partitions) {
-        splitTasks.add(new SplitTask(
-            (splitTask.fromIndex + splitTask.toIndex) / 2, splitTask.toIndex,
+        splitTasks.add(new SplitTask(splitIndex, splitTask.toIndex,
             1 - splitTask.direction, splitTask.partitionID * 2 + 1));
       }
     }
@@ -164,19 +182,19 @@ public class KdTreePartitioner extends Partitioner {
   }
 
   /**
-   * Reorders the given array so that the element at (fromIndex+toIndex)/2
-   * points to the median of this subrange according to the given comparator.
-   * If the size of the given subrange is even (i.e., toIndex-fromIndex is a
-   * multiple of two), then there are two values that need to be interpolated
-   * to give the median, in this case, these two values will be placed in
-   * the indexes (fromIndex+toIndex)/2-1 and (fromIndex+toIndex)/2.
-   * @param a
-   * @param fromIndex
-   * @param toIndex
-   * @param c
+   * Reorders the given subrange of the array so that the element at the
+   * desiredIndex is at its correct position. Upon return of this function,
+   * the element at the desired index is greater than or equal all previous
+   * values in the subrange and less than or equal to all following items in
+   * the subrange.
+   * @param a - the array to sort
+   * @param fromIndex - the index of the first element in the subrange
+   * @param toIndex - the index after the last element in the subrange
+   * @param desiredIndex - the index which needs to be adjusted
+   * @param c - the comparator used to compare array elements
    */
-  public static <T> void quickMedian(T[] a, int fromIndex, int toIndex,
-      Comparator<T> c) {
+  public static <T> void partialQuickSort(T[] a, int fromIndex, int toIndex,
+      int desiredIndex, Comparator<T> c) {
     Arrays.sort(a, fromIndex, toIndex, c);
   }
 
@@ -235,13 +253,13 @@ public class KdTreePartitioner extends Partitioner {
     int direction = 0;
     while (partitionID < splits.length) {
       if (direction == 0) {
-        // The corresponding split is vertical (along the x-axis)
+        // The corresponding split is vertical (along the x-axis). Like |
         if (pt.x < splits[partitionID])
           partitionID = partitionID * 2; // Go left
         else
           partitionID = partitionID * 2 + 1; // Go right
       } else {
-        // The corresponding split is horizontal (along the y-axis)
+        // The corresponding split is horizontal (along the y-axis). Like -
         if (pt.y < splits[partitionID])
           partitionID = partitionID * 2;
         else
