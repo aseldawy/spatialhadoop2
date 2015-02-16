@@ -203,6 +203,7 @@ public class Indexer {
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(shape.getClass());
     job.setReducerClass(RepartitionMethods.class);
+    job.setOutputCommitter(IndexerOutputCommitter.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
