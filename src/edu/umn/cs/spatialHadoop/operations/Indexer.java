@@ -141,7 +141,9 @@ public class Indexer {
         String sindex = job.get("sindex");
         Path masterPath = new Path(outPath, "_master." + sindex);
         OutputStream destOut = outFs.create(masterPath);
-        PrintStream wktOut = new PrintStream(outFs.create(new Path("_partitions.wkt")));
+        Path wktPath = new Path(outPath, "_"+sindex+".wkt");
+        PrintStream wktOut = new PrintStream(outFs.create(wktPath));
+        wktOut.println("Boundaries\tRecord Count\tSize\tFile name");
         Text tempLine = new Text2();
         Partition tempPartition = new Partition();
         final byte[] NewLine = new byte[] {'\n'};
