@@ -120,6 +120,17 @@ public class GridPartitioner extends Partitioner {
       }
     }
   }
+  
+  @Override
+  public int overlapPartition(Shape shape) {
+    if (shape == null)
+      return -1;
+    Rectangle shapeMBR = shape.getMBR();
+    if (shapeMBR == null)
+      return -1;
+    Point centerPoint = shapeMBR.getCenterPoint();
+    return this.gridInfo.getOverlappingCell(centerPoint.x, centerPoint.y);
+  }
 
   @Override
   public CellInfo getPartition(int partitionID) {

@@ -39,6 +39,17 @@ public abstract class Partitioner implements Writable {
   public abstract void overlapPartitions(Shape shape, ResultCollector<Integer> matcher);
   
   /**
+   * Returns only one overlapping partition. If the given shape overlaps more
+   * than one partitions, the partitioner returns only one of them according to
+   * its own criteria. If it does not overlap any partition, it returns -1
+   * which is an invalid partition ID.
+   * 
+   * @param shape
+   * @return
+   */
+  public abstract int overlapPartition(Shape shape);
+  
+  /**
    * Returns the details of a specific partition.
    * @param partitionID
    * @return

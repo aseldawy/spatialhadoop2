@@ -228,6 +228,24 @@ public class STRPartitioner extends Partitioner {
       matcher.collect(cell);
     }
   }
+  
+  @Override
+  public int overlapPartition(Shape shape) {
+    if (shape == null)
+      return -1;
+    Rectangle shapeMBR = shape.getMBR();
+    if (shapeMBR == null)
+      return -1;
+    // Assign to only one partition
+    Point center = shapeMBR.getCenterPoint();
+    int col = Arrays.binarySearch(xSplits, center.x);
+    if (col < 0)
+      col = -col - 1;
+    int cell = Arrays.binarySearch(ySplits, col * rows, (col+1)*rows, center.y);
+    if (cell < 0)
+      cell = -cell - 1;
+    return cell;
+  }
 
   @Override
   public CellInfo getPartition(int id) {

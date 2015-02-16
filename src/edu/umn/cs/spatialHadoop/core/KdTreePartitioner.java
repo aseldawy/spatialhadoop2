@@ -217,8 +217,19 @@ public class KdTreePartitioner extends Partitioner {
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
+    // TODO match with all overlapping partitions
+    int partitionID = overlapPartition(shape);
+    if (partitionID >= 0)
+      matcher.collect(partitionID);
+  }
+
+  /**
+   * @param shape
+   * @return
+   */
+  public int overlapPartition(Shape shape) {
     if (shape == null || shape.getMBR() == null)
-      return;
+      return -1;
     Point pt = shape.getMBR().getCenterPoint();
     int partitionID = 1; // Start from the root
     int direction = 0;
@@ -238,7 +249,7 @@ public class KdTreePartitioner extends Partitioner {
       }
       direction ^= 1;
     }
-    matcher.collect(partitionID);
+    return partitionID;
   }
 
   @Override

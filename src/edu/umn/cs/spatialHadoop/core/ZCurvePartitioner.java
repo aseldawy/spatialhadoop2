@@ -257,18 +257,26 @@ public class ZCurvePartitioner extends Partitioner {
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
+    // TODO match with all overlapping partitions instead of only one
+    int partition = overlapPartition(shape);
+    if (partition >= 0)
+      matcher.collect(partition);
+  }
+  
+  @Override
+  public int overlapPartition(Shape shape) {
     if (shape == null)
-      return;
+      return -1;
     Rectangle shapeMBR = shape.getMBR();
     if (shapeMBR == null)
-      return;
+      return -1;
     // Assign to only one partition that contains the center point
     Point center = shapeMBR.getCenterPoint();
     long zValue = computeZ(mbr, center.x, center.y);
     int partition = Arrays.binarySearch(zSplits, zValue);
     if (partition < 0)
       partition = -partition - 1;
-    matcher.collect(partition);
+    return partition;
   }
 
   @Override
