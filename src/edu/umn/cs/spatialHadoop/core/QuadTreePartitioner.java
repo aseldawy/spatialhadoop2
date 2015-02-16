@@ -12,8 +12,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Queue;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -27,25 +29,18 @@ import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
- * Partition the space based on Z-curve.
+ * Partition the space based on a Quad tree
  * @author Ahmed Eldawy
  *
  */
-public class ZCurvePartitioner extends Partitioner {
-  private static final Log LOG = LogFactory.getLog(ZCurvePartitioner.class);
+public class QuadTreePartitioner extends ZCurvePartitioner {
+  private static final Log LOG = LogFactory.getLog(QuadTreePartitioner.class);
 
-  /**MBR of the input file*/
-  protected Rectangle mbr;
-  /**Upper bound of all partitions*/
-  protected long[] zSplits;
-
-  protected static final int Resolution = Integer.MAX_VALUE;
-  
   /**
    * A default constructor to be able to dynamically instantiate it
    * and deserialize it
    */
-  public ZCurvePartitioner() {
+  public QuadTreePartitioner() {
   }
 
   /**
@@ -54,7 +49,7 @@ public class ZCurvePartitioner extends Partitioner {
    * @param job
    * @throws IOException 
    */
-  public static ZCurvePartitioner createIndexingPartitioner(Path inPath,
+  public static QuadTreePartitioner createIndexingPartitioner(Path inPath,
       Path outPath, JobConf job) throws IOException {
     final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     // Determine number of partitions
@@ -62,7 +57,7 @@ public class ZCurvePartitioner extends Partitioner {
     FileSystem outFS = outPath.getFileSystem(job);
     long outBlockSize = outFS.getDefaultBlockSize(outPath);
     int partitions = (int) (inSize / outBlockSize);
-    LOG.info("Z-cruve to partition the space into "+partitions+" partitions");
+    LOG.info("Quad tree to partition the space into "+partitions+" partitions");
     
     // Sample of the input file and each point is mapped to a Z-value
     final Vector<Long> zValues = new Vector<Long>();
@@ -84,18 +79,18 @@ public class ZCurvePartitioner extends Partitioner {
     Sampler.sample(new Path[] {inPath}, resultCollector, params2);
     LOG.info("Finished reading a sample of "+zValues.size()+" records");
     
-    ZCurvePartitioner p = createFromZValues(zValues, inMBR, partitions);
+    QuadTreePartitioner p = createFromZValues(zValues, inMBR, partitions);
     
     return p;
   }
   
-  public static ZCurvePartitioner createFromPoints(final Vector<Point> points,
+  public static QuadTreePartitioner createFromPoints(final Vector<Point> points,
       final Rectangle inMBR, int partitions) {
     Vector<Long> zValues = new Vector<Long>(points.size());
     for (Point p : points) {
       zValues.add(computeZ(inMBR, p.x, p.y));
     }
-    ZCurvePartitioner p = createFromZValues(zValues, inMBR, partitions);
+    QuadTreePartitioner p = createFromZValues(zValues, inMBR, partitions);
     return p;
   }
 
@@ -106,14 +101,55 @@ public class ZCurvePartitioner extends Partitioner {
    * @param partitions
    * @return
    */
-  public static ZCurvePartitioner createFromZValues(final Vector<Long> zValues,
+  public static QuadTreePartitioner createFromZValues(final Vector<Long> zValues,
       final Rectangle inMBR, int partitions) {
+    int nodeCapacity = zValues.size() / partitions;
     Collections.sort(zValues);
+    class QuadTreeNode {
+      int fromIndex, toIndex;
+      long minZ, maxZ;
+      int nodeID; // A unique ID of the node
+      int depth; // Depth in the tree starting with zero at the root
+      
+      public QuadTreeNode(int fromIndex, int toIndex, long minZ, long maxZ,
+          int nodeID, int depth) {
+        this.fromIndex = fromIndex;
+        this.toIndex = toIndex;
+        this.minZ = minZ;
+        this.maxZ = maxZ;
+        this.nodeID = nodeID;
+        this.depth = depth;
+      }
+    }
     
-    ZCurvePartitioner p = new ZCurvePartitioner();
+    long minZ = computeZ(inMBR, inMBR.x1, inMBR.y1); // Always zero
+    long maxZ = computeZ(inMBR, inMBR.x2, inMBR.y2);
+    QuadTreeNode root = new QuadTreeNode(0, zValues.size(), minZ, maxZ, 1, 0);
+    Queue<QuadTreeNode> nodesToSplit = new ArrayDeque<QuadTreeNode>();
+    nodesToSplit.add(root);
+    
+    Vector<Long> zSplits = new Vector<Long>();
+    
+    while (!nodesToSplit.isEmpty()) {
+      QuadTreeNode nodeToSplit = nodesToSplit.remove();
+      if (nodeToSplit.toIndex - nodeToSplit.fromIndex <= nodeCapacity) {
+        // No need to split
+        zSplits.add(nodeToSplit.maxZ);
+      } else {
+        // Need to split into four children
+        for (int iChild = 0; iChild < 4; iChild++) {
+          
+          
+          QuadTreeNode childNode = new QuadTreeNode(fromIndex, toIndex, minZ, maxZ,
+              nodeToSplit.nodeID * 4 + iChild, nodeToSplit.depth + 1);
+          
+        }
+      }
+    }
+    
+    QuadTreePartitioner p = new QuadTreePartitioner();
     p.mbr = new Rectangle(inMBR);
     p.zSplits = new long[partitions];
-    long maxZ = computeZ(inMBR, inMBR.x2, inMBR.y2);
     for (int i = 0; i < partitions; i++) {
       int quantile = (i + 1) * zValues.size() / partitions;
       p.zSplits[i] = quantile == zValues.size() ? maxZ : zValues.get(quantile);
