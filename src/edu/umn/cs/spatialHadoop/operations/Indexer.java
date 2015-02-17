@@ -41,6 +41,7 @@ import edu.umn.cs.spatialHadoop.core.GridPartitioner;
 import edu.umn.cs.spatialHadoop.core.KdTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
+import edu.umn.cs.spatialHadoop.core.QuadTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.STRPartitioner;
@@ -69,11 +70,17 @@ public class Indexer {
 
     /**The partitioner used to partitioner the data across reducers*/
     private Partitioner partitioner;
+    /**
+     * Whether to replicate a record to all overlapping partitions or to assign
+     * it to only one partition
+     */
+    private boolean replicate;
 
     @Override
     public void configure(JobConf job) {
       super.configure(job);
       this.partitioner = Partitioner.getPartitioner(job);
+      this.replicate = job.getBoolean("replicate", false);
     }
     
     @Override
@@ -83,17 +90,23 @@ public class Indexer {
       final IntWritable partitionID = new IntWritable();
       int i = 0;
       for (final Shape shape : shapes) {
-        partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
-          @Override
-          public void collect(Integer r) {
-            partitionID.set(r);
-            try {
-              output.collect(partitionID, shape);
-            } catch (IOException e) {
-              LOG.warn("Error checking overlapping partitions", e);
+        if (replicate) {
+          partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
+            @Override
+            public void collect(Integer r) {
+              partitionID.set(r);
+              try {
+                output.collect(partitionID, shape);
+              } catch (IOException e) {
+                LOG.warn("Error checking overlapping partitions", e);
+              }
             }
-          }
-        });
+          });
+        } else {
+          partitionID.set(partitioner.overlapPartition(shape));
+          if (partitionID.get() >= 0)
+            output.collect(partitionID, shape);
+        }
         if (((++i) & 0xffff) == 0) {
           reporter.progress();
         }
@@ -143,7 +156,7 @@ public class Indexer {
         OutputStream destOut = outFs.create(masterPath);
         Path wktPath = new Path(outPath, "_"+sindex+".wkt");
         PrintStream wktOut = new PrintStream(outFs.create(wktPath));
-        wktOut.println("Boundaries\tRecord Count\tSize\tFile name");
+        wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
         Text tempLine = new Text2();
         Partition tempPartition = new Partition();
         final byte[] NewLine = new byte[] {'\n'};
@@ -188,14 +201,22 @@ public class Indexer {
     Partitioner partitioner;
     if (index.equalsIgnoreCase("grid")) {
       partitioner = GridPartitioner.createIndexingPartitioner(inPath, outPath, job);
+      job.setBoolean("replicate", true);
     } else if (index.equalsIgnoreCase("str")) {
-      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job, false);
+      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job);
+      job.setBoolean("replicate", false);
     } else if (index.equalsIgnoreCase("str+")) {
-      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job, true);
+      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job);
+      job.setBoolean("replicate", true);
     } else if (index.equalsIgnoreCase("zcurve")) {
       partitioner = ZCurvePartitioner.createIndexingPartitioner(inPath, outPath, job);
+      job.setBoolean("replicate", false);
     } else if (index.equalsIgnoreCase("kdtree")) {
-      partitioner = KdTreePartitioner.createIndexingPartitioner(inPath, outPath, job, true);
+      partitioner = KdTreePartitioner.createIndexingPartitioner(inPath, outPath, job);
+      job.setBoolean("replicate", false);
+    } else if (index.equalsIgnoreCase("quadtree")) {
+      partitioner = QuadTreePartitioner.createIndexingPartitioner(inPath, outPath, job);
+      job.setBoolean("replicate", false);
     } else {
       throw new RuntimeException("Unknown index type '"+index+"'");
     }
@@ -237,7 +258,7 @@ public class Indexer {
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("shape:<point|rectangle|polygon> - (*) Type of shapes stored in input file");
-    System.out.println("sindex:<index> - (*) Type of spatial index (grid|rtree|r+tree|str|str+)");
+    System.out.println("sindex:<index> - (*) Type of spatial index (grid|str|str+|quadtree|zcurve|kdtree)");
     System.out.println("-overwrite - Overwrite output file without noitce");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }

@@ -42,8 +42,6 @@ public class STRPartitioner extends Partitioner {
   private double[] xSplits;
   /**Locations of horizontal strips for each vertical strip*/
   private double[] ySplits;
-  /**Whether to replicate to all overlapping cells or assign to only one cell*/
-  private boolean replicate;
   
   /**
    * A default constructor to be able to dynamically instantiate it
@@ -59,7 +57,7 @@ public class STRPartitioner extends Partitioner {
    * @throws IOException 
    */
   public static STRPartitioner createIndexingPartitioner(Path inPath,
-      Path outPath, JobConf job, boolean replicate) throws IOException {
+      Path outPath, JobConf job) throws IOException {
     String gridSize = job.get("grid");
     Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     int columns, rows;
@@ -111,7 +109,6 @@ public class STRPartitioner extends Partitioner {
       }});
     
     STRPartitioner p = new STRPartitioner();
-    p.replicate = replicate;
     p.columns = columns;
     p.rows = rows;
     p.xSplits = new double[columns];
@@ -145,7 +142,6 @@ public class STRPartitioner extends Partitioner {
 
   @Override
   public void write(DataOutput out) throws IOException {
-    out.writeBoolean(replicate);
     mbr.write(out);
     out.writeInt(columns);
     out.writeInt(rows);
@@ -161,7 +157,6 @@ public class STRPartitioner extends Partitioner {
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    replicate = in.readBoolean();
     if (mbr == null)
       mbr = new Rectangle();
     mbr.readFields(in);
@@ -194,38 +189,26 @@ public class STRPartitioner extends Partitioner {
     Rectangle shapeMBR = shape.getMBR();
     if (shapeMBR == null)
       return;
-    if (replicate) {
-      // Replicate to all overlapping partitions
-      // Find first and last matching columns
-      int col1 = Arrays.binarySearch(xSplits, shapeMBR.x1);
-      if (col1 < 0)
-        col1 = -col1 - 1; // Adjust the position if value not found
-      int col2 = Arrays.binarySearch(xSplits, shapeMBR.x2);
-      if (col2 < 0)
-        col2 = -col2 - 1; // Adjust the position if value not found
-      
-      for (int col = col1; col <= col2; col++) {
-        // For each column, find all matching rows
-        int cell1 = Arrays.binarySearch(ySplits, col * rows, (col+1) * rows, shapeMBR.y1);
-        if (cell1 < 0)
-          cell1 = -cell1 - 1;
-        int cell2 = Arrays.binarySearch(ySplits, col * rows, (col+1) * rows, shapeMBR.y2);
-        if (cell2 < 0)
-          cell2 = -cell2 - 1;
-        
-        for (int cell = cell1; cell <= cell2; cell++)
-          matcher.collect(cell);
-      }
-    } else {
-      // Assign to only one partition
-      Point center = shapeMBR.getCenterPoint();
-      int col = Arrays.binarySearch(xSplits, center.x);
-      if (col < 0)
-        col = -col - 1;
-      int cell = Arrays.binarySearch(ySplits, col * rows, (col+1)*rows, center.y);
-      if (cell < 0)
-        cell = -cell - 1;
-      matcher.collect(cell);
+    // Replicate to all overlapping partitions
+    // Find first and last matching columns
+    int col1 = Arrays.binarySearch(xSplits, shapeMBR.x1);
+    if (col1 < 0)
+      col1 = -col1 - 1; // Adjust the position if value not found
+    int col2 = Arrays.binarySearch(xSplits, shapeMBR.x2);
+    if (col2 < 0)
+      col2 = -col2 - 1; // Adjust the position if value not found
+
+    for (int col = col1; col <= col2; col++) {
+      // For each column, find all matching rows
+      int cell1 = Arrays.binarySearch(ySplits, col * rows, (col+1) * rows, shapeMBR.y1);
+      if (cell1 < 0)
+        cell1 = -cell1 - 1;
+      int cell2 = Arrays.binarySearch(ySplits, col * rows, (col+1) * rows, shapeMBR.y2);
+      if (cell2 < 0)
+        cell2 = -cell2 - 1;
+
+      for (int cell = cell1; cell <= cell2; cell++)
+        matcher.collect(cell);
     }
   }
   

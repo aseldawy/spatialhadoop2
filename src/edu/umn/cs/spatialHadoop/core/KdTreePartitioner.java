@@ -63,7 +63,7 @@ public class KdTreePartitioner extends Partitioner {
    * @throws IOException 
    */
   public static KdTreePartitioner createIndexingPartitioner(Path inPath,
-      Path outPath, JobConf job, boolean replicate) throws IOException {
+      Path outPath, JobConf job) throws IOException {
     Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     
     // Determine number of partitions
