@@ -8,7 +8,10 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.core;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Queue;
@@ -33,8 +36,13 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
  * @author Ahmed Eldawy
  *
  */
-public class QuadTreePartitioner extends ZCurvePartitioner {
+public class QuadTreePartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(QuadTreePartitioner.class);
+
+  /**The minimal bounding rectangle of the underlying file*/
+  protected Rectangle mbr;
+  /**ID of all leaf nodes in partition tree*/
+  protected int[] leafNodeIDs;
 
   /**
    * A default constructor to be able to dynamically instantiate it
@@ -69,7 +77,7 @@ public class QuadTreePartitioner extends ZCurvePartitioner {
     ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
       @Override
       public void collect(Point p) {
-        zValues.add(computeZ(inMBR, p.x, p.y));
+        zValues.add(ZCurvePartitioner.computeZ(inMBR, p.x, p.y));
       }
     };
     OperationsParams params2 = new OperationsParams(job);
@@ -87,9 +95,8 @@ public class QuadTreePartitioner extends ZCurvePartitioner {
   public static QuadTreePartitioner createFromPoints(final Vector<Point> points,
       final Rectangle inMBR, int partitions) {
     Vector<Long> zValues = new Vector<Long>(points.size());
-    for (Point p : points) {
-      zValues.add(computeZ(inMBR, p.x, p.y));
-    }
+    for (Point p : points)
+      zValues.add(ZCurvePartitioner.computeZ(inMBR, p.x, p.y));
     QuadTreePartitioner p = createFromZValues(
         zValues.toArray(new Long[zValues.size()]), inMBR, partitions);
     return p;
@@ -123,25 +130,25 @@ public class QuadTreePartitioner extends ZCurvePartitioner {
       }
     }
     
-    long minZ = computeZ(inMBR, inMBR.x1, inMBR.y1); // Always zero
-    long maxZ = computeZ(inMBR, inMBR.x2, inMBR.y2);
+    long minZ = ZCurvePartitioner.computeZ(inMBR, inMBR.x1, inMBR.y1); // Always zero
+    long maxZ = ZCurvePartitioner.computeZ(inMBR, inMBR.x2, inMBR.y2);
     QuadTreeNode root = new QuadTreeNode(0, zValues.length, minZ, maxZ, 1, 1);
     Queue<QuadTreeNode> nodesToSplit = new ArrayDeque<QuadTreeNode>();
     nodesToSplit.add(root);
-    
-    Vector<Long> zSplits = new Vector<Long>();
+
+    Vector<Integer> leafNodeIDs = new Vector<Integer>();
     
     while (!nodesToSplit.isEmpty()) {
       QuadTreeNode nodeToSplit = nodesToSplit.remove();
       if (nodeToSplit.toIndex - nodeToSplit.fromIndex <= nodeCapacity) {
         // No need to split
-        zSplits.add(nodeToSplit.maxZ);
+        leafNodeIDs.add(nodeToSplit.nodeID);
       } else {
         // The position of the lowest of the two bits that change for these
         // children in the Z-order
         // For the root, we change the two highest bits in the zOrder
         int changedBits =
-            KdTreePartitioner.getNumberOfSignificantBits(Resolution) * 2 -
+            KdTreePartitioner.getNumberOfSignificantBits(ZCurvePartitioner.Resolution) * 2 -
             nodeToSplit.depth * 2;
         // Need to split into four children
         long childMinZ = nodeToSplit.minZ;
@@ -164,14 +171,111 @@ public class QuadTreePartitioner extends ZCurvePartitioner {
     
     QuadTreePartitioner p = new QuadTreePartitioner();
     p.mbr = new Rectangle(inMBR);
-    p.zSplits = new long[zSplits.size()];
-    for (int i = 0; i < zSplits.size(); i++) {
-      p.zSplits[i] = zSplits.get(i);
-    }
-    Arrays.sort(p.zSplits);
+    p.leafNodeIDs = new int[leafNodeIDs.size()];
+    for (int i = 0; i < leafNodeIDs.size(); i++)
+      p.leafNodeIDs[i] = leafNodeIDs.get(i);
+    Arrays.sort(p.leafNodeIDs);
     return p;
   }
   
+  @Override
+  public int overlapPartition(Shape shape) {
+    if (shape == null || shape.getMBR() == null)
+      return -1;
+
+    Point queryPoint = shape.getMBR().getCenterPoint();
+    int nodeToSearch = 1; // Start from the root
+    Rectangle nodeMBR = mbr.clone();
+    while (Arrays.binarySearch(leafNodeIDs, nodeToSearch) < 0) {
+      if (nodeToSearch > leafNodeIDs[leafNodeIDs.length - 1]) {
+        System.err.println("not found");
+        return -1;
+      }
+      Point nodeCenter = nodeMBR.getCenterPoint();
+      if (queryPoint.x < nodeCenter.x && queryPoint.y < nodeCenter.y) {
+        nodeToSearch = nodeToSearch * 4;
+        nodeMBR.x2 = nodeCenter.x;
+        nodeMBR.y2 = nodeCenter.y;
+      } else if (queryPoint.x < nodeCenter.x && queryPoint.y >= nodeCenter.y) {
+        nodeToSearch = nodeToSearch * 4 + 1;
+        nodeMBR.x2 = nodeCenter.x;
+        nodeMBR.y1 = nodeCenter.y;
+      } else if (queryPoint.x >= nodeCenter.x && queryPoint.y < nodeCenter.y) {
+        nodeToSearch = nodeToSearch * 4 + 2;
+        nodeMBR.x1 = nodeCenter.x;
+        nodeMBR.y2 = nodeCenter.y;
+      } else {
+        nodeToSearch = nodeToSearch * 4 + 3;
+        nodeMBR.x1 = nodeCenter.x;
+        nodeMBR.y1 = nodeCenter.y;
+      }
+    }
+    return nodeToSearch;
+  }
+  
+  @Override
+  public int getPartitionCount() {
+    return leafNodeIDs.length;
+  }
+
+  @Override
+  public CellInfo getPartitionAt(int index) {
+    return getPartition(leafNodeIDs[index]);
+  }
+  
+  @Override
+  public CellInfo getPartition(int partitionID) {
+    CellInfo cellInfo = new CellInfo(partitionID, mbr);
+    
+    int partitionDepth =
+        (KdTreePartitioner.getNumberOfSignificantBits(partitionID) + 1) / 2;
+    
+    for (int depth = 1; depth < partitionDepth; depth++) {
+      int childNumber = (partitionID >> (2 * (partitionDepth - depth - 1))) & 3;
+      Point center = cellInfo.getCenterPoint();
+      switch (childNumber) {
+      case 0: cellInfo.x2 = center.x; cellInfo.y2 = center.y; break;
+      case 1: cellInfo.x2 = center.x; cellInfo.y1 = center.y; break;
+      case 2: cellInfo.x1 = center.x; cellInfo.y2 = center.y; break;
+      case 3: cellInfo.x1 = center.x; cellInfo.y1 = center.y; break;
+      }
+    }
+    
+    return cellInfo;
+  }
+
+  @Override
+  public void write(DataOutput out) throws IOException {
+    mbr.write(out);
+    out.writeInt(leafNodeIDs.length);
+    ByteBuffer bbuffer = ByteBuffer.allocate(leafNodeIDs.length * 4);
+    for (int leafNodeID : leafNodeIDs)
+      bbuffer.putInt(leafNodeID);
+    if (bbuffer.hasRemaining())
+      throw new RuntimeException("Did not calculate buffer size correctly");
+    out.write(bbuffer.array(), bbuffer.arrayOffset(), bbuffer.position());
+  }
+
+  @Override
+  public void readFields(DataInput in) throws IOException {
+    if (mbr == null)
+      mbr = new Rectangle();
+    mbr.readFields(in);
+    int numberOfLeafNodes = in.readInt();
+    leafNodeIDs = new int[numberOfLeafNodes];
+    byte[] buffer = new byte[leafNodeIDs.length * 4];
+    in.readFully(buffer);
+    ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
+    for (int i = 0; i < leafNodeIDs.length; i++)
+      leafNodeIDs[i] = bbuffer.getInt();
+  }
+
+  @Override
+  public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
+    // TODO Auto-generated method stub
+    throw new RuntimeException("Non-implemented method");
+  }
+
   public static void main(String[] args) throws IOException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     
@@ -195,10 +299,10 @@ public class QuadTreePartitioner extends ZCurvePartitioner {
       int partition = qtp.overlapPartition(p);
       System.out.println(p.x+","+p.y+","+partition);
     }
-    
+  
+    System.out.println("Partition count "+qtp.getPartitionCount());
     for (int i = 0; i < qtp.getPartitionCount(); i++) {
-      System.out.println(qtp.getPartition(i).toWKT());
+      System.out.println(qtp.getPartitionAt(i).toWKT());
     }
   }
-
 }

@@ -137,4 +137,8 @@ public class GridPartitioner extends Partitioner {
     return gridInfo.getCell(partitionID);
   }
 
+  @Override
+  public CellInfo getPartitionAt(int index) {
+    return getPartition(index+1);
+  }
 }

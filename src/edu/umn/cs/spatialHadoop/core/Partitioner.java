@@ -50,11 +50,19 @@ public abstract class Partitioner implements Writable {
   public abstract int overlapPartition(Shape shape);
   
   /**
-   * Returns the details of a specific partition.
+   * Returns the details of a specific partition given its ID.
    * @param partitionID
    * @return
    */
   public abstract CellInfo getPartition(int partitionID);
+  
+  /**
+   * Returns the detail of a partition given its position starting from zero
+   * and ending at partitionCount() - 1
+   * @param partitionID
+   * @return
+   */
+  public abstract CellInfo getPartitionAt(int index);
   
   /**
    * Returns total number of partitions

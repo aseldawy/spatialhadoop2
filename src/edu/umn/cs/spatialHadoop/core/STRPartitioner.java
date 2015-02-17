@@ -229,6 +229,11 @@ public class STRPartitioner extends Partitioner {
       cell = -cell - 1;
     return cell;
   }
+  
+  @Override
+  public CellInfo getPartitionAt(int index) {
+    return getPartition(index);
+  }
 
   @Override
   public CellInfo getPartition(int id) {

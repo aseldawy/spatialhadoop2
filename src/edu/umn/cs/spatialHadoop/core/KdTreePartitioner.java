@@ -269,6 +269,11 @@ public class KdTreePartitioner extends Partitioner {
     }
     return partitionID;
   }
+  
+  @Override
+  public CellInfo getPartitionAt(int index) {
+    return getPartition(index + splits.length);
+  }
 
   @Override
   public CellInfo getPartition(int id) {

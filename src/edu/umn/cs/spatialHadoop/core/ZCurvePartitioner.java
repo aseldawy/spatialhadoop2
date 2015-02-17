@@ -279,6 +279,11 @@ public class ZCurvePartitioner extends Partitioner {
   }
 
   @Override
+  public CellInfo getPartitionAt(int index) {
+    return getPartition(index);
+  }
+  
+  @Override
   public CellInfo getPartition(int id) {
     CellInfo cell = new CellInfo();
     cell.cellId = id;
