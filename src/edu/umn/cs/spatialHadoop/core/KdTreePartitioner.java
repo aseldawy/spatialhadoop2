@@ -235,10 +235,48 @@ public class KdTreePartitioner extends Partitioner {
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
-    // TODO match with all overlapping partitions
-    int partitionID = overlapPartition(shape);
-    if (partitionID >= 0)
-      matcher.collect(partitionID);
+    if (shape == null || shape.getMBR() == null)
+      return;
+    Rectangle shapeMBR = shape.getMBR();
+    /**Information about a split to test*/
+    class SplitToTest {
+      /**The ID of the split in the array of splits in the KDTreePartitioner*/
+      int splitID;
+      /**Direction of the split. 0 is vertical (|) and 1 is horizontal (-)*/
+      int direction;
+      
+      public SplitToTest(int splitID, int direction) {
+        this.splitID = splitID;
+        this.direction = direction;
+      }
+    }
+    // A queue of all splits to test
+    Queue<SplitToTest> splitsToTest = new ArrayDeque<SplitToTest>();
+    // Start from the first (root) split
+    splitsToTest.add(new SplitToTest(1, 0));
+    
+    while (!splitsToTest.isEmpty()) {
+      SplitToTest splitToTest = splitsToTest.remove();
+      if (splitToTest.splitID >= splits.length) {
+        // Matched a partition. return it
+        matcher.collect(splitToTest.splitID);
+      } else {
+        // Need to test that split
+        if (splitToTest.direction == 0) {
+          // The corresponding split is vertical (along the x-axis). Like |
+          if (shapeMBR.x1 < splits[splitToTest.splitID])
+            splitsToTest.add(new SplitToTest(splitToTest.splitID * 2, 1 ^ splitToTest.direction)); // Go left
+          if (shapeMBR.x2 > splits[splitToTest.splitID])
+            splitsToTest.add(new SplitToTest(splitToTest.splitID * 2 + 1, 1 ^ splitToTest.direction)); // Go right
+        } else {
+          // The corresponding split is horizontal (along the y-axis). Like -
+          if (shapeMBR.y1 < splits[splitToTest.splitID])
+            splitsToTest.add(new SplitToTest(splitToTest.splitID * 2, 1 ^ splitToTest.direction));
+          if (shapeMBR.y2 > splits[splitToTest.splitID])
+            splitsToTest.add(new SplitToTest(splitToTest.splitID * 2 + 1, 1 ^ splitToTest.direction));
+        }
+      }
+    }
   }
 
   /**
@@ -249,25 +287,25 @@ public class KdTreePartitioner extends Partitioner {
     if (shape == null || shape.getMBR() == null)
       return -1;
     Point pt = shape.getMBR().getCenterPoint();
-    int partitionID = 1; // Start from the root
+    int splitID = 1; // Start from the root
     int direction = 0;
-    while (partitionID < splits.length) {
+    while (splitID < splits.length) {
       if (direction == 0) {
         // The corresponding split is vertical (along the x-axis). Like |
-        if (pt.x < splits[partitionID])
-          partitionID = partitionID * 2; // Go left
+        if (pt.x < splits[splitID])
+          splitID = splitID * 2; // Go left
         else
-          partitionID = partitionID * 2 + 1; // Go right
+          splitID = splitID * 2 + 1; // Go right
       } else {
         // The corresponding split is horizontal (along the y-axis). Like -
-        if (pt.y < splits[partitionID])
-          partitionID = partitionID * 2;
+        if (pt.y < splits[splitID])
+          splitID = splitID * 2;
         else
-          partitionID = partitionID * 2 + 1;
+          splitID = splitID * 2 + 1;
       }
       direction ^= 1;
     }
-    return partitionID;
+    return splitID;
   }
   
   @Override
