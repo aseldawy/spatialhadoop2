@@ -241,8 +241,33 @@ public class QuadTreePartitioner extends Partitioner {
   
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
-    // TODO Auto-generated method stub
-    throw new RuntimeException("Non-implemented method");
+    if (shape == null || shape.getMBR() == null)
+      return;
+    Rectangle shapeMBR = shape.getMBR();
+    Queue<CellInfo> nodesToSearch = new ArrayDeque<CellInfo>();
+    nodesToSearch.add(new CellInfo(1, mbr));
+    
+    while (!nodesToSearch.isEmpty()) {
+      // Go down as necessary
+      CellInfo nodeToSearch = nodesToSearch.remove();
+      if (shapeMBR.isIntersected(nodeToSearch)) {
+        if (Arrays.binarySearch(leafNodeIDs, nodeToSearch.cellId) >= 0) {
+          // Reached a leaf node that overlaps the given shape
+          matcher.collect(nodeToSearch.cellId);
+        } else {
+          // Overlapping with a non-leaf node, go deeper to four children
+          Point centerPoint = nodeToSearch.getCenterPoint();
+          nodesToSearch.add(new CellInfo(nodeToSearch.cellId * 4,
+              nodeToSearch.x1, nodeToSearch.y1, centerPoint.x, centerPoint.y));
+          nodesToSearch.add(new CellInfo(nodeToSearch.cellId * 4 + 1,
+              nodeToSearch.x1, centerPoint.y, centerPoint.x, nodeToSearch.y2));
+          nodesToSearch.add(new CellInfo(nodeToSearch.cellId * 4 + 2,
+              centerPoint.x, nodeToSearch.y1, nodeToSearch.x2, centerPoint.y));
+          nodesToSearch.add(new CellInfo(nodeToSearch.cellId * 4 + 3,
+              centerPoint.x, centerPoint.y, nodeToSearch.x2, nodeToSearch.y2));
+        }
+      }
+    }
   }
 
   @Override
