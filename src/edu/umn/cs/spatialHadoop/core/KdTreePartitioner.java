@@ -70,7 +70,7 @@ public class KdTreePartitioner extends Partitioner {
     long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
     FileSystem outFS = outPath.getFileSystem(job);
     long outBlockSize = outFS.getDefaultBlockSize(outPath);
-    int partitions = (int) (inSize / outBlockSize);
+    int partitions = Math.min(1, (int) (inSize / outBlockSize));
     LOG.info("K-d tree partitiong into "+partitions+" partitions");
     
     // Draw a random sample of the input file

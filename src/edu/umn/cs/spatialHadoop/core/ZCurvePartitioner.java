@@ -61,7 +61,7 @@ public class ZCurvePartitioner extends Partitioner {
     long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
     FileSystem outFS = outPath.getFileSystem(job);
     long outBlockSize = outFS.getDefaultBlockSize(outPath);
-    int partitions = (int) (inSize / outBlockSize);
+    int partitions = Math.max(1, (int) (inSize / outBlockSize));
     LOG.info("Z-cruve to partition the space into "+partitions+" partitions");
     
     // Sample of the input file and each point is mapped to a Z-value

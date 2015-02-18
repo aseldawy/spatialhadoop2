@@ -64,7 +64,7 @@ public class QuadTreePartitioner extends Partitioner {
     long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
     FileSystem outFS = outPath.getFileSystem(job);
     long outBlockSize = outFS.getDefaultBlockSize(outPath);
-    int partitions = (int) (inSize / outBlockSize);
+    int partitions = Math.max(1, (int) (inSize / outBlockSize));
     LOG.info("Quad tree to partition the space into "+partitions+" partitions");
     
     // Sample of the input file and each point is mapped to a Z-value
@@ -179,6 +179,32 @@ public class QuadTreePartitioner extends Partitioner {
   }
   
   @Override
+  public void write(DataOutput out) throws IOException {
+    mbr.write(out);
+    out.writeInt(leafNodeIDs.length);
+    ByteBuffer bbuffer = ByteBuffer.allocate(leafNodeIDs.length * 4);
+    for (int leafNodeID : leafNodeIDs)
+      bbuffer.putInt(leafNodeID);
+    if (bbuffer.hasRemaining())
+      throw new RuntimeException("Did not calculate buffer size correctly");
+    out.write(bbuffer.array(), bbuffer.arrayOffset(), bbuffer.position());
+  }
+
+  @Override
+  public void readFields(DataInput in) throws IOException {
+    if (mbr == null)
+      mbr = new Rectangle();
+    mbr.readFields(in);
+    int numberOfLeafNodes = in.readInt();
+    leafNodeIDs = new int[numberOfLeafNodes];
+    byte[] buffer = new byte[leafNodeIDs.length * 4];
+    in.readFully(buffer);
+    ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
+    for (int i = 0; i < leafNodeIDs.length; i++)
+      leafNodeIDs[i] = bbuffer.getInt();
+  }
+
+  @Override
   public int overlapPartition(Shape shape) {
     if (shape == null || shape.getMBR() == null)
       return -1;
@@ -214,6 +240,12 @@ public class QuadTreePartitioner extends Partitioner {
   }
   
   @Override
+  public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
+    // TODO Auto-generated method stub
+    throw new RuntimeException("Non-implemented method");
+  }
+
+  @Override
   public int getPartitionCount() {
     return leafNodeIDs.length;
   }
@@ -242,38 +274,6 @@ public class QuadTreePartitioner extends Partitioner {
     }
     
     return cellInfo;
-  }
-
-  @Override
-  public void write(DataOutput out) throws IOException {
-    mbr.write(out);
-    out.writeInt(leafNodeIDs.length);
-    ByteBuffer bbuffer = ByteBuffer.allocate(leafNodeIDs.length * 4);
-    for (int leafNodeID : leafNodeIDs)
-      bbuffer.putInt(leafNodeID);
-    if (bbuffer.hasRemaining())
-      throw new RuntimeException("Did not calculate buffer size correctly");
-    out.write(bbuffer.array(), bbuffer.arrayOffset(), bbuffer.position());
-  }
-
-  @Override
-  public void readFields(DataInput in) throws IOException {
-    if (mbr == null)
-      mbr = new Rectangle();
-    mbr.readFields(in);
-    int numberOfLeafNodes = in.readInt();
-    leafNodeIDs = new int[numberOfLeafNodes];
-    byte[] buffer = new byte[leafNodeIDs.length * 4];
-    in.readFully(buffer);
-    ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
-    for (int i = 0; i < leafNodeIDs.length; i++)
-      leafNodeIDs[i] = bbuffer.getInt();
-  }
-
-  @Override
-  public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
-    // TODO Auto-generated method stub
-    throw new RuntimeException("Non-implemented method");
   }
 
   public static void main(String[] args) throws IOException {
