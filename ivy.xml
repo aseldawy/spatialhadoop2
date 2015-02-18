@@ -28,6 +28,7 @@
     <dependency org="com.vividsolutions" name="jts" rev="1.8" conf="common->default"/>
     <dependency org="com.esri.geometry" name="esri-geometry-api" rev="1.2" conf="common->default"/>
     <dependency org="org.apache.pig" name="pig" rev="0.13.0" conf="common->default"/>
+    <dependency org="com.github.davidmoten" name="rtree" rev="0.5.4" conf="common->default"/>
     
     <!-- canceled as we use our custom version which includes the patch of bug PIG 3373 -->
     <!-- dependency org="org.apache.pig" name="piggybank" rev="0.13.0"/ -->

@@ -216,7 +216,7 @@ public class Indexer {
       job.setBoolean("replicate", false);
     } else if (index.equalsIgnoreCase("quadtree")) {
       partitioner = QuadTreePartitioner.createIndexingPartitioner(inPath, outPath, job);
-      job.setBoolean("replicate", false);
+      job.setBoolean("replicate", true);
     } else {
       throw new RuntimeException("Unknown index type '"+index+"'");
     }
