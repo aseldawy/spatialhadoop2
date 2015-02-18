@@ -64,13 +64,14 @@ public class KdTreePartitioner extends Partitioner {
    */
   public static KdTreePartitioner createIndexingPartitioner(Path inPath,
       Path outPath, JobConf job) throws IOException {
+    long t1 = System.currentTimeMillis();
     Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     
     // Determine number of partitions
     long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
     FileSystem outFS = outPath.getFileSystem(job);
     long outBlockSize = outFS.getDefaultBlockSize(outPath);
-    int partitions = Math.min(1, (int) (inSize / outBlockSize));
+    int partitions = Math.max(1, (int) (inSize / outBlockSize));
     LOG.info("K-d tree partitiong into "+partitions+" partitions");
     
     // Draw a random sample of the input file
@@ -95,7 +96,9 @@ public class KdTreePartitioner extends Partitioner {
     Point[] points = vsample.toArray(new Point[vsample.size()]);
     vsample.clear();
     LOG.info("Finished reading a sample of "+points.length+" records");
-
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for sampling in millis: "+(t2-t1));
+    
     KdTreePartitioner kdp = createFromPoints(inMBR, partitions, points);
     
     return kdp;
@@ -150,30 +153,28 @@ public class KdTreePartitioner extends Partitioner {
     
     while (!splitTasks.isEmpty()) {
       SplitTask splitTask = splitTasks.remove();
-      String child1 = Integer.toBinaryString(splitTask.partitionID * 2);
-      String child2 = Integer.toBinaryString(splitTask.partitionID * 2 + 1);
-      int size_child1 = 0, size_child2 = 0;
-      for (int i = 0; i < ids.length; i++) {
-        if (ids[i].startsWith(child1))
-          size_child1++;
-        else if (ids[i].startsWith(child2))
-          size_child2++;
-      }
-      
-      // Calculate the index which partitions the subrange into sizes
-      // proportional to size_child1 and size_child2
-      int splitIndex = (size_child1 * splitTask.toIndex + size_child2 * splitTask.fromIndex)
-          / (size_child1 + size_child2);
-      partialQuickSort(points, splitTask.fromIndex, splitTask.toIndex,
-          splitIndex, comparators[splitTask.direction]);
-      Point splitValue = points[splitIndex];
-      kdp.splits[splitTask.partitionID] = splitTask.direction == 0 ?
-          splitValue.x : splitValue.y;
-      if (splitTask.partitionID * 2 < partitions) {
+      if (splitTask.partitionID < partitions) {
+        String child1 = Integer.toBinaryString(splitTask.partitionID * 2);
+        String child2 = Integer.toBinaryString(splitTask.partitionID * 2 + 1);
+        int size_child1 = 0, size_child2 = 0;
+        for (int i = 0; i < ids.length; i++) {
+          if (ids[i].startsWith(child1))
+            size_child1++;
+          else if (ids[i].startsWith(child2))
+            size_child2++;
+        }
+        
+        // Calculate the index which partitions the subrange into sizes
+        // proportional to size_child1 and size_child2
+        int splitIndex = (size_child1 * splitTask.toIndex + size_child2 * splitTask.fromIndex)
+            / (size_child1 + size_child2);
+        partialQuickSort(points, splitTask.fromIndex, splitTask.toIndex,
+            splitIndex, comparators[splitTask.direction]);
+        Point splitValue = points[splitIndex];
+        kdp.splits[splitTask.partitionID] = splitTask.direction == 0 ?
+            splitValue.x : splitValue.y;
         splitTasks.add(new SplitTask(splitTask.fromIndex, splitIndex,
             1 - splitTask.direction, splitTask.partitionID * 2));
-      }
-      if (splitTask.partitionID * 2 + 1 < partitions) {
         splitTasks.add(new SplitTask(splitIndex, splitTask.toIndex,
             1 - splitTask.direction, splitTask.partitionID * 2 + 1));
       }

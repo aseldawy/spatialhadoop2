@@ -58,6 +58,7 @@ public class STRPartitioner extends Partitioner {
    */
   public static STRPartitioner createIndexingPartitioner(Path inPath,
       Path outPath, JobConf job) throws IOException {
+    long t1 = System.currentTimeMillis();
     String gridSize = job.get("grid");
     Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     int columns, rows;
@@ -98,6 +99,8 @@ public class STRPartitioner extends Partitioner {
     Sampler.sample(new Path[] {inPath}, resultCollector, params2);
     Point[] sample = vsample.toArray(new Point[vsample.size()]);
     vsample.clear();
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for sampling in millis: "+(t2-t1));
     LOG.info("Finished reading a sample of "+sample.length+" records");
     
     // Apply the STR algorithm in two rounds
