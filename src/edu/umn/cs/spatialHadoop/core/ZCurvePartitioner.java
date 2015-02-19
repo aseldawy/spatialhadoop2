@@ -56,6 +56,7 @@ public class ZCurvePartitioner extends Partitioner {
    */
   public static ZCurvePartitioner createIndexingPartitioner(Path inPath,
       Path outPath, JobConf job) throws IOException {
+    long t1 = System.currentTimeMillis();
     final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     // Determine number of partitions
     long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
@@ -83,9 +84,10 @@ public class ZCurvePartitioner extends Partitioner {
     params2.setClass("outshape", Point.class, Shape.class);
     Sampler.sample(new Path[] {inPath}, resultCollector, params2);
     LOG.info("Finished reading a sample of "+zValues.size()+" records");
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for sampling in millis: "+(t2-t1));
     
     ZCurvePartitioner p = createFromZValues(zValues, inMBR, partitions);
-    
     return p;
   }
   

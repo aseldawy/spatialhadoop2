@@ -199,6 +199,7 @@ public class Indexer {
     if (index == null)
       throw new RuntimeException("Index type is not set");
     Partitioner partitioner;
+    long t1 = System.currentTimeMillis();
     if (index.equalsIgnoreCase("grid")) {
       partitioner = GridPartitioner.createIndexingPartitioner(inPath, outPath, job);
       job.setBoolean("replicate", true);
@@ -221,6 +222,8 @@ public class Indexer {
       throw new RuntimeException("Unknown index type '"+index+"'");
     }
     Partitioner.setPartitioner(job, partitioner);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for space subdivision in millis: "+(t2-t1));
     
     // Set mapper and reducer
     Shape shape = params.getShape("shape");

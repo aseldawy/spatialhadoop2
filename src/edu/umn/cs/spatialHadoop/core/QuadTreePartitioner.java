@@ -59,6 +59,7 @@ public class QuadTreePartitioner extends Partitioner {
    */
   public static QuadTreePartitioner createIndexingPartitioner(Path inPath,
       Path outPath, JobConf job) throws IOException {
+    long t1 = System.currentTimeMillis();
     final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
     // Determine number of partitions
     long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
@@ -85,6 +86,8 @@ public class QuadTreePartitioner extends Partitioner {
     params2.setLong("size", sample_size);
     params2.setClass("outshape", Point.class, Shape.class);
     Sampler.sample(new Path[] {inPath}, resultCollector, params2);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for sampling in millis: "+(t2-t1));
     LOG.info("Finished reading a sample of "+zValues.size()+" records");
 
     QuadTreePartitioner p = createFromZValues(zValues.toArray(new Long[zValues.size()]), inMBR, partitions);
