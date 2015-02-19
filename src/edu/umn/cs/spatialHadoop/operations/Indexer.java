@@ -38,6 +38,7 @@ import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GridPartitioner;
+import edu.umn.cs.spatialHadoop.core.HilbertCurvePartitioner;
 import edu.umn.cs.spatialHadoop.core.KdTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
@@ -211,6 +212,9 @@ public class Indexer {
       job.setBoolean("replicate", true);
     } else if (index.equalsIgnoreCase("zcurve")) {
       partitioner = ZCurvePartitioner.createIndexingPartitioner(inPath, outPath, job);
+      job.setBoolean("replicate", false);
+    } else if (index.equalsIgnoreCase("hilbert")) {
+      partitioner = HilbertCurvePartitioner.createIndexingPartitioner(inPath, outPath, job);
       job.setBoolean("replicate", false);
     } else if (index.equalsIgnoreCase("kdtree")) {
       partitioner = KdTreePartitioner.createIndexingPartitioner(inPath, outPath, job);
