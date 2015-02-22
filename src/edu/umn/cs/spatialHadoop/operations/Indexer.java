@@ -108,7 +108,7 @@ public class Indexer {
           if (partitionID.get() >= 0)
             output.collect(partitionID, shape);
         }
-        if (((++i) & 0xffff) == 0) {
+        if (((++i) & 0xff) == 0) {
           reporter.progress();
         }
       }
