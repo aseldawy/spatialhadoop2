@@ -193,16 +193,18 @@
         </div>
  		<div id="panel2" class="submenu" style="background:#DEDEDE;height: 70px">
             <label for="fly-to">Fly to: </label>
-            <input type="text" id="fly-to" placeholder="Type destination..." size="17"/>
+            <input type="text" id="fly-to" placeholder="Type destination ..." size="17"/>
             <label> Data Set: </label>
             <select id="datasets" style="display: compact;">
-                <option id="LST_Day_1km"	title="MYD11A1/LST_Day_1km/"	value="MYD11A1.005" selected="selected">Temperature Dataset</option>
+                <option id="LST_Day_1km" value="MOLA/MYD11A1.005" selected="selected">Temperature Day</option>
+                <option id="LST_Night_1km" value="MOLA/MYD11A1.005">Temperature Night</option>
             </select>
             <br/>
             <label for="fromDatePicker" style="display: inline;"> From Date: </label>
             <input type="text" value="01/01/2013" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;"/>
             <label for="toDatePicker" style="display: inline;"> To Date: </label>
             <input type="text" value="01/15/2013" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;"/>
+            <input type="button" value="Img" name="GenerateImage" id="GenerateImage" style="display: inline; width: 40px;"/>
             <br/>
             <div id="date-range-selector"></div>
         </div>
@@ -272,25 +274,24 @@
         });
         google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
         google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
-        google.maps.event.addListener(rectangle, 'bounds_changed', processRequest);
+        google.maps.event.addListener(rectangle, 'bounds_changed', aggregateQuery);
       }
 
       // Move the draggable rectangle to a specific location on the map			      
       function MoveRectangle(bounds) {
-        rectangle.setBounds(bounds);
         rectangle.setMap(map); // Ensure it is visible if not
+        rectangle.setBounds(bounds);
       }
       
       // TODO This variable should be thread-safe
       var processingRequest = false;
       
       // Process the request by submitting it to the backend server
-      function processRequest(){
+      function aggregateQuery(){
       	if (rectangleIsDragged)
         	return;
         if (processingRequest)
           return; // Another request already in progress
-        processingRequest = true;
       	if ($("#fromDatePicker").val().length == 0 || $("#toDatePicker").val().length == 0) {
         	alert('Please specify start and end date');
         	return;
@@ -299,6 +300,7 @@
         	alert("Please specify a rectangle");
         	return;
       	}
+        processingRequest = true;
       	document.getElementById("fromDate").value = document.getElementById("fromDatePicker").value;
       	document.getElementById("toDate").value = document.getElementById("toDatePicker").value;
       	var ne = rectangle.getBounds().getNorthEast();
@@ -321,6 +323,35 @@
               document.getElementById("time").value = timeInMilliSec;
               processingRequest = false;
           });
+      }
+      
+      function generateImage() {
+        if ($("#fromDatePicker").val().length == 0 || $("#toDatePicker").val().length == 0) {
+          alert('Please specify start and end date');
+          return;
+        }
+        if (rectangle == null) {
+          alert("Please specify a rectangle");
+          return;
+        }
+        var fromDate = document.getElementById("fromDatePicker").value;
+        var toDate = document.getElementById("toDatePicker").value;
+        var ne = rectangle.getBounds().getNorthEast();
+        var sw = rectangle.getBounds().getSouthWest();
+        var selectedDatasetOption = $("#datasets option:selected");
+        var dataset = selectedDatasetOption.attr("id");
+        var url = selectedDatasetOption.val();
+        requestURL = "cgi-bin/generate_image.cgi?"
+                      + "min_lat=" + sw.lat() + "&min_lon=" + sw.lng()
+                      + "&max_lat=" + ne.lat() + "&max_lon=" + ne.lng()
+                      + "&fromDate=" + fromDate
+                      + "&toDate=" + toDate
+                      + "&dataset=" + dataset
+                      + "&dataset_url=" + url;
+        // Send using Ajax
+        $.getJSON(requestURL, function(response) {
+          alert(response);
+        });
       }
           
       function formatDate(date) {
@@ -378,6 +409,7 @@
           var value2 = (Date.parse($("#toDatePicker").val()) - day0.getTime()) / MillisPerDay;
           slider.slider('values', [value1, value2]);
         });
+        $("#GenerateImage").click(generateImage);
 			});
 		</script>
 		
@@ -425,7 +457,15 @@
         // Move the selection rectangle in the clicked location
         lat = event.latLng.lat();
         lng = event.latLng.lng();
-        bounds = new google.maps.LatLngBounds(new google.maps.LatLng(lat - 0.5, lng - 1), new google.maps.LatLng(lat + 0.5, lng + 1));
+
+        var ne = map.getBounds().getNorthEast();
+        var sw = map.getBounds().getSouthWest();
+        var width = (ne.lng() - sw.lng()) / 10.0;
+        var height = (ne.lat() - sw.lat()) / 10.0;
+        bounds = new google.maps.LatLngBounds(
+          new google.maps.LatLng(lat - height, lng - width),
+          new google.maps.LatLng(lat + height, lng + width));
+        
         MoveRectangle(bounds);
       });
  
