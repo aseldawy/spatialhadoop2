@@ -12,6 +12,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.URLConnection;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
@@ -23,7 +24,6 @@ import javax.mail.Message;
 import javax.mail.Message.RecipientType;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
-import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.AddressException;
@@ -57,9 +57,15 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 public class VisualizationServer extends AbstractHandler {
 
   private static final Log LOG = LogFactory.getLog(VisualizationServer.class);
+  
+  private static final String MAIL_HOST = "mail.cs.umn.edu";;
+  
+  private static final Properties MAIL_PROPERTIES;
 
   /**Common parameters for all queries*/
   private OperationsParams commonParams;
+  /**Email address to send from*/
+  private String from;
   /**Username of the mail server*/
   final private String username;
   /**Password of the mail server*/
@@ -68,10 +74,28 @@ public class VisualizationServer extends AbstractHandler {
   /**The base directory in which all datasets are stored*/
   private Path dataBaseDir;
 
+  static {
+    MAIL_PROPERTIES = new Properties();
+ 
+    MAIL_PROPERTIES.put("mail.smtp.starttls.enable", "true");
+    MAIL_PROPERTIES.put("mail.smtp.auth", "true");
+    
+    // Use the following if you need SSL
+    MAIL_PROPERTIES.put("mail.smtp.socketFactory.port", 465);
+    MAIL_PROPERTIES.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+    MAIL_PROPERTIES.put("mail.smtp.socketFactory.fallback", "false");
+
+    
+    MAIL_PROPERTIES.put("mail.smtp.host", MAIL_HOST);
+    MAIL_PROPERTIES.put("mail.smtp.port", "465");
+
+  }
+
   public VisualizationServer(Path dataPath, OperationsParams params) {
     this.commonParams = new OperationsParams(params);
     this.username = params.get("username");
     this.password = params.get("password");
+    this.from = params.get("from", this.username);
     this.dataBaseDir = dataPath;
   }
 
@@ -203,33 +227,39 @@ public class VisualizationServer extends AbstractHandler {
      * @param requestID
      * @throws MessagingException 
      * @throws AddressException 
+     * @throws UnsupportedEncodingException 
      */
-    private void sendConfirmEmail() throws AddressException, MessagingException {
-      Properties props = new Properties();
-      props.put("mail.smtp.auth", "true");
-      props.put("mail.smtp.starttls.enable", "true");
-      props.put("mail.smtp.host", "smtp.gmail.com");
-      props.put("mail.smtp.port", "587");
-    
-      Session session = Session.getInstance(props,
-          new javax.mail.Authenticator() {
-        protected PasswordAuthentication getPasswordAuthentication() {
-          return new PasswordAuthentication(username, password);
-        }
-      });
-    
-      Message message = new MimeMessage(session);
+    private void sendConfirmEmail() throws AddressException, MessagingException, UnsupportedEncodingException {
+      Properties props = new Properties(MAIL_PROPERTIES);
+      
+      props.put("mail.smtp.user", from);
+      props.put("mail.smtp.password", password);
+
+      Session mailSession = Session.getDefaultInstance(props);
+      
+      Message message = new MimeMessage(mailSession);
+      InternetAddress requesterAddress = new InternetAddress(email, requesterName);
       message.setFrom(new InternetAddress(username));
-      String toLine = requesterName+'<'+email+'>';
-      message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
+      message.addRecipient(RecipientType.TO, requesterAddress);
+      InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
+      message.addRecipient(RecipientType.BCC, adminAddress);
       message.setSubject("Confirmation: Your request was received");
       message.setText("Dear "+requesterName+",\n"+
           "Your request was received. "+
           "The server is currently processing your request and you will receive " +
           "an email with the generated files as soon as the request is complete.\n\n"+
           "Thank you for using Shahed. \n\n Shahed team");
-      Transport.send(message);
-      LOG.info("Message sent successfully to '"+toLine+"'");
+      InternetAddress shahedAddress = new InternetAddress(from, "SHAHED Team");
+      
+      message.setFrom(shahedAddress);
+      message.setReplyTo(new InternetAddress[] {shahedAddress});
+      
+      Transport transport = mailSession.getTransport();
+      transport.connect(MAIL_HOST, username, password);
+      
+      transport.sendMessage(message, message.getAllRecipients());
+      transport.close();
+      LOG.info("Message sent successfully to '"+requesterAddress+"'");
     }
 
     /**
@@ -308,20 +338,14 @@ public class VisualizationServer extends AbstractHandler {
      * @throws IOException 
      */
     private void sendResponseEmail(byte[] imageBytes, byte[] kmlBytes) throws AddressException, MessagingException, IOException {
-      Properties props = new Properties();
-      props.put("mail.smtp.auth", "true");
-      props.put("mail.smtp.starttls.enable", "true");
-      props.put("mail.smtp.host", "smtp.gmail.com");
-      props.put("mail.smtp.port", "587");
+      Properties props = new Properties(MAIL_PROPERTIES);
+      
+      props.put("mail.smtp.user", from);
+      props.put("mail.smtp.password", password);
     
-      Session session = Session.getInstance(props,
-          new javax.mail.Authenticator() {
-        protected PasswordAuthentication getPasswordAuthentication() {
-          return new PasswordAuthentication(username, password);
-        }
-      });
+      Session mailSession = Session.getInstance(props);
     
-      Message message = new MimeMessage(session);
+      Message message = new MimeMessage(mailSession);
       message.setFrom(new InternetAddress(username));
       String toLine = requesterName+'<'+email+'>';
       message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
@@ -366,7 +390,11 @@ public class VisualizationServer extends AbstractHandler {
       
       message.setContent(multipart);
 
-      Transport.send(message);
+      Transport transport = mailSession.getTransport();
+      transport.connect(MAIL_HOST, username, password);
+      
+      transport.sendMessage(message, message.getAllRecipients());
+      transport.close();
       LOG.info("Request finished successfully");
     }
   }
