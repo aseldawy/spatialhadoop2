@@ -305,7 +305,7 @@
         $("#max_lat").val(ne.lat());
         $("#max_lon").val(ne.lng());
         $("#dataset").val("LST_Day_1km");
-        $("#dataset_url").val("MYD11A1.005/");
+        $("#dataset_url").val("MOLA/MYD11A1.005/");
         // Send using Ajax
         jQuery.get(form.attr('action'), form.serialize(), function(response) {
           alert(response);
