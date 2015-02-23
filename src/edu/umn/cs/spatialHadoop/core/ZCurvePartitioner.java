@@ -117,7 +117,7 @@ public class ZCurvePartitioner extends Partitioner {
     p.zSplits = new long[partitions];
     long maxZ = computeZ(inMBR, inMBR.x2, inMBR.y2);
     for (int i = 0; i < partitions; i++) {
-      int quantile = (i + 1) * zValues.size() / partitions;
+      int quantile = (int) ((long)(i + 1) * zValues.size() / partitions);
       p.zSplits[i] = quantile == zValues.size() ? maxZ : zValues.get(quantile);
     }
     return p;
