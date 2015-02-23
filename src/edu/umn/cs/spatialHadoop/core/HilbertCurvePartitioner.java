@@ -117,7 +117,7 @@ public class HilbertCurvePartitioner extends Partitioner {
     p.splits = new int[partitions];
     int maxH = 0x7fffffff;
     for (int i = 0; i < partitions; i++) {
-      int quantile = (i + 1) * hValues.size() / partitions;
+      int quantile = (int) ((long)(i + 1) * hValues.size() / partitions);
       p.splits[i] = quantile == hValues.size() ? maxH : hValues.get(quantile);
     }
     return p;
