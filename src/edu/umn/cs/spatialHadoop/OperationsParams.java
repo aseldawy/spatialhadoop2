@@ -507,6 +507,84 @@ public class OperationsParams extends Configuration {
 		return sjmrPartitioningGrid;
 	}
 
+	
+	public static int getJoiningThresholdPerOnce(Configuration conf,
+			String key) {
+		String joiningThresholdPerOnce_str = conf.get(key);
+		if (joiningThresholdPerOnce_str == null)
+			LOG.error("Your joiningThresholdPerOnce is not set");
+		return Integer.parseInt(joiningThresholdPerOnce_str);
+	}
+
+	public static void setJoiningThresholdPerOnce(Configuration conf,
+			String param, int joiningThresholdPerOnce) {
+		String str = null;
+		if (joiningThresholdPerOnce < 0){
+			str = "50000";				
+		}else{
+			str = joiningThresholdPerOnce + "";
+		}
+		conf.set(param, str);
+	}
+	
+	
+	public static void setSpatialJoinOutputMode(Configuration conf,
+			String param, boolean spatialJoinOutputMode) {
+		String str = null;
+		if (spatialJoinOutputMode){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
+	public static boolean getSpatialJoinOutputMode(Configuration conf,
+			String key) {
+		String spatialJoinOutputModeFlag = conf.get(key);
+		if (spatialJoinOutputModeFlag == null)
+			LOG.error("Your spatialJoinOutputMode is not set");
+		return Boolean.parseBoolean(spatialJoinOutputModeFlag);
+	}
+	
+	public static void setFilterOnlyModeFlag(Configuration conf,
+			String param, boolean filterOnlyMode) {
+		String str = null;
+		if (filterOnlyMode){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
+	public static boolean getFilterOnlyModeFlag(Configuration conf,
+			String key) {
+		String filterOnlyModeFlag = conf.get(key);
+		if (filterOnlyModeFlag == null)
+			LOG.error("Your filterOnlyMode is not set");
+		return Boolean.parseBoolean(filterOnlyModeFlag);
+	}
+	
+	public static boolean getInactiveModeFlag(Configuration conf,
+			String key) {
+		String inactiveModeFlag_str = conf.get(key);
+		if (inactiveModeFlag_str == null)
+			LOG.error("Your inactiveModeFlag is not set");
+		return Boolean.parseBoolean(inactiveModeFlag_str);
+	}
+	
+	public static void setInactiveModeFlag(Configuration conf,
+			String param, boolean inactiveModeFlag) {
+		String str = null;
+		if (inactiveModeFlag){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
 	public static Path getRepartitionJoinIndexPath(Configuration conf,
 			String key) {
 		String repartitionJoinIndexPath_str = conf.get(key);

@@ -256,7 +256,8 @@ public class Repartition {
    * @return
    * @throws IOException 
    */
-  public static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
+@SuppressWarnings("deprecation")
+public static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
       FileSystem outFs, Path outFile, long blockSize) throws IOException {
     final float IndexingOverhead =
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);
@@ -304,11 +305,12 @@ public class Repartition {
 
     // Calculate number of partitions in output file
     // Copy blocksize from source file if it's globally indexed
-    final long blockSize = outFs.getDefaultBlockSize();
+    @SuppressWarnings("deprecation")
+	final long blockSize = outFs.getDefaultBlockSize();
     
     // Calculate the dimensions of each partition based on gindex type
     if(cellInfos == null){
-    	if (sindex.equals("grid")) {
+    		if (sindex.equals("grid")) {
     	      Rectangle input_mbr = FileMBR.fileMBR(inFile, params);
     	      long inFileSize = FileMBR.sizeOfLastProcessedFile;
     	      int num_partitions = calculateNumberOfPartitions(new Configuration(),
@@ -506,7 +508,8 @@ public class Repartition {
     }
     GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     FileSystem outFs = outFile.getFileSystem(params);
-    long blocksize = outFs.getDefaultBlockSize();
+    @SuppressWarnings("deprecation")
+	long blocksize = outFs.getDefaultBlockSize();
     gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
     if (fileMBR == null)
       gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
@@ -547,7 +550,8 @@ public class Repartition {
     repartitionLocal(inFile, outFile, params);
   }
   
-  public static <S extends Shape> void repartitionLocal(Path inFile,
+  @SuppressWarnings("deprecation")
+public static <S extends Shape> void repartitionLocal(Path inFile,
       Path outFile, OperationsParams params) throws IOException {
     String sindex = params.get("sindex");
     long blockSize = params.getSize("blocksize");
@@ -671,7 +675,7 @@ public class Repartition {
       repartitionMapReduce(inFile, outputPath, null, params);
   }
 
-  private static void printUsage() {
+  protected static void printUsage() {
     System.out.println("Builds a spatial index on an input file");
     System.out.println("Parameters (* marks required parameters):");
     System.out.println("<input file> - (*) Path to input file");

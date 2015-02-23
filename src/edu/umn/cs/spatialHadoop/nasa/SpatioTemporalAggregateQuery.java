@@ -262,7 +262,7 @@ public class SpatioTemporalAggregateQuery {
       
       OperationsParams params;
       try {
-        if (target.equals("/aggregate_query.cgi")) {
+        if (target.endsWith("/aggregate_query.cgi")) {
           String west = request.getParameter("min_lon");
           String east = request.getParameter("max_lon");
           String south = request.getParameter("min_lat");
@@ -369,6 +369,7 @@ public class SpatioTemporalAggregateQuery {
     Server server = new Server(port);
     server.setHandler(new AggregateQueryHandler(indexPath, params));
     server.start();
+    LOG.info("Started served on port "+port);
     server.join();
   }
 
