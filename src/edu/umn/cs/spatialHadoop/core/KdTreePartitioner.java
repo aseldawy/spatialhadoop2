@@ -166,8 +166,8 @@ public class KdTreePartitioner extends Partitioner {
         
         // Calculate the index which partitions the subrange into sizes
         // proportional to size_child1 and size_child2
-        int splitIndex = (size_child1 * splitTask.toIndex + size_child2 * splitTask.fromIndex)
-            / (size_child1 + size_child2);
+        int splitIndex = (int) (((long)size_child1 * splitTask.toIndex + (long)size_child2 * splitTask.fromIndex)
+            / (size_child1 + size_child2));
         partialQuickSort(points, splitTask.fromIndex, splitTask.toIndex,
             splitIndex, comparators[splitTask.direction]);
         Point splitValue = points[splitIndex];
