@@ -99,7 +99,7 @@ public class VisualizationServer extends AbstractHandler {
     ((Request) request).setHandled(true);
     
     try {
-      if (target.equals("/generate_image")) {
+      if (target.endsWith("/generate_image.cgi")) {
         LOG.info("Generating image");
         // Start a background thread that handles the request
         new ImageRequestHandler(request).start();
@@ -409,16 +409,12 @@ public class VisualizationServer extends AbstractHandler {
   public static void main(String[] args) throws Exception {
     final OperationsParams params =
         new OperationsParams(new GenericOptionsParser(args), false);
-    if (!params.checkInput()) {
-      System.err.println("Please specify the directory which contains modis data");
-      printUsage();
-      System.exit(1);
-    }
     if (params.get("username") == null || params.get("password") == null) {
       System.err.println("Please specify username and password for mail server");
       printUsage();
       System.exit(1);
     }
-    startServer(params.getInputPath(), params);
+    Path datasetPath = new Path(params.get("datasets", "http://e4ftl01.cr.usgs.gov/"));
+    startServer(datasetPath, params);
   }
 }
