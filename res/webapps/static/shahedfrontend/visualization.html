@@ -179,12 +179,12 @@
       <!--
       <label> Data Set: </label>
       <select id="datasets" style="display: compact;">
-          <option id="LST_Day_1km"	title="MYD11A1/LST_Day_1km/"	value="MYD11A1.005" selected="selected">Temperature Dataset</option>
+          <option id="LST_Day_1km" title="MYD11A1/LST_Day_1km/" value="MOLA/MYD11A1.005" selected="selected">Temperature Day</option>
       </select>
       <br/>
       -->
             
- 		  <form action="/generate_image" id="image-form">
+ 		  <form action="/generate_image.cgi" id="image-form">
         <label for="fly-to">Fly to: </label>
         <input type="text" id="fly-to" placeholder="Type destination..." size="17"/>
         
@@ -305,7 +305,7 @@
         $("#max_lat").val(ne.lat());
         $("#max_lon").val(ne.lng());
         $("#dataset").val("LST_Day_1km");
-        $("#dataset_url").val("MYD11A1.005/");
+        $("#dataset_url").val("MOLA/MYD11A1.005/");
         // Send using Ajax
         jQuery.get(form.attr('action'), form.serialize(), function(response) {
           alert(response);

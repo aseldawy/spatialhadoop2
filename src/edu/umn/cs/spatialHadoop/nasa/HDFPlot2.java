@@ -196,6 +196,11 @@ public class HDFPlot2 {
 
   public static RunningJob plot(Path[] inFiles, Path outFile, OperationsParams params)
       throws IOException {
+    for (int i = 0; i < inFiles.length; i++) {
+      if (!inFiles[i].getName().endsWith("\\.hdf"))
+        inFiles[i] = new Path(inFiles[i], "*.hdf");
+      System.out.println("------------ "+inFiles[i]);
+    }
     if (params.getBoolean("pyramid", false)) {
       return MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
     } else {
