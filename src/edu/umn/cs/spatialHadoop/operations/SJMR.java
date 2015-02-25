@@ -29,6 +29,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapred.lib.NullOutputFormat;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -71,7 +72,6 @@ public class SJMR {
   private static final String PartitionGrid = "SJMR.PartitionGrid";
   public static final String PartitioiningGridParam = "partition-grid-factor";
   private static final String InactiveMode = "SJMR.InactiveMode";
-  private static final String SpatialJoinOutputMode = "DJ.SpatialJoinOutputMode";
   private static final String isFilterOnlyMode = "DJ.FilterOnlyMode";
   private static final String JoiningThresholdPerOnce = "DJ.JoiningThresholdPerOnce";
   public static boolean isReduceInactive = false;
@@ -248,7 +248,6 @@ public class SJMR {
     /**List of cells used by the reducer*/
     private GridInfo grid;
     private boolean inactiveMode;
-    private boolean isSpatialJoinOutputRequired;
 	private boolean isFilterOnly;
 	private int shapesThresholdPerOnce;
 	
@@ -261,7 +260,6 @@ public class SJMR {
       shape = (S) SpatialSite.createStockShape(job);
       inputFileCount = FileInputFormat.getInputPaths(job).length;
       inactiveMode = OperationsParams.getInactiveModeFlag(job, InactiveMode);
-      isSpatialJoinOutputRequired = OperationsParams.getSpatialJoinOutputMode(job, SpatialJoinOutputMode);
 	  isFilterOnly = OperationsParams.getFilterOnlyModeFlag(job, isFilterOnlyMode);
 	  shapesThresholdPerOnce = OperationsParams.getJoiningThresholdPerOnce(job, JoiningThresholdPerOnce);
       sjmrReduceLOG.info("configured the reduced task");
@@ -380,7 +378,10 @@ public class SJMR {
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
 
     job.setInputFormat(ShapeLineInputFormat.class);
-    job.setOutputFormat(TextOutputFormat.class);
+    if (job.getBoolean("output", true))
+      job.setOutputFormat(TextOutputFormat.class);
+    else
+      job.setOutputFormat(NullOutputFormat.class);
     
     String commaSeparatedFiles = "";
     for (int i = 0; i < inFiles.length; i++) {
@@ -411,7 +412,6 @@ public class SJMR {
 
     OperationsParams.setInactiveModeFlag(job, InactiveMode, isReduceInactive);
     OperationsParams.setJoiningThresholdPerOnce(job, JoiningThresholdPerOnce, joiningThresholdPerOnce);
-	OperationsParams.setSpatialJoinOutputMode(job, SpatialJoinOutputMode, isSpatialJoinOutputRequired);
 	OperationsParams.setFilterOnlyModeFlag(job, isFilterOnlyMode, isFilterOnly);
 	
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
