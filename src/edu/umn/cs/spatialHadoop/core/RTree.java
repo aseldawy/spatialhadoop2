@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.LineReader;
@@ -994,7 +995,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
   protected static<S1 extends Shape, S2 extends Shape> int spatialJoinMemory(
       final RTree<S1> R,
       final RTree<S2> S,
-      final ResultCollector2<S1, S2> output)
+      final ResultCollector2<S1, S2> output,
+      final Reporter reporter)
       throws IOException {
     S1[] rs = (S1[]) Array.newInstance(R.stockObject.getClass(), R.getElementCount());
     int i = 0;
@@ -1010,7 +1012,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     if (i != ss.length)
       throw new RuntimeException(i+"!="+ss.length);
 
-    return SpatialAlgorithms.SpatialJoin_planeSweep(rs, ss, output);
+    return SpatialAlgorithms.SpatialJoin_planeSweep(rs, ss, output, reporter);
   }
   
   //LRU cache used to avoid deserializing the same records again and again
@@ -1056,7 +1058,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
   protected static<S1 extends Shape, S2 extends Shape> int spatialJoinDisk(
       final RTree<S1> R,
       final RTree<S2> S,
-      final ResultCollector2<S1, S2> output)
+      final ResultCollector2<S1, S2> output,
+      final Reporter reporter)
       throws IOException {
     // Reserve locations for nodes MBRs and data offset [start, end)
     final Rectangle[] r_nodes = new Rectangle[R.degree];
@@ -1247,6 +1250,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
           }
         }
       }
+      reporter.progress();
     }
     return result_count;
   }
@@ -1254,14 +1258,15 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
   public static<S1 extends Shape, S2 extends Shape> int spatialJoin(
       final RTree<S1> R,
       final RTree<S2> S,
-      final ResultCollector2<S1, S2> output)
+      final ResultCollector2<S1, S2> output,
+      final Reporter reporter)
       throws IOException {
     try {
       if (R.treeStartOffset >= 0 && S.treeStartOffset >= 0) {
         // Both trees are read from disk
-        return spatialJoinDisk(R, S, output);
+        return spatialJoinDisk(R, S, output, reporter);
       } else {
-        return spatialJoinMemory(R, S, output);
+        return spatialJoinMemory(R, S, output, reporter);
       }
     } catch (TopologyException e) {
       e.printStackTrace();
