@@ -191,7 +191,7 @@ public class SpatialAlgorithms {
 
   
   public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweepFilterOnly(
-	      final S1[] R, final S2[] S, ResultCollector2<S1, S2> output) {
+	      final S1[] R, final S2[] S, ResultCollector2<S1, S2> output, Reporter reporter) {
 	    int count = 0;
 
 	    final Comparator<Shape> comparator = new Comparator<Shape>() {
@@ -226,6 +226,9 @@ public class SpatialAlgorithms {
 	              count++;
 	            }
 	            jj++;
+	            
+	            if (reporter != null)
+	              reporter.progress();
 	          }
 	          i++;
 	        } else {
@@ -242,7 +245,11 @@ public class SpatialAlgorithms {
 	            ii++;
 	          }
 	          j++;
+	          if (reporter != null)
+	            reporter.progress();
 	        }
+	        if (reporter != null)
+	          reporter.progress();
 	      }
 	    } catch (RuntimeException e) {
 	      e.printStackTrace();
@@ -254,7 +261,7 @@ public class SpatialAlgorithms {
 
   
   public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweep(
-      final S1[] R, final S2[] S, ResultCollector2<S1, S2> output) {
+      final S1[] R, final S2[] S, ResultCollector2<S1, S2> output, Reporter reporter) {
     int count = 0;
 
     final Comparator<Shape> comparator = new Comparator<Shape>() {
@@ -289,6 +296,8 @@ public class SpatialAlgorithms {
               count++;
             }
             jj++;
+            if (reporter != null)
+              reporter.progress();
           }
           i++;
         } else {
@@ -303,9 +312,13 @@ public class SpatialAlgorithms {
               count++;
             }
             ii++;
+            if (reporter != null)
+              reporter.progress();
           }
           j++;
         }
+        if (reporter != null)
+          reporter.progress();
       }
     } catch (RuntimeException e) {
       e.printStackTrace();
