@@ -88,7 +88,7 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
   public static<S1 extends Shape, S2 extends Shape>
       int spatialJoin(GlobalIndex<S1> s1, GlobalIndex<S2> s2,
           final ResultCollector2<S1, S2> output) {
-    return SpatialAlgorithms.SpatialJoin_planeSweep(s1.shapes, s2.shapes, output);
+    return SpatialAlgorithms.SpatialJoin_planeSweep(s1.shapes, s2.shapes, output, null);
   }
   
   /**
