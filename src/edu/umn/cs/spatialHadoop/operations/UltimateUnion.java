@@ -215,7 +215,7 @@ public class UltimateUnion {
       // might relate a shape to another disjoint shape. These extra shapes
       // will be handled and avoided in the reduce step.
       Shape[] shapes = (Shape[]) values.get();
-      SpatialAlgorithms.SelfJoin_planeSweep(shapes, false, output);
+      SpatialAlgorithms.SelfJoin_planeSweep(shapes, false, output, reporter);
     }
     
   }

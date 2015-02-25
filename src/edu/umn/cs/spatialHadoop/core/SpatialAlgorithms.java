@@ -23,6 +23,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.Reporter;
 
 
 /**
@@ -76,7 +77,8 @@ public class SpatialAlgorithms {
 
   
   public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweepFilterOnly(
-	      final List<S1> R, final List<S2> S, final ResultCollector2<S1, S2> output)
+	      final List<S1> R, final List<S2> S, final ResultCollector2<S1, S2> output,
+	      Reporter reporter)
 	      throws IOException {
 	  
 	  	LOG.info("Start spatial join plan sweep algorithm !!!");
@@ -101,7 +103,7 @@ public class SpatialAlgorithms {
 	            count.set(count.get() + 1);
 	          //}
 	        }
-	    });
+	    }, reporter);
 	      
 	      LOG.info("Filtered result size "+filterCount+", refined result size "+count.get());
 	      
@@ -117,7 +119,7 @@ public class SpatialAlgorithms {
    * @throws IOException
    */
   public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweep(
-      List<S1> R, List<S2> S, ResultCollector2<S1, S2> output)
+      List<S1> R, List<S2> S, ResultCollector2<S1, S2> output, Reporter reporter)
       throws IOException {
     int count = 0;
 
@@ -155,6 +157,8 @@ public class SpatialAlgorithms {
               count++;
             }
             jj++;
+            if (reporter !=  null)
+              reporter.progress();
           }
           i++;
         } else {
@@ -169,9 +173,13 @@ public class SpatialAlgorithms {
               count++;
             }
             ii++;
+            if (reporter !=  null)
+              reporter.progress();
           }
           j++;
         }
+        if (reporter !=  null)
+          reporter.progress();
       }
     } catch (RuntimeException e) {
       e.printStackTrace();
@@ -315,7 +323,7 @@ public class SpatialAlgorithms {
    * @throws IOException
    */
   public static <S1 extends Rectangle, S2 extends Rectangle> int SpatialJoin_rectangles(final S1[] R, final S2[] S,
-      OutputCollector<S1, S2> output) throws IOException {
+      OutputCollector<S1, S2> output, Reporter reporter) throws IOException {
     int count = 0;
 
     final Comparator<Rectangle> comparator = new Comparator<Rectangle>() {
@@ -352,6 +360,8 @@ public class SpatialAlgorithms {
     	            jj++;
     	          }
     	          i++;
+    	          if (reporter != null)
+    	            reporter.progress();
     	        } else {
     	          s = S[j];
     	          int ii = i;
@@ -364,9 +374,13 @@ public class SpatialAlgorithms {
     	              count++;
     	            }
     	            ii++;
+    	            if (reporter != null)
+    	              reporter.progress();
     	          }
     	          j++;
     	        }
+    	        if (reporter != null)
+    	          reporter.progress();
     	      }
 
     } catch (RuntimeException e) {
@@ -388,7 +402,7 @@ public class SpatialAlgorithms {
    * @throws IOException
    */
   public static <S extends Rectangle> int SelfJoin_rectangles(final S[] rs,
-      OutputCollector<S, S> output) throws IOException {
+      OutputCollector<S, S> output, Reporter reporter) throws IOException {
     int count = 0;
 
     final Comparator<Rectangle> comparator = new Comparator<Rectangle>() {
@@ -423,6 +437,8 @@ public class SpatialAlgorithms {
               count++;
             }
             jj++;
+            if (reporter != null)
+              reporter.progress();
           }
           i++;
         } else {
@@ -438,9 +454,13 @@ public class SpatialAlgorithms {
               count++;
             }
             ii++;
+            if (reporter != null)
+              reporter.progress();
           }
           j++;
         }
+        if (reporter != null)
+          reporter.progress();
       }
     } catch (RuntimeException e) {
       e.printStackTrace();
@@ -478,7 +498,7 @@ public class SpatialAlgorithms {
    * @throws IOException
    */
   public static <S extends Shape> int SelfJoin_planeSweep(final S[] R,
-      boolean refine, final OutputCollector<S, S> output) throws IOException {
+      boolean refine, final OutputCollector<S, S> output, Reporter reporter) throws IOException {
     // Use a two-phase filter and refine approach
     // 1- Use MBRs as a first filter
     // 2- Use ConvexHull as a second filter
@@ -500,7 +520,7 @@ public class SpatialAlgorithms {
             count.set(count.get() + 1);
           }
         }
-      });
+      }, reporter);
       
       LOG.info("Filtered result size "+filterCount+", refined result size "+count.get());
       
@@ -513,7 +533,7 @@ public class SpatialAlgorithms {
           if (output != null)
             output.collect(R[r1.id], R[r2.id]);
         }
-      });
+      }, reporter);
     }
   }
 }

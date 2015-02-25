@@ -132,7 +132,7 @@ public class DistributedJoin {
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
 				throws IOException {
 			Shape[] objects = (Shape[]) value.get();
-			SpatialAlgorithms.SelfJoin_planeSweep(objects, true, output);
+			SpatialAlgorithms.SelfJoin_planeSweep(objects, true, output, reporter);
 			reporter.progress();
 		}
 	}
@@ -218,7 +218,7 @@ public class DistributedJoin {
 											}	
 										}
 									}
-								});	
+								}, reporter);	
 					}else{
 						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 								new ResultCollector2<Shape, Shape>() {
@@ -249,7 +249,7 @@ public class DistributedJoin {
 											}	
 										}
 									}
-								});	
+								}, reporter);	
 					}
 				} else {
 
@@ -288,7 +288,7 @@ public class DistributedJoin {
 											}
 										}
 									}
-								});
+								}, reporter);
 					}else{
 						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 								new ResultCollector2<Shape, Shape>() {
@@ -312,7 +312,7 @@ public class DistributedJoin {
 											}
 										}
 									}
-						});
+						}, reporter);
 					}
 				}
 			} else if (value.first instanceof RTree
@@ -441,7 +441,7 @@ public class DistributedJoin {
 											}	
 										}
 									}
-								});	
+								}, reporter);	
 					}else{
 						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 								new ResultCollector2<Shape, Shape>() {
@@ -464,7 +464,7 @@ public class DistributedJoin {
 											}	
 										}
 									}
-								});	
+								}, reporter);	
 					}
 				} else {
 					ArrayList<Shape> r = new ArrayList<Shape>();
@@ -502,7 +502,7 @@ public class DistributedJoin {
 											}	
 										}
 									}
-								});	
+								}, reporter);	
 					}else{
 						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 								new ResultCollector2<Shape, Shape>() {
@@ -524,7 +524,7 @@ public class DistributedJoin {
 											}	
 										}
 									}
-								});
+								}, reporter);
 					}
 				}
 			} else if (value.first instanceof RTree
@@ -969,7 +969,7 @@ public class DistributedJoin {
 															}	
 														}
 													}
-												});
+												}, reporter);
 									}else{
 										SpatialAlgorithms.SpatialJoin_planeSweep(
 												r, selectedSShapes,
@@ -984,7 +984,7 @@ public class DistributedJoin {
 															}	
 														}
 													}
-												});										
+												}, reporter);										
 									}
 									
 			
@@ -1279,7 +1279,7 @@ public class DistributedJoin {
 								writer.print(",");
 								writer.println(s.toText(temp));
 							}
-						});
+						}, null);
 				if (reader.next(key, value)) {
 					throw new RuntimeException(
 							"Error! Not all values read in one shot.");

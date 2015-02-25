@@ -233,7 +233,7 @@ public class SJMR {
             }
           }
         }
-      });
+      }, reporter);
     }
   }
   
@@ -315,7 +315,7 @@ public class SJMR {
                           }	
                 	}
                 }
-              });  
+              }, reporter);  
         }else{
             SpatialAlgorithms.SpatialJoin_planeSweep(shapeLists[0], shapeLists[1], new ResultCollector2<S, S>() {
                 @Override
@@ -335,7 +335,7 @@ public class SJMR {
                           }	
                 	}
                 }
-              });
+              }, reporter);
         
       }  
     }
