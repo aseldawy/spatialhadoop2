@@ -211,8 +211,7 @@ public class DistributedJoin {
 									        r.getMBR().x1, s.getMBR().x1);
 									    double intersectionY = Math.max(
 									        r.getMBR().y1, s.getMBR().y1);
-									    // Employ reference point duplicate
-									    // avoidance technique
+									    // Employ reference point duplicate avoidance technique
                       if (mapperMBR.contains(intersectionX, intersectionY))
 									      output.collect(r, s);
 									  } catch (IOException e) {
@@ -283,10 +282,8 @@ public class DistributedJoin {
 								// rectangle (the point with the least
 								// dimensions of both x and
 								// y in the intersection rectangle)
-								double intersectionX = Math.max(r.getMBR().x1,
-										s.getMBR().x1);
-								double intersectionY = Math.max(r.getMBR().y1,
-										s.getMBR().y1);
+								double intersectionX = Math.max(r.getMBR().x1, s.getMBR().x1);
+								double intersectionY = Math.max(r.getMBR().y1, s.getMBR().y1);
                 if (mapperMBR.contains(intersectionX, intersectionY))
 									output.collect(r, s);
 							}
@@ -309,7 +306,6 @@ public class DistributedJoin {
 			Mapper<PairWritable<Rectangle>, PairWritable<? extends Writable>, Shape, Shape> {
 
 		private boolean isFilterOnly;
-		private boolean isSpatialJoinOutputRequired;
 		
 		@Override
 		public void configure(JobConf job) {
@@ -321,8 +317,6 @@ public class DistributedJoin {
 				final PairWritable<? extends Writable> value,
 				final OutputCollector<Shape, Shape> output, final Reporter reporter)
 				throws IOException {
-			
-			final int maxShapesOutputToReport = 2000;
 			
 			final Rectangle mapperMBR = !key.first.isValid()
 					&& !key.second.isValid() ? null // Both blocks are heap
@@ -358,46 +352,25 @@ public class DistributedJoin {
 					if(isFilterOnly){
 						SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(r, s,
 								new ResultCollector2<Shape, Shape>() {
-									int currNumOfShapesOutput = 0;
-									
 									@Override
 									public void collect(Shape r, Shape s) {
-										if (currNumOfShapesOutput > maxShapesOutputToReport){
-											reporter.progress();
-											currNumOfShapesOutput = 0;
-										}
-										currNumOfShapesOutput++;
-										
-										if(isSpatialJoinOutputRequired){
-											try {
-												output.collect(r, s);
-											} catch (IOException e) {
-												e.printStackTrace();
-											}	
-										}
+									  try {
+									    output.collect(r, s);
+									  } catch (IOException e) {
+									    e.printStackTrace();
+									  }	
 									}
 								}, reporter);	
 					}else{
 						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 								new ResultCollector2<Shape, Shape>() {
-									int currNumOfShapesOutput = 0;
-									
 									@Override
 									public void collect(Shape r, Shape s) {
-										
-										if (currNumOfShapesOutput > maxShapesOutputToReport){
-											reporter.progress();
-											currNumOfShapesOutput = 0;
-										}
-										currNumOfShapesOutput++;
-										
-										if(isSpatialJoinOutputRequired){
-											try {
-												output.collect(r, s);
-											} catch (IOException e) {
-												e.printStackTrace();
-											}	
-										}
+									  try {
+									    output.collect(r, s);
+									  } catch (IOException e) {
+									    e.printStackTrace();
+									  }	
 									}
 								}, reporter);	
 					}
@@ -419,45 +392,25 @@ public class DistributedJoin {
 					if(isFilterOnly){
 						SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(r, s,
 								new ResultCollector2<Shape, Shape>() {
-									int currNumOfShapesOutput = 0;
-									
 									@Override
 									public void collect(Shape r, Shape s) {
-										if (currNumOfShapesOutput > maxShapesOutputToReport){
-											reporter.progress();
-											currNumOfShapesOutput = 0;
-										}
-										currNumOfShapesOutput++;
-										
-										if(isSpatialJoinOutputRequired){
-											try {
-												output.collect(r, s);
-											} catch (IOException e) {
-												e.printStackTrace();
-											}	
-										}
+										try {
+											output.collect(r, s);
+										} catch (IOException e) {
+											e.printStackTrace();
+										}	
 									}
 								}, reporter);	
 					}else{
 						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 								new ResultCollector2<Shape, Shape>() {
-									int currNumOfShapesOutput = 0;
-							
 									@Override
 									public void collect(Shape r, Shape s) {
-										if (currNumOfShapesOutput > maxShapesOutputToReport){
-											reporter.progress();
-											currNumOfShapesOutput = 0;
-										}
-										currNumOfShapesOutput++;
-										
-										if(isSpatialJoinOutputRequired){
-											try {
-												output.collect(r, s);
-											} catch (IOException e) {
-												e.printStackTrace();
-											}	
-										}
+										try {
+											output.collect(r, s);
+										} catch (IOException e) {
+											e.printStackTrace();
+										}	
 									}
 								}, reporter);
 					}
@@ -470,24 +423,13 @@ public class DistributedJoin {
 				@SuppressWarnings("unchecked")
 				RTree<Shape> r2 = (RTree<Shape>) value.second;
 				RTree.spatialJoin(r1, r2, new ResultCollector2<Shape, Shape>() {
-					int currNumOfShapesOutput = 0;
-					
 					@Override
 					public void collect(Shape r, Shape s) {
-						
-						if (currNumOfShapesOutput > maxShapesOutputToReport){
-							reporter.progress();
-							currNumOfShapesOutput = 0;
-						}
-						currNumOfShapesOutput++;
-						
-						if(isSpatialJoinOutputRequired){
-							try {
-								output.collect(r, s);
-							} catch (IOException e) {
-								e.printStackTrace();
-							}	
-						}
+						try {
+							output.collect(r, s);
+						} catch (IOException e) {
+							e.printStackTrace();
+						}	
 					}
 				}, reporter);
 			} else {
