@@ -19,6 +19,7 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -101,6 +102,17 @@ public class IndexOutputFormat<S extends Shape>
       Path masterFilePath = name == null ?
           new Path(outPath, String.format("_master_.%s", sindex)) :
             new Path(outPath, String.format("_master_%s_.%s", name, sindex));
+      this.masterFile = outFS.create(masterFilePath);
+    }
+
+    public IndexRecordWriter(Partitioner partitioner, boolean replicate,
+        String sindex, Path outPath, Configuration conf)
+            throws IOException {
+      this.replicated = replicate;
+      this.outFS = outPath.getFileSystem(conf);
+      this.outPath = outPath;
+      this.partitioner = partitioner;
+      Path masterFilePath =  new Path(outPath, "_master_."+ sindex);
       this.masterFile = outFS.create(masterFilePath);
     }
     

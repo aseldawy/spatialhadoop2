@@ -341,11 +341,10 @@ public class Indexer {
     
     // Copy splits to a final array to be used in parallel
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
-    
-    final IndexRecordWriter<Shape> recordWriter =
-        new IndexRecordWriter<Shape>(job, outPath);
-
     boolean replicate = job.getBoolean("replicate", false);
+    
+    final IndexRecordWriter<Shape> recordWriter = new IndexRecordWriter<Shape>(
+        partitioner, replicate, sindex, outPath, params);
     
     for (FileSplit fsplit : fsplits) {
       RecordReader<Rectangle, Iterable<? extends Shape>> reader =
