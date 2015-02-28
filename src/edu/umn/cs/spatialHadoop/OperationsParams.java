@@ -36,10 +36,12 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
+import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -790,6 +792,7 @@ public class OperationsParams extends Configuration {
 	 *         in MapReduce mode.
 	 */
 	public static boolean isLocal(JobConf job, Path... input) {
+	  job = new JobConf(job); // To ensure we don't change the original
 		final boolean LocalProcessing = true;
 		final boolean MapReduceProcessing = false;
 
@@ -810,6 +813,8 @@ public class OperationsParams extends Configuration {
 
 		FileInputFormat.setInputPaths(job, input);
 		ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
+		job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+		
 		try {
 			InputSplit[] splits = inputFormat.getSplits(job, 1);
 			if (splits.length > MaxSplitsForLocalProcessing)
