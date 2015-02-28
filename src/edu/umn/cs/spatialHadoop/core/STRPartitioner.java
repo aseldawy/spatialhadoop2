@@ -14,17 +14,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.JobConf;
-
-import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
-import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * A partitioner that partitioner data using the STR bulk loading algorithm.
@@ -48,82 +40,33 @@ public class STRPartitioner extends Partitioner {
    * and deserialize it
    */
   public STRPartitioner() {
+    this.mbr = new Rectangle();
   }
-
-  /**
-   * Constructs a new grid partitioner which is used for indexing
-   * @param inPath
-   * @param job
-   * @throws IOException 
-   */
-  public static STRPartitioner createIndexingPartitioner(Path inPath,
-      Path outPath, JobConf job) throws IOException {
-    long t1 = System.currentTimeMillis();
-    String gridSize = job.get("grid");
-    Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-    int columns, rows;
-    if (gridSize != null) {
-      // Use user-specified grid size
-      String[] parts = gridSize.split(",");
-      columns = Integer.parseInt(parts[0]);
-      rows = Integer.parseInt(parts[1]);
-    } else {
-      // Auto-detect grid size
-      long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
-      FileSystem outFS = outPath.getFileSystem(job);
-      long outBlockSize = outFS.getDefaultBlockSize(outPath);
-      GridInfo gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
-      gridInfo.calculateCellDimensions(inSize, outBlockSize);
-      columns = gridInfo.columns;
-      rows = gridInfo.rows;
-    }
-    LOG.info("Using an STR partitioner of size "+columns+"x"+rows);
-    
-    // Draw a random sample of the input file
-    final Vector<Point> vsample = new Vector<Point>();
-    
-    float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
-    long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
-
-    LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
-    ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
-      @Override
-      public void collect(Point value) {
-        vsample.add(value.clone());
-      }
-    };
-    OperationsParams params2 = new OperationsParams(job);
-    params2.setFloat("ratio", sample_ratio);
-    params2.setLong("size", sample_size);
-    params2.setClass("outshape", Point.class, Shape.class);
-    Sampler.sample(new Path[] {inPath}, resultCollector, params2);
-    Point[] sample = vsample.toArray(new Point[vsample.size()]);
-    vsample.clear();
-    long t2 = System.currentTimeMillis();
-    System.out.println("Total time for sampling in millis: "+(t2-t1));
-    LOG.info("Finished reading a sample of "+sample.length+" records");
-    
+  
+  @Override
+  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
     // Apply the STR algorithm in two rounds
     // 1- First round, sort points by X and split into the given columns
-    Arrays.sort(sample, new Comparator<Point>() {
+    Arrays.sort(points, new Comparator<Point>() {
       @Override
       public int compare(Point a, Point b) {
         return a.x < b.x? -1 : (a.x > b.x? 1 : 0);
       }});
-    
-    STRPartitioner p = new STRPartitioner();
-    p.columns = columns;
-    p.rows = rows;
-    p.xSplits = new double[columns];
-    p.ySplits = new double[rows * columns];
-    p.mbr = new Rectangle(inMBR);
+    // Calculate partitioning numbers based on a grid
+    GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+    gridInfo.calculateCellDimensions(numPartitions);
+    this.columns = gridInfo.columns;
+    this.rows = gridInfo.rows;
+    this.xSplits = new double[columns];
+    this.ySplits = new double[rows * columns];
     int prev_quantile = 0;
+    this.mbr = mbr.clone();
     for (int column = 0; column < columns; column++) {
-      int col_quantile = (column + 1) * sample.length / columns;
+      int col_quantile = (column + 1) * points.length / columns;
       // Determine the x split for this column. Last column has a special handling
-      p.xSplits[column] = col_quantile == sample.length ? inMBR.x2 : sample[col_quantile-1].x;
+      this.xSplits[column] = col_quantile == points.length ? mbr.x2 : points[col_quantile-1].x;
       // 2- Partition this column vertically in the same way
-      Arrays.sort(sample, prev_quantile, col_quantile, new Comparator<Point>() {
+      Arrays.sort(points, prev_quantile, col_quantile, new Comparator<Point>() {
         @Override
         public int compare(Point a, Point b) {
           return a.y < b.y? -1 : (a.y > b.y? 1 : 0);
@@ -134,13 +77,11 @@ public class STRPartitioner extends Partitioner {
         int row_quantile = (prev_quantile * (rows - (row+1)) +
             col_quantile * (row+1)) / rows;
         // Determine y split for this row. Last row has a special handling
-        p.ySplits[column * rows + row] = row_quantile == col_quantile ? inMBR.y2 : sample[row_quantile].y;
+        this.ySplits[column * rows + row] = row_quantile == col_quantile ? mbr.y2 : points[row_quantile].y;
       }
       
       prev_quantile = col_quantile;
     }
-    
-    return p;
   }
 
   @Override

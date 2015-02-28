@@ -19,17 +19,13 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
-import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * Partition the space based on a Quad tree
@@ -50,61 +46,16 @@ public class QuadTreePartitioner extends Partitioner {
    */
   public QuadTreePartitioner() {
   }
-
-  /**
-   * Constructs a new grid partitioner which is used for indexing
-   * @param inPath
-   * @param job
-   * @throws IOException 
-   */
-  public static QuadTreePartitioner createIndexingPartitioner(Path inPath,
-      Path outPath, JobConf job) throws IOException {
-    long t1 = System.currentTimeMillis();
-    final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-    // Determine number of partitions
-    long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
-    FileSystem outFS = outPath.getFileSystem(job);
-    long outBlockSize = outFS.getDefaultBlockSize(outPath);
-    int partitions = Math.max(1, (int) (inSize / outBlockSize));
-    LOG.info("Quad tree to partition the space into "+partitions+" partitions");
-    
-    // Sample of the input file and each point is mapped to a Z-value
-    final Vector<Long> zValues = new Vector<Long>();
-    
-    float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
-    long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
-    
-    LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
-    ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
-      @Override
-      public void collect(Point p) {
-        zValues.add(ZCurvePartitioner.computeZ(inMBR, p.x, p.y));
-      }
-    };
-    OperationsParams params2 = new OperationsParams(job);
-    params2.setFloat("ratio", sample_ratio);
-    params2.setLong("size", sample_size);
-    params2.setClass("outshape", Point.class, Shape.class);
-    Sampler.sample(new Path[] {inPath}, resultCollector, params2);
-    long t2 = System.currentTimeMillis();
-    System.out.println("Total time for sampling in millis: "+(t2-t1));
-    LOG.info("Finished reading a sample of "+zValues.size()+" records");
-
-    QuadTreePartitioner p = createFromZValues(zValues.toArray(new Long[zValues.size()]), inMBR, partitions);
-    
-    return p;
+  
+  @Override
+  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+    this.mbr = mbr.clone();
+    long[] zValues = new long[points.length];
+    for (int i = 0; i < points.length; i++)
+      zValues[i] = ZCurvePartitioner.computeZ(mbr, points[i].x, points[i].y);
+    createFromZValues(zValues, numPartitions);
   }
   
-  public static QuadTreePartitioner createFromPoints(final Vector<Point> points,
-      final Rectangle inMBR, int partitions) {
-    Vector<Long> zValues = new Vector<Long>(points.size());
-    for (Point p : points)
-      zValues.add(ZCurvePartitioner.computeZ(inMBR, p.x, p.y));
-    QuadTreePartitioner p = createFromZValues(
-        zValues.toArray(new Long[zValues.size()]), inMBR, partitions);
-    return p;
-  }
-
   /**
    * Create a ZCurvePartitioner from a list of points
    * @param vsample
@@ -112,8 +63,7 @@ public class QuadTreePartitioner extends Partitioner {
    * @param partitions
    * @return
    */
-  public static QuadTreePartitioner createFromZValues(final Long[] zValues,
-      final Rectangle inMBR, int partitions) {
+  protected void createFromZValues(final long[] zValues, int partitions) {
     int nodeCapacity = zValues.length / partitions;
     Arrays.sort(zValues);
     class QuadTreeNode {
@@ -133,8 +83,8 @@ public class QuadTreePartitioner extends Partitioner {
       }
     }
     
-    long minZ = ZCurvePartitioner.computeZ(inMBR, inMBR.x1, inMBR.y1); // Always zero
-    long maxZ = ZCurvePartitioner.computeZ(inMBR, inMBR.x2, inMBR.y2);
+    long minZ = ZCurvePartitioner.computeZ(mbr, mbr.x1, mbr.y1); // Always zero
+    long maxZ = ZCurvePartitioner.computeZ(mbr, mbr.x2, mbr.y2);
     QuadTreeNode root = new QuadTreeNode(0, zValues.length, minZ, maxZ, 1, 1);
     Queue<QuadTreeNode> nodesToSplit = new ArrayDeque<QuadTreeNode>();
     nodesToSplit.add(root);
@@ -172,15 +122,13 @@ public class QuadTreePartitioner extends Partitioner {
       }
     }
     
-    QuadTreePartitioner p = new QuadTreePartitioner();
-    p.mbr = new Rectangle(inMBR);
-    p.leafNodeIDs = new int[leafNodeIDs.size()];
+    this.leafNodeIDs = new int[leafNodeIDs.size()];
     for (int i = 0; i < leafNodeIDs.size(); i++)
-      p.leafNodeIDs[i] = leafNodeIDs.get(i);
-    Arrays.sort(p.leafNodeIDs);
-    return p;
+      this.leafNodeIDs[i] = leafNodeIDs.get(i);
+    Arrays.sort(this.leafNodeIDs);
   }
-  
+
+
   @Override
   public void write(DataOutput out) throws IOException {
     mbr.write(out);
@@ -321,7 +269,8 @@ public class QuadTreePartitioner extends Partitioner {
     }
     Rectangle inMBR = (Rectangle)OperationsParams.getShape(params, "mbr");
     
-    QuadTreePartitioner qtp = createFromPoints(points, inMBR, 8);
+    QuadTreePartitioner qtp = new QuadTreePartitioner();
+    qtp.createFromPoints(inMBR, points.toArray(new Point[points.size()]), 8);
     System.out.println("x,y,partition");
     for (Point p : points) {
       int partition = qtp.overlapPartition(p);

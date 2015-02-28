@@ -11,7 +11,10 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -23,6 +26,8 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.FileOutputCommitter;
+import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
@@ -30,6 +35,7 @@ import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
@@ -42,16 +48,20 @@ import edu.umn.cs.spatialHadoop.core.HilbertCurvePartitioner;
 import edu.umn.cs.spatialHadoop.core.KdTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
+import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.QuadTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.STRPartitioner;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.core.ZCurvePartitioner;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat;
+import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat.IndexRecordWriter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * @author Ahmed Eldawy
@@ -60,12 +70,35 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 public class Indexer {
   private static final Log LOG = LogFactory.getLog(Indexer.class);
   
+  private static final Map<String, Class<? extends Partitioner>> PartitionerClasses;
+  private static final Map<String, Boolean> PartitionerReplicate;
+  
+  static {
+    PartitionerClasses = new HashMap<String, Class<? extends Partitioner>>();
+    PartitionerClasses.put("grid", GridPartitioner.class);
+    PartitionerClasses.put("str", STRPartitioner.class);
+    PartitionerClasses.put("str+", STRPartitioner.class);
+    PartitionerClasses.put("quadtree", QuadTreePartitioner.class);
+    PartitionerClasses.put("zcurve", ZCurvePartitioner.class);
+    PartitionerClasses.put("hilbert", HilbertCurvePartitioner.class);
+    PartitionerClasses.put("kdtree", KdTreePartitioner.class);
+    
+    PartitionerReplicate = new HashMap<String, Boolean>();
+    PartitionerReplicate.put("grid", true);
+    PartitionerReplicate.put("str", false);
+    PartitionerReplicate.put("str+", true);
+    PartitionerReplicate.put("quadtree", true);
+    PartitionerReplicate.put("zcurve", false);
+    PartitionerReplicate.put("hilbert", false);
+    PartitionerReplicate.put("kdtree", true);
+  }
+  
   /**
    * The map and reduce functions for the repartition
    * @author Ahmed Eldawy
    *
    */
-  public static class RepartitionMethods extends MapReduceBase 
+  public static class IndexMethods extends MapReduceBase 
     implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape>,
     Reducer<IntWritable, Shape, IntWritable, Shape> {
 
@@ -177,9 +210,8 @@ public class Indexer {
     }
   }
   
-  private static RunningJob repartitionMapReduce(Path inPath, Path outPath,
+  private static RunningJob indexMapReduce(Path inPath, Path outPath,
       OperationsParams params) throws IOException {
-    
     JobConf job = new JobConf(params, Indexer.class);
     job.setJobName("Indexer");
     
@@ -194,47 +226,23 @@ public class Indexer {
     ShapeIterInputFormat.setInputPaths(job, inPath);
     job.setOutputFormat(IndexOutputFormat.class);
     GridOutputFormat.setOutputPath(job, outPath);
-    
+
     // Set the correct partitioner according to index type
     String index = job.get("sindex");
     if (index == null)
       throw new RuntimeException("Index type is not set");
-    Partitioner partitioner;
     long t1 = System.currentTimeMillis();
-    if (index.equalsIgnoreCase("grid")) {
-      partitioner = GridPartitioner.createIndexingPartitioner(inPath, outPath, job);
-      job.setBoolean("replicate", true);
-    } else if (index.equalsIgnoreCase("str")) {
-      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job);
-      job.setBoolean("replicate", false);
-    } else if (index.equalsIgnoreCase("str+")) {
-      partitioner = STRPartitioner.createIndexingPartitioner(inPath, outPath, job);
-      job.setBoolean("replicate", true);
-    } else if (index.equalsIgnoreCase("zcurve")) {
-      partitioner = ZCurvePartitioner.createIndexingPartitioner(inPath, outPath, job);
-      job.setBoolean("replicate", false);
-    } else if (index.equalsIgnoreCase("hilbert")) {
-      partitioner = HilbertCurvePartitioner.createIndexingPartitioner(inPath, outPath, job);
-      job.setBoolean("replicate", false);
-    } else if (index.equalsIgnoreCase("kdtree")) {
-      partitioner = KdTreePartitioner.createIndexingPartitioner(inPath, outPath, job);
-      job.setBoolean("replicate", true);
-    } else if (index.equalsIgnoreCase("quadtree")) {
-      partitioner = QuadTreePartitioner.createIndexingPartitioner(inPath, outPath, job);
-      job.setBoolean("replicate", true);
-    } else {
-      throw new RuntimeException("Unknown index type '"+index+"'");
-    }
+    Partitioner partitioner = createPartitioner(inPath, outPath, job, index);
     Partitioner.setPartitioner(job, partitioner);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time for space subdivision in millis: "+(t2-t1));
     
     // Set mapper and reducer
     Shape shape = params.getShape("shape");
-    job.setMapperClass(RepartitionMethods.class);
+    job.setMapperClass(IndexMethods.class);
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(shape.getClass());
-    job.setReducerClass(RepartitionMethods.class);
+    job.setReducerClass(IndexMethods.class);
     job.setOutputCommitter(IndexerOutputCommitter.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
@@ -253,10 +261,136 @@ public class Indexer {
       return JobClient.runJob(job);
     }
   }
-  
-  public static RunningJob repartition(Path inPath, Path outPath,
+
+  private static Partitioner createPartitioner(Path in, Path out, JobConf job,
+      String index) throws IOException {
+    try {
+      Partitioner partitioner = null;
+      Class<? extends Partitioner> partitionerClass =
+          PartitionerClasses.get(index.toLowerCase());
+      if (partitionerClass == null) {
+        throw new RuntimeException("Unknown index type '"+index+"'");
+      }
+      boolean replicate = PartitionerReplicate.get(index.toLowerCase());
+      job.setBoolean("replicate", replicate);
+      partitioner = partitionerClass.newInstance();
+      
+      long t1 = System.currentTimeMillis();
+      final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+      // Determine number of partitions
+      long inSize = FileUtil.getPathSize(in.getFileSystem(job), in);
+      FileSystem outFS = out.getFileSystem(job);
+      long outBlockSize = outFS.getDefaultBlockSize(out);
+      int numPartitions = Math.max(1, (int) (inSize / outBlockSize));
+      LOG.info("Partitioning the space into "+numPartitions+" partitions");
+
+      final Vector<Point> sample = new Vector<Point>();
+      float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
+      long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
+
+      LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
+      ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
+        @Override
+        public void collect(Point p) {
+          sample.add(p.clone());
+        }
+      };
+      OperationsParams params2 = new OperationsParams(job);
+      params2.setFloat("ratio", sample_ratio);
+      params2.setLong("size", sample_size);
+      params2.setClass("outshape", Point.class, Shape.class);
+      Sampler.sample(new Path[] {in}, resultCollector, params2);
+      long t2 = System.currentTimeMillis();
+      System.out.println("Total time for sampling in millis: "+(t2-t1));
+      LOG.info("Finished reading a sample of "+sample.size()+" records");
+      
+      partitioner.createFromPoints(inMBR, sample.toArray(new Point[sample.size()]), numPartitions);
+      
+      return partitioner;
+    } catch (InstantiationException e) {
+      e.printStackTrace();
+      return null;
+    } catch (IllegalAccessException e) {
+      e.printStackTrace();
+      return null;
+    }
+  }
+
+  private static void indexLocal(Path inPath, Path outPath,
       OperationsParams params) throws IOException {
-    return repartitionMapReduce(inPath, outPath, params);
+    JobConf job = new JobConf(params);
+    String sindex = params.get("sindex");
+    Partitioner partitioner = createPartitioner(inPath, outPath, job, sindex);
+    
+    // Start reading input file
+    Vector<InputSplit> splits = new Vector<InputSplit>();
+    final ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
+    FileSystem inFs = inPath.getFileSystem(params);
+    FileStatus inFStatus = inFs.getFileStatus(inPath);
+    if (inFStatus != null && !inFStatus.isDir()) {
+      // One file, retrieve it immediately.
+      // This is useful if the input is a hidden file which is automatically
+      // skipped by FileInputFormat. We need to plot a hidden file for the case
+      // of plotting partition boundaries of a spatial index
+      splits.add(new FileSplit(inPath, 0, inFStatus.getLen(), new String[0]));
+    } else {
+      ShapeIterInputFormat.addInputPath(job, inPath);
+      for (InputSplit s : inputFormat.getSplits(job, 1))
+        splits.add(s);
+    }
+    
+    // Copy splits to a final array to be used in parallel
+    final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
+    boolean replicate = job.getBoolean("replicate", false);
+    
+    final IndexRecordWriter<Shape> recordWriter = new IndexRecordWriter<Shape>(
+        partitioner, replicate, sindex, outPath, params);
+    
+    for (FileSplit fsplit : fsplits) {
+      RecordReader<Rectangle, Iterable<? extends Shape>> reader =
+          inputFormat.getRecordReader(fsplit, job, null);
+      Rectangle partitionMBR = reader.createKey();
+      Iterable<? extends Shape> shapes = reader.createValue();
+      
+      final IntWritable partitionID = new IntWritable();
+      
+      while (reader.next(partitionMBR, shapes)) {
+        if (replicate) {
+          // Replicate each shape to all overlapping partitions
+          for (final Shape s : shapes) {
+            partitioner.overlapPartitions(s, new ResultCollector<Integer>() {
+              @Override
+              public void collect(Integer id) {
+                partitionID.set(id);
+                try {
+                  recordWriter.write(partitionID, s);
+                } catch (IOException e) {
+                  throw new RuntimeException(e);
+                }
+              }
+            });
+          }
+        } else {
+          for (Shape s : shapes) {
+            partitionID.set(partitioner.overlapPartition(s));
+            recordWriter.write(partitionID, s);
+          }
+        }
+      }
+      reader.close();
+    }
+    
+    recordWriter.close(null);
+  }
+  
+  public static RunningJob index(Path inPath, Path outPath,
+      OperationsParams params) throws IOException {
+    if (OperationsParams.isLocal(new JobConf(params), inPath)) {
+      indexLocal(inPath, outPath, params);
+      return null;
+    } else {
+      return indexMapReduce(inPath, outPath, params);
+    }
   }
 
   protected static void printUsage() {
@@ -292,7 +426,7 @@ public class Indexer {
 
     // The spatial index to use
     long t1 = System.currentTimeMillis();
-    repartition(inputPath, outputPath, params);
+    index(inputPath, outputPath, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total indexing time in millis "+(t2-t1));
   }

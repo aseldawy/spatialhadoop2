@@ -20,17 +20,13 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
-import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * A partitioner that partitioner data using a K-d tree-based partitioner.
@@ -55,62 +51,15 @@ public class KdTreePartitioner extends Partitioner {
    */
   public KdTreePartitioner() {
   }
+  
+  @Override
+  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
 
-  /**
-   * Constructs a new grid partitioner which is used for indexing
-   * @param inPath
-   * @param job
-   * @throws IOException 
-   */
-  public static KdTreePartitioner createIndexingPartitioner(Path inPath,
-      Path outPath, JobConf job) throws IOException {
-    long t1 = System.currentTimeMillis();
-    Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-    
-    // Determine number of partitions
-    long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
-    FileSystem outFS = outPath.getFileSystem(job);
-    long outBlockSize = outFS.getDefaultBlockSize(outPath);
-    int partitions = Math.max(1, (int) (inSize / outBlockSize));
-    LOG.info("K-d tree partitiong into "+partitions+" partitions");
-    
-    // Draw a random sample of the input file
-    final Vector<Point> vsample = new Vector<Point>();
-    
-    float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
-    long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
-
-    LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
-    ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
-      @Override
-      public void collect(Point value) {
-        vsample.add(value.clone());
-      }
-    };
-    OperationsParams params2 = new OperationsParams(job);
-    params2.setFloat("ratio", sample_ratio);
-    params2.setLong("size", sample_size);
-    params2.setClass("outshape", Point.class, Shape.class);
-    Sampler.sample(new Path[] {inPath}, resultCollector, params2);
-    // Convert to array to be able to sort subranges
-    Point[] points = vsample.toArray(new Point[vsample.size()]);
-    vsample.clear();
-    LOG.info("Finished reading a sample of "+points.length+" records");
-    long t2 = System.currentTimeMillis();
-    System.out.println("Total time for sampling in millis: "+(t2-t1));
-    
-    KdTreePartitioner kdp = createFromPoints(inMBR, partitions, points);
-    
-    return kdp;
-  }
-
-  public static KdTreePartitioner createFromPoints(Rectangle inMBR,
-      int partitions, Point[] points) {
     // Enumerate all partition IDs to be able to count leaf nodes in any split
     // TODO do the same functionality without enumerating all IDs
-    String[] ids = new String[partitions];
-    for (int id = partitions; id < 2 * partitions; id++)
-      ids[id - partitions] = Integer.toBinaryString(id);
+    String[] ids = new String[numPartitions];
+    for (int id = numPartitions; id < 2 * numPartitions; id++)
+      ids[id - numPartitions] = Integer.toBinaryString(id);
     
     // Keep splitting the space into halves until we reach the desired number of
     // partitions
@@ -147,13 +96,12 @@ public class KdTreePartitioner extends Partitioner {
     Queue<SplitTask> splitTasks = new ArrayDeque<SplitTask>();
     splitTasks.add(new SplitTask(0, points.length, 0, 1));
     
-    KdTreePartitioner kdp = new KdTreePartitioner();
-    kdp.mbr = new Rectangle(inMBR);
-    kdp.splits = new double[partitions];
+    this.mbr = mbr.clone();
+    this.splits = new double[numPartitions];
     
     while (!splitTasks.isEmpty()) {
       SplitTask splitTask = splitTasks.remove();
-      if (splitTask.partitionID < partitions) {
+      if (splitTask.partitionID < numPartitions) {
         String child1 = Integer.toBinaryString(splitTask.partitionID * 2);
         String child2 = Integer.toBinaryString(splitTask.partitionID * 2 + 1);
         int size_child1 = 0, size_child2 = 0;
@@ -171,7 +119,7 @@ public class KdTreePartitioner extends Partitioner {
         partialQuickSort(points, splitTask.fromIndex, splitTask.toIndex,
             splitIndex, comparators[splitTask.direction]);
         Point splitValue = points[splitIndex];
-        kdp.splits[splitTask.partitionID] = splitTask.direction == 0 ?
+        this.splits[splitTask.partitionID] = splitTask.direction == 0 ?
             splitValue.x : splitValue.y;
         splitTasks.add(new SplitTask(splitTask.fromIndex, splitIndex,
             1 - splitTask.direction, splitTask.partitionID * 2));
@@ -179,7 +127,6 @@ public class KdTreePartitioner extends Partitioner {
             1 - splitTask.direction, splitTask.partitionID * 2 + 1));
       }
     }
-    return kdp;
   }
 
   /**
@@ -395,7 +342,8 @@ public class KdTreePartitioner extends Partitioner {
     }
     Rectangle inMBR = (Rectangle)OperationsParams.getShape(params, "mbr");
     
-    KdTreePartitioner kdp = createFromPoints(inMBR, 7, points.toArray(new Point[points.size()]));
+    KdTreePartitioner kdp = new KdTreePartitioner();
+    kdp.createFromPoints(inMBR, points.toArray(new Point[points.size()]), 7);
     System.out.println("x,y,partition");
     int[] sizes = new int[kdp.getPartitionCount()*2];
     for (Point p : points) {

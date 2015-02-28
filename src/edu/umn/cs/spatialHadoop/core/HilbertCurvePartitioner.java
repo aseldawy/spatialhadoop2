@@ -13,22 +13,17 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
-import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * @author Ahmed Eldawy
@@ -48,79 +43,30 @@ public class HilbertCurvePartitioner extends Partitioner {
   public HilbertCurvePartitioner() {
   }
   
-  /**
-   * Constructs a new grid partitioner which is used for indexing
-   * @param inPath
-   * @param job
-   * @throws IOException 
-   */
-  public static HilbertCurvePartitioner createIndexingPartitioner(Path inPath,
-      Path outPath, JobConf job) throws IOException {
-    long t1 = System.currentTimeMillis();
-    final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-    // Determine number of partitions
-    long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
-    FileSystem outFS = outPath.getFileSystem(job);
-    long outBlockSize = outFS.getDefaultBlockSize(outPath);
-    int partitions = Math.max(1, (int) (inSize / outBlockSize));
-    LOG.info("Z-cruve to partition the space into "+partitions+" partitions");
-    
-    // Sample of the input file and each point is mapped to a Z-value
-    final Vector<Integer> hValues = new Vector<Integer>();
-    
-    float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
-    long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
-    
-    LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
-    ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
-      @Override
-      public void collect(Point p) {
-        hValues.add(computeHValue(inMBR, p.x, p.y));
-      }
-    };
-    OperationsParams params2 = new OperationsParams(job);
-    params2.setFloat("ratio", sample_ratio);
-    params2.setLong("size", sample_size);
-    params2.setClass("outshape", Point.class, Shape.class);
-    Sampler.sample(new Path[] {inPath}, resultCollector, params2);
-    LOG.info("Finished reading a sample of "+hValues.size()+" records");
-    long t2 = System.currentTimeMillis();
-    System.out.println("Total time for sampling in millis: "+(t2-t1));
-    
-    HilbertCurvePartitioner p = createFromHValues(hValues, inMBR, partitions);
-    return p;
+  @Override
+  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+    this.mbr = mbr.clone();
+    int[] hValues = new int[points.length];
+    for (int i = 0; i < points.length; i++)
+      hValues[i] = computeHValue(mbr, points[i].x, points[i].y);
+    createFromHValues(hValues, numPartitions);
   }
-  
-  public static HilbertCurvePartitioner createFromPoints(final Vector<Point> points,
-      final Rectangle inMBR, int partitions) {
-    Vector<Integer> hValues = new Vector<Integer>(points.size());
-    for (Point p : points)
-      hValues.add(computeHValue(inMBR, p.x, p.y));
-    HilbertCurvePartitioner p = createFromHValues(hValues, inMBR, partitions);
-    return p;
-  }
-
   
   /**
    * Create a ZCurvePartitioner from a list of points
    * @param vsample
-   * @param inMBR
    * @param partitions
    * @return
    */
-  public static HilbertCurvePartitioner createFromHValues(final Vector<Integer> hValues,
-      final Rectangle inMBR, int partitions) {
-    Collections.sort(hValues);
+  protected void createFromHValues(final int[] hValues, int partitions) {
+    Arrays.sort(hValues);
     
-    HilbertCurvePartitioner p = new HilbertCurvePartitioner();
-    p.mbr = new Rectangle(inMBR);
-    p.splits = new int[partitions];
+    this.splits = new int[partitions];
     int maxH = 0x7fffffff;
     for (int i = 0; i < partitions; i++) {
-      int quantile = (int) ((long)(i + 1) * hValues.size() / partitions);
-      p.splits[i] = quantile == hValues.size() ? maxH : hValues.get(quantile);
+      int quantile = (int) ((long)(i + 1) * hValues.length / partitions);
+      this.splits[i] = quantile == hValues.length ? maxH : hValues[quantile];
     }
-    return p;
   }
   
   @Override
@@ -232,8 +178,8 @@ public class HilbertCurvePartitioner extends Partitioner {
       }
     }
     Rectangle inMBR = (Rectangle)OperationsParams.getShape(params, "mbr");
-    
-    HilbertCurvePartitioner hcp = createFromPoints(points, inMBR, 10);
+    HilbertCurvePartitioner hcp = new HilbertCurvePartitioner();
+    hcp.createFromPoints(inMBR, points.toArray(new Point[points.size()]), 10);
     
     System.out.println("x,y,partition");
     for (Point p : points) {
