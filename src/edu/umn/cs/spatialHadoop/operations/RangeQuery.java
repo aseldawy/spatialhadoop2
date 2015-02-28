@@ -418,6 +418,7 @@ public class RangeQuery {
     Vector<RunningJob> jobs = new Vector<RunningJob>();
     Vector<Thread> threads = new Vector<Thread>();
 
+    long t1 = System.currentTimeMillis();
     for (int i = 0; i < queryRanges.length; i++) {
       final OperationsParams queryParams = new OperationsParams(params);
       OperationsParams.setShape(queryParams, "rect", queryRanges[i]);
@@ -465,7 +466,6 @@ public class RangeQuery {
       }
     }
 
-    long t1 = System.currentTimeMillis();
     while (!jobs.isEmpty()) {
       RunningJob firstJob = jobs.firstElement();
       firstJob.waitForCompletion();
