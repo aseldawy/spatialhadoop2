@@ -85,7 +85,11 @@ public class IndexOutputFormat<S extends Shape>
     /**Whether records are replicated in the index or distributed*/
     private boolean replicated;
 
-    public IndexRecordWriter(JobConf job, String reducerName, Path outPath,
+    public IndexRecordWriter(JobConf job, Path outPath) throws IOException {
+      this(job, null, outPath, null);
+    }
+    
+    public IndexRecordWriter(JobConf job, String name, Path outPath,
         Progressable progress)
         throws IOException {
       String sindex = job.get("sindex");
@@ -94,8 +98,9 @@ public class IndexOutputFormat<S extends Shape>
       this.outFS = outPath.getFileSystem(job);
       this.outPath = outPath;
       this.partitioner = Partitioner.getPartitioner(job);
-      Path masterFilePath = new Path(outPath,
-          String.format("_master_%s_.%s", reducerName, sindex));
+      Path masterFilePath = name == null ?
+          new Path(outPath, String.format("_master_.%s", sindex)) :
+            new Path(outPath, String.format("_master_%s_.%s", name, sindex));
       this.masterFile = outFS.create(masterFilePath);
     }
     
@@ -119,7 +124,8 @@ public class IndexOutputFormat<S extends Shape>
         partition.size += tempText.getLength() + NEW_LINE.length;
         partition.expand(value);
       }
-      progress.progress();
+      if (progress != null)
+        progress.progress();
     }
 
     /**
@@ -225,7 +231,8 @@ public class IndexOutputFormat<S extends Shape>
         // Close any open partitions
         for (Integer id : partitionsInfo.keySet()) {
           closePartition(id);
-          reporter.progress();
+          if (reporter != null)
+            reporter.progress();
         }
         // Wait until all background threads are close
         // NOTE: Have to use an integer iterator to avoid conflicts if threads
@@ -235,7 +242,8 @@ public class IndexOutputFormat<S extends Shape>
           while (thread.isAlive()) {
             try {
               thread.join(10000);
-              reporter.progress();
+              if (reporter != null)
+                reporter.progress();
             } catch (InterruptedException e) {
               e.printStackTrace();
             }

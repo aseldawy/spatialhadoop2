@@ -103,6 +103,13 @@ public class STRPartitioner extends Partitioner {
     System.out.println("Total time for sampling in millis: "+(t2-t1));
     LOG.info("Finished reading a sample of "+sample.length+" records");
     
+    STRPartitioner p = createFromPoints(inMBR, columns, rows, sample);
+    
+    return p;
+  }
+
+  public static STRPartitioner createFromPoints(Rectangle inMBR, int columns,
+      int rows, Point[] sample) {
     // Apply the STR algorithm in two rounds
     // 1- First round, sort points by X and split into the given columns
     Arrays.sort(sample, new Comparator<Point>() {
