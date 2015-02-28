@@ -46,59 +46,16 @@ public class ZCurvePartitioner extends Partitioner {
    * and deserialize it
    */
   public ZCurvePartitioner() {
-  }
-
-  /**
-   * Constructs a new grid partitioner which is used for indexing
-   * @param inPath
-   * @param job
-   * @throws IOException 
-   */
-  public static ZCurvePartitioner createIndexingPartitioner(Path inPath,
-      Path outPath, JobConf job) throws IOException {
-    long t1 = System.currentTimeMillis();
-    final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-    // Determine number of partitions
-    long inSize = FileUtil.getPathSize(inPath.getFileSystem(job), inPath);
-    FileSystem outFS = outPath.getFileSystem(job);
-    long outBlockSize = outFS.getDefaultBlockSize(outPath);
-    int partitions = Math.max(1, (int) (inSize / outBlockSize));
-    LOG.info("Z-cruve to partition the space into "+partitions+" partitions");
-    
-    // Sample of the input file and each point is mapped to a Z-value
-    final Vector<Long> zValues = new Vector<Long>();
-    
-    float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
-    long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
-    
-    LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
-    ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
-      @Override
-      public void collect(Point p) {
-        zValues.add(computeZ(inMBR, p.x, p.y));
-      }
-    };
-    OperationsParams params2 = new OperationsParams(job);
-    params2.setFloat("ratio", sample_ratio);
-    params2.setLong("size", sample_size);
-    params2.setClass("outshape", Point.class, Shape.class);
-    Sampler.sample(new Path[] {inPath}, resultCollector, params2);
-    LOG.info("Finished reading a sample of "+zValues.size()+" records");
-    long t2 = System.currentTimeMillis();
-    System.out.println("Total time for sampling in millis: "+(t2-t1));
-    
-    ZCurvePartitioner p = createFromZValues(zValues, inMBR, partitions);
-    return p;
+    this.mbr = new Rectangle();
   }
   
-  public static ZCurvePartitioner createFromPoints(final Vector<Point> points,
-      final Rectangle inMBR, int partitions) {
-    Vector<Long> zValues = new Vector<Long>(points.size());
-    for (Point p : points) {
-      zValues.add(computeZ(inMBR, p.x, p.y));
-    }
-    ZCurvePartitioner p = createFromZValues(zValues, inMBR, partitions);
-    return p;
+  @Override
+  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+    this.mbr = mbr.clone();
+    long[] zValues = new long[points.length];
+    for (int i = 0; i < points.length; i++)
+      zValues[i] = computeZ(mbr, points[i].x, points[i].y);
+    createFromZValues(zValues, numPartitions);
   }
 
   /**
@@ -108,21 +65,17 @@ public class ZCurvePartitioner extends Partitioner {
    * @param partitions
    * @return
    */
-  public static ZCurvePartitioner createFromZValues(final Vector<Long> zValues,
-      final Rectangle inMBR, int partitions) {
-    Collections.sort(zValues);
+  protected void createFromZValues(final long[] zValues, int partitions) {
+    Arrays.sort(zValues);
     
-    ZCurvePartitioner p = new ZCurvePartitioner();
-    p.mbr = new Rectangle(inMBR);
-    p.zSplits = new long[partitions];
-    long maxZ = computeZ(inMBR, inMBR.x2, inMBR.y2);
+    this.zSplits = new long[partitions];
+    long maxZ = computeZ(mbr, mbr.x2, mbr.y2);
     for (int i = 0; i < partitions; i++) {
-      int quantile = (int) ((long)(i + 1) * zValues.size() / partitions);
-      p.zSplits[i] = quantile == zValues.size() ? maxZ : zValues.get(quantile);
+      int quantile = (int) ((long)(i + 1) * zValues.length / partitions);
+      this.zSplits[i] = quantile == zValues.length ? maxZ : zValues[quantile];
     }
-    return p;
   }
-  
+
   /**
    * Computes the Z-order of a point relative to a containing rectangle
    * @param mbr
@@ -235,8 +188,6 @@ public class ZCurvePartitioner extends Partitioner {
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    if (mbr == null)
-      mbr = new Rectangle();
     mbr.readFields(in);
     int partitionCount = in.readInt();
     zSplits = new long[partitionCount];

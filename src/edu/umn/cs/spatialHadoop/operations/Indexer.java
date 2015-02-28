@@ -11,7 +11,9 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -46,17 +48,20 @@ import edu.umn.cs.spatialHadoop.core.HilbertCurvePartitioner;
 import edu.umn.cs.spatialHadoop.core.KdTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
+import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.QuadTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.STRPartitioner;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.core.ZCurvePartitioner;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat.IndexRecordWriter;
+import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * @author Ahmed Eldawy
@@ -64,6 +69,29 @@ import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat.IndexRecordWriter;
  */
 public class Indexer {
   private static final Log LOG = LogFactory.getLog(Indexer.class);
+  
+  private static final Map<String, Class<? extends Partitioner>> PartitionerClasses;
+  private static final Map<String, Boolean> PartitionerReplicate;
+  
+  static {
+    PartitionerClasses = new HashMap<String, Class<? extends Partitioner>>();
+    PartitionerClasses.put("grid", GridPartitioner.class);
+    PartitionerClasses.put("str", STRPartitioner.class);
+    PartitionerClasses.put("str+", STRPartitioner.class);
+    PartitionerClasses.put("quadtree", QuadTreePartitioner.class);
+    PartitionerClasses.put("zcurve", ZCurvePartitioner.class);
+    PartitionerClasses.put("hilbert", HilbertCurvePartitioner.class);
+    PartitionerClasses.put("kdtree", KdTreePartitioner.class);
+    
+    PartitionerReplicate = new HashMap<String, Boolean>();
+    PartitionerReplicate.put("grid", true);
+    PartitionerReplicate.put("str", false);
+    PartitionerReplicate.put("str+", true);
+    PartitionerReplicate.put("quadtree", true);
+    PartitionerReplicate.put("zcurve", false);
+    PartitionerReplicate.put("hilbert", false);
+    PartitionerReplicate.put("kdtree", true);
+  }
   
   /**
    * The map and reduce functions for the repartition
@@ -236,32 +264,56 @@ public class Indexer {
 
   private static Partitioner createPartitioner(Path in, Path out, JobConf job,
       String index) throws IOException {
-    Partitioner partitioner = null;
-    if (index.equalsIgnoreCase("grid")) {
-      partitioner = GridPartitioner.createIndexingPartitioner(in, out, job);
-      job.setBoolean("replicate", true);
-    } else if (index.equalsIgnoreCase("str")) {
-      partitioner = STRPartitioner.createIndexingPartitioner(in, out, job);
-      job.setBoolean("replicate", false);
-    } else if (index.equalsIgnoreCase("str+")) {
-      partitioner = STRPartitioner.createIndexingPartitioner(in, out, job);
-      job.setBoolean("replicate", true);
-    } else if (index.equalsIgnoreCase("zcurve")) {
-      partitioner = ZCurvePartitioner.createIndexingPartitioner(in, out, job);
-      job.setBoolean("replicate", false);
-    } else if (index.equalsIgnoreCase("hilbert")) {
-      partitioner = HilbertCurvePartitioner.createIndexingPartitioner(in, out, job);
-      job.setBoolean("replicate", false);
-    } else if (index.equalsIgnoreCase("kdtree")) {
-      partitioner = KdTreePartitioner.createIndexingPartitioner(in, out, job);
-      job.setBoolean("replicate", true);
-    } else if (index.equalsIgnoreCase("quadtree")) {
-      partitioner = QuadTreePartitioner.createIndexingPartitioner(in, out, job);
-      job.setBoolean("replicate", true);
-    } else {
-      throw new RuntimeException("Unknown index type '"+index+"'");
+    try {
+      Partitioner partitioner = null;
+      Class<? extends Partitioner> partitionerClass =
+          PartitionerClasses.get(index.toLowerCase());
+      if (partitionerClass == null) {
+        throw new RuntimeException("Unknown index type '"+index+"'");
+      }
+      boolean replicate = PartitionerReplicate.get(index.toLowerCase());
+      job.setBoolean("replicate", replicate);
+      partitioner = partitionerClass.newInstance();
+      
+      long t1 = System.currentTimeMillis();
+      final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+      // Determine number of partitions
+      long inSize = FileUtil.getPathSize(in.getFileSystem(job), in);
+      FileSystem outFS = out.getFileSystem(job);
+      long outBlockSize = outFS.getDefaultBlockSize(out);
+      int numPartitions = Math.max(1, (int) (inSize / outBlockSize));
+      LOG.info("Partitioning the space into "+numPartitions+" partitions");
+
+      final Vector<Point> sample = new Vector<Point>();
+      float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
+      long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
+
+      LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
+      ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
+        @Override
+        public void collect(Point p) {
+          sample.add(p.clone());
+        }
+      };
+      OperationsParams params2 = new OperationsParams(job);
+      params2.setFloat("ratio", sample_ratio);
+      params2.setLong("size", sample_size);
+      params2.setClass("outshape", Point.class, Shape.class);
+      Sampler.sample(new Path[] {in}, resultCollector, params2);
+      long t2 = System.currentTimeMillis();
+      System.out.println("Total time for sampling in millis: "+(t2-t1));
+      LOG.info("Finished reading a sample of "+sample.size()+" records");
+      
+      partitioner.createFromPoints(inMBR, sample.toArray(new Point[sample.size()]), numPartitions);
+      
+      return partitioner;
+    } catch (InstantiationException e) {
+      e.printStackTrace();
+      return null;
+    } catch (IllegalAccessException e) {
+      e.printStackTrace();
+      return null;
     }
-    return partitioner;
   }
 
   private static void indexLocal(Path inPath, Path outPath,

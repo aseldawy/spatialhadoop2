@@ -30,6 +30,15 @@ public abstract class Partitioner implements Writable {
   private static final String PartitionerValue = "Partitioner.Value";
 
   /**
+   * Populate this partitioner for a set of points and number of partitions
+   * @param mbr
+   * @param points
+   * @param numPartitions
+   */
+  public abstract void createFromPoints(Rectangle mbr, Point[] points,
+      int numPartitions);
+  
+  /**
    * Overlap a shape with partitions and calls a matcher for each overlapping
    * partition.
    * @param shape
