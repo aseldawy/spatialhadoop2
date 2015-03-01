@@ -50,6 +50,7 @@ public class KdTreePartitioner extends Partitioner {
    * and deserialize it
    */
   public KdTreePartitioner() {
+    this.mbr = new Rectangle();
   }
   
   @Override
@@ -96,7 +97,7 @@ public class KdTreePartitioner extends Partitioner {
     Queue<SplitTask> splitTasks = new ArrayDeque<SplitTask>();
     splitTasks.add(new SplitTask(0, points.length, 0, 1));
     
-    this.mbr = mbr.clone();
+    this.mbr.set(mbr);
     this.splits = new double[numPartitions];
     
     while (!splitTasks.isEmpty()) {

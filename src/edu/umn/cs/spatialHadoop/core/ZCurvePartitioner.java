@@ -51,7 +51,7 @@ public class ZCurvePartitioner extends Partitioner {
   
   @Override
   public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
-    this.mbr = mbr.clone();
+    this.mbr.set(mbr);
     long[] zValues = new long[points.length];
     for (int i = 0; i < points.length; i++)
       zValues[i] = computeZ(mbr, points[i].x, points[i].y);

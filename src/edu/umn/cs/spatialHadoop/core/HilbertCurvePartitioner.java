@@ -41,11 +41,12 @@ public class HilbertCurvePartitioner extends Partitioner {
   protected static final int Resolution = Short.MAX_VALUE;
   
   public HilbertCurvePartitioner() {
+    this.mbr = new Rectangle();
   }
   
   @Override
   public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
-    this.mbr = mbr.clone();
+    this.mbr.set(mbr);
     int[] hValues = new int[points.length];
     for (int i = 0; i < points.length; i++)
       hValues[i] = computeHValue(mbr, points[i].x, points[i].y);
