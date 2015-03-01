@@ -279,9 +279,10 @@ public class Indexer {
       final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
       // Determine number of partitions
       long inSize = FileUtil.getPathSize(in.getFileSystem(job), in);
+      long estimatedOutSize = (long) (inSize * (1.0 + job.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f)));
       FileSystem outFS = out.getFileSystem(job);
       long outBlockSize = outFS.getDefaultBlockSize(out);
-      int numPartitions = Math.max(1, (int) (inSize / outBlockSize));
+      int numPartitions = Math.max(1, (int) Math.ceil((float)estimatedOutSize / outBlockSize));
       LOG.info("Partitioning the space into "+numPartitions+" partitions");
 
       final Vector<Point> sample = new Vector<Point>();
