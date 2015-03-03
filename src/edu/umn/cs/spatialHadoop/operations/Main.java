@@ -22,7 +22,7 @@ import edu.umn.cs.spatialHadoop.nasa.HDFPlot2;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
 import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
-import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
+import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
 import edu.umn.cs.spatialHadoop.temporal.RepartitionTemporal;
 
 /**
@@ -111,7 +111,7 @@ public class Main {
       pgd.addClass("distcp", DistributedCopy.class,
           "Copies a directory or file using a MapReduce job");
       
-      pgd.addClass("vizserver", VisualizationServer.class,
+      pgd.addClass("vizserver", ShahedServer.class,
           "Starts a server that handles visualization requests");
 
       pgd.addClass("staggquery", SpatioTemporalAggregateQuery.class,

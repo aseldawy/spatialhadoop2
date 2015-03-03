@@ -216,10 +216,6 @@
                     <input name="dataset_url" id="dataset_url" type="hidden" readonly="readonly"/>
                     <input id="fromDate" name="selectedFromDate" type="hidden" readonly="readonly">
                     <input id="toDate" name="selectedToDate" type="hidden" readonly="readonly">
-                    <input id="min_lat"	name="min_lat"	type="hidden" readonly="readonly">
-                    <input id="min_lon"	name="min_lon"	type="hidden" readonly="readonly">
-                    <input id="max_lat"	name="max_lat"	type="hidden" readonly="readonly">
-                    <input id="max_lon"	name="max_lon"	type="hidden" readonly="readonly">
                     <input type="submit" value="Submit">
                 </form>
             </fieldset>
@@ -301,15 +297,15 @@
         	return;
       	}
         processingRequest = true;
-      	document.getElementById("fromDate").value = document.getElementById("fromDatePicker").value;
-      	document.getElementById("toDate").value = document.getElementById("toDatePicker").value;
+      	var fromDate = document.getElementById("fromDatePicker").value;
+      	var toDate = document.getElementById("toDatePicker").value;
       	var ne = rectangle.getBounds().getNorthEast();
         var sw = rectangle.getBounds().getSouthWest();
       	requestURL = "cgi-bin/aggregate_query.cgi?"
                       + "min_lat=" + sw.lat() + "&min_lon=" + sw.lng()
     									+ "&max_lat=" + ne.lat() + "&max_lon=" + ne.lng()
-    									+ "&fromDate=" + document.getElementById("fromDate").value
-    									+ "&toDate=" + document.getElementById("toDate").value;
+    									+ "&fromDate=" + fromDate
+    									+ "&toDate=" + toDate;;
           $.getJSON(requestURL, function(data) {
               min = ((parseInt(data.results.min)/50) - 273.15) * 1.8000 + 32.00;
               document.getElementById("min").value = min;

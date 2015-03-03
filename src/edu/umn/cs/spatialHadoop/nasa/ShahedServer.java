@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLConnection;
+import java.text.ParseException;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -49,17 +50,19 @@ import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree.Node;
 
 /**
  * @author Ahmed Eldawy
  *
  */
-public class VisualizationServer extends AbstractHandler {
+public class ShahedServer extends AbstractHandler {
 
-  private static final Log LOG = LogFactory.getLog(VisualizationServer.class);
+  private static final Log LOG = LogFactory.getLog(ShahedServer.class);
   
-  private static final String MAIL_HOST = "mail.cs.umn.edu";;
-  
+  /**Mail server*/
+  private static final String MAIL_HOST;
+  /**Properties used to configure the mail server*/
   private static final Properties MAIL_PROPERTIES;
 
   /**Common parameters for all queries*/
@@ -72,9 +75,14 @@ public class VisualizationServer extends AbstractHandler {
   final private String password;
 
   /**The base directory in which all datasets are stored*/
-  private Path dataBaseDir;
+  private Path dataPath;
 
+  private Path indexPath;
+  
   static {
+    MAIL_HOST = "mail.cs.umn.edu";
+    
+    // Mail properties that work with mail.cs.umn.edu
     MAIL_PROPERTIES = new Properties();
  
     MAIL_PROPERTIES.put("mail.smtp.starttls.enable", "true");
@@ -88,15 +96,21 @@ public class VisualizationServer extends AbstractHandler {
     
     MAIL_PROPERTIES.put("mail.smtp.host", MAIL_HOST);
     MAIL_PROPERTIES.put("mail.smtp.port", "465");
-
   }
 
-  public VisualizationServer(Path dataPath, OperationsParams params) {
+  /**
+   * A constructor that starts the Jetty server
+   * @param dataPath
+   * @param indexPath
+   * @param params
+   */
+  public ShahedServer(Path dataPath, Path indexPath, OperationsParams params) {
     this.commonParams = new OperationsParams(params);
     this.username = params.get("username");
     this.password = params.get("password");
     this.from = params.get("from", this.username);
-    this.dataBaseDir = dataPath;
+    this.dataPath = dataPath;
+    this.indexPath = indexPath;
   }
 
   /**
@@ -104,11 +118,12 @@ public class VisualizationServer extends AbstractHandler {
    * all queries
    * @throws Exception 
    */
-  private static void startServer(Path dataPath, OperationsParams params) throws Exception {
+  private static void startServer(Path dataPath, Path indexPath,
+      OperationsParams params) throws Exception {
     int port = params.getInt("port", 8889);
 
     Server server = new Server(port);
-    server.setHandler(new VisualizationServer(dataPath, params));
+    server.setHandler(new ShahedServer(dataPath, indexPath, params));
     server.start();
     server.join();
   }
@@ -130,15 +145,64 @@ public class VisualizationServer extends AbstractHandler {
         response.setStatus(HttpServletResponse.SC_OK);
         response.setContentType("text/plain;charset=utf-8");
         response.getWriter().println("Image request received successfully");
+      } else if (target.endsWith("/aggregate_query.cgi")) {
+        handleAggregateQuery(request, response);
+        LOG.info("Query results returned");
       } else {
         if (target.equals("/"))
-          target = "/visualization.html";
+          target = "/index.html";
         tryToLoadStaticResource(target, response);
       }
     } catch (Exception e) {
       e.printStackTrace();
       reportError(response, "Error placing the request", e);
     }
+  }
+
+  /**
+   * Handle a request for a spatio-temporal aggregate query.
+   * @param request
+   * @param response
+   * @throws ParseException
+   * @throws IOException
+   */
+  private void handleAggregateQuery(HttpServletRequest request,
+      HttpServletResponse response) throws ParseException, IOException {
+    String west = request.getParameter("min_lon");
+    String east = request.getParameter("max_lon");
+    String south = request.getParameter("min_lat");
+    String north = request.getParameter("max_lat");
+    
+    String[] startDateParts = request.getParameter("fromDate").split("/");
+    String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+    String[] endDateParts = request.getParameter("toDate").split("/");
+    String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+    
+    // Create the query parameters
+    OperationsParams params = new OperationsParams(commonParams);
+    params.set("rect", west+','+south+','+east+','+north);
+    params.set("time", startDate+".."+endDate);
+    
+    long t1 = System.currentTimeMillis();
+    Node result = SpatioTemporalAggregateQuery.aggregateQuery(indexPath, params);
+    long t2 = System.currentTimeMillis();
+    // Report the answer and time
+    response.setContentType("application/json;charset=utf-8");
+    PrintWriter writer = response.getWriter();
+    writer.print("{");
+    writer.print("\"results\":{");
+    writer.print("\"min\": "+result.min+',');
+    writer.print("\"max\": "+result.max+',');
+    writer.print("\"count\": "+result.count+',');
+    writer.print("\"sum\": "+result.sum);
+    writer.print("},");
+    writer.print("\"stats\":{");
+    writer.print("\"totaltime\":"+(t2-t1)+',');
+    writer.print("\"num-of-temporal-partitions\":"+SpatioTemporalAggregateQuery.numOfTemporalPartitionsInLastQuery+',');
+    writer.print("\"num-of-trees\":"+SpatioTemporalAggregateQuery.numOfTreesTouchesInLastRequest);
+    writer.print("}");
+    writer.print("}");
+    response.setStatus(HttpServletResponse.SC_OK);
   }
 
   /**
@@ -267,7 +331,7 @@ public class VisualizationServer extends AbstractHandler {
      * @throws IOException
      */
     private byte[] plotImage() throws IOException {
-      this.inputURL = new Path(dataBaseDir, datasetPath+"/"+startDate);
+      this.inputURL = new Path(dataPath, datasetPath+"/"+startDate);
       Path outputPath = new Path(outDir, "image.png");
       // Launch the MapReduce job that plots the dataset
       OperationsParams plotParams = new OperationsParams(commonParams);
@@ -424,8 +488,11 @@ public class VisualizationServer extends AbstractHandler {
   public static void printUsage() {
     System.out.println("Starts a server which will handle visualization requests");
     System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<datasets path> - Path the raw MODIS files");
+    System.out.println("<index path> - (*) Path the indexed modis data");
     System.out.println("username:<u> - (*) Username to authenticate with the mail server");
     System.out.println("password:<pw> - (*) Password to authenticate with the mail server");
+    System.out.println("email:<pw> - (*) Email to send from");
     System.out.println("port:<p> - The port to start listening to. Default: 8889");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
@@ -442,7 +509,9 @@ public class VisualizationServer extends AbstractHandler {
       printUsage();
       System.exit(1);
     }
-    Path datasetPath = new Path(params.get("datasets", "http://e4ftl01.cr.usgs.gov/"));
-    startServer(datasetPath, params);
+    Path[] paths = params.getPaths();
+    Path datasetPath = paths.length == 1? new Path("http://e4ftl01.cr.usgs.gov/") : paths[0];
+    Path indexPath = paths.length == 1? paths[0] : paths[1];
+    startServer(datasetPath, indexPath, params);
   }
 }
