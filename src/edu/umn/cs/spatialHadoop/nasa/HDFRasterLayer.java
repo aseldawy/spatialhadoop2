@@ -24,6 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
 
 /**
@@ -260,6 +261,52 @@ public class HDFRasterLayer extends RasterLayer {
       }
     }
     return color;
+  }
+
+  /**
+   * Recover holes using linear interpolation according to the given water mask
+   * @param waterMask
+   */
+  public void recoverHoles(BitArray waterMask) {
+    // Recover in x-direction
+    for (int y = 0; y < height; y++) {
+      int offsetInWaterMask = y * getWidth();
+      int x2 = 0;
+      while (x2 < getWidth()) {
+        int x1 = x2;
+        // x1 should point to the first missing point
+        while (x1 < getWidth() && count[x1][y] > 0)
+          x1++;
+        x2 = x1;
+        // x2 should point to the first non-missing point
+        while (x2 < getWidth() && count[x2][y] == 0)
+          x2++;
+        // Recover all points in the range [x1, x2)
+        if (x1 == 0 && x2 == getWidth()) {
+          // All the line is empty. Nothing can be done
+        } else if (x1 == 0 || x2 == getWidth()) {
+          // One value at one end. Use it
+          long recoverCount = x1 == 0? count[x2][y] : count[x1-1][y];
+          long recoverSum = x1 == 0? sum[x2][y] : sum[x1-1][y];
+          for (int x = x1; x < x2; x++) {
+            if (waterMask.get(offsetInWaterMask + x)) {
+              sum[x][y] = recoverSum;
+              count[x][y] = recoverCount;
+            }
+          }
+        } else {
+          // Two end point. Interpolate between them
+          for (int x = x1; x < x2; x++) {
+            long average1 = sum[x1-1][y] / count[x1-1][y];
+            long average2 = sum[x2][y] / count[x2][y];
+            if (waterMask.get(offsetInWaterMask + x)) {
+              sum[x][y] = (average1 * (x2 - x) + average2 * (x - x1)) / (x2 - x1);
+              count[x][y] = 1;
+            }
+          }
+        }
+      }
+    }
   }
 
 }

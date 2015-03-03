@@ -81,12 +81,12 @@ public class BitArray implements Writable {
   @Override
   public void readFields(DataInput in) throws IOException {
     int count = in.readInt();
-    if (entries.length != count)
+    if (entries == null || entries.length != count)
       entries = new long[count];
     byte[] buffer = new byte[entries.length * BitsPerEntry / 8];
     in.readFully(buffer);
     ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
-    for (int i = 0; i < buffer.length; i++)
+    for (int i = 0; i < entries.length; i++)
       entries[i] = bbuffer.getLong();
     if (bbuffer.hasRemaining())
       throw new RuntimeException("Did not consume all entries");
