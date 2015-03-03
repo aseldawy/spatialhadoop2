@@ -793,7 +793,8 @@ public class OperationsParams extends Configuration {
 
 		FileInputFormat.setInputPaths(job, input);
 		ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
-		job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+                if (job.get("rect") != null)
+                   job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
 		
 		try {
 			InputSplit[] splits = inputFormat.getSplits(job, 1);

@@ -199,7 +199,6 @@ public class HDFPlot2 {
     for (int i = 0; i < inFiles.length; i++) {
       if (!inFiles[i].getName().endsWith("\\.hdf"))
         inFiles[i] = new Path(inFiles[i], "*.hdf");
-      System.out.println("------------ "+inFiles[i]);
     }
     if (params.getBoolean("pyramid", false)) {
       return MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
