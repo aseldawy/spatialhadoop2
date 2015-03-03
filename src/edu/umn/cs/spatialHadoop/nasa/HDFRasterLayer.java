@@ -75,6 +75,14 @@ public class HDFRasterLayer extends RasterLayer {
     this.max = max;
   }
   
+  public long getSum(int x, int y) {
+    return sum[x][y];
+  }
+  
+  public long getCount(int x, int y) {
+    return count[x][y];
+  }
+  
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);

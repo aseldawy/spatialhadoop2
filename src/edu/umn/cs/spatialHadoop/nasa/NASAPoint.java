@@ -131,4 +131,9 @@ public class NASAPoint extends Point implements NASAShape {
   public long getTimestamp() {
     return this.timestamp;
   }
+  
+  @Override
+  public NASAPoint clone() {
+    return new NASAPoint(x, y, value, timestamp);
+  }
 }

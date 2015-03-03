@@ -31,6 +31,7 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
+import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
 import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
 import edu.umn.cs.spatialHadoop.visualization.Rasterizer;
@@ -43,6 +44,11 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
  */
 public class HDFPlot2 {
 
+  /***
+   * Rasterizes HDF files as heat map images.
+   * @author Ahmed Eldawy
+   *
+   */
   public static class HDFRasterizer extends Rasterizer {
 
     /**Color associated with minimum value*/
@@ -134,21 +140,26 @@ public class HDFPlot2 {
     }
   }
   
-  private static void printUsage() {
-    System.out.println("Plots NASA data in HDFS files");
-    System.out.println("Parameters: (* marks required parameters)");
-    System.out.println("<input file> - (*) Path to input file");
-    System.out.println("<output file> - (*) Path to output file");
-    System.out.println("width:<w> - Maximum width of the image (1000)");
-    System.out.println("height:<h> - Maximum height of the image (1000)");
-    System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
-    System.out.println("valuerange:<v1..v2> - Range of values for the generated heat map");
-    System.out.println("color1:<c1> - The color associated with v1");
-    System.out.println("color2:<c2> - The color associated with v2");
-    System.out.println("gradient:<rgb|hsb> - Type of gradient to use");
-    System.out.println("-overwrite: Override output file without notice");
-    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
-    GenericOptionsParser.printGenericCommandUsage(System.out);
+  public static class HDFRasterizeWaterMask extends HDFRasterizer {
+    @Override
+    public void writeImage(RasterLayer layer, DataOutputStream out,
+        boolean vflip) throws IOException {
+      HDFRasterLayer hdfLayer = ((HDFRasterLayer)layer);
+      BitArray bits = new BitArray((long)hdfLayer.getWidth() * hdfLayer.getHeight());
+      for (int x = 0; x < hdfLayer.getWidth(); x++) {
+        for (int y = 0; y < hdfLayer.getHeight(); y++) {
+          long sum = hdfLayer.getSum(x, y);
+          long count = hdfLayer.getCount(x, y);
+          if (sum < count / 2) {
+            bits.set(y * hdfLayer.getWidth() + x, true);
+          } else {
+            bits.set(y * hdfLayer.getWidth() + x, false);
+          }
+        }
+      }
+      // Write the bit array to the output
+      bits.write(out);
+    }
   }
   
   /**
@@ -194,17 +205,45 @@ public class HDFPlot2 {
     outStream.close();
   }
 
-  public static RunningJob plot(Path[] inFiles, Path outFile, OperationsParams params)
+  public static RunningJob plotWaterMask(Path[] inFiles, Path outFile,
+      OperationsParams params) throws IOException {
+    for (int i = 0; i < inFiles.length; i++) {
+      if (!inFiles[i].getName().endsWith(".hdf"))
+        inFiles[i] = new Path(inFiles[i], "*.hdf");
+    }
+    if (params.getBoolean("pyramid", false))
+      return MultilevelPlot.plot(inFiles, outFile, HDFRasterizeWaterMask.class, params);
+    else
+      return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizeWaterMask.class, params);
+  }
+  
+  public static RunningJob plotHeatMap(Path[] inFiles, Path outFile, OperationsParams params)
       throws IOException {
     for (int i = 0; i < inFiles.length; i++) {
       if (!inFiles[i].getName().endsWith("\\.hdf"))
         inFiles[i] = new Path(inFiles[i], "*.hdf");
     }
-    if (params.getBoolean("pyramid", false)) {
+    if (params.getBoolean("pyramid", false))
       return MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
-    } else {
+    else
       return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
-    }
+  }
+
+  private static void printUsage() {
+    System.out.println("Plots NASA data in HDFS files");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file> - (*) Path to input file");
+    System.out.println("<output file> - (*) Path to output file");
+    System.out.println("width:<w> - Maximum width of the image (1000)");
+    System.out.println("height:<h> - Maximum height of the image (1000)");
+    System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
+    System.out.println("valuerange:<v1..v2> - Range of values for the generated heat map");
+    System.out.println("color1:<c1> - The color associated with v1");
+    System.out.println("color2:<c2> - The color associated with v2");
+    System.out.println("gradient:<rgb|hsb> - Type of gradient to use");
+    System.out.println("-overwrite: Override output file without notice");
+    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
   /**
@@ -231,7 +270,7 @@ public class HDFPlot2 {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    plot(inFiles, outFile, params);
+    plotHeatMap(inFiles, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

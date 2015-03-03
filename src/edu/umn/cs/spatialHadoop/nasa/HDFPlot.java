@@ -149,7 +149,7 @@ public class HDFPlot {
           (pyramid? "" : ".png"));
       if (overwrite || !outFs.exists(outputPath)) {
         // Need to plot
-        RunningJob rj = HDFPlot2.plot(new Path[] {inputPath}, outputPath, params);
+        RunningJob rj = HDFPlot2.plotHeatMap(new Path[] {inputPath}, outputPath, params);
         if (background)
           jobs.add(rj);
       }

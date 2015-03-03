@@ -277,7 +277,7 @@ public class VisualizationServer extends AbstractHandler {
       plotParams.setBoolean("recoverholes", true);
       plotParams.set("dataset", datasetName);
       
-      HDFPlot2.plot(new Path[] {inputURL}, outputPath, plotParams);
+      HDFPlot2.plotHeatMap(new Path[] {inputURL}, outputPath, plotParams);
       
       FileSystem fs = outputPath.getFileSystem(commonParams);
       if (!fs.exists(outputPath)) {
