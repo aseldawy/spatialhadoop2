@@ -289,7 +289,7 @@ public class HDFRasterLayer extends RasterLayer {
           long recoverCount = x1 == 0? count[x2][y] : count[x1-1][y];
           long recoverSum = x1 == 0? sum[x2][y] : sum[x1-1][y];
           for (int x = x1; x < x2; x++) {
-            if (waterMask.get(offsetInWaterMask + x)) {
+            if (!waterMask.get(offsetInWaterMask + x)) {
               sum[x][y] = recoverSum;
               count[x][y] = recoverCount;
             }
@@ -299,7 +299,7 @@ public class HDFRasterLayer extends RasterLayer {
           for (int x = x1; x < x2; x++) {
             long average1 = sum[x1-1][y] / count[x1-1][y];
             long average2 = sum[x2][y] / count[x2][y];
-            if (waterMask.get(offsetInWaterMask + x)) {
+            if (!waterMask.get(offsetInWaterMask + x)) {
               sum[x][y] = (average1 * (x2 - x) + average2 * (x - x1)) / (x2 - x1);
               count[x][y] = 1;
             }

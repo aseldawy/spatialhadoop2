@@ -64,7 +64,7 @@ public class BitArray implements Writable {
   public boolean get(long i) {
     int entry = (int) (i / BitsPerEntry);
     int offset = (int) (i % BitsPerEntry);
-    return (entries[entry] & (1L << offset)) == 1;
+    return (entries[entry] & (1L << offset)) != 0;
   }
 
   @Override
