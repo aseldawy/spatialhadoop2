@@ -23,12 +23,14 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.CompressionInputStream;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.io.compress.SplitCompressionInputStream;
 import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -76,8 +78,6 @@ public class SpatialRecordReader2<V extends Shape>
   private InputStream in;
   /**An object that is used to read the current file position*/
   private Seekable filePosition;
-  /**The offset of last byte read from the input*/
-  private long pos;
 
   /**Used to read text lines from the input*/
   private LineReader lineReader;
@@ -86,6 +86,9 @@ public class SpatialRecordReader2<V extends Shape>
   private V stockShape;
 
   private Text tempLine;
+
+  /**Reporter to report the progress to the MapReduce framework*/
+  private Reporter reporter;
 
   public SpatialRecordReader2(Configuration job, FileSplit split,
       Reporter reporter) throws IOException {
@@ -105,7 +108,7 @@ public class SpatialRecordReader2<V extends Shape>
         final SplitCompressionInputStream cIn =
             ((SplittableCompressionCodec)codec).createInputStream(
                 directIn, decompressor, start, end,
-                SplittableCompressionCodec.READ_MODE.BYBLOCK);
+                SplittableCompressionCodec.READ_MODE.CONTINUOUS);
         in = cIn;
         start = cIn.getAdjustedStart();
         end = cIn.getAdjustedEnd();
@@ -114,8 +117,9 @@ public class SpatialRecordReader2<V extends Shape>
         filePosition = cIn;
       } else {
         // Non-splittable input, need to start from the beginning
-        in = codec.createInputStream(directIn, decompressor);
-        filePosition = directIn;
+        CompressionInputStream cIn = codec.createInputStream(directIn, decompressor);
+        in = cIn;
+        filePosition = cIn;
       }
     } else {
       // Non-compressed file, seek to the desired position and use this stream
@@ -124,7 +128,6 @@ public class SpatialRecordReader2<V extends Shape>
       in = directIn;
       filePosition = directIn;
     }
-    this.pos = start;
     this.lineReader = new LineReader(in);
     
     this.stockShape = (V) OperationsParams.getShape(job, "shape");
@@ -142,26 +145,10 @@ public class SpatialRecordReader2<V extends Shape>
           cellMBR = p;
       }
     }
+    
+    this.reporter = reporter;
   }
 
-  /**
-   * Returns the current position of the file being parsed. This is equal to
-   * the number of bytes consumed from disk regardless of whether the file is
-   * compressed or not.
-   * This function is used to report the progress.
-   * @return
-   * @throws IOException
-   */
-  private long getFilePosition() throws IOException {
-    long retVal;
-    if (codec != null && filePosition != null) {
-      retVal = filePosition.getPos();
-    } else {
-      retVal = pos;
-    }
-    return retVal;
-  }
-  
   @Override
   public void close() throws IOException {
     try {
@@ -189,15 +176,9 @@ public class SpatialRecordReader2<V extends Shape>
     }
   }
   
-  /**
-   * Returns the current position in the data file. If the file is not
-   * compressed, this is equal to the value returned by {@link #getFilePosition()}.
-   * However, if the file is compressed, this value indicates the position
-   * in the decompressed stream.
-   */
   @Override
   public long getPos() throws IOException {
-    return pos;
+    return filePosition.getPos();
   }
 
   
@@ -224,7 +205,8 @@ public class SpatialRecordReader2<V extends Shape>
    * @throws IOException
    */
   protected boolean nextLine(Text value) throws IOException {
-    while (getFilePosition() <= end) {
+    long pos1 = getPos();
+    while (getPos() <= end) {
       value.clear();
       int b = 0;
       
@@ -235,17 +217,27 @@ public class SpatialRecordReader2<V extends Shape>
         // Indicates an end of stream
         return false;
       }
-      pos += b;
       
       // Append the part read from stream to the part extracted from buffer
       value.append(temp.getBytes(), 0, temp.getLength());
       
       if (value.getLength() > 1) {
+        if (reporter != null) {
+          long pos2 = getPos();
+          reporter.incrCounter(Task.Counter.MAP_INPUT_BYTES, pos2 - pos1);
+          reporter.incrCounter(Task.Counter.MAP_INPUT_RECORDS, 1);
+          reporter.progress();
+        }
         // Read a non-empty line. Note that end-of-line character is included
         return true;
       }
     }
     // Reached end of file
+    if (reporter != null) {
+      long pos2 = getPos();
+      reporter.incrCounter(Task.Counter.MAP_INPUT_BYTES, pos2 - pos1);
+      reporter.progress();
+    }
     return false;
   }
   
@@ -294,6 +286,7 @@ public class SpatialRecordReader2<V extends Shape>
         if (nextShape != null && !srr.nextShape(nextShape))
             nextShape = null;
       } catch (IOException e) {
+        throw new RuntimeException("Error reading from file", e);
       }
     }
     
@@ -304,6 +297,7 @@ public class SpatialRecordReader2<V extends Shape>
         if (srr != null && !srr.nextShape(nextShape))
             nextShape = null;
       } catch (IOException e) {
+        throw new RuntimeException("Error eading from file", e);
       }
     }
 
@@ -327,7 +321,7 @@ public class SpatialRecordReader2<V extends Shape>
           nextShape = null;
         return shape;
       } catch (IOException e) {
-        return null;
+        throw new RuntimeException("Error reading from file", e);
       }
     }
 

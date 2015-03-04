@@ -52,14 +52,33 @@ public class SpatialInputFormat2<K extends Rectangle, V extends Shape>
     
     if (split instanceof FileSplit) {
       FileSplit fsplit = (FileSplit) split;
+      String extension = "";
       String fname = fsplit.getPath().getName().toLowerCase();
-      if (fname.endsWith(".hdf")) {
+      if (compressionCodecs.getCodec(fsplit.getPath()) == null) {
+        // File not compressed, get the extension
+        int last_dot = fname.lastIndexOf('.');
+        if (last_dot >= 0) {
+          extension = fname.substring(last_dot + 1);
+        }
+      } else {
+        // File is comrpessed, get the extension before the compression
+        int last_dot = fname.lastIndexOf('.');
+        if (last_dot > 0) {
+          int prev_dot = fname.lastIndexOf('.', last_dot - 1);
+          if (prev_dot >= 0) {
+            extension = fname.substring(prev_dot + 1, last_dot);
+          }
+        }
+      }
+      // If this extension is for a compression, skip it and take the previous
+      // extension
+      if (extension.equals("hdf")) {
         // HDF File. Create HDFRecordReader
         return (RecordReader)new HDFRecordReader(job, fsplit,
             job.get(HDFRecordReader.DatasetName),
             job.getBoolean(HDFRecordReader.SkipFillValue, true));
       }
-      if (fname.endsWith(".rtree")) {
+      if (extension.equals("rtree")) {
         // File is locally indexed as RTree
         return (RecordReader)new RTreeRecordReader2<V>(job, (FileSplit)split, reporter);
       }

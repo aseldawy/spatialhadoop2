@@ -22,12 +22,14 @@ import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.CompressionInputStream;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.io.compress.SplitCompressionInputStream;
 import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.Task;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
@@ -75,14 +77,15 @@ public class RTreeRecordReader2<V extends Shape>
   private DataInputStream in;
   /**An object that is used to read the current file position*/
   private Seekable filePosition;
-  /**The offset of last byte read from the input*/
-  private long pos;
 
   /**The shape used to parse input lines*/
   private V stockShape;
 
   /**Start offset of the next tree*/
   private long offsetOfNextTree;
+
+  /**Reporter used to report progress to the MapReduce framework*/
+  private Reporter reporter;
 
   public RTreeRecordReader2(Configuration job, FileSplit split,
       Reporter reporter) throws IOException {
@@ -111,8 +114,9 @@ public class RTreeRecordReader2<V extends Shape>
         filePosition = cIn;
       } else {
         // Non-splittable input, need to start from the beginning
-        in = new DataInputStream(codec.createInputStream(directIn, decompressor));
-        filePosition = directIn;
+        CompressionInputStream cIn = codec.createInputStream(directIn, decompressor);
+        in = new DataInputStream(cIn);
+        filePosition = cIn;
       }
     } else {
       // Non-compressed file, seek to the desired position and use this stream
@@ -121,14 +125,13 @@ public class RTreeRecordReader2<V extends Shape>
       in = directIn;
       filePosition = directIn;
     }
-    this.pos = start;
     byte[] signature = new byte[8];
     in.readFully(signature);
     if (!Arrays.equals(signature, SpatialSite.RTreeFileMarkerB)) {
       throw new RuntimeException("Incorrect signature for RTree");
     }
-    this.pos += signature.length;
     this.stockShape = (V) OperationsParams.getShape(job, "shape");
+    this.reporter = reporter;
     
     // Check if there is an associated global index to read cell boundaries
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, path.getParent());
@@ -144,24 +147,6 @@ public class RTreeRecordReader2<V extends Shape>
     }
   }
 
-  /**
-   * Returns the current position of the file being parsed. This is equal to
-   * the number of bytes consumed from disk regardless of whether the file is
-   * compressed or not.
-   * This function is used to report the progress.
-   * @return
-   * @throws IOException
-   */
-  private long getFilePosition() throws IOException {
-    long retVal;
-    if (codec != null && filePosition != null) {
-      retVal = filePosition.getPos();
-    } else {
-      retVal = pos;
-    }
-    return retVal;
-  }
-  
   @Override
   public void close() throws IOException {
     try {
@@ -192,7 +177,7 @@ public class RTreeRecordReader2<V extends Shape>
    */
   @Override
   public long getPos() throws IOException {
-    return pos;
+    return filePosition.getPos();
   }
 
   
@@ -214,19 +199,26 @@ public class RTreeRecordReader2<V extends Shape>
   @Override
   public boolean next(Partition key, RTree<V> value) throws IOException {
     if (offsetOfNextTree > 0) {
-      if (codec != null && filePosition != null) {
+      if (codec == null) {
+        // Input is not compressed. Just seek to the next RTree
         filePosition.seek(offsetOfNextTree);
       } else {
-        long skipBytes = offsetOfNextTree - getFilePosition();
-        in.skip(skipBytes);
-        pos += skipBytes;
+        // Input is compressed. We must have read the whole R-tree already
       }
     }
-    if (getFilePosition() >= end)
+    long pos1 = getPos();
+    if (getPos() >= end)
       return false;
     key.set(cellMBR);
     value.readFields(in);
     this.offsetOfNextTree = value.getEndOffset();
+
+    // Report progress to the underlying reporter
+    if (reporter != null) {
+      reporter.incrCounter(Task.Counter.MAP_INPUT_BYTES, value.getEndOffset() - pos1);
+      reporter.incrCounter(Task.Counter.MAP_INPUT_RECORDS, value.getElementCount());
+      reporter.progress();
+    }
     return value.getElementCount() > 0;
   }
 }
