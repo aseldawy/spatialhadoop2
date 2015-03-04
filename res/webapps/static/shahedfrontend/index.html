@@ -317,6 +317,7 @@
               document.getElementById("avg").value = average;
               timeInMilliSec = parseInt(data.stats.totaltime);
               document.getElementById("time").value = timeInMilliSec;
+          }).always(function() {
               processingRequest = false;
           });
       }
