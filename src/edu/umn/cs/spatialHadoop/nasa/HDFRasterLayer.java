@@ -268,9 +268,11 @@ public class HDFRasterLayer extends RasterLayer {
    * @param waterMask
    */
   public void recoverHoles(BitArray waterMask) {
+    // Sets a bit for values that were copied (not interpolated) in the
+    // first round
+    BitArray valuesCopied = new BitArray(getWidth() * getHeight());
     // Recover in x-direction
     for (int y = 0; y < height; y++) {
-      int offsetInWaterMask = y * getWidth();
       int x2 = 0;
       while (x2 < getWidth()) {
         int x1 = x2;
@@ -285,13 +287,14 @@ public class HDFRasterLayer extends RasterLayer {
         if (x1 == 0 && x2 == getWidth()) {
           // All the line is empty. Nothing can be done
         } else if (x1 == 0 || x2 == getWidth()) {
-          // One value at one end. Use it
+          // One value at one end. Replicate it to all missing points
           long recoverCount = x1 == 0? count[x2][y] : count[x1-1][y];
           long recoverSum = x1 == 0? sum[x2][y] : sum[x1-1][y];
           for (int x = x1; x < x2; x++) {
-            if (!waterMask.get(offsetInWaterMask + x)) {
+            if (!waterMask.get(y * width + x)) {
               sum[x][y] = recoverSum;
               count[x][y] = recoverCount;
+              valuesCopied.set(y * width + x, true);
             }
           }
         } else {
@@ -299,9 +302,56 @@ public class HDFRasterLayer extends RasterLayer {
           for (int x = x1; x < x2; x++) {
             long average1 = sum[x1-1][y] / count[x1-1][y];
             long average2 = sum[x2][y] / count[x2][y];
-            if (!waterMask.get(offsetInWaterMask + x)) {
-              sum[x][y] = (average1 * (x2 - x) + average2 * (x - x1)) / (x2 - x1);
-              count[x][y] = 1;
+            if (!waterMask.get(y * width + x)) {
+              // Adjust the sum and count so that the average is correct
+              sum[x][y] = average1 * (x2 - x) + average2 * (x - x1);
+              count[x][y] = x2 - x1;
+            }
+          }
+        }
+      }
+    }
+    
+    // Recover in y-direction
+    for (int x = 0; x < width; x++) {
+      int y2 = 0;
+      while (y2 < height) {
+        int y1 = y2;
+        // x1 should point to the first missing point
+        while (y1 < height && count[x][y1] > 0)
+          y1++;
+        y2 = y1;
+        // y2 should point to the first non-missing point
+        while (y2 < height && count[x][y2] == 0)
+          y2++;
+        // Recover all points in the range [y1, y2)
+        if (y1 == 0 && y2 == height) {
+          // All the line is empty. Nothing can be done
+        } else if (y1 == 0 || y2 == height) {
+          // One value at one end. Replicate it to all missing points
+          long recoverCount = y1 == 0? count[x][y2] : count[x][y1-1];
+          long recoverSum = y1 == 0? sum[x][y2] : sum[x][y1-1];
+          for (int y = y1; y < y2; y++) {
+            if (!waterMask.get(y * width + x)) {
+              sum[x][y] += recoverSum;
+              count[x][y] += recoverCount;
+              valuesCopied.set(y * width + x, true);
+            }
+          }
+        } else {
+          // Two end point. Interpolate between them
+          for (int y = y1; y < y2; y++) {
+            long average1 = sum[x][y1-1] / count[x][y1-1];
+            long average2 = sum[x][y2] / count[x][y2];
+            if (!waterMask.get(y * width + x)) {
+              // Adjust the sum and count so that the average is correct
+              if (valuesCopied.get(y * width + x)) {
+                // This value was copied in the first round. Overwrite
+                sum[x][y] = 0;
+                count[x][y] = 0;
+              }
+              sum[x][y] += average1 * (y2 - y) + average2 * (y - y1);
+              count[x][y] += y2 - y1;
             }
           }
         }
