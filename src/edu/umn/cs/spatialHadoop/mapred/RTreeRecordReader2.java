@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.mapred;
 
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -29,10 +30,12 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.RTree;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * Parses an unindexed input file into spatial records
@@ -59,7 +62,7 @@ public class RTreeRecordReader2<V extends Shape>
   private long end;
   
   /** The boundary of the partition currently being read */
-  protected Rectangle cellMbr;
+  protected Rectangle cellMBR;
   
   /**
    * The input stream that reads directly from the input file.
@@ -77,6 +80,9 @@ public class RTreeRecordReader2<V extends Shape>
 
   /**The shape used to parse input lines*/
   private V stockShape;
+
+  /**Start offset of the next tree*/
+  private long offsetOfNextTree;
 
   public RTreeRecordReader2(Configuration job, FileSplit split,
       Reporter reporter) throws IOException {
@@ -116,7 +122,26 @@ public class RTreeRecordReader2<V extends Shape>
       filePosition = directIn;
     }
     this.pos = start;
+    byte[] signature = new byte[8];
+    in.readFully(signature);
+    if (!Arrays.equals(signature, SpatialSite.RTreeFileMarkerB)) {
+      throw new RuntimeException("Incorrect signature for RTree");
+    }
+    this.pos += signature.length;
     this.stockShape = (V) OperationsParams.getShape(job, "shape");
+    
+    // Check if there is an associated global index to read cell boundaries
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, path.getParent());
+    if (gindex == null) {
+      cellMBR = new Rectangle();
+      cellMBR.invalidate();
+    } else {
+      // Set from the associated partition in the global index
+      for (Partition p : gindex) {
+        if (p.filename.equals(this.path.getName()))
+          cellMBR = p;
+      }
+    }
   }
 
   /**
@@ -188,8 +213,20 @@ public class RTreeRecordReader2<V extends Shape>
   
   @Override
   public boolean next(Partition key, RTree<V> value) throws IOException {
-    key.set(cellMbr);
+    if (offsetOfNextTree > 0) {
+      if (codec != null && filePosition != null) {
+        filePosition.seek(offsetOfNextTree);
+      } else {
+        long skipBytes = offsetOfNextTree - getFilePosition();
+        in.skip(skipBytes);
+        pos += skipBytes;
+      }
+    }
+    if (getFilePosition() >= end)
+      return false;
+    key.set(cellMBR);
     value.readFields(in);
+    this.offsetOfNextTree = value.getEndOffset();
     return value.getElementCount() > 0;
   }
 }

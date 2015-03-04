@@ -136,4 +136,10 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     }
     return intermediateCellStreams[cellIndex];
   }
+  
+  @Override
+  protected Path getFinalCellPath(int cellIndex) throws IOException {
+    Path finalCellPath = super.getFinalCellPath(cellIndex);
+    return new Path(finalCellPath.getParent(), finalCellPath.getName()+".rtree");
+  }
 }

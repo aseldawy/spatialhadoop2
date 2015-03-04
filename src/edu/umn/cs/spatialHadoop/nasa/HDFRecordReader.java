@@ -35,7 +35,6 @@ import org.apache.hadoop.mapred.RecordReader;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 

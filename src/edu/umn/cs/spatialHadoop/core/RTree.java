@@ -99,7 +99,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
 
   public RTree() {
   }
-
+  
   /**
    * Builds the RTree given a serialized list of elements. It uses the given
    * stockObject to deserialize these elements using
@@ -565,6 +565,10 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     // Add the size of all nodes
     header_size += nodeCount * NodeSize;
     return header_size;
+  }
+  
+  public long getEndOffset() {
+    return treeStartOffset + treeSize;
   }
 
   /**
