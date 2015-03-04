@@ -132,13 +132,14 @@ public class SpatialRecordReader2<V extends Shape>
     
     // Check if there is an associated global index to read cell boundaries
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, path.getParent());
-    cellMBR = new Rectangle();
-    cellMBR.invalidate();
-    if (gindex != null) {
+    if (gindex == null) {
+      cellMBR = new Rectangle();
+      cellMBR.invalidate();
+    } else {
       // Set from the associated partition in the global index
       for (Partition p : gindex) {
         if (p.filename.equals(this.path.getName()))
-          cellMBR.set(p);
+          cellMBR = p;
       }
     }
   }
