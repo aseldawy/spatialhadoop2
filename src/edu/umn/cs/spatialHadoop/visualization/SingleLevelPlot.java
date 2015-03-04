@@ -50,7 +50,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
-import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
+import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 

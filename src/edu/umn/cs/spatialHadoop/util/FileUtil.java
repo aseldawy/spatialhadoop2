@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.mapred.FileSplit;
 
@@ -281,6 +282,10 @@ public final class FileUtil {
       }
     }
     return extension;
+  }
+
+  public static CompressionCodec getCodec(Path file) {
+    return compressionCodecs.getCodec(file);
   }
 
 }

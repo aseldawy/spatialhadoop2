@@ -46,7 +46,6 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
@@ -64,56 +63,7 @@ import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
  */
 public class RangeQuery {
   /**Logger for RangeQuery*/
-  private static final Log LOG = LogFactory.getLog(RangeQuery.class);
-  
-  /**
-   * A filter function that selects partitions overlapping with a query range.
-   * @author Ahmed Eldawy
-   *
-   */
-  public static class RangeFilter extends DefaultBlockFilter {
-    
-    /**A shape that is used to filter input*/
-    private Shape queryRange;
-    
-    @Override
-    public void configure(JobConf job) {
-      this.queryRange = OperationsParams.getShape(job, "rect");
-    }
-    
-    @Override
-    public void selectCells(GlobalIndex<Partition> gIndex,
-        ResultCollector<Partition> output) {
-      int numPartitions;
-      if (gIndex.isReplicated()) {
-        // Need to process all partitions to perform duplicate avoidance
-        numPartitions = gIndex.rangeQuery(queryRange, output);
-        LOG.info("Selected "+numPartitions+" partitions overlapping "+queryRange);
-      } else {
-        Rectangle queryRange = this.queryRange.getMBR();
-        // Need to process only partitions on the perimeter of the query range
-        // Partitions that are totally contained in query range should not be
-        // processed and should be copied to output directly
-        numPartitions = 0;
-        for (Partition p : gIndex) {
-          if (queryRange.contains(p)) {
-            // TODO partitions totally contained in query range should be copied
-            // to output directly
-
-            // XXX Until hard links are supported, R-tree blocks are processed
-            // similar to R+-tree
-            output.collect(p);
-            numPartitions++;
-          } else if (p.isIntersected(queryRange)) {
-            output.collect(p);
-            numPartitions++;
-          }
-        }
-        LOG.info("Selected "+numPartitions+" partitions on the perimeter of "+queryRange);
-      }
-    }
-  }
-  
+  static final Log LOG = LogFactory.getLog(RangeQuery.class);
   
   /**
    * The map function used for range query

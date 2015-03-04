@@ -351,7 +351,7 @@ public class KNN {
     job.setReducerClass(KNNReduce.class);
     job.setNumReduceTasks(1);
     
-    job.setClass(SpatialSite.FilterClass, RangeQuery.RangeFilter.class, BlockFilter.class);
+    job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     
     Shape range_for_this_iteration = new Point(queryPoint.x, queryPoint.y);
     final IntWritable additional_blocks_2b_processed = new IntWritable(0);

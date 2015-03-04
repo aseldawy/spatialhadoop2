@@ -40,8 +40,8 @@ import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
+import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
-import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
