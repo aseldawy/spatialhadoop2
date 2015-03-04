@@ -32,9 +32,11 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * Parses an unindexed input file into spatial records
@@ -61,7 +63,7 @@ public class SpatialRecordReader2<V extends Shape>
   private long end;
   
   /** The boundary of the partition currently being read */
-  protected Rectangle cellMbr;
+  protected Rectangle cellMBR;
   
   /**
    * The input stream that reads directly from the input file.
@@ -127,6 +129,18 @@ public class SpatialRecordReader2<V extends Shape>
     
     this.stockShape = (V) OperationsParams.getShape(job, "shape");
     this.tempLine = new Text();
+    
+    // Check if there is an associated global index to read cell boundaries
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, path.getParent());
+    cellMBR = new Rectangle();
+    cellMBR.invalidate();
+    if (gindex != null) {
+      // Set from the associated partition in the global index
+      for (Partition p : gindex) {
+        if (p.filename.equals(this.path.getName()))
+          cellMBR.set(p);
+      }
+    }
   }
 
   /**
@@ -253,7 +267,7 @@ public class SpatialRecordReader2<V extends Shape>
   
   @Override
   public boolean next(Partition key, ShapeIterator<V> value) throws IOException {
-    key.set(cellMbr);
+    key.set(cellMBR);
     value.setSpatialRecordReader(this);
     return value.hasNext();
   }

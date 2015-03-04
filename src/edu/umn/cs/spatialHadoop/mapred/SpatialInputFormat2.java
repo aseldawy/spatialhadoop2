@@ -63,6 +63,7 @@ public class SpatialInputFormat2<K extends Rectangle, V extends Shape>
         // File is locally indexed as RTree
         return (RecordReader)new RTreeRecordReader2<V>(job, (FileSplit)split, reporter);
       }
+      // Read a non-indexed file
       return (RecordReader)new SpatialRecordReader2<V>(job, (FileSplit)split, reporter);
     } else {
       throw new RuntimeException("Cannot handle splits of type "+split.getClass());
