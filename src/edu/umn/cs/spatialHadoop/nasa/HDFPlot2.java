@@ -20,6 +20,7 @@ import java.io.IOException;
 import javax.imageio.ImageIO;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -31,6 +32,7 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
+import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
 import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
 import edu.umn.cs.spatialHadoop.visualization.Rasterizer;
@@ -43,6 +45,13 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
  */
 public class HDFPlot2 {
 
+  private static final String WATER_MASK_PATH = "water_mask";
+
+  /***
+   * Rasterizes HDF files as heat map images.
+   * @author Ahmed Eldawy
+   *
+   */
   public static class HDFRasterizer extends Rasterizer {
 
     /**Color associated with minimum value*/
@@ -54,6 +63,10 @@ public class HDFPlot2 {
     
     /**Minimum and maximum values to be used while drawing the heat map*/
     private float minValue, maxValue;
+    /**Path of the water mask if we need to recover on write*/
+    private Path waterMaskPath;
+    /**FileSystem of the water mask*/
+    private FileSystem waterMaskFS;
 
     @Override
     public void configure(Configuration conf) {
@@ -70,6 +83,14 @@ public class HDFPlot2 {
       } else {
         this.minValue = 0;
         this.maxValue = -1;
+      }
+      if (conf.get("recover", "none").equals("write")) {
+        try {
+          waterMaskPath = new Path(conf.get(WATER_MASK_PATH));
+          waterMaskFS = waterMaskPath.getFileSystem(conf);
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
       }
     }
     
@@ -121,7 +142,16 @@ public class HDFPlot2 {
     @Override
     public void writeImage(RasterLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
-      BufferedImage img =  ((HDFRasterLayer)layer).asImage();
+      HDFRasterLayer hdfLayer = (HDFRasterLayer)layer;
+      if (waterMaskPath != null) {
+        // Recover holes on write
+        FSDataInputStream waterMaskFile = waterMaskFS.open(waterMaskPath);
+        BitArray bitMask = new BitArray();
+        bitMask.readFields(waterMaskFile);
+        waterMaskFile.close();
+        hdfLayer.recoverHoles(bitMask);
+      }
+      BufferedImage img =  hdfLayer.asImage();
       // Flip image vertically if needed
       if (vflip) {
         AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
@@ -134,21 +164,26 @@ public class HDFPlot2 {
     }
   }
   
-  private static void printUsage() {
-    System.out.println("Plots NASA data in HDFS files");
-    System.out.println("Parameters: (* marks required parameters)");
-    System.out.println("<input file> - (*) Path to input file");
-    System.out.println("<output file> - (*) Path to output file");
-    System.out.println("width:<w> - Maximum width of the image (1000)");
-    System.out.println("height:<h> - Maximum height of the image (1000)");
-    System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
-    System.out.println("valuerange:<v1..v2> - Range of values for the generated heat map");
-    System.out.println("color1:<c1> - The color associated with v1");
-    System.out.println("color2:<c2> - The color associated with v2");
-    System.out.println("gradient:<rgb|hsb> - Type of gradient to use");
-    System.out.println("-overwrite: Override output file without notice");
-    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
-    GenericOptionsParser.printGenericCommandUsage(System.out);
+  public static class HDFRasterizeWaterMask extends HDFRasterizer {
+    @Override
+    public void writeImage(RasterLayer layer, DataOutputStream out,
+        boolean vflip) throws IOException {
+      HDFRasterLayer hdfLayer = ((HDFRasterLayer)layer);
+      BitArray bits = new BitArray((long)hdfLayer.getWidth() * hdfLayer.getHeight());
+      for (int x = 0; x < hdfLayer.getWidth(); x++) {
+        for (int y = 0; y < hdfLayer.getHeight(); y++) {
+          long sum = hdfLayer.getSum(x, y);
+          long count = hdfLayer.getCount(x, y);
+          if (sum < count / 2) {
+            bits.set(y * hdfLayer.getWidth() + x, false);
+          } else {
+            bits.set(y * hdfLayer.getWidth() + x, true);
+          }
+        }
+      }
+      // Write the bit array to the output
+      bits.write(out);
+    }
   }
   
   /**
@@ -194,13 +229,70 @@ public class HDFPlot2 {
     outStream.close();
   }
 
-  public static RunningJob plot(Path[] inFiles, Path outFile, OperationsParams params)
-      throws IOException {
-    if (params.getBoolean("pyramid", false)) {
-      return MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
-    } else {
-      return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
+  /**
+   * Plot a water mask for a region and store the result in a binary format.
+   * @param inFiles
+   * @param outFile
+   * @param params
+   * @return
+   * @throws IOException
+   */
+  public static RunningJob plotWaterMask(Path[] inFiles, Path outFile,
+      OperationsParams params) throws IOException {
+    // Restrict to HDF files if working on a directory
+    for (int i = 0; i < inFiles.length; i++) {
+      if (!inFiles[i].getName().toLowerCase().endsWith(".hdf"))
+        inFiles[i] = new Path(inFiles[i], "*.hdf");
     }
+    params.setBoolean("recoverholes", false);
+    params.set("recover", "none");
+    if (params.getBoolean("pyramid", false))
+      return MultilevelPlot.plot(inFiles, outFile, HDFRasterizeWaterMask.class, params);
+    else
+      return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizeWaterMask.class, params);
+  }
+  
+  public static RunningJob plotHeatMap(Path[] inFiles, Path outFile,
+      OperationsParams params) throws IOException {
+    // Restrict to HDF files if working on a directory
+    for (int i = 0; i < inFiles.length; i++) {
+      if (!inFiles[i].getName().toLowerCase().endsWith(".hdf"))
+        inFiles[i] = new Path(inFiles[i], "*.hdf");
+    }
+    String recover = params.get("recover", "none").toLowerCase();
+    if (recover.equals("none")) {
+      // Don't recover holes
+      params.setBoolean("recoverholes", false);
+    } else if (recover.equals("read")) {
+      // Recover holes on read
+      params.setBoolean("recoverholes", true);
+    } else if (recover.equals("write")) {
+      // Recover holes upon writing the final image
+      params.setBoolean("recoverholes", false);
+      if (params.get(WATER_MASK_PATH) == null)
+        throw new RuntimeException("You need to set 'water_mask' to recover holes on write");
+    }
+    if (params.getBoolean("pyramid", false))
+      return MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
+    else
+      return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
+  }
+
+  private static void printUsage() {
+    System.out.println("Plots NASA data in HDFS files");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file> - (*) Path to input file");
+    System.out.println("<output file> - (*) Path to output file");
+    System.out.println("width:<w> - Maximum width of the image (1000)");
+    System.out.println("height:<h> - Maximum height of the image (1000)");
+    System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
+    System.out.println("valuerange:<v1..v2> - Range of values for the generated heat map");
+    System.out.println("color1:<c1> - The color associated with v1");
+    System.out.println("color2:<c2> - The color associated with v2");
+    System.out.println("gradient:<rgb|hsb> - Type of gradient to use");
+    System.out.println("-overwrite: Override output file without notice");
+    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
   /**
@@ -227,7 +319,7 @@ public class HDFPlot2 {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    plot(inFiles, outFile, params);
+    plotHeatMap(inFiles, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
   }

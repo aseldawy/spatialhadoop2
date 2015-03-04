@@ -28,6 +28,8 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
  */
 public class GridPartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(GridPartitioner.class);
+  
+  /**The information of the underlying grid*/
   private GridInfo gridInfo;
   
   /**
@@ -37,6 +39,12 @@ public class GridPartitioner extends Partitioner {
   public GridPartitioner() {
     // Initialize grid info so that readFields work correctly
     this.gridInfo = new GridInfo();
+  }
+  
+  @Override
+  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+    this.gridInfo.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+    this.gridInfo.calculateCellDimensions(numPartitions);
   }
   
   /**
@@ -67,6 +75,11 @@ public class GridPartitioner extends Partitioner {
   public void readFields(DataInput in) throws IOException {
     this.gridInfo.readFields(in);
   }
+  
+  @Override
+  public int getPartitionCount() {
+    return gridInfo.rows * gridInfo.columns;
+  }
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
@@ -82,10 +95,25 @@ public class GridPartitioner extends Partitioner {
       }
     }
   }
+  
+  @Override
+  public int overlapPartition(Shape shape) {
+    if (shape == null)
+      return -1;
+    Rectangle shapeMBR = shape.getMBR();
+    if (shapeMBR == null)
+      return -1;
+    Point centerPoint = shapeMBR.getCenterPoint();
+    return this.gridInfo.getOverlappingCell(centerPoint.x, centerPoint.y);
+  }
 
   @Override
   public CellInfo getPartition(int partitionID) {
     return gridInfo.getCell(partitionID);
   }
 
+  @Override
+  public CellInfo getPartitionAt(int index) {
+    return getPartition(index+1);
+  }
 }

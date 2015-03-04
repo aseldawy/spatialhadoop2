@@ -13,8 +13,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -26,6 +27,9 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * A bunch of helper functions used with files
@@ -66,21 +70,15 @@ public final class FileUtil {
 
 		FSDataInputStream in = fs.open(split.getPath());
 		in.seek(split.getStart());
+		ReadableByteChannel rbc = Channels.newChannel(in);
 
 		// Prepare output file for write
-		File tempFile = File.createTempFile(split.getPath().getName(), "hdf");
-		OutputStream out = new FileOutputStream(tempFile);
+		File tempFile = File.createTempFile(split.getPath().getName(), "tmp");
+		FileOutputStream out = new FileOutputStream(tempFile);
+		
+		out.getChannel().transferFrom(rbc, 0, length);
 
-		// A buffer used between source and destination
-		byte[] buffer = new byte[1024 * 1024];
-		while (length > 0) {
-			int numBytesRead = in.read(buffer, 0,
-					(int) Math.min(length, buffer.length));
-			out.write(buffer, 0, numBytesRead);
-			length -= numBytesRead;
-		}
-
-		in.close();
+		rbc.close();
 		out.close();
 		return tempFile.getAbsolutePath();
 	}
@@ -99,6 +97,41 @@ public final class FileUtil {
 		return copyFile(conf, fs.getFileStatus(inFile));
 	}
 
+	/**
+	 * Writes paths to a HDFS file where each path is a line.
+	 * 
+	 * @author ibrahimsabek
+	 * @param paths
+	 */
+	
+	public static Path writePathsToHDFSFile(OperationsParams params, Path[] paths){
+		String tmpFileName = "pathsDictionary.txt";
+		Configuration conf = new Configuration();
+		try {
+			FileSystem fs = params.getPaths()[0].getFileSystem(conf);
+			Path hdfsFilePath = new Path(params.getPaths()[0].toString() + "/"
+					+ tmpFileName);	
+			FSDataOutputStream out = fs.create(hdfsFilePath);
+			
+			for (int i = 0; i < paths.length; i++) {
+				StringBuilder pathStringBuilder = new StringBuilder();
+				pathStringBuilder.append(paths[i].toString());
+				pathStringBuilder.append("\n");
+				
+				byte[] bytArr = pathStringBuilder.toString().getBytes();
+				out.write(bytArr);
+			}
+					
+			out.close();
+
+			return hdfsFilePath;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+		
+	}
+	
 	/**
 	 * Writes paths to a file where each path is a line.
 	 * 
@@ -162,4 +195,55 @@ public final class FileUtil {
 		out.close();
 	}
 
+	/**
+	 * function to list files in a certain directory
+	 * 
+	 * @author ibrahimsabek
+	 * @param path
+	 * @return
+	 * @throws IOException
+	 */
+	public static Path[] getFilesListInPath(Path path) throws IOException{
+		FileSystem fileSystem = path.getFileSystem(new Configuration());
+		FileStatus[] matchingDirs = fileSystem.listStatus(path);
+		Path[] pathsArr = new Path[matchingDirs.length];
+		for(int i = 0; i < matchingDirs.length; i++){
+			pathsArr[i] = matchingDirs[i].getPath();
+		}
+		return pathsArr;
+	}
+
+	/**
+	 * Get the actual size of all data in the given directory. If the input is
+	 * a single file, its size is returned immediately. If the input is a
+	 * directory, we returns the total size of all data in that directory.
+	 * If there is a global index, the size is retrieved from that global index.
+	 * Otherwise, we add up all the sizes of single files.
+	 * @param fs - the file system that contains the path
+	 * @param path - the path that contains the data
+	 * @return
+	 * @throws IOException 
+	 */
+  public static long getPathSize(FileSystem fs, Path path) throws IOException {
+    FileStatus fileStatus = fs.getFileStatus(path);
+    // 1- Check if the path points to a file
+    if (!fileStatus.isDir())
+      return fileStatus.getLen();
+    // 2- Check if the input is indexed and get the cached size
+    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, path);
+    if (gIndex != null) {
+      long totalSize = 0;
+      for (Partition partition : gIndex)
+        totalSize += partition.size;
+      return totalSize;
+    }
+    // 3- Get the total size of all non-hidden files
+    long totalSize = 0;
+    FileStatus[] allFiles = fs.listStatus(path, SpatialSite.NonHiddenFileFilter);
+    for (FileStatus subFile : allFiles) {
+      if (!subFile.isDir())
+        totalSize += subFile.getLen();
+    }
+    return totalSize;
+  }
 }

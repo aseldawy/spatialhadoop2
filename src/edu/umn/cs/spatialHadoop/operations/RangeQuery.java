@@ -13,9 +13,11 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
@@ -42,6 +44,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
@@ -360,7 +363,8 @@ public class RangeQuery {
                 for (Shape s : shapes) {
                   if (queryRange.isIntersected(s)) {
                     results++;
-                    output.collect((S) s);
+                    if (output != null)
+                      output.collect((S) s);
                   }
                 }
               }
@@ -412,16 +416,56 @@ public class RangeQuery {
     // All running jobs
     Vector<Long> resultsCounts = new Vector<Long>();
     Vector<RunningJob> jobs = new Vector<RunningJob>();
-
-    for (int i = 0; i < queryRanges.length; i++) {
-      OperationsParams queryParams = new OperationsParams(params);
-      queryParams.setBoolean("background", true);
-      OperationsParams.setShape(queryParams, "rect", queryRanges[i]);
-      RunningJob job = rangeQueryMapReduce(inPath, outPath, queryParams);
-      jobs.add(job);
-    }
+    Vector<Thread> threads = new Vector<Thread>();
 
     long t1 = System.currentTimeMillis();
+    for (int i = 0; i < queryRanges.length; i++) {
+      final OperationsParams queryParams = new OperationsParams(params);
+      OperationsParams.setShape(queryParams, "rect", queryRanges[i]);
+      if (OperationsParams.isLocal(new JobConf(queryParams), inPath)) {
+        // Run in local mode
+        final Rectangle queryRange = queryRanges[i];
+        final Shape shape = queryParams.getShape("shape");
+        final Path output = outPath == null ? null :
+          (queryRanges.length == 1 ? outPath : new Path(outPath, String.format("%05d", i)));
+        Thread thread = new Thread() {
+          @Override
+          public void run() {
+            try {
+              ResultCollector<Shape> collector = null;
+              if (output != null) {
+                FileSystem outFS = output.getFileSystem(queryParams);
+                final FSDataOutputStream outFile = outFS.create(output);
+                final Text tempText = new Text2();
+                collector = new ResultCollector<Shape>() {
+                  @Override
+                  public void collect(Shape r) {
+                    try {
+                      tempText.clear();
+                      r.toText(tempText);
+                      outFile.write(tempText.getBytes(), 0, tempText.getLength());
+                    } catch (IOException e) {
+                      e.printStackTrace();
+                    }
+                  }
+                };
+              }
+              rangeQueryLocal(inPath, queryRange, shape, queryParams, collector);
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+          }
+        };
+        thread.start();
+        threads.add(thread);
+      } else {
+        // Run in MapReduce mode
+        queryParams.setBoolean("background", true);
+        RunningJob job = rangeQueryMapReduce(inPath, outPath, queryParams);
+        jobs.add(job);
+      }
+    }
+
     while (!jobs.isEmpty()) {
       RunningJob firstJob = jobs.firstElement();
       firstJob.waitForCompletion();
@@ -436,6 +480,15 @@ public class RangeQuery {
       Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
       resultsCounts.add(outputRecordCounter.getValue());
       jobs.remove(0);
+    }
+    while (!threads.isEmpty()) {
+      try {
+        Thread thread = threads.firstElement();
+        thread.join();
+        threads.remove(0);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
     }
     long t2 = System.currentTimeMillis();
     

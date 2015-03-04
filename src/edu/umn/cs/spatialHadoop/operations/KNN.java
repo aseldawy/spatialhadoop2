@@ -494,7 +494,6 @@ public class KNN {
       Rectangle key = (Rectangle) reader.createKey();
       Shape shape = (Shape) reader.createValue();
       
-      
       while (reader.next(key, shape)) {
         double distance = shape.distanceTo(queryPoint.x, queryPoint.y);
         int i = k - 1;
@@ -517,19 +516,7 @@ public class KNN {
       reader.close();
     }
     
-    long resultCount = 0;
-    if (outPath != null) {
-      FileSystem outFs = outPath.getFileSystem(job);
-      PrintStream ps = new PrintStream(outFs.create(outPath));
-      for (int i = 0; i < knn.length; i++) {
-        if (knn[i] != null) {
-          ps.println(knn[i].distance+","+knn[i].text);
-          resultCount++;
-        }
-      }
-      
-      ps.close();
-    }
+    long resultCount = knn.length;
     return resultCount;
   }
   
@@ -579,7 +566,7 @@ public class KNN {
     final Point[] queryPoints = closeness < 0 ? params.getShapes("point", new Point()) : new Point[count];
     final FileSystem fs = inputFile.getFileSystem(params);
     final int k = params.getInt("k", 1);
-    int concurrency = params.getInt("concurrency", 1);
+    int concurrency = params.getInt("concurrency", 100);
     if (k == 0) {
       LOG.warn("k = 0");
     }

@@ -122,4 +122,9 @@ public class CellInfo extends Rectangle {
     this.cellId = TextSerializerHelper.consumeInt(text, ',');
     super.fromText(text);
   }
+  
+  @Override
+  public String toWKT() {
+    return cellId+"\t"+super.toWKT();
+  }
 }

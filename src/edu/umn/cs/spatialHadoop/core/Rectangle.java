@@ -344,4 +344,12 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   public Rectangle translate(double dx, double dy) {
     return new Rectangle(this.x1 + dx, this.y1 + dy, this.x2 + dx, this.y2 + dy);
   }
+  
+  public String toWKT() {
+    return String.format("POLYGON((%g %g, %g %g, %g %g, %g %g, %g %g))", this.x1, this.y1,
+        this.x1, this.y2,
+        this.x2, this.y2,
+        this.x2, this.y1,
+        this.x1, this.y1);
+  }
 }

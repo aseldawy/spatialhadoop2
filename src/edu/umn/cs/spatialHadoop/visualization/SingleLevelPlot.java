@@ -46,8 +46,11 @@ import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
+import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
@@ -357,9 +360,12 @@ public class SingleLevelPlot {
     Rasterizer.setRasterizer(job, rasterizerClass);
     // Set input file MBR
     Rectangle inputMBR = (Rectangle) params.getShape("mbr");
+    Rectangle drawRect = (Rectangle) params.getShape("rect");
     if (inputMBR == null)
-      inputMBR = FileMBR.fileMBR(inFiles, params);
+      inputMBR = drawRect != null? drawRect : FileMBR.fileMBR(inFiles, params);
     OperationsParams.setShape(job, InputMBR, inputMBR);
+    if (drawRect != null)
+      job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     
     // Adjust width and height if aspect ratio is to be kept
     int width = job.getInt("width", 1000);
@@ -444,8 +450,9 @@ public class SingleLevelPlot {
 
     boolean vflip = params.getBoolean("vflip", true);
 
-    Shape plotRange = params.getShape("rect", null);
-    final Rectangle inputMBR = plotRange == null ? FileMBR.fileMBR(inFiles, params) : plotRange.getMBR();
+    
+    final Rectangle inputMBR = params.get("mbr") != null ?
+        params.getShape("mbr").getMBR() : FileMBR.fileMBR(inFiles, params);
     OperationsParams.setShape(params, InputMBR, inputMBR);
 
     // Retrieve desired output image size and keep aspect ratio if needed

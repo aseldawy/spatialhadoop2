@@ -65,6 +65,7 @@
     		<include name="zoom_view.html"/>
         <include name="gistic_logo.png"/>
         <include name="gistic_logo_license.txt"/>
+        <include name="webapps/**/*"/>
     	</fileset>
   	</copy>
   </target>

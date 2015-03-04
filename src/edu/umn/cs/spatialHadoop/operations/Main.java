@@ -16,15 +16,18 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
+import edu.umn.cs.spatialHadoop.nasa.DistributedAggregateSpatioTemporalIndexer;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot2;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
 import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
-import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
+import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
+import edu.umn.cs.spatialHadoop.temporal.RepartitionTemporal;
 
 /**
  * The main entry point to all queries.
+ * 
  * @author eldawy
  *
  */
@@ -40,8 +43,6 @@ public class Main {
     int exitCode = -1;
     ProgramDriver pgd = new ProgramDriver();
     try {
-      ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-      
       pgd.addClass("rangequery", RangeQuery.class,
           "Finds all objects in the query range given by a rectangle");
 
@@ -58,6 +59,9 @@ public class Main {
       
       pgd.addClass("index", Repartition.class,
           "Builds an index on an input file");
+
+      pgd.addClass("partition", Indexer.class,
+          "Spatially partition a file using a specific partitioner");
       
       pgd.addClass("mbr", FileMBR.class,
           "Finds the minimal bounding rectangle of an input file");
@@ -107,7 +111,7 @@ public class Main {
       pgd.addClass("distcp", DistributedCopy.class,
           "Copies a directory or file using a MapReduce job");
       
-      pgd.addClass("vizserver", VisualizationServer.class,
+      pgd.addClass("vizserver", ShahedServer.class,
           "Starts a server that handles visualization requests");
 
       pgd.addClass("staggquery", SpatioTemporalAggregateQuery.class,

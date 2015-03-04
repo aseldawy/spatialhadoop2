@@ -12,7 +12,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.URLConnection;
+import java.text.ParseException;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -23,7 +25,6 @@ import javax.mail.Message;
 import javax.mail.Message.RecipientType;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
-import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.AddressException;
@@ -49,30 +50,67 @@ import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree.Node;
 
 /**
  * @author Ahmed Eldawy
  *
  */
-public class VisualizationServer extends AbstractHandler {
+public class ShahedServer extends AbstractHandler {
 
-  private static final Log LOG = LogFactory.getLog(VisualizationServer.class);
+  private static final Log LOG = LogFactory.getLog(ShahedServer.class);
+  
+  /**Mail server*/
+  private static final String MAIL_HOST;
+  /**Properties used to configure the mail server*/
+  private static final Properties MAIL_PROPERTIES;
 
   /**Common parameters for all queries*/
   private OperationsParams commonParams;
+  /**Email address to send from*/
+  private String from;
   /**Username of the mail server*/
   final private String username;
   /**Password of the mail server*/
   final private String password;
 
   /**The base directory in which all datasets are stored*/
-  private Path dataBaseDir;
+  private Path dataPath;
 
-  public VisualizationServer(Path dataPath, OperationsParams params) {
+  private Path indexPath;
+  
+  static {
+    MAIL_HOST = "mail.cs.umn.edu";
+    
+    // Mail properties that work with mail.cs.umn.edu
+    MAIL_PROPERTIES = new Properties();
+ 
+    MAIL_PROPERTIES.put("mail.smtp.starttls.enable", "true");
+    MAIL_PROPERTIES.put("mail.smtp.auth", "true");
+    
+    // Use the following if you need SSL
+    MAIL_PROPERTIES.put("mail.smtp.socketFactory.port", 465);
+    MAIL_PROPERTIES.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+    MAIL_PROPERTIES.put("mail.smtp.socketFactory.fallback", "false");
+
+    
+    MAIL_PROPERTIES.put("mail.smtp.host", MAIL_HOST);
+    MAIL_PROPERTIES.put("mail.smtp.port", "465");
+  }
+
+  /**
+   * A constructor that starts the Jetty server
+   * @param dataPath
+   * @param indexPath
+   * @param params
+   */
+  public ShahedServer(Path dataPath, Path indexPath, OperationsParams params) {
     this.commonParams = new OperationsParams(params);
     this.username = params.get("username");
     this.password = params.get("password");
-    this.dataBaseDir = dataPath;
+    this.from = params.get("from", this.username);
+    this.dataPath = dataPath;
+    this.indexPath = indexPath;
   }
 
   /**
@@ -80,11 +118,12 @@ public class VisualizationServer extends AbstractHandler {
    * all queries
    * @throws Exception 
    */
-  private static void startServer(Path dataPath, OperationsParams params) throws Exception {
+  private static void startServer(Path dataPath, Path indexPath,
+      OperationsParams params) throws Exception {
     int port = params.getInt("port", 8889);
 
     Server server = new Server(port);
-    server.setHandler(new VisualizationServer(dataPath, params));
+    server.setHandler(new ShahedServer(dataPath, indexPath, params));
     server.start();
     server.join();
   }
@@ -99,22 +138,71 @@ public class VisualizationServer extends AbstractHandler {
     ((Request) request).setHandled(true);
     
     try {
-      if (target.equals("/generate_image")) {
+      if (target.endsWith("/generate_image.cgi")) {
         LOG.info("Generating image");
         // Start a background thread that handles the request
         new ImageRequestHandler(request).start();
         response.setStatus(HttpServletResponse.SC_OK);
         response.setContentType("text/plain;charset=utf-8");
         response.getWriter().println("Image request received successfully");
+      } else if (target.endsWith("/aggregate_query.cgi")) {
+        handleAggregateQuery(request, response);
+        LOG.info("Query results returned");
       } else {
         if (target.equals("/"))
-          target = "/visualization.html";
+          target = "/index.html";
         tryToLoadStaticResource(target, response);
       }
     } catch (Exception e) {
       e.printStackTrace();
       reportError(response, "Error placing the request", e);
     }
+  }
+
+  /**
+   * Handle a request for a spatio-temporal aggregate query.
+   * @param request
+   * @param response
+   * @throws ParseException
+   * @throws IOException
+   */
+  private void handleAggregateQuery(HttpServletRequest request,
+      HttpServletResponse response) throws ParseException, IOException {
+    String west = request.getParameter("min_lon");
+    String east = request.getParameter("max_lon");
+    String south = request.getParameter("min_lat");
+    String north = request.getParameter("max_lat");
+    
+    String[] startDateParts = request.getParameter("fromDate").split("/");
+    String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+    String[] endDateParts = request.getParameter("toDate").split("/");
+    String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+    
+    // Create the query parameters
+    OperationsParams params = new OperationsParams(commonParams);
+    params.set("rect", west+','+south+','+east+','+north);
+    params.set("time", startDate+".."+endDate);
+    
+    long t1 = System.currentTimeMillis();
+    Node result = SpatioTemporalAggregateQuery.aggregateQuery(indexPath, params);
+    long t2 = System.currentTimeMillis();
+    // Report the answer and time
+    response.setContentType("application/json;charset=utf-8");
+    PrintWriter writer = response.getWriter();
+    writer.print("{");
+    writer.print("\"results\":{");
+    writer.print("\"min\": "+result.min+',');
+    writer.print("\"max\": "+result.max+',');
+    writer.print("\"count\": "+result.count+',');
+    writer.print("\"sum\": "+result.sum);
+    writer.print("},");
+    writer.print("\"stats\":{");
+    writer.print("\"totaltime\":"+(t2-t1)+',');
+    writer.print("\"num-of-temporal-partitions\":"+SpatioTemporalAggregateQuery.numOfTemporalPartitionsInLastQuery+',');
+    writer.print("\"num-of-trees\":"+SpatioTemporalAggregateQuery.numOfTreesTouchesInLastRequest);
+    writer.print("}");
+    writer.print("}");
+    response.setStatus(HttpServletResponse.SC_OK);
   }
 
   /**
@@ -203,33 +291,39 @@ public class VisualizationServer extends AbstractHandler {
      * @param requestID
      * @throws MessagingException 
      * @throws AddressException 
+     * @throws UnsupportedEncodingException 
      */
-    private void sendConfirmEmail() throws AddressException, MessagingException {
-      Properties props = new Properties();
-      props.put("mail.smtp.auth", "true");
-      props.put("mail.smtp.starttls.enable", "true");
-      props.put("mail.smtp.host", "smtp.gmail.com");
-      props.put("mail.smtp.port", "587");
-    
-      Session session = Session.getInstance(props,
-          new javax.mail.Authenticator() {
-        protected PasswordAuthentication getPasswordAuthentication() {
-          return new PasswordAuthentication(username, password);
-        }
-      });
-    
-      Message message = new MimeMessage(session);
+    private void sendConfirmEmail() throws AddressException, MessagingException, UnsupportedEncodingException {
+      Properties props = new Properties(MAIL_PROPERTIES);
+      
+      props.put("mail.smtp.user", from);
+      props.put("mail.smtp.password", password);
+
+      Session mailSession = Session.getDefaultInstance(props);
+      
+      Message message = new MimeMessage(mailSession);
+      InternetAddress requesterAddress = new InternetAddress(email, requesterName);
       message.setFrom(new InternetAddress(username));
-      String toLine = requesterName+'<'+email+'>';
-      message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
+      message.addRecipient(RecipientType.TO, requesterAddress);
+      InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
+      message.addRecipient(RecipientType.BCC, adminAddress);
       message.setSubject("Confirmation: Your request was received");
       message.setText("Dear "+requesterName+",\n"+
           "Your request was received. "+
           "The server is currently processing your request and you will receive " +
           "an email with the generated files as soon as the request is complete.\n\n"+
           "Thank you for using Shahed. \n\n Shahed team");
-      Transport.send(message);
-      LOG.info("Message sent successfully to '"+toLine+"'");
+      InternetAddress shahedAddress = new InternetAddress(from, "SHAHED Team");
+      
+      message.setFrom(shahedAddress);
+      message.setReplyTo(new InternetAddress[] {shahedAddress});
+      
+      Transport transport = mailSession.getTransport();
+      transport.connect(MAIL_HOST, username, password);
+      
+      transport.sendMessage(message, message.getAllRecipients());
+      transport.close();
+      LOG.info("Message sent successfully to '"+requesterAddress+"'");
     }
 
     /**
@@ -237,7 +331,7 @@ public class VisualizationServer extends AbstractHandler {
      * @throws IOException
      */
     private byte[] plotImage() throws IOException {
-      this.inputURL = new Path(dataBaseDir, datasetPath+"/"+startDate);
+      this.inputURL = new Path(dataPath, datasetPath+"/"+startDate);
       Path outputPath = new Path(outDir, "image.png");
       // Launch the MapReduce job that plots the dataset
       OperationsParams plotParams = new OperationsParams(commonParams);
@@ -247,7 +341,7 @@ public class VisualizationServer extends AbstractHandler {
       plotParams.setBoolean("recoverholes", true);
       plotParams.set("dataset", datasetName);
       
-      HDFPlot2.plot(new Path[] {inputURL}, outputPath, plotParams);
+      HDFPlot2.plotHeatMap(new Path[] {inputURL}, outputPath, plotParams);
       
       FileSystem fs = outputPath.getFileSystem(commonParams);
       if (!fs.exists(outputPath)) {
@@ -308,20 +402,14 @@ public class VisualizationServer extends AbstractHandler {
      * @throws IOException 
      */
     private void sendResponseEmail(byte[] imageBytes, byte[] kmlBytes) throws AddressException, MessagingException, IOException {
-      Properties props = new Properties();
-      props.put("mail.smtp.auth", "true");
-      props.put("mail.smtp.starttls.enable", "true");
-      props.put("mail.smtp.host", "smtp.gmail.com");
-      props.put("mail.smtp.port", "587");
+      Properties props = new Properties(MAIL_PROPERTIES);
+      
+      props.put("mail.smtp.user", from);
+      props.put("mail.smtp.password", password);
     
-      Session session = Session.getInstance(props,
-          new javax.mail.Authenticator() {
-        protected PasswordAuthentication getPasswordAuthentication() {
-          return new PasswordAuthentication(username, password);
-        }
-      });
+      Session mailSession = Session.getInstance(props);
     
-      Message message = new MimeMessage(session);
+      Message message = new MimeMessage(mailSession);
       message.setFrom(new InternetAddress(username));
       String toLine = requesterName+'<'+email+'>';
       message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
@@ -366,7 +454,11 @@ public class VisualizationServer extends AbstractHandler {
       
       message.setContent(multipart);
 
-      Transport.send(message);
+      Transport transport = mailSession.getTransport();
+      transport.connect(MAIL_HOST, username, password);
+      
+      transport.sendMessage(message, message.getAllRecipients());
+      transport.close();
       LOG.info("Request finished successfully");
     }
   }
@@ -396,8 +488,11 @@ public class VisualizationServer extends AbstractHandler {
   public static void printUsage() {
     System.out.println("Starts a server which will handle visualization requests");
     System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<datasets path> - Path the raw MODIS files");
+    System.out.println("<index path> - (*) Path the indexed modis data");
     System.out.println("username:<u> - (*) Username to authenticate with the mail server");
     System.out.println("password:<pw> - (*) Password to authenticate with the mail server");
+    System.out.println("email:<pw> - (*) Email to send from");
     System.out.println("port:<p> - The port to start listening to. Default: 8889");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
@@ -409,16 +504,14 @@ public class VisualizationServer extends AbstractHandler {
   public static void main(String[] args) throws Exception {
     final OperationsParams params =
         new OperationsParams(new GenericOptionsParser(args), false);
-    if (!params.checkInput()) {
-      System.err.println("Please specify the directory which contains modis data");
-      printUsage();
-      System.exit(1);
-    }
     if (params.get("username") == null || params.get("password") == null) {
       System.err.println("Please specify username and password for mail server");
       printUsage();
       System.exit(1);
     }
-    startServer(params.getInputPath(), params);
+    Path[] paths = params.getPaths();
+    Path datasetPath = paths.length == 1? new Path("http://e4ftl01.cr.usgs.gov/") : paths[0];
+    Path indexPath = paths.length == 1? paths[0] : paths[1];
+    startServer(datasetPath, indexPath, params);
   }
 }

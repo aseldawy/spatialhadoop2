@@ -36,10 +36,12 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
+import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -507,6 +509,64 @@ public class OperationsParams extends Configuration {
 		return sjmrPartitioningGrid;
 	}
 
+	
+	public static int getJoiningThresholdPerOnce(Configuration conf,
+			String key) {
+		String joiningThresholdPerOnce_str = conf.get(key);
+		if (joiningThresholdPerOnce_str == null)
+			LOG.error("Your joiningThresholdPerOnce is not set");
+		return Integer.parseInt(joiningThresholdPerOnce_str);
+	}
+
+	public static void setJoiningThresholdPerOnce(Configuration conf,
+			String param, int joiningThresholdPerOnce) {
+		String str = null;
+		if (joiningThresholdPerOnce < 0){
+			str = "50000";				
+		}else{
+			str = joiningThresholdPerOnce + "";
+		}
+		conf.set(param, str);
+	}
+	
+	public static void setFilterOnlyModeFlag(Configuration conf,
+			String param, boolean filterOnlyMode) {
+		String str = null;
+		if (filterOnlyMode){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
+	public static boolean getFilterOnlyModeFlag(Configuration conf,
+			String key) {
+		String filterOnlyModeFlag = conf.get(key);
+		if (filterOnlyModeFlag == null)
+			LOG.error("Your filterOnlyMode is not set");
+		return Boolean.parseBoolean(filterOnlyModeFlag);
+	}
+	
+	public static boolean getInactiveModeFlag(Configuration conf,
+			String key) {
+		String inactiveModeFlag_str = conf.get(key);
+		if (inactiveModeFlag_str == null)
+			LOG.error("Your inactiveModeFlag is not set");
+		return Boolean.parseBoolean(inactiveModeFlag_str);
+	}
+	
+	public static void setInactiveModeFlag(Configuration conf,
+			String param, boolean inactiveModeFlag) {
+		String str = null;
+		if (inactiveModeFlag){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
 	public static Path getRepartitionJoinIndexPath(Configuration conf,
 			String key) {
 		String repartitionJoinIndexPath_str = conf.get(key);
@@ -712,6 +772,7 @@ public class OperationsParams extends Configuration {
 	 *         in MapReduce mode.
 	 */
 	public static boolean isLocal(JobConf job, Path... input) {
+	  job = new JobConf(job); // To ensure we don't change the original
 		final boolean LocalProcessing = true;
 		final boolean MapReduceProcessing = false;
 
@@ -732,6 +793,9 @@ public class OperationsParams extends Configuration {
 
 		FileInputFormat.setInputPaths(job, input);
 		ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
+                if (job.get("rect") != null)
+                   job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+		
 		try {
 			InputSplit[] splits = inputFormat.getSplits(job, 1);
 			if (splits.length > MaxSplitsForLocalProcessing)
