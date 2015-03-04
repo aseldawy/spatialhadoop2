@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.mapred.FileSplit;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -246,4 +247,40 @@ public final class FileUtil {
     }
     return totalSize;
   }
+  
+  /**
+   * Used to check whether files are compressed or not to remove their
+   * extension.
+   */
+  private static final CompressionCodecFactory compressionCodecs = 
+      new CompressionCodecFactory(new Configuration());
+  
+  /**
+   * Returns the extension of the file after removing any possible suffixes
+   * for compression
+   * @param path
+   * @return
+   */
+  public static String getExtensionWithoutCompression(Path path) {
+    String extension = "";
+    String fname = path.getName().toLowerCase();
+    if (compressionCodecs.getCodec(path) == null) {
+      // File not compressed, get the extension
+      int last_dot = fname.lastIndexOf('.');
+      if (last_dot >= 0) {
+        extension = fname.substring(last_dot + 1);
+      }
+    } else {
+      // File is comrpessed, get the extension before the compression
+      int last_dot = fname.lastIndexOf('.');
+      if (last_dot > 0) {
+        int prev_dot = fname.lastIndexOf('.', last_dot - 1);
+        if (prev_dot >= 0) {
+          extension = fname.substring(prev_dot + 1, last_dot);
+        }
+      }
+    }
+    return extension;
+  }
+
 }

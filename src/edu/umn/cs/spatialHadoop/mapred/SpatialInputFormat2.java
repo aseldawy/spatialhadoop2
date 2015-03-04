@@ -10,7 +10,6 @@ package edu.umn.cs.spatialHadoop.mapred;
 
 import java.io.IOException;
 
-import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -22,6 +21,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * This input format is used to write any spatial file. It automatically decides
@@ -37,40 +37,15 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 public class SpatialInputFormat2<K extends Rectangle, V extends Shape>
     extends FileInputFormat<K, Iterable<V>> {
   
-  /**
-   * Used to check whether files are compressed or not. Some compressed files
-   * (e.g., gz) are not splittable.
-   */
-  private CompressionCodecFactory compressionCodecs = null;
-
   @SuppressWarnings("unchecked")
   @Override
   public RecordReader<K, Iterable<V>> getRecordReader(
       InputSplit split, JobConf job, Reporter reporter) throws IOException {
     // Create compressionCodecs to be used by isSplitable method
-    if (compressionCodecs == null)
-      compressionCodecs = new CompressionCodecFactory(job);
     
     if (split instanceof FileSplit) {
       FileSplit fsplit = (FileSplit) split;
-      String extension = "";
-      String fname = fsplit.getPath().getName().toLowerCase();
-      if (compressionCodecs.getCodec(fsplit.getPath()) == null) {
-        // File not compressed, get the extension
-        int last_dot = fname.lastIndexOf('.');
-        if (last_dot >= 0) {
-          extension = fname.substring(last_dot + 1);
-        }
-      } else {
-        // File is comrpessed, get the extension before the compression
-        int last_dot = fname.lastIndexOf('.');
-        if (last_dot > 0) {
-          int prev_dot = fname.lastIndexOf('.', last_dot - 1);
-          if (prev_dot >= 0) {
-            extension = fname.substring(prev_dot + 1, last_dot);
-          }
-        }
-      }
+      String extension = FileUtil.getExtensionWithoutCompression(fsplit.getPath());
       // If this extension is for a compression, skip it and take the previous
       // extension
       if (extension.equals("hdf")) {
