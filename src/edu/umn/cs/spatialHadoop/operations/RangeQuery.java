@@ -41,7 +41,6 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
-import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
@@ -77,7 +76,7 @@ public class RangeQuery {
   public static Job rangeQueryMapReduce(Path inFile, Path outFile,
       OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
     // Use the built-in range filter of the input format
-    params.set(SpatialInputFormat2.InputQueryRange, params.get("rect"));
+    params.set(SpatialInputFormat3.InputQueryRange, params.get("rect"));
     // Use multithreading in case it is running locally
     params.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     
@@ -180,6 +179,7 @@ public class RangeQuery {
   
   public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException {
     final OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    
     final Path[] paths = params.getPaths();
     if (paths.length <= 1 && !params.checkInput()) {
       printUsage();

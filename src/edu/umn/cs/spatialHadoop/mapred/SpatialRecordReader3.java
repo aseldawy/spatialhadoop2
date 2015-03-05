@@ -41,7 +41,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class SpatialRecordReader3<V extends Shape> extends
@@ -142,10 +142,10 @@ public class SpatialRecordReader3<V extends Shape> extends
     this.stockShape = (V) OperationsParams.getShape(conf, "shape");
     this.tempLine = new Text();
     
-    if (conf.get(SpatialInputFormat2.InputQueryRange) != null) {
+    if (conf.get(SpatialInputFormat3.InputQueryRange) != null) {
       // Retrieve the input query range to apply on all records
       this.inputQueryRange = OperationsParams.getShape(conf,
-          SpatialInputFormat2.InputQueryRange);
+          SpatialInputFormat3.InputQueryRange);
     }
     
     // Check if there is an associated global index to read cell boundaries
