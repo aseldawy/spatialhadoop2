@@ -258,7 +258,7 @@ public class RTreeRecordReader3<V extends Shape> extends
       do {
         nextValue = values.next();
       } while (values.hasNext() && !isMatched(nextValue));
-      if (!values.hasNext())
+      if (nextValue == null || !isMatched(nextValue))
         nextValue = null;
     }
     

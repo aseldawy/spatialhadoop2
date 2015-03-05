@@ -1027,7 +1027,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
             firstOffset = toBeSearched.pop();
 
             data.seek(firstOffset + treeStartOffset);
-            LineReader lineReader = new LineReader(data);
+            lineReader = new LineReader(data);
             while (firstOffset < lastOffset) {
               firstOffset += lineReader.readLine(line);
               nextResultShape.fromText(line);
