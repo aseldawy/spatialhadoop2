@@ -17,14 +17,21 @@ import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
  */
 public class RangeFilter extends DefaultBlockFilter {
   /**Configuration parameter for setting a search query range*/
-  public static final String QueryRange = "SpatialInputFormat.QueryRange";
+  public static final String QueryRange = "RangeFilter.QueryRange";
 
   /**A shape that is used to filter input*/
   private Shape queryRange;
   
+  public RangeFilter() {}
+  
+  public RangeFilter(Shape shape) {
+    this.queryRange = shape.clone();
+  }
+
   @Override
   public void configure(JobConf job) {
-    this.queryRange = OperationsParams.getShape(job, QueryRange);
+    // Override query range in the job configuration if specified
+    this.queryRange = OperationsParams.getShape(job, QueryRange, this.queryRange);
   }
   
   @Override

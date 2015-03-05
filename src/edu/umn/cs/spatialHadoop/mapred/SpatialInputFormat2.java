@@ -49,7 +49,10 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
  */
 public class SpatialInputFormat2<K extends Rectangle, V extends Shape>
     extends FileInputFormat<K, Iterable<V>> {
-  
+
+  /**Query range to apply upon reading the input*/
+  public static final String InputQueryRange = "SpatialInputFormat.QueryRange";
+
   @SuppressWarnings({ "unchecked", "rawtypes" })
   @Override
   public RecordReader<K, Iterable<V>> getRecordReader(
@@ -127,9 +130,9 @@ public class SpatialInputFormat2<K extends Rectangle, V extends Shape>
     try {
       // The block filter associated with this job
       BlockFilter blockFilter = null;
-      if (job.get(RangeFilter.QueryRange) != null) {
+      if (job.get(InputQueryRange) != null) {
         // This job requires a range query
-        blockFilter = new RangeFilter();
+        blockFilter = new RangeFilter(OperationsParams.getShape(job, InputQueryRange));
       }
       // Retrieve the BlockFilter set by the developers in the JobConf
       Class<? extends BlockFilter> blockFilterClass =

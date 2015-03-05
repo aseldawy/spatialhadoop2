@@ -90,6 +90,9 @@ public class SpatialRecordReader2<V extends Shape>
   /**Reporter to report the progress to the MapReduce framework*/
   private Reporter reporter;
 
+  /**Input query range if specified in the job configuration*/
+  private Shape inputQueryRange;
+
   public SpatialRecordReader2(Configuration job, FileSplit split,
       Reporter reporter) throws IOException {
     LOG.info("Open a SpatialRecordReader to split: "+split);
@@ -132,6 +135,12 @@ public class SpatialRecordReader2<V extends Shape>
     
     this.stockShape = (V) OperationsParams.getShape(job, "shape");
     this.tempLine = new Text();
+    
+    if (job.get(SpatialInputFormat2.InputQueryRange) != null) {
+      // Retrieve the input query range to apply on all records
+      this.inputQueryRange = OperationsParams.getShape(job,
+          SpatialInputFormat2.InputQueryRange);
+    }
     
     // Check if there is an associated global index to read cell boundaries
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, path.getParent());
@@ -252,9 +261,11 @@ public class SpatialRecordReader2<V extends Shape>
    * @throws IOException 
    */
   protected boolean nextShape(V s) throws IOException {
-    if (!nextLine(tempLine))
-      return false;
-    s.fromText(tempLine);
+    do {
+      if (!nextLine(tempLine))
+        return false;
+      s.fromText(tempLine);
+    } while (inputQueryRange != null && !s.isIntersected(inputQueryRange));
     return true;
   }
   
