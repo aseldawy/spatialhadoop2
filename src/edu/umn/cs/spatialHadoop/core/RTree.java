@@ -955,6 +955,11 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       prepareNextResult();
       return resultShape;
     }
+    
+    @Override
+    public void remove() {
+      throw new RuntimeException("Unsupported method");
+    }
 
     /**
      * Search for next item in result and store in in resultShape.
