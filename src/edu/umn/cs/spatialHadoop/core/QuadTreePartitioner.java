@@ -17,8 +17,6 @@ import java.util.Arrays;
 import java.util.Queue;
 import java.util.Vector;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -33,8 +31,6 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  *
  */
 public class QuadTreePartitioner extends Partitioner {
-  private static final Log LOG = LogFactory.getLog(QuadTreePartitioner.class);
-
   /**The minimal bounding rectangle of the underlying file*/
   protected Rectangle mbr;
   /**ID of all leaf nodes in partition tree*/
@@ -69,7 +65,7 @@ public class QuadTreePartitioner extends Partitioner {
     Arrays.sort(zValues);
     class QuadTreeNode {
       int fromIndex, toIndex;
-      long minZ, maxZ;
+      long minZ/*, maxZ*/;
       int nodeID; // A unique ID of the node
       int depth; // Depth in the tree starting with ONE at the root
       
@@ -78,7 +74,7 @@ public class QuadTreePartitioner extends Partitioner {
         this.fromIndex = fromIndex;
         this.toIndex = toIndex;
         this.minZ = minZ;
-        this.maxZ = maxZ;
+        //this.maxZ = maxZ;
         this.nodeID = nodeID;
         this.depth = depth;
       }

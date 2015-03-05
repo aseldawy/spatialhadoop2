@@ -25,7 +25,6 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
-import org.apache.hadoop.mapred.lib.NullOutputFormat;
 import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -38,6 +37,7 @@ import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapred.lib.NullOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -403,7 +403,8 @@ public class SJMR {
         LOG.info("SJMRPartitioningGrid is configured");
     }
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize() * sjmrPartitioningGridFactor);
+    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath)
+        * sjmrPartitioningGridFactor);
     LOG.info("Number of cells is configured to be " + num_cells);
 
     OperationsParams.setInactiveModeFlag(job, InactiveMode, isReduceInactive);

@@ -154,7 +154,7 @@ public class SpatialSite {
     ClassLoader loader = my_class.getClassLoader();
     String class_file = my_class.getName().replaceAll("\\.", "/") + ".class";
     try {
-      for(Enumeration itr = loader.getResources(class_file);
+      for(Enumeration<URL> itr = loader.getResources(class_file);
           itr.hasMoreElements();) {
         URL url = (URL) itr.nextElement();
         if ("jar".equals(url.getProtocol())) {

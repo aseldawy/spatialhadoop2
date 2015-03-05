@@ -18,8 +18,6 @@ import java.util.Comparator;
 import java.util.Queue;
 import java.util.Vector;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -34,8 +32,6 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  *
  */
 public class KdTreePartitioner extends Partitioner {
-  private static final Log LOG = LogFactory.getLog(KdTreePartitioner.class);
-
   /**MBR of the input file*/
   private Rectangle mbr;
   
