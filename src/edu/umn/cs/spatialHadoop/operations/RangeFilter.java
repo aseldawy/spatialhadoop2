@@ -26,7 +26,6 @@ public class RangeFilter extends DefaultBlockFilter {
   
   public RangeFilter(Shape shape) {
     this.queryRange = shape.clone();
-    System.out.println("Query range in constructor "+queryRange);
   }
 
   @Override
@@ -34,7 +33,6 @@ public class RangeFilter extends DefaultBlockFilter {
     // If not set in constructor, read queryRange from the job configuration
     if (this.queryRange == null)
       this.queryRange = OperationsParams.getShape(job, QueryRange);
-    System.out.println("Query range in configure "+queryRange);
   }
   
   @Override

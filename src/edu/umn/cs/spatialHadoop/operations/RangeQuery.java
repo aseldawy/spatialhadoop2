@@ -21,8 +21,6 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
@@ -38,13 +36,10 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
-import edu.umn.cs.spatialHadoop.core.RTree;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat3;
@@ -63,155 +58,24 @@ public class RangeQuery {
   
   /**
    * The map function used for range query
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
    * @param <T>
    */
   public static class RangeQueryMap extends
       Mapper<Rectangle, Iterable<Shape>, NullWritable, Shape> {
-    /**A shape that is used to filter input*/
-    private Shape queryShape;
-    private Rectangle queryMbr;
-    private final NullWritable dummy = NullWritable.get();
-    
-    @Override
-    protected void setup(Context context) throws IOException,
-        InterruptedException {
-      super.setup(context);
-      queryShape = OperationsParams.getShape(context.getConfiguration(), "rect");
-      queryMbr = queryShape.getMBR();
-    }
-
     @Override
     protected void map(final Rectangle cellMBR, Iterable<Shape> value,
         final Context context) throws IOException, InterruptedException {
-      if (value instanceof RTree) {
-        RTree<Shape> shapes = (RTree<Shape>) value;
-        shapes.search(queryMbr, new ResultCollector<Shape>() {
-          @Override
-          public void collect(Shape shape) {
-            try {
-              boolean report_result = false;
-              if (cellMBR.isValid()) {
-                // Check for duplicate avoidance using reference point technique
-                Rectangle intersection = queryMbr.getIntersection(shape.getMBR());
-                report_result = cellMBR.contains(intersection.x1, intersection.y1);
-              } else {
-                // A heap block, report right away
-                report_result = true;
-              }
-              if (report_result)
-                context.write(dummy, shape);
-            } catch (IOException e) {
-              e.printStackTrace();
-            } catch (InterruptedException e) {
-              e.printStackTrace();
-            }
-          }
-        });
-      } else {
-        for (Shape shape : value) {
-          Rectangle shapeMBR = shape.getMBR();
-          if (shapeMBR != null && shapeMBR.isIntersected(queryMbr)
-              && shape.isIntersected(queryShape)) {
-            boolean report_result = false;
-            if (cellMBR.isValid()) {
-              // Check for duplicate avoidance using reference point technique
-              double reference_x = Math.max(queryMbr.x1, shapeMBR.x1);
-              double reference_y = Math.max(queryMbr.y1, shapeMBR.y1);
-              report_result = cellMBR.contains(reference_x, reference_y);
-            } else {
-              // A heap block, report right away
-              report_result = true;
-            }
-            
-            if (report_result)
-              context.write(dummy, shape);
-          }
-        }
-      }
-    
-    }
-  }
-  
-  
-  /**
-   * The map function used for range query
-   * @author eldawy
-   *
-   * @param <T>
-   */
-  public static class RangeQueryMapNoDupAvoidance extends
-      Mapper<Rectangle, Iterable<Shape>, NullWritable, Shape> {
-    /**A shape that is used to filter input*/
-    private Shape queryShape;
-    private Rectangle queryMbr;
-    private final NullWritable dummy = NullWritable.get();
-
-    @Override
-    protected void setup(Context context) throws IOException,
-        InterruptedException {
-      super.setup(context);
-      queryShape = OperationsParams.getShape(context.getConfiguration(), "rect");
-      queryMbr = queryShape.getMBR();
-    }
-    
-
-    @Override
-    protected void map(Rectangle key, Iterable<Shape> value,
-        final Context context) throws IOException,
-        InterruptedException {
-      if (value instanceof RTree) {
-        RTree<Shape> shapes = (RTree<Shape>) value;
-        shapes.search(queryMbr, new ResultCollector<Shape>() {
-          @Override
-          public void collect(Shape shape) {
-            try {
-              context.write(dummy, shape);
-            } catch (IOException e) {
-              e.printStackTrace();
-            } catch (InterruptedException e) {
-              e.printStackTrace();
-            }
-          }
-        });
-      } else {
-        for (Shape shape : value) {
-          if (shape.isIntersected(queryShape)) {
-            context.write(dummy, shape);
-          }
-        }
+      NullWritable dummyKey = NullWritable.get();
+      for (Shape s : value) {
+        context.write(dummyKey, s);
       }
     }
-    /**
-     * Map function for non-indexed blocks
-     */
-    public void map(final Rectangle cellMbr, final Iterable<Shape> value,
-        final OutputCollector<NullWritable, Shape> output, Reporter reporter)
-            throws IOException {}
   }
   
   public static Job rangeQueryMapReduce(Path inFile, Path outFile,
       OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
-    boolean overwrite = params.getBoolean("overwrite", false);
-    Shape shape = OperationsParams.getShape(params, "shape");
-    FileSystem outFs = inFile.getFileSystem(params);
-    Path outputPath = outFile;
-    if (outputPath == null) {
-      do {
-        outputPath = new Path(inFile.getName()+
-            ".rangequery_"+(int)(Math.random() * 1000000));
-      } while (outFs.exists(outputPath));
-      params.setBoolean("output", false); // Avoid writing the output
-    } else {
-      if (outFs.exists(outputPath)) {
-        if (overwrite) {
-          outFs.delete(outputPath, true);
-        } else {
-          throw new RuntimeException("Output path already exists and -overwrite flag is not set");
-        }
-      }
-    }
     // Use the built-in range filter of the input format
     params.set(SpatialInputFormat2.InputQueryRange, params.get("rect"));
     // Use multithreading in case it is running locally
@@ -221,24 +85,14 @@ public class RangeQuery {
     job.setJarByClass(RangeQuery.class);
     job.setNumReduceTasks(0);
     
-    job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(shape.getClass());
-    job.setOutputKeyClass(NullWritable.class);
-    job.setOutputValueClass(shape.getClass());
-    
-    FileSystem inFs = inFile.getFileSystem(params);
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.setInputPaths(job, inFile);
     
-    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inFile);
-    if (gIndex != null && gIndex.isReplicated())
-      job.setMapperClass(RangeQueryMap.class);
-    else
-      job.setMapperClass(RangeQueryMapNoDupAvoidance.class);
+    job.setMapperClass(RangeQueryMap.class);
 
-    if (params.getBoolean("output", true)) {
+    if (params.getBoolean("output", true) && outFile != null) {
       job.setOutputFormatClass(TextOutputFormat.class);
-      TextOutputFormat.setOutputPath(job, outputPath);
+      TextOutputFormat.setOutputPath(job, outFile);
     } else {
       // Skip writing the output for the sake of debugging
       job.setOutputFormatClass(NullOutputFormat.class);
@@ -264,13 +118,13 @@ public class RangeQuery {
    * @param output
    * @return
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static <S extends Shape> long rangeQueryLocal(Path inPath,
       final Shape queryRange, final S shape,
-      final OperationsParams params, final ResultCollector<S> output) throws IOException {
+      final OperationsParams params, final ResultCollector<S> output) throws IOException, InterruptedException {
     // Set MBR of query shape in job configuration to work with the spatial filter
     OperationsParams.setShape(params, SpatialInputFormat3.InputQueryRange, queryRange.getMBR());
-    final FileSystem inFS = inPath.getFileSystem(params);
     // 1- Split the input path/file to get splits that can be processed independently
     final SpatialInputFormat3<Partition, S> inputFormat =
         new SpatialInputFormat3<Partition, S>();
@@ -286,18 +140,16 @@ public class RangeQuery {
         for (int i = i1; i < i2; i++) {
           try {
             FileSplit fsplit = (FileSplit) splits.get(i);
-            TaskAttemptContext context = new TaskAttemptContext(params, new TaskAttemptID());
-                RecordReader<Partition, Iterable<S>> reader =
-                    inputFormat.createRecordReader(fsplit, context);
+            final TaskAttemptContext context = new TaskAttemptContext(params, new TaskAttemptID());
+            final RecordReader<Partition, Iterable<S>> reader =
+                inputFormat.createRecordReader(fsplit, context);
             reader.initialize(fsplit, context);
             while (reader.nextKeyValue()) {
               Iterable<S> shapes = reader.getCurrentValue();
               for (Shape s : shapes) {
-                if (queryRange.isIntersected(s)) {
-                  results++;
-                  if (output != null)
-                    output.collect((S) s);
-                }
+                results++;
+                if (output != null)
+                  output.collect((S) s);
               }
             }
             reader.close();
@@ -391,6 +243,8 @@ public class RangeQuery {
               long resultCount = rangeQueryLocal(inPath, queryRange, shape, queryParams, collector);
               resultsCounts.add(resultCount);
             } catch (IOException e) {
+              e.printStackTrace();
+            } catch (InterruptedException e) {
               e.printStackTrace();
             } finally {
               try {
