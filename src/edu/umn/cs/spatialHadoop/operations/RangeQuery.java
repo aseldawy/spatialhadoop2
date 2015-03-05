@@ -18,7 +18,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
@@ -46,10 +45,9 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
+import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.util.Parallel;
@@ -72,7 +70,7 @@ public class RangeQuery {
    * @param <T>
    */
   public static class RangeQueryMap extends MapReduceBase implements
-      Mapper<Rectangle, Writable, NullWritable, Shape> {
+      Mapper<Rectangle, Iterable<Shape>, NullWritable, Shape> {
     /**A shape that is used to filter input*/
     private Shape queryShape;
     private Rectangle queryMbr;
@@ -89,29 +87,10 @@ public class RangeQuery {
     /**
      * Map function for non-indexed blocks
      */
-    public void map(final Rectangle cellMbr, final Writable value,
+    public void map(final Rectangle cellMbr, final Iterable<Shape> value,
         final OutputCollector<NullWritable, Shape> output, Reporter reporter)
             throws IOException {
-      if (value instanceof Shape) {
-        Shape shape = (Shape) value;
-        Rectangle shapeMBR = shape.getMBR();
-        if (shapeMBR != null && shapeMBR.isIntersected(queryMbr)
-            && shape.isIntersected(queryShape)) {
-          boolean report_result = false;
-          if (cellMbr.isValid()) {
-            // Check for duplicate avoidance using reference point technique
-            double reference_x = Math.max(queryMbr.x1, shapeMBR.x1);
-            double reference_y = Math.max(queryMbr.y1, shapeMBR.y1);
-            report_result = cellMbr.contains(reference_x, reference_y);
-          } else {
-            // A heap block, report right away
-            report_result = true;
-          }
-          
-          if (report_result)
-            output.collect(dummy, shape);
-        }
-      } else if (value instanceof RTree) {
+      if (value instanceof RTree) {
         RTree<Shape> shapes = (RTree<Shape>) value;
         shapes.search(queryMbr, new ResultCollector<Shape>() {
           @Override
@@ -133,6 +112,26 @@ public class RangeQuery {
             }
           }
         });
+      } else {
+        for (Shape shape : value) {
+          Rectangle shapeMBR = shape.getMBR();
+          if (shapeMBR != null && shapeMBR.isIntersected(queryMbr)
+              && shape.isIntersected(queryShape)) {
+            boolean report_result = false;
+            if (cellMbr.isValid()) {
+              // Check for duplicate avoidance using reference point technique
+              double reference_x = Math.max(queryMbr.x1, shapeMBR.x1);
+              double reference_y = Math.max(queryMbr.y1, shapeMBR.y1);
+              report_result = cellMbr.contains(reference_x, reference_y);
+            } else {
+              // A heap block, report right away
+              report_result = true;
+            }
+            
+            if (report_result)
+              output.collect(dummy, shape);
+          }
+        }
       }
     }
   }
@@ -145,7 +144,7 @@ public class RangeQuery {
    * @param <T>
    */
   public static class RangeQueryMapNoDupAvoidance extends MapReduceBase implements
-      Mapper<Rectangle, Writable, NullWritable, Shape> {
+      Mapper<Rectangle, Iterable<Shape>, NullWritable, Shape> {
     /**A shape that is used to filter input*/
     private Shape queryShape;
     private Rectangle queryMbr;
@@ -162,15 +161,10 @@ public class RangeQuery {
     /**
      * Map function for non-indexed blocks
      */
-    public void map(final Rectangle cellMbr, final Writable value,
+    public void map(final Rectangle cellMbr, final Iterable<Shape> value,
         final OutputCollector<NullWritable, Shape> output, Reporter reporter)
             throws IOException {
-      if (value instanceof Shape) {
-        Shape shape = (Shape) value;
-        if (shape.isIntersected(queryShape)) {
-          output.collect(dummy, shape);
-        }
-      } else if (value instanceof RTree) {
+      if (value instanceof RTree) {
         RTree<Shape> shapes = (RTree<Shape>) value;
         shapes.search(queryMbr, new ResultCollector<Shape>() {
           @Override
@@ -182,6 +176,12 @@ public class RangeQuery {
             }
           }
         });
+      } else {
+        for (Shape shape : value) {
+          if (shape.isIntersected(queryShape)) {
+            output.collect(dummy, shape);
+          }
+        }
       }
     }
   }
@@ -210,7 +210,9 @@ public class RangeQuery {
     }
     
     job.setJobName("RangeQuery");
-    job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+    // Use the built-in range filter of the input format
+    job.set(SpatialInputFormat2.InputQueryRange, job.get("rect"));
+    
 
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
@@ -218,18 +220,8 @@ public class RangeQuery {
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(shape.getClass());
     FileSystem inFs = inFile.getFileSystem(job);
-    // Decide which map function to use depending on how blocks are indexed
-    // And also which input format to use
-    if (SpatialSite.isRTree(inFs, inFile)) {
-      // RTree indexed file
-      LOG.info("Searching an RTree indexed file");
-      job.setInputFormat(RTreeInputFormat.class);
-    } else {
-      // A file with no local index
-      LOG.info("Searching a non local-indexed file");
-      job.setInputFormat(ShapeInputFormat.class);
-    }
-    ShapeInputFormat.setInputPaths(job, inFile);
+    job.setInputFormat(SpatialInputFormat2.class);
+    SpatialInputFormat2.setInputPaths(job, inFile);
     
     GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inFile);
     if (gIndex != null && gIndex.isReplicated())
@@ -241,16 +233,12 @@ public class RangeQuery {
       job.setOutputFormat(TextOutputFormat.class);
       TextOutputFormat.setOutputPath(job, outputPath);
     } else {
+      // Skip writing the output for the sake of debugging
       job.setOutputFormat(NullOutputFormat.class);
     }
     
-
-    if (OperationsParams.isLocal(job, inFile)) {
-      // Enforce local execution if explicitly set by user or for small files
-      job.set("mapred.job.tracker", "local");
-      // Use multithreading too
-      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
-    }
+    // Use multithreading in case it is running locally
+    job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
     // Submit the job
     if (!params.is("background")) {

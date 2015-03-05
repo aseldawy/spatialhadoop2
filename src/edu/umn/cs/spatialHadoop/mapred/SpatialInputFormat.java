@@ -42,9 +42,12 @@ import edu.umn.cs.spatialHadoop.nasa.HTTPFileSystem;
 /**
  * An input format used with spatial data. It filters generated splits before
  * creating record readers.
+ * 
+ * This class is deprecated in favor to {@link SpatialInputFormat2}
  * @author Ahmed Eldawy
  *
  */
+@Deprecated
 public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
   
   /**
