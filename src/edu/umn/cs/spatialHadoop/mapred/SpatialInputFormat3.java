@@ -62,12 +62,13 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       }
       if (extension.equals("rtree")) {
         // File is locally indexed as RTree
-//        return (RecordReader)new RTreeRecordReader2<V>(job, (FileSplit)split, reporter);
+        return (RecordReader)new RTreeRecordReader3<V>();
       }
-      // For backward compatibility, check if the file is RTree indexed
-//      if (SpatialSite.isRTree(fsplit.getPath().getFileSystem(job), fsplit.getPath())) {
-//        return (RecordReader)new RTreeRecordReader2<V>(job, (FileSplit)split, reporter);
-//      }
+      // For backward compatibility, check if the file is RTree indexed from
+      // its signature
+      if (SpatialSite.isRTree(fsplit.getPath().getFileSystem(context.getConfiguration()), fsplit.getPath())) {
+        return (RecordReader)new RTreeRecordReader3<V>();
+      }
       // Read a non-indexed file
       return (RecordReader)new SpatialRecordReader3<V>();
   }

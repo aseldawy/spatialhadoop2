@@ -353,7 +353,7 @@ public class RangeQuery {
     final Rectangle[] queryRanges = params.getShapes("rect", new Rectangle());
 
     // All running jobs
-    Vector<Long> resultsCounts = new Vector<Long>();
+    final Vector<Long> resultsCounts = new Vector<Long>();
     Vector<Job> jobs = new Vector<Job>();
     Vector<Thread> threads = new Vector<Thread>();
 
@@ -370,11 +370,13 @@ public class RangeQuery {
         Thread thread = new Thread() {
           @Override
           public void run() {
+            FSDataOutputStream outFile = null;
+            final String newLine = System.getProperty("line.separator", "\n");
             try {
               ResultCollector<Shape> collector = null;
               if (output != null) {
                 FileSystem outFS = output.getFileSystem(queryParams);
-                final FSDataOutputStream outFile = outFS.create(output);
+                final FSDataOutputStream foutFile = outFile = outFS.create(output);
                 final Text tempText = new Text2();
                 collector = new ResultCollector<Shape>() {
                   @Override
@@ -382,16 +384,27 @@ public class RangeQuery {
                     try {
                       tempText.clear();
                       r.toText(tempText);
-                      outFile.write(tempText.getBytes(), 0, tempText.getLength());
+                      foutFile.write(tempText.getBytes(), 0, tempText.getLength());
+                      foutFile.writeChars(newLine);
                     } catch (IOException e) {
                       e.printStackTrace();
                     }
                   }
                 };
+              } else {
+                outFile = null;
               }
-              rangeQueryLocal(inPath, queryRange, shape, queryParams, collector);
+              long resultCount = rangeQueryLocal(inPath, queryRange, shape, queryParams, collector);
+              resultsCounts.add(resultCount);
             } catch (IOException e) {
               e.printStackTrace();
+            } finally {
+              try {
+                if (outFile != null)
+                  outFile.close();
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
             }
           }
         };
