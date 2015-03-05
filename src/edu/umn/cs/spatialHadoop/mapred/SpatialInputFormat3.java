@@ -121,6 +121,7 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       Configuration jobConf = job.getConfiguration();
       // The block filter associated with this job
       BlockFilter blockFilter = null;
+      System.out.println("Query in config: "+jobConf.get(InputQueryRange));
       if (jobConf.get(InputQueryRange) != null) {
         // This job requires a range query
         blockFilter = new RangeFilter(OperationsParams.getShape(jobConf, InputQueryRange));

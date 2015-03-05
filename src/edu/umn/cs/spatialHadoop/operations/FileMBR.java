@@ -202,9 +202,10 @@ public class FileMBR {
    * @param params - Additional operation parameters
    * @return
    * @throws IOException
-   */
+   * @throws InterruptedException 
+//   */
   private static <S extends Shape> Partition fileMBRMapReduce(Path[] inFiles,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, FileMBR.class);
       
     Path outputPath;
@@ -297,11 +298,11 @@ public class FileMBR {
     return p;
   }
 
-  public static Partition fileMBR(Path file, OperationsParams params) throws IOException {
+  public static Partition fileMBR(Path file, OperationsParams params) throws IOException, InterruptedException {
     return fileMBR(new Path[] {file}, params);
   }
   
-  public static Partition fileMBR(Path[] files, OperationsParams params) throws IOException {
+  public static Partition fileMBR(Path[] files, OperationsParams params) throws IOException, InterruptedException {
     Partition cachedMBR = fileMBRCached(files, params);
     if (cachedMBR != null)
       return cachedMBR;
@@ -325,8 +326,9 @@ public class FileMBR {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInput()) {
       printUsage();

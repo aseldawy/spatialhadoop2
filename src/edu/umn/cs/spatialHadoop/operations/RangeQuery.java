@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -18,8 +19,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -27,8 +26,13 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
+import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.TaskAttemptID;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -42,12 +46,8 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
-import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat3;
-import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
@@ -269,48 +269,42 @@ public class RangeQuery {
       final Shape queryRange, final S shape,
       final OperationsParams params, final ResultCollector<S> output) throws IOException {
     // Set MBR of query shape in job configuration to work with the spatial filter
-    OperationsParams.setShape(params, "rect", queryRange.getMBR());
-    params.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+    OperationsParams.setShape(params, SpatialInputFormat3.InputQueryRange, queryRange.getMBR());
     final FileSystem inFS = inPath.getFileSystem(params);
     // 1- Split the input path/file to get splits that can be processed independently
-    ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
-    JobConf job = new JobConf(params);
-    ShapeIterInputFormat.setInputPaths(job, inPath);
-    final InputSplit[] splits = inputFormat.getSplits(job, Runtime.getRuntime().availableProcessors());
+    final SpatialInputFormat3<Partition, S> inputFormat =
+        new SpatialInputFormat3<Partition, S>();
+    Job job = new Job(params);
+    SpatialInputFormat3.setInputPaths(job, inPath);
+    final List<InputSplit> splits = inputFormat.getSplits(job);
     
     // 2- Process splits in parallel
-    Vector<Long> results = Parallel.forEach(splits.length, new RunnableRange<Long>() {
+    Vector<Long> results = Parallel.forEach(splits.size(), new RunnableRange<Long>() {
       @Override
       public Long run(int i1, int i2) {
-        S privateShape = (S) shape.clone();
         long results = 0;
         for (int i = i1; i < i2; i++) {
           try {
-            FileSplit fsplit = (FileSplit) splits[i];
-            if (fsplit.getStart() == 0 && SpatialSite.isRTree(inFS, fsplit.getPath())) {
-              // Handle an RTree
-              RTree<S> rtree = SpatialSite.loadRTree(inFS, fsplit.getPath(), privateShape);
-              results += rtree.search(queryRange, output);
-              rtree.close();
-            } else {
-              // Handle a heap file
-              ShapeIterRecordReader reader = new ShapeIterRecordReader(params, fsplit);
-              reader.setShape(privateShape);
-              Rectangle key = reader.createKey();
-              ShapeIterator shapes = reader.createValue();
-              while (reader.next(key, shapes)) {
-                for (Shape s : shapes) {
-                  if (queryRange.isIntersected(s)) {
-                    results++;
-                    if (output != null)
-                      output.collect((S) s);
-                  }
+            FileSplit fsplit = (FileSplit) splits.get(i);
+            TaskAttemptContext context = new TaskAttemptContext(params, new TaskAttemptID());
+                RecordReader<Partition, Iterable<S>> reader =
+                    inputFormat.createRecordReader(fsplit, context);
+            reader.initialize(fsplit, context);
+            while (reader.nextKeyValue()) {
+              Iterable<S> shapes = reader.getCurrentValue();
+              for (Shape s : shapes) {
+                if (queryRange.isIntersected(s)) {
+                  results++;
+                  if (output != null)
+                    output.collect((S) s);
                 }
               }
-              reader.close();
             }
+            reader.close();
           } catch (IOException e) {
-            LOG.error("Error processing split "+splits[i], e);
+            LOG.error("Error processing split "+splits.get(i), e);
+          } catch (InterruptedException e) {
+            LOG.error("Error processing split "+splits.get(i), e);
           }
         }
         return results;

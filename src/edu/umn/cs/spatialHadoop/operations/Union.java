@@ -110,9 +110,10 @@ public class Union {
    *  of all shapes in it. Each line contains the category, then a comma,
    *   then the union represented as text.
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static void unionMapReduce(Path inFile, Path output,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, Union.class);
     job.setJobName("Union");
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFile.getFileSystem(job), inFile);
@@ -272,7 +273,7 @@ public class Union {
   }
 
   public static void union(Path inFile, Path outFile,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     unionMapReduce(inFile, outFile, params);
   }
 
@@ -280,8 +281,9 @@ public class Union {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (params.getPaths().length == 0 && params.is("local")) {
       // Special handling for union on an input stream

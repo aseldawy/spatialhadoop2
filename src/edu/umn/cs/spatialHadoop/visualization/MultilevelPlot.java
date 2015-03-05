@@ -435,7 +435,7 @@ public class MultilevelPlot {
   }
 
   public static RunningJob plotMapReduce(Path[] inFiles, Path outFile,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
+      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException, InterruptedException {
     Rasterizer rasterizer;
     try {
       rasterizer = rasterizerClass.newInstance();
@@ -514,7 +514,7 @@ public class MultilevelPlot {
   }
   
   public static RunningJob plot(Path[] inPaths, Path outPath,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
+      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException, InterruptedException {
     // Decide how to run it based on range of levels to generate
     String[] strLevels = params.get("levels", "7").split("\\.\\.");
     int minLevel, maxLevel;

@@ -211,7 +211,7 @@ public class Indexer {
   }
   
   private static RunningJob indexMapReduce(Path inPath, Path outPath,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, Indexer.class);
     job.setJobName("Indexer");
     
@@ -385,7 +385,7 @@ public class Indexer {
   }
   
   public static RunningJob index(Path inPath, Path outPath,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     if (OperationsParams.isLocal(new JobConf(params), inPath)) {
       indexLocal(inPath, outPath, params);
       return null;

@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop;
 import java.awt.Color;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -19,14 +20,14 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.InputSplit;
-import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -36,11 +37,9 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
-import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
+import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
-import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
@@ -770,15 +769,16 @@ public class OperationsParams extends Configuration {
 	 * 
 	 * @return <code>true</code> to run in local mode, <code>false</code> to run
 	 *         in MapReduce mode.
+	 * @throws IOException 
+	 * @throws InterruptedException 
 	 */
-	public static boolean isLocal(JobConf job, Path... input) {
-	  job = new JobConf(job); // To ensure we don't change the original
+	public static boolean isLocal(Configuration jobConf, Path... input) throws IOException, InterruptedException {
 		final boolean LocalProcessing = true;
 		final boolean MapReduceProcessing = false;
 
-		// Whatever is explicitly set has the highest prioerity
-		if (job.get("local") != null)
-			return job.getBoolean("local", false);
+		// Whatever is explicitly set has the highest priority
+		if (jobConf.get("local") != null)
+			return jobConf.getBoolean("local", false);
 
 		// If any of the input files are hidden, use local processing
 		for (Path inputFile : input) {
@@ -791,14 +791,15 @@ public class OperationsParams extends Configuration {
 			return MapReduceProcessing;
 		}
 
-		FileInputFormat.setInputPaths(job, input);
-		ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
-                if (job.get("rect") != null)
-                   job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+		Job job = new Job(jobConf); // To ensure we don't change the original
+		SpatialInputFormat3.setInputPaths(job, input);
+		SpatialInputFormat3<Partition, Shape> inputFormat = new SpatialInputFormat3<Partition, Shape>();
+		if (jobConf.get("rect") != null)
+		  job.getConfiguration().set(SpatialInputFormat3.InputQueryRange, jobConf.get("rect"));
 		
 		try {
-			InputSplit[] splits = inputFormat.getSplits(job, 1);
-			if (splits.length > MaxSplitsForLocalProcessing)
+			List<InputSplit> splits = inputFormat.getSplits(job);
+			if (splits.size() > MaxSplitsForLocalProcessing)
 				return MapReduceProcessing;
 
 			long totalSize = 0;

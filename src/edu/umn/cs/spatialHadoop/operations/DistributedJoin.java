@@ -568,10 +568,11 @@ public class DistributedJoin {
 	 * @param fStatus
 	 * @param gIndexes
 	 * @throws IOException
+	 * @throws InterruptedException 
 	 */
 	protected static void repartitionStep(final Path[] files,
 			int file_to_repartition, OperationsParams params)
-			throws IOException {
+			throws IOException, InterruptedException {
 
 		// Do the repartition step
 		long t1 = System.currentTimeMillis();
@@ -1006,10 +1007,11 @@ public class DistributedJoin {
 	 * @param output
 	 * @return
 	 * @throws IOException
+	 * @throws InterruptedException 
 	 */
 	@SuppressWarnings("unchecked")
 	public static long distributedJoinSmart(final Path[] inputFiles,
-			Path userOutputPath, OperationsParams params) throws IOException {
+			Path userOutputPath, OperationsParams params) throws IOException, InterruptedException {
 		Path[] originalInputFiles = inputFiles.clone();
 		FileSystem outFs = inputFiles[0].getFileSystem(params);
 		Path outputPath = userOutputPath;
@@ -1182,7 +1184,7 @@ public class DistributedJoin {
 		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
 
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) throws IOException, InterruptedException {
 		OperationsParams params = new OperationsParams(
 				new GenericOptionsParser(args));
 		Path[] allFiles = params.getPaths();

@@ -95,8 +95,9 @@ public class SVGPlot {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     System.setProperty("java.awt.headless", "true");
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {

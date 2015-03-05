@@ -279,13 +279,14 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
    * @param rtree
    * @param overwrite
    * @throws IOException
+	 * @throws InterruptedException 
    * @deprecated this method is replaced with
    *   {@link #repartitionMapReduce(Path, Path, OperationsParams)}
    */
   @Deprecated
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, String sindex,
-      boolean overwrite) throws IOException {
+      boolean overwrite) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams();
     if (stockShape != null)
       params.setClass("shape", stockShape.getClass(), Shape.class);
@@ -296,7 +297,7 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
   }
   
   public static void repartitionMapReduce(Path inFile, Path outPath, CellInfo[] cellInfos, 
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
     Shape stockShape = params.getShape("shape");
@@ -533,6 +534,7 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
    * @param sindex
    * @param overwrite
    * @throws IOException
+   * @throws InterruptedException 
    * @deprecated this method is replaced with
    *   {@link #repartitionLocal(Path, Path, OperationsParams)}
    */
@@ -540,7 +542,7 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
   public static <S extends Shape> void repartitionLocal(Path inFile,
       Path outFile, S stockShape, long blockSize, String sindex,
       boolean overwrite)
-          throws IOException {
+          throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams();
     if (stockShape != null)
       params.setClass("shape", stockShape.getClass(), Shape.class);
@@ -552,7 +554,7 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
   
   @SuppressWarnings("deprecation")
 public static <S extends Shape> void repartitionLocal(Path inFile,
-      Path outFile, OperationsParams params) throws IOException {
+      Path outFile, OperationsParams params) throws IOException, InterruptedException {
     String sindex = params.get("sindex");
     long blockSize = params.getSize("blocksize");
 
@@ -659,9 +661,10 @@ public static <S extends Shape> void repartitionLocal(Path inFile,
    * @param outputPath
    * @param params
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static void repartition(Path inFile, Path outputPath,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, FileMBR.class);
     FileInputFormat.addInputPath(job, inFile);
     ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();

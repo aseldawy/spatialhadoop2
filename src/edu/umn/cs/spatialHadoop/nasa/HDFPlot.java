@@ -65,8 +65,9 @@ public class HDFPlot {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] input = params.getInputPaths();
     Path output = params.getOutputPath();

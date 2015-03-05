@@ -58,7 +58,7 @@ public class RepartitionTemporal extends Repartition {
 	}
 
 	public static void repartitionMapReduce(Path[] inputPaths, Path outputPath,
-			OperationsParams params) throws IOException {
+			OperationsParams params) throws IOException, InterruptedException {
 		String sindex = params.get("sindex");
 		boolean overwrite = params.is("overwrite");
 		Shape stockShape = params.getShape("shape");
@@ -227,7 +227,7 @@ public class RepartitionTemporal extends Repartition {
 
 	private static void bulkLoadSpatioTemporalIndexesLevel(
 			Path indexLevelHomePath, Path[] inputPathDirs, String indexLevel,
-			OperationsParams params) throws IOException {
+			OperationsParams params) throws IOException, InterruptedException {
 		LOG.info("Needs to index/re-index " + inputPathDirs.length + " "
 				+ indexLevel);
 
@@ -256,7 +256,7 @@ public class RepartitionTemporal extends Repartition {
 
 	private static void bulkLoadSpatioTemporalIndexes(
 			TemporalIndexManager temporalIndexManager, OperationsParams params)
-			throws IOException {
+			throws IOException, InterruptedException {
 
 		bulkLoadSpatioTemporalIndexesLevel(params.getPaths()[0],
 				temporalIndexManager.getNeededDailyIndexes(), "daily", params);
@@ -283,7 +283,7 @@ public class RepartitionTemporal extends Repartition {
 		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
 
-	public static void main(String[] args) throws IOException, ParseException {
+	public static void main(String[] args) throws IOException, ParseException, InterruptedException {
 		OperationsParams params = new OperationsParams(
 				new GenericOptionsParser(args), false);
 

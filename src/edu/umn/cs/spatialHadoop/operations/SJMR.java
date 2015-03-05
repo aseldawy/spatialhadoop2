@@ -344,7 +344,7 @@ public class SJMR {
   }
 
   public static <S extends Shape> long sjmr(Path[] inFiles,
-      Path userOutputPath, OperationsParams params) throws IOException {
+      Path userOutputPath, OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, SJMR.class);
     
     LOG.info("SJMR journey starts ....");
@@ -445,8 +445,9 @@ public class SJMR {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
 	OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] allFiles = params.getPaths();
     if (allFiles.length < 2) {
