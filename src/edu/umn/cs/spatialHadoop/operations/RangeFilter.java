@@ -1,6 +1,6 @@
 package edu.umn.cs.spatialHadoop.operations;
 
-import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.conf.Configuration;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
@@ -29,7 +29,7 @@ public class RangeFilter extends DefaultBlockFilter {
   }
 
   @Override
-  public void configure(JobConf job) {
+  public void configure(Configuration job) {
     // Override query range in the job configuration if specified
     this.queryRange = OperationsParams.getShape(job, QueryRange, this.queryRange);
   }

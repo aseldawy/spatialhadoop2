@@ -10,7 +10,7 @@ package edu.umn.cs.spatialHadoop.mapred;
 
 import java.util.Vector;
 
-import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.conf.Configuration;
 
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
@@ -34,9 +34,9 @@ public class CombineBlockFilter extends DefaultBlockFilter {
   }
   
   @Override
-  public void configure(JobConf job) {
+  public void configure(Configuration conf) {
     for (BlockFilter bf : blockFilters)
-      bf.configure(job);
+      bf.configure(conf);
   }
 
   @Override
