@@ -50,7 +50,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
-import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
+import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
@@ -342,9 +342,10 @@ public class SingleLevelPlot {
    * @param params
    * @return
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static RunningJob plotMapReduce(Path[] inFiles, Path outFile,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
+      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException, InterruptedException {
     Rasterizer rasterizer;
     try {
       rasterizer = rasterizerClass.newInstance();
@@ -446,7 +447,7 @@ public class SingleLevelPlot {
   }
 
   public static void plotLocal(Path[] inFiles, Path outFile,
-      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
+      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException, InterruptedException {
 
     boolean vflip = params.getBoolean("vflip", true);
 
@@ -576,9 +577,10 @@ public class SingleLevelPlot {
    * @param rasterizerClass
    * @param params
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static RunningJob plot(Path[] inFiles, Path outFile,
-      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
+      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException, InterruptedException {
     if (OperationsParams.isLocal(new JobConf(params), inFiles)) {
       plotLocal(inFiles, outFile, rasterizerClass, params);
       return null;

@@ -8,7 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.mapred;
 
-import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.conf.Configuration;
 
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
@@ -26,7 +26,7 @@ public interface BlockFilter {
    * Configure the block filter the first time it is created.
    * @param conf
    */
-  public void configure(JobConf job);
+  public void configure(Configuration conf);
 
   /**
    * Selects the blocks that need to be processed b a MapReduce job.

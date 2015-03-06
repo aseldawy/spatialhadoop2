@@ -32,9 +32,9 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.RecordReader;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 
@@ -169,7 +169,7 @@ public class HDFRecordReader implements RecordReader<NASADataset, Iterable<NASAS
         }
       }
       
-      this.value = (NASAShape) SpatialSite.createStockShape(job);
+      this.value = (NASAShape) OperationsParams.getShape(job, "shape", new NASARectangle());
       
       if (fillValueStr == null) {
         this.skipFillValue = false;

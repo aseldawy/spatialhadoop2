@@ -8,7 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.mapred;
 
-import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.conf.Configuration;
 
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
@@ -23,7 +23,7 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 public class DefaultBlockFilter implements BlockFilter {
   
   @Override
-  public void configure(JobConf job) {
+  public void configure(Configuration conf) {
     // Do nothing
   }
 

@@ -9,21 +9,16 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
-import edu.umn.cs.spatialHadoop.nasa.DistributedAggregateSpatioTemporalIndexer;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot2;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
-import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
 import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
-import edu.umn.cs.spatialHadoop.temporal.RepartitionTemporal;
+import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
 
 /**
  * The main entry point to all queries.

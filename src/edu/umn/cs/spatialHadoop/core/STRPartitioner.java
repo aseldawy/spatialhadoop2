@@ -15,17 +15,12 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Comparator;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-
 /**
  * A partitioner that partitioner data using the STR bulk loading algorithm.
  * @author Ahmed Eldawy
  *
  */
 public class STRPartitioner extends Partitioner {
-  private static final Log LOG = LogFactory.getLog(STRPartitioner.class);
-
   /**MBR of the input file*/
   private Rectangle mbr;
   /**Number of rows and columns*/

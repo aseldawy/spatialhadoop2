@@ -236,9 +236,10 @@ public class HDFPlot2 {
    * @param params
    * @return
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static RunningJob plotWaterMask(Path[] inFiles, Path outFile,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     // Restrict to HDF files if working on a directory
     for (int i = 0; i < inFiles.length; i++) {
       if (!inFiles[i].getName().toLowerCase().endsWith(".hdf"))
@@ -253,7 +254,7 @@ public class HDFPlot2 {
   }
   
   public static RunningJob plotHeatMap(Path[] inFiles, Path outFile,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     // Restrict to HDF files if working on a directory
     for (int i = 0; i < inFiles.length; i++) {
       if (!inFiles[i].getName().toLowerCase().endsWith(".hdf"))
@@ -298,8 +299,9 @@ public class HDFPlot2 {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     System.setProperty("java.awt.headless", "true");
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     if (!params.checkInputOutput()) {

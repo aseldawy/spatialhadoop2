@@ -82,8 +82,9 @@ public class RecordCount {
    * @param inFile
    * @return
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static long recordCountMapReduce(FileSystem fs, Path inFile) throws IOException {
+  public static long recordCountMapReduce(FileSystem fs, Path inFile) throws IOException, InterruptedException {
     JobConf job = new JobConf(RecordCount.class);
     
     Path outputPath = new Path(inFile.toUri().getPath()+".linecount");
@@ -203,8 +204,9 @@ public class RecordCount {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     JobConf conf = new JobConf(RecordCount.class);
     Path inputFile = params.getPath();

@@ -35,8 +35,8 @@ import org.mortbay.log.Log;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
+import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -94,8 +94,9 @@ public class MakeHDFVideo {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {
       System.exit(1);

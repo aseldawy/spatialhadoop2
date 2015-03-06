@@ -73,7 +73,7 @@ public class RandomSpatialGenerator {
     } else if (sindex.equals("grid")) {
       GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
       FileSystem fs = outFile.getFileSystem(job);
-      long blocksize = fs.getDefaultBlockSize();
+      long blocksize = fs.getDefaultBlockSize(outFile);
       long size = params.getSize("size");
       int numOfCells = Repartition.calculateNumberOfPartitions(job, size, fs, outFile, blocksize);
       gridInfo.calculateCellDimensions(numOfCells);
@@ -147,7 +147,7 @@ public class RandomSpatialGenerator {
   private static void generateFileLocal(Path outFile, OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, RandomSpatialGenerator.class);
     FileSystem outFS = outFile.getFileSystem(params);
-    long blocksize = outFS.getDefaultBlockSize();
+    long blocksize = outFS.getDefaultBlockSize(outFile);
     String sindex = params.get("sindex");
     Rectangle mbr = params.getShape("mbr").getMBR();
     long totalSize = params.getSize("size");

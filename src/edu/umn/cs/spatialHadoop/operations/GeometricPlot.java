@@ -108,9 +108,10 @@ public class GeometricPlot {
    * @param outFile
    * @param params
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static void plot(Path[] inFiles, Path outFile, OperationsParams params)
-      throws IOException {
+      throws IOException, InterruptedException {
     if (params.getBoolean("pyramid", false)) {
       MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
     } else {
@@ -121,8 +122,9 @@ public class GeometricPlot {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     System.setProperty("java.awt.headless", "true");
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {

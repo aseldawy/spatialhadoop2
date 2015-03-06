@@ -15,8 +15,6 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Vector;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -30,8 +28,6 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  *
  */
 public class HilbertCurvePartitioner extends Partitioner {
-  private static final Log LOG = LogFactory.getLog(HilbertCurvePartitioner.class);
-
   /**Splits along the Hilbert curve*/
   protected int[] splits;
   

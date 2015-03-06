@@ -43,6 +43,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * Combines all the configuration needed for SpatialHadoop.
@@ -153,7 +154,7 @@ public class SpatialSite {
     ClassLoader loader = my_class.getClassLoader();
     String class_file = my_class.getName().replaceAll("\\.", "/") + ".class";
     try {
-      for(Enumeration itr = loader.getResources(class_file);
+      for(Enumeration<URL> itr = loader.getResources(class_file);
           itr.hasMoreElements();) {
         URL url = (URL) itr.nextElement();
         if ("jar".equals(url.getProtocol())) {
@@ -371,6 +372,9 @@ public class SpatialSite {
    * @throws IOException
    */
   public static boolean isRTree(FileSystem fs, Path path) throws IOException {
+    if (FileUtil.getExtensionWithoutCompression(path).equals("rtree"))
+      return true;
+    
     FileStatus file = fs.getFileStatus(path);
     Path fileToCheck;
     if (file.isDir()) {

@@ -45,7 +45,6 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.nasa.NASADataset;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAShape;
-import edu.umn.cs.spatialHadoop.operations.RangeQuery.RangeFilter;
 
 /**
  * Computes the minimum and maximum values for a set of input HDF files.

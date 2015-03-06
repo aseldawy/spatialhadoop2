@@ -209,9 +209,9 @@ public class Skyline {
     private Direction dir;
     
     @Override
-    public void configure(JobConf job) {
-      super.configure(job);
-      dir = OperationsParams.getDirection(job, "dir", Direction.MaxMax);
+    public void configure(Configuration conf) {
+      super.configure(conf);
+      dir = OperationsParams.getDirection(conf, "dir", Direction.MaxMax);
     }
     
     @Override
