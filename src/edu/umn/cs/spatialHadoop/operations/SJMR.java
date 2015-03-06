@@ -473,7 +473,7 @@ public class SJMR {
       throw new RuntimeException("Input file does not exist");
     }
     
-    if (params.get("repartition-only").equals("yes")) {
+    if (params.get("repartition-only", "no").equals("yes")) {
 		System.out.println("Repartition-only is true");
 		isReduceInactive = true;
 	}

@@ -580,8 +580,8 @@ public class KNN {
   
   public static Job knn(Path inFile, Path outFile, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
-    if (OperationsParams.isLocal(params, inFile)) {
-      // Process without MapReduce
+    if (params.getBoolean("local", true)) {
+      // Process without MapReduce. The default for KNN regardless of input size
       knnLocal(inFile, outFile, params);
       return null;
     } else {

@@ -178,15 +178,12 @@ public class SpatialRecordReader3<V extends Shape> extends
    * @throws IOException
    */
   protected boolean nextLine(Text value) throws IOException {
-    long pos1 = getPos();
     while (getPos() <= end) {
       value.clear();
-      int b = 0;
-      
+
       // Read the first line from stream
       Text temp = new Text();
-      b += lineReader.readLine(temp);
-      if (b == 0) {
+      if (lineReader.readLine(temp) == 0) {
         // Indicates an end of stream
         return false;
       }
@@ -203,7 +200,7 @@ public class SpatialRecordReader3<V extends Shape> extends
     return false;
   }
   
-  public boolean isMatched(Shape shape) {
+  protected boolean isMatched(Shape shape) {
     Rectangle shapeMBR = shape.getMBR();
     // Match with the query
     if (inputQueryRange != null && !shape.isIntersected(inputQueryRange))
