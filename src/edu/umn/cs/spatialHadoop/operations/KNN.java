@@ -343,7 +343,6 @@ public class KNN {
     final Point queryPoint = (Point) params.getShape("point");
     final int k = params.getInt("k", 1);
     
-    Shape range_for_this_iteration = new Point(queryPoint.x, queryPoint.y);
     final IntWritable additional_blocks_2b_processed = new IntWritable(0);
     long resultCount;
     int iterations = 0;
@@ -362,6 +361,9 @@ public class KNN {
     Configuration templateConf = job.getConfiguration();
 
     FileSystem outFs = outputPath.getFileSystem(params);
+    // Start with the query point to select all partitions overlapping with it
+    Shape range_for_this_iteration = new Point(queryPoint.x, queryPoint.y);
+    
     do {
       job = new Job(templateConf);
       // Delete results of last iteration if not first iteration
@@ -370,7 +372,8 @@ public class KNN {
         
       LOG.info("Running iteration: "+(++iterations));
       // Set query range for the SpatialInputFormat
-      OperationsParams.setShape(job.getConfiguration(), "rect", range_for_this_iteration);
+      OperationsParams.setShape(job.getConfiguration(), RangeFilter.QueryRange,
+          range_for_this_iteration);
 
       // Submit the job
       if (params.is("background")) {
