@@ -11,8 +11,10 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.Vector;
@@ -21,6 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -34,20 +37,24 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
-import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.TaskAttemptID;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.PriorityQueue;
+import org.apache.pig.parser.AliasMasker.output_clause_return;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Circle;
@@ -65,8 +72,8 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.RTreeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 
 /**
  * Performs k Nearest Neighbor (kNN) query over a spatial file.
@@ -82,14 +89,15 @@ public class KNN {
 
   /**Reference to the last submitted kNN job*/
   public static RunningJob lastRunningJob;
-  
-  /**Configuration line name for query point*/
-  public static final String QUERY_POINT =
-      "edu.umn.cs.spatialHadoop.operations.KNN.QueryPoint";
 
-  public static final String K = "KNN.K";
-
-  public static class TextWithDistance implements Writable, Cloneable, TextSerializable {
+  /***
+   * Stores a shape text along with its distance to the query point. Notice that
+   * it cannot be a ShapeWithDistance because we cannot easily deserialize it
+   * unless we know the right class of the shape.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class TextWithDistance implements Writable, Cloneable, TextSerializable, Comparable<TextWithDistance> {
     public double distance; 
     public Text text = new Text();
     
@@ -143,6 +151,11 @@ public class KNN {
       c.text.set(this.text);
       return c;
     }
+
+    @Override
+    public int compareTo(TextWithDistance o) {
+      return this.distance < o.distance ? -1 : (this.distance > o.distance ? +1 : 0);
+    }
   }
   
   /**
@@ -163,9 +176,8 @@ public class KNN {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      queryPoint = new Point();
-      queryPoint.fromText(new Text(job.get(QUERY_POINT)));
-      k = job.getInt(K, 1);
+      queryPoint = (Point) OperationsParams.getShape(job, "point");
+      k = job.getInt("k", 1);
     }
 
     /**
@@ -225,12 +237,12 @@ public class KNN {
    * @author eldawy
    *
    */
-  public static class KNNObjects extends PriorityQueue<TextWithDistance> {
+  public static class KNNObjects<S extends Comparable<S>> extends PriorityQueue<S> {
     /**
      * A hashset of all elements currently in the heap. Used to avoid inserting
      * the same object twice.
      */
-    Set<TextWithDistance> allElements = new HashSet<TextWithDistance>();
+    Set<S> allElements = new HashSet<S>();
     /**Capacity of the queue*/
     private int capacity;
     
@@ -240,15 +252,15 @@ public class KNN {
     }
     
     /**
-     * Keep elements sorted by distance in descending order (Max heap)
+     * Keep elements sorted in descending order (Max heap)
      */
     @Override
     protected boolean lessThan(Object a, Object b) {
-      return ((TextWithDistance)a).distance >= ((TextWithDistance)b).distance;
+      return ((S)a).compareTo((S)b) > 0;
     }
     
     @Override
-    public boolean insert(TextWithDistance newElement) {
+    public boolean insert(S newElement) {
       // Skip element if already there
       if (allElements.contains(newElement))
         return false;
@@ -279,9 +291,8 @@ public class KNN {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      queryPoint = new Point();
-      queryPoint.fromText(new Text(job.get(QUERY_POINT)));
-      k = job.getInt(K, 1);
+      queryPoint = (Point) OperationsParams.getShape(job, "point");
+      k = job.getInt("k", 1);
     }
 
     @Override
@@ -290,7 +301,7 @@ public class KNN {
             throws IOException {
       if (k == 0)
         return;
-      PriorityQueue<TextWithDistance> knn = new KNNObjects(k);
+      PriorityQueue<TextWithDistance> knn = new KNNObjects<TextWithDistance>(k);
       while (values.hasNext()) {
         TextWithDistance t = values.next();
         knn.insert(t.clone());
@@ -319,8 +330,7 @@ public class KNN {
    * @throws IOException
    */
   private static <S extends Shape> long knnMapReduce(Path inputPath,
-      Path userOutputPath, final Point queryPoint, int k,
-      OperationsParams params) throws IOException {
+      Path userOutputPath, OperationsParams params) throws IOException {
     JobConf job = new JobConf(params, KNN.class);
     
     job.setJobName("KNN");
@@ -344,13 +354,13 @@ public class KNN {
     
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(TextWithDistance.class);
-    job.set(QUERY_POINT, queryPoint.toText(new Text()).toString());
-    job.setInt(K, k);
     
     job.setReducerClass(KNNReduce.class);
     job.setNumReduceTasks(1);
     
     job.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+    final Point queryPoint = (Point) params.getShape("point");
+    final int k = params.getInt("k", 1);
     
     Shape range_for_this_iteration = new Point(queryPoint.x, queryPoint.y);
     final IntWritable additional_blocks_2b_processed = new IntWritable(0);
@@ -474,66 +484,150 @@ public class KNN {
     return resultCount;
   }
   
-  private static<S extends Shape> long knnLocal(Path inFile, Path outPath,
-      Point queryPoint, int k, OperationsParams params)
-      throws IOException {
-    // TODO sort partitions by distance and keep processing until the result
-    // is correct
-    JobConf job = new JobConf(params, KNN.class);
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-    ShapeInputFormat.addInputPath(job, inFile);
-    InputSplit[] splits = inputFormat.getSplits(job, 1);
-
-    // Top-K answer is retained in this array
-    TextWithDistance[] knn = new TextWithDistance[k];
+  /**Stores a shape along with its distance from the query point*/
+  static class ShapeWithDistance <S extends Shape> implements Comparable<ShapeWithDistance<S>> {
+    public S shape;
+    public double distance;
     
-    for (InputSplit split : splits) {
-      RecordReader<Rectangle, Shape> reader = inputFormat.getRecordReader(split, job, null);
-      
-      Rectangle key = (Rectangle) reader.createKey();
-      Shape shape = (Shape) reader.createValue();
-      
-      while (reader.next(key, shape)) {
-        double distance = shape.distanceTo(queryPoint.x, queryPoint.y);
-        int i = k - 1;
-        while (i >= 0 && (knn[i] == null || knn[i].distance > distance)) {
-          i--;
-        }
-        i++;
-        if (i < k) {
-          if (knn[i] != null) {
-            for (int j = k - 1; j > i; j--)
-              knn[j] = knn[j-1];
-          }
-          
-          knn[i] = new TextWithDistance();
-          shape.toText(knn[i].text);
-          knn[i].distance = distance;
-        }
-      }
-      
-      reader.close();
+    public ShapeWithDistance() {
     }
     
-    long resultCount = knn.length;
-    return resultCount;
+    public ShapeWithDistance(S s, double d) {
+      this.shape = s;
+      this.distance = d;
+    }
+
+    @Override
+    public int compareTo(ShapeWithDistance<S> o) {
+      return this.distance < o.distance? -1 : (this.distance > o.distance? +1 : 0);
+    }
+    
+    @Override
+    public String toString() {
+      return shape.toString() + " @"+distance;
+    }
   }
   
-  public static long knn(Path inFile, Path outFile, Point pt, int k,
-      OperationsParams params) throws IOException {
-    JobConf job = new JobConf(params, FileMBR.class);
-    FileInputFormat.addInputPath(job, inFile);
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
+  private static<S extends Shape> long knnLocal(Path inFile, Path outPath,
+      OperationsParams params) throws IOException, InterruptedException {
+    int iterations = 0;
+    FileSystem fs = inFile.getFileSystem(params);
+    Point queryPoint = (Point) OperationsParams.getShape(params, "point");
+    int k = params.getInt("k", 1);
+    // Top-k objects are retained in this object
+    PriorityQueue<ShapeWithDistance<S>> knn = new KNNObjects<ShapeWithDistance<S>>(k);
 
-    boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
-    boolean isLocal = params.is("local", autoLocal);
+    SpatialInputFormat3<Partition, Shape> inputFormat =
+        new SpatialInputFormat3<Partition, Shape>();
+    TaskAttemptContext context = new TaskAttemptContext(params, new TaskAttemptID());
     
-    if (isLocal) {
+    final GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, inFile);
+    double kthDistance = Double.MAX_VALUE;
+    if (gIndex != null) {
+      // There is a global index, use it
+      PriorityQueue<ShapeWithDistance<Partition>> partitionsToProcess =
+          new PriorityQueue<KNN.ShapeWithDistance<Partition>>() {
+        {
+          initialize(gIndex.size());
+        }
+        
+        @Override
+        protected boolean lessThan(Object a, Object b) {
+          return ((ShapeWithDistance<Partition>)a).distance <
+              ((ShapeWithDistance<Partition>)b).distance;
+        }
+      };
+      for (Partition p : gIndex) {
+        double distance = p.getMinDistanceTo(queryPoint.x, queryPoint.y);
+        partitionsToProcess.insert(new ShapeWithDistance<Partition>(p.clone(), distance));
+      }
+      
+      while (partitionsToProcess.size() > 0 &&
+          partitionsToProcess.top().distance <= kthDistance) {
+        
+        ShapeWithDistance<Partition> partitionToProcess = partitionsToProcess.pop();
+        // Process this partition
+        Path partitionPath = new Path(inFile, partitionToProcess.shape.filename);
+        long length = fs.getFileStatus(partitionPath).getLen();
+        FileSplit fsplit = new FileSplit(partitionPath, 0, length, new String[0]);
+        RecordReader<Partition, Iterable<Shape>> reader =
+            inputFormat.createRecordReader(fsplit, context);
+        reader.initialize(fsplit, context);
+        iterations++;
+        
+        while (reader.nextKeyValue()) {
+          Iterable<Shape> shapes = reader.getCurrentValue();
+          for (Shape shape : shapes) {
+            double distance = shape.distanceTo(queryPoint.x, queryPoint.y);
+            if (distance <= kthDistance)
+              knn.insert(new ShapeWithDistance<S>((S)shape.clone(), distance));
+          }
+        }
+        reader.close();
+        
+        if (knn.size() >= k)
+          kthDistance = knn.top().distance;
+      }
+    } else {
+      // No global index, have to scan the whole file
+      Job job = new Job(params);
+      SpatialInputFormat3.addInputPath(job, inFile);
+      List<InputSplit> splits = inputFormat.getSplits(job);
+      
+      for (InputSplit split : splits) {
+        RecordReader<Partition, Iterable<Shape>> reader =
+            inputFormat.createRecordReader(split, context);
+        reader.initialize(split, context);
+        iterations++;
+        
+        while (reader.nextKeyValue()) {
+          Iterable<Shape> shapes = reader.getCurrentValue();
+          for (Shape shape : shapes) {
+            double distance = shape.distanceTo(queryPoint.x, queryPoint.y);
+            knn.insert(new ShapeWithDistance<S>((S)shape.clone(), distance));
+          }
+        }
+        
+        reader.close();
+      }
+      if (knn.size() >= k)
+        kthDistance = knn.top().distance;
+    }
+    long resultCount = knn.size();
+    if (outPath != null && params.getBoolean("output", true)) {
+      FileSystem outFS = outPath.getFileSystem(params);
+      PrintStream ps = new PrintStream(outFS.create(outPath));
+      Vector<ShapeWithDistance<S>> resultsOrdered =
+          new Vector<ShapeWithDistance<S>>((int) resultCount);
+      resultsOrdered.setSize((int) resultCount);
+      while (knn.size() > 0) {
+        ShapeWithDistance<S> nextAnswer = knn.pop();
+        resultsOrdered.set(knn.size(), nextAnswer);
+      }
+      
+      Text text = new Text();
+      for (ShapeWithDistance<S> answer : resultsOrdered) {
+        text.clear();
+        TextSerializerHelper.serializeDouble(answer.distance, text, ',');
+        answer.shape.toText(text);
+        ps.println(text);
+      }
+      ps.close();
+    }
+    TotalIterations.addAndGet(iterations);
+    return resultCount;
+    
+  }
+  
+  public static long knn(Path inFile, Path outFile,
+      OperationsParams params) throws IOException, InterruptedException {
+    if (OperationsParams.isLocal(params, inFile)) {
       // Process without MapReduce
-      return knnLocal(inFile, outFile, pt, k, params);
+      return knnLocal(inFile, outFile, params);
     } else {
       // Process with MapReduce
-      return knnMapReduce(inFile, outFile, pt, k, params);
+      return knnMapReduce(inFile, outFile, params);
+      
     }
   }
   
@@ -621,10 +715,13 @@ public class KNN {
         public void run() {
           try {
             Point query_point = queryPoints[threads.indexOf(this)];
-            long result_count = knn(inputFile, outputPath,
-                query_point, k, params);
+            OperationsParams newParams = new OperationsParams(params);
+            OperationsParams.setShape(newParams, "point", query_point);
+            long result_count = knn(inputFile, outputPath, params);
             results.add(result_count);
           } catch (IOException e) {
+            e.printStackTrace();
+          } catch (InterruptedException e) {
             e.printStackTrace();
           }
         }

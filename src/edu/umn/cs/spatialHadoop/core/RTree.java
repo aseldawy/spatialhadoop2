@@ -732,6 +732,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
 
     @Override
     public T next() {
+      if (!hasNext())
+        return null;
       try {
         offset += reader.readLine(line);
         _stockObject.fromText(line);
