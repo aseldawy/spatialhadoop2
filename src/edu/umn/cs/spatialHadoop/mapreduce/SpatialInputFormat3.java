@@ -131,8 +131,9 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       Class<? extends BlockFilter> blockFilterClass =
           jobConf.getClass(SpatialSite.FilterClass, null, BlockFilter.class);
       if (blockFilterClass != null) {
-        blockFilter = new CombineBlockFilter(blockFilter,
-            blockFilterClass.newInstance());
+        BlockFilter userBlockFilter = blockFilterClass.newInstance();
+        blockFilter = blockFilter == null ? userBlockFilter :
+          new CombineBlockFilter(blockFilter, userBlockFilter);
       }
       if (blockFilter == null) {
         // No block filter specified by user
