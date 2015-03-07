@@ -18,6 +18,7 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -262,23 +263,40 @@ public class Indexer {
     }
   }
 
-  private static Partitioner createPartitioner(Path in, Path out, JobConf job,
-      String index) throws IOException {
+  public static Partitioner createPartitioner(Path in, Path out,
+      Configuration job, String partitionerName) throws IOException {
+    return createPartitioner(new Path[] {in}, out, job, partitionerName);
+  }
+
+  /***
+   * Create a partitioner for a particular job
+   * @param in
+   * @param out
+   * @param job
+   * @param partitionerName
+   * @return
+   * @throws IOException
+   */
+  public static Partitioner createPartitioner(Path[] ins, Path out,
+      Configuration job, String partitionerName) throws IOException {
     try {
       Partitioner partitioner = null;
       Class<? extends Partitioner> partitionerClass =
-          PartitionerClasses.get(index.toLowerCase());
+          PartitionerClasses.get(partitionerName.toLowerCase());
       if (partitionerClass == null) {
-        throw new RuntimeException("Unknown index type '"+index+"'");
+        throw new RuntimeException("Unknown index type '"+partitionerName+"'");
       }
-      boolean replicate = PartitionerReplicate.get(index.toLowerCase());
+      boolean replicate = PartitionerReplicate.get(partitionerName.toLowerCase());
       job.setBoolean("replicate", replicate);
       partitioner = partitionerClass.newInstance();
       
       long t1 = System.currentTimeMillis();
       final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
       // Determine number of partitions
-      long inSize = FileUtil.getPathSize(in.getFileSystem(job), in);
+      long inSize = 0;
+      for (Path in : ins) {
+        inSize += FileUtil.getPathSize(in.getFileSystem(job), in);
+      }
       long estimatedOutSize = (long) (inSize * (1.0 + job.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f)));
       FileSystem outFS = out.getFileSystem(job);
       long outBlockSize = outFS.getDefaultBlockSize(out);
@@ -300,7 +318,7 @@ public class Indexer {
       params2.setFloat("ratio", sample_ratio);
       params2.setLong("size", sample_size);
       params2.setClass("outshape", Point.class, Shape.class);
-      Sampler.sample(new Path[] {in}, resultCollector, params2);
+      Sampler.sample(ins, resultCollector, params2);
       long t2 = System.currentTimeMillis();
       System.out.println("Total time for sampling in millis: "+(t2-t1));
       LOG.info("Finished reading a sample of "+sample.size()+" records");

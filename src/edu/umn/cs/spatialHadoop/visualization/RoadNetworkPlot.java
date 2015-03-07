@@ -159,8 +159,9 @@ public class RoadNetworkPlot {
    * @param args
    * @throws IOException 
    * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
     System.setProperty("java.awt.headless", "true");
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {

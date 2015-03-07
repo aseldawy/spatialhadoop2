@@ -10,14 +10,13 @@ package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.IOException;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.FileOutputFormat;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.RecordWriter;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.mapreduce.RecordWriter;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 /**
  * Writes raster layers as images to the output file
@@ -31,24 +30,25 @@ public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
    * @author Ahmed Eldawy
    *
    */
-  class ImageRecordWriter implements RecordWriter<Object, RasterLayer> {
-    /**Progress of the output format*/
-    private Progressable progress;
+  class ImageRecordWriter extends RecordWriter<Object, RasterLayer> {
     /**Rasterizer used to merge intermediate raster layers*/
     private Rasterizer rasterizer;
     private Path outPath;
     private FileSystem outFS;
     private int rasterLayersWritten;
     private boolean vflip;
+    /**The associated reduce task. Used to report progress*/
+    private TaskAttemptContext task;
 
-    public ImageRecordWriter(FileSystem fs, Path taskOutputPath, JobConf job,
-        Progressable progress) throws IOException {
-      this.progress = progress;
-      this.rasterizer = Rasterizer.getRasterizer(job);
+    public ImageRecordWriter(FileSystem fs, Path taskOutputPath,
+        TaskAttemptContext task) throws IOException {
+      Configuration conf = task.getConfiguration();
+      this.task = task;
+      this.rasterizer = Rasterizer.getRasterizer(conf);
       this.outPath = taskOutputPath;
-      this.outFS = this.outPath.getFileSystem(job);
+      this.outFS = this.outPath.getFileSystem(conf);
       this.rasterLayersWritten = 0;
-      this.vflip = job.getBoolean("vflip", true);
+      this.vflip = conf.getBoolean("vflip", true);
     }
 
     @Override
@@ -59,21 +59,22 @@ public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
       // Write the merged raster layer
       rasterizer.writeImage(r, outFile, this.vflip);
       outFile.close();
-      progress.progress();
+      task.progress();
     }
     
     @Override
-    public void close(Reporter reporter) throws IOException {
+    public void close(TaskAttemptContext context) throws IOException,
+        InterruptedException {
+      
     }
   }
   
   @Override
   public RecordWriter<Object, RasterLayer> getRecordWriter(
-      FileSystem ignored, JobConf job, String name, Progressable progress)
-      throws IOException {
-    Path taskOutputPath = getTaskOutputPath(job, name);
-    FileSystem fs = taskOutputPath.getFileSystem(job);
-    return new ImageRecordWriter(fs, taskOutputPath, job, progress);
+      TaskAttemptContext task) throws IOException, InterruptedException {
+    Path file = getDefaultWorkFile(task, "");
+    FileSystem fs = file.getFileSystem(task.getConfiguration());
+    return new ImageRecordWriter(fs, file, task);
   }
 
 }

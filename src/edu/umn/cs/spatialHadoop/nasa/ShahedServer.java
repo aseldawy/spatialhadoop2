@@ -330,8 +330,9 @@ public class ShahedServer extends AbstractHandler {
      * Plots the image as the user requested
      * @throws IOException
      * @throws InterruptedException 
+     * @throws ClassNotFoundException 
      */
-    private byte[] plotImage() throws IOException, InterruptedException {
+    private byte[] plotImage() throws IOException, InterruptedException, ClassNotFoundException {
       this.inputURL = new Path(dataPath, datasetPath+"/"+startDate);
       Path outputPath = new Path(outDir, "image.png");
       // Launch the MapReduce job that plots the dataset

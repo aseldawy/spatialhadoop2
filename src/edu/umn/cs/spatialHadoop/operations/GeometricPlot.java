@@ -109,9 +109,10 @@ public class GeometricPlot {
    * @param params
    * @throws IOException
    * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
   public static void plot(Path[] inFiles, Path outFile, OperationsParams params)
-      throws IOException, InterruptedException {
+      throws IOException, InterruptedException, ClassNotFoundException {
     if (params.getBoolean("pyramid", false)) {
       MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
     } else {
@@ -123,8 +124,9 @@ public class GeometricPlot {
    * @param args
    * @throws IOException 
    * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
     System.setProperty("java.awt.headless", "true");
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {

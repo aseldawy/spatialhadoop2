@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -66,8 +66,9 @@ public class HDFPlot {
    * @param args
    * @throws IOException 
    * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] input = params.getInputPaths();
     Path output = params.getOutputPath();
@@ -143,14 +144,14 @@ public class HDFPlot {
     boolean overwrite = params.is("overwrite");
     boolean pyramid = params.is("pyramid");
     FileSystem outFs = output.getFileSystem(conf);
-    Vector<RunningJob> jobs = new Vector<RunningJob>();
+    Vector<Job> jobs = new Vector<Job>();
     boolean background = params.is("background");
     for (Path inputPath : matchingPaths) {
       Path outputPath = new Path(output+"/"+inputPath.getParent().getName()+
           (pyramid? "" : ".png"));
       if (overwrite || !outFs.exists(outputPath)) {
         // Need to plot
-        RunningJob rj = HDFPlot2.plotHeatMap(new Path[] {inputPath}, outputPath, params);
+        Job rj = HDFPlot2.plotHeatMap(new Path[] {inputPath}, outputPath, params);
         if (background)
           jobs.add(rj);
       }

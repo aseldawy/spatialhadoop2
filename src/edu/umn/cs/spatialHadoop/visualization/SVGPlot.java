@@ -1,5 +1,5 @@
 /***********************************************************************
-* Copyright (c) 2015 by Regents of the University of Minnesota.
+j* Copyright (c) 2015 by Regents of the University of Minnesota.
 * All rights reserved. This program and the accompanying materials
 * are made available under the terms of the Apache License, Version 2.0 which 
 * accompanies this distribution and is available at
@@ -96,8 +96,9 @@ public class SVGPlot {
    * @param args
    * @throws IOException 
    * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
     System.setProperty("java.awt.headless", "true");
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {

@@ -9,18 +9,25 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.IOException;
+import java.util.Vector;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.FileOutputFormat;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.RecordWriter;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.OutputCommitter;
+import org.apache.hadoop.mapreduce.RecordWriter;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.util.Parallel;
 
 /**
  * Writes raster layers to a binary output file
@@ -34,35 +41,37 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
    * @author Ahmed Eldawy
    *
    */
-  class RasterRecordWriter implements RecordWriter<Object, RasterLayer> {
-    /**Progress of the output format*/
-    private Progressable progress;
+  class RasterRecordWriter extends RecordWriter<Object, RasterLayer> {
     /**The output file where all raster layers are written*/
     private FSDataOutputStream outFile;
     /**Rasterizer used to merge intermediate raster layers*/
     private Rasterizer rasterizer;
     /**The raster layer resulting of merging all written raster layers*/
     private RasterLayer mergedRasterLayer;
-
-    public RasterRecordWriter(FileSystem fs, Path taskOutputPath, JobConf job,
-        Progressable progress) throws IOException {
-      this.progress = progress;
+    /**Associated task context to report progress*/
+    private TaskAttemptContext task;
+    
+    public RasterRecordWriter(FileSystem fs, Path taskOutputPath,
+        TaskAttemptContext task) throws IOException {
+      Configuration conf = task.getConfiguration();
+      this.task = task;
       this.outFile = fs.create(taskOutputPath);
-      this.rasterizer = Rasterizer.getRasterizer(job);
-      int imageWidth = job.getInt("width", 1000);
-      int imageHeight = job.getInt("height", 1000);
-      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+      this.rasterizer = Rasterizer.getRasterizer(conf);
+      int imageWidth = conf.getInt("width", 1000);
+      int imageHeight = conf.getInt("height", 1000);
+      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
       this.mergedRasterLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
     }
 
     @Override
     public void write(Object dummy, RasterLayer r) throws IOException {
       rasterizer.merge(mergedRasterLayer, r);
-      progress.progress();
+      task.progress();
     }
     
     @Override
-    public void close(Reporter reporter) throws IOException {
+    public void close(TaskAttemptContext context) throws IOException,
+        InterruptedException {
       // Write the merged raster layer
       mergedRasterLayer.write(outFile);
       outFile.close();
@@ -71,10 +80,120 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
   
   @Override
   public RecordWriter<Object, RasterLayer> getRecordWriter(
-      FileSystem fs, JobConf job, String name, Progressable progress)
-      throws IOException {
-    Path taskOutputPath = getTaskOutputPath(job, name);
-    return new RasterRecordWriter(fs, taskOutputPath, job, progress);
+      TaskAttemptContext task) throws IOException, InterruptedException {
+    Path file = getDefaultWorkFile(task, "");
+    FileSystem fs = file.getFileSystem(task.getConfiguration());
+    return new RasterRecordWriter(fs, file, task);
   }
+  
+  
+  /**
+   * Writes the final image by doing any remaining merges then generating
+   * the final image
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class ImageWriter extends FileOutputCommitter {
+    private static final String InputMBR = "mbr";
 
+    /**Job output path*/
+    private Path outPath;
+
+    public ImageWriter(Path outputPath, TaskAttemptContext context)
+        throws IOException {
+      super(outputPath, context);
+      this.outPath = outputPath;
+    }
+    
+    @Override
+    public void commitJob(JobContext context) throws IOException {
+      super.commitJob(context);
+      
+      final Configuration conf = context.getConfiguration();
+      
+      final int width = conf.getInt("width", 1000);
+      final int height = conf.getInt("height", 1000);
+      final Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
+      
+      final boolean vflip = conf.getBoolean("vflip", true);
+      
+      // List all output files resulting from reducers
+      final FileSystem outFs = outPath.getFileSystem(conf);
+      final FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
+        @Override
+        public boolean accept(Path path) {
+          return path.toUri().getPath().contains("part-");
+        }
+      });
+      
+      if (resultFiles.length == 0) {
+        System.err.println("Error! Couldn't find any partial output. Exiting!");
+        return;
+      }
+      System.out.println(System.currentTimeMillis()+": Merging "+resultFiles.length+" layers into one");
+      Vector<RasterLayer> intermediateLayers = Parallel.forEach(resultFiles.length, new Parallel.RunnableRange<RasterLayer>() {
+        @Override
+        public RasterLayer run(int i1, int i2) {
+          Rasterizer rasterizer = Rasterizer.getRasterizer(conf);
+          // The raster layer that contains the merge of all assigned layers
+          RasterLayer finalLayer = null;
+          RasterLayer tempLayer = rasterizer.createRaster(1, 1, new Rectangle());
+          for (int i = i1; i < i2; i++) {
+            FileStatus resultFile = resultFiles[i];
+            try {
+              FSDataInputStream inputStream = outFs.open(resultFile.getPath());
+              while (inputStream.getPos() < resultFile.getLen()) {
+                if (tempLayer == finalLayer) {
+                  // More than one layer. Create a separate final layer to merge
+                  finalLayer = rasterizer.createRaster(width, height, inputMBR);
+                  rasterizer.merge(finalLayer, tempLayer);
+                }
+                tempLayer.readFields(inputStream);
+                
+                if (finalLayer == null) {
+                  // First layer. Treat it as a final layer to avoid merging
+                  // if it is the only layer
+                  finalLayer = tempLayer;
+                } else {
+                  // More than only layer. Merge into the final layer
+                  rasterizer.merge(finalLayer, tempLayer);
+                }
+              }
+              inputStream.close();
+            } catch (IOException e) {
+              System.err.println("Error reading "+resultFile);
+              e.printStackTrace();
+            }
+          }
+          return finalLayer;
+        }
+      });
+      
+      // Merge all intermediate layers into one final layer
+      Rasterizer rasterizer = Rasterizer.getRasterizer(conf);
+      RasterLayer finalLayer;
+      if (intermediateLayers.size() == 1) {
+        finalLayer = intermediateLayers.elementAt(0);
+      } else {
+        finalLayer = rasterizer.createRaster(width, height, inputMBR);
+        for (RasterLayer intermediateLayer : intermediateLayers) {
+          rasterizer.merge(finalLayer, intermediateLayer);
+        }
+      }
+      
+      // Finally, write the resulting image to the given output path
+      System.out.println(System.currentTimeMillis()+": Writing final image");
+      outFs.delete(outPath, true); // Delete old (non-combined) images
+      FSDataOutputStream outputFile = outFs.create(outPath);
+      rasterizer.writeImage(finalLayer, outputFile, vflip);
+      outputFile.close();
+    }
+  }
+  
+  @Override
+  public synchronized OutputCommitter getOutputCommitter(
+      TaskAttemptContext context) throws IOException {
+    Path jobOutputPath = getOutputPath(context);
+    return new ImageWriter(jobOutputPath, context);
+  }
 }

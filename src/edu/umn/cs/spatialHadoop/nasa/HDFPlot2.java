@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -237,9 +237,11 @@ public class HDFPlot2 {
    * @return
    * @throws IOException
    * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static RunningJob plotWaterMask(Path[] inFiles, Path outFile,
-      OperationsParams params) throws IOException, InterruptedException {
+  public static Job plotWaterMask(Path[] inFiles, Path outFile,
+      OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException {
     // Restrict to HDF files if working on a directory
     for (int i = 0; i < inFiles.length; i++) {
       if (!inFiles[i].getName().toLowerCase().endsWith(".hdf"))
@@ -253,8 +255,9 @@ public class HDFPlot2 {
       return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizeWaterMask.class, params);
   }
   
-  public static RunningJob plotHeatMap(Path[] inFiles, Path outFile,
-      OperationsParams params) throws IOException, InterruptedException {
+  public static Job plotHeatMap(Path[] inFiles, Path outFile,
+      OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException {
     // Restrict to HDF files if working on a directory
     for (int i = 0; i < inFiles.length; i++) {
       if (!inFiles[i].getName().toLowerCase().endsWith(".hdf"))
@@ -300,8 +303,10 @@ public class HDFPlot2 {
    * @param args
    * @throws IOException 
    * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args) throws IOException,
+      InterruptedException, ClassNotFoundException {
     System.setProperty("java.awt.headless", "true");
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     if (!params.checkInputOutput()) {
