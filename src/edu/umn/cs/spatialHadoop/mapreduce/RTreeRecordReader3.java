@@ -262,7 +262,7 @@ public class RTreeRecordReader3<V extends Shape> extends
 
   @Override
   public Iterable<V> getCurrentValue() throws IOException, InterruptedException {
-    if (cellMBR.isValid()) {
+    if (cellMBR.isValid() && inputQueryMBR != null) {
       // need to run a duplicate avoidance technique on all results
       return new DuplicateAvoidanceIterator<V>(cellMBR, inputQueryMBR, value.iterator());
     }

@@ -228,7 +228,8 @@ public class SpatialRecordReader3<V extends Shape> extends
     // Match with the query
     if (inputQueryRange != null && !shape.isIntersected(inputQueryRange))
       return false;
-    if (!cellMBR.isValid())
+    // Check if we need to apply a duplicate avoidance step or not
+    if (!cellMBR.isValid() || inputQueryMBR == null)
       return true;
     // Apply reference point duplicate avoidance technique
     Rectangle shapeMBR = shape.getMBR();
