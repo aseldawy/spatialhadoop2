@@ -90,6 +90,8 @@ public class RTreeRecordReader3<V extends Shape> extends
 
   /**Optional query range*/
   private Shape inputQueryRange;
+  /**The MBR of the input query. Used to apply duplicate avoidance technique*/
+  private Rectangle inputQueryMBR;
 
   public RTreeRecordReader3() {
   }
@@ -146,6 +148,7 @@ public class RTreeRecordReader3<V extends Shape> extends
       // Retrieve the input query range to apply on all records
       this.inputQueryRange = OperationsParams.getShape(conf,
           SpatialInputFormat3.InputQueryRange);
+      this.inputQueryMBR = this.inputQueryRange.getMBR();
     }
 
     // Check if there is an associated global index to read cell boundaries
@@ -162,19 +165,6 @@ public class RTreeRecordReader3<V extends Shape> extends
     }
   }
   
-  public boolean isMatched(Shape shape) {
-    Rectangle shapeMBR = shape.getMBR();
-    // Match with the query
-    if (inputQueryRange != null && !shape.isIntersected(inputQueryRange))
-      return false;
-    // Check reference point duplicate avoidance technique
-    if (!cellMBR.isValid())
-      return true;
-    double reference_x = Math.max(cellMBR.x1, shapeMBR.x1);
-    double reference_y = Math.max(cellMBR.y1, shapeMBR.y1);
-    return cellMBR.contains(reference_x, reference_y);
-  }
-
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
     if (offsetOfNextTree > 0) {
@@ -215,26 +205,27 @@ public class RTreeRecordReader3<V extends Shape> extends
   public static class DuplicateAvoidanceIterator<V extends Shape> implements Iterable<V>, Iterator<V> {
     /**MBR of the containing cell to run the reference point technique*/
     private Rectangle cellMBR;
+    /**MBR of the query range*/
+    private Rectangle inputQueryMBR;
     /**All underlying values*/
     private Iterator<V> values;
     /**The value that will be returned next*/
     private V nextValue;
 
-    public boolean isMatched(Shape shape) {
-      Rectangle shapeMBR = shape.getMBR();
-      // Check reference point duplicate avoidance technique
-      if (!cellMBR.isValid())
-        return true;
-      double reference_x = Math.max(cellMBR.x1, shapeMBR.x1);
-      double reference_y = Math.max(cellMBR.y1, shapeMBR.y1);
-      return cellMBR.contains(reference_x, reference_y);
-    }
-
-    
-    public DuplicateAvoidanceIterator(Rectangle cellMBR, Iterator<V> values) {
+    public DuplicateAvoidanceIterator(Rectangle cellMBR,
+        Rectangle inputQueryMBR, Iterator<V> values) {
       this.cellMBR = cellMBR;
+      this.inputQueryMBR = inputQueryMBR;
       this.values = values;
       getNextValue();
+    }
+    
+    public boolean isMatched(Shape shape) {
+      // Apply reference point duplicate avoidance technique
+      Rectangle shapeMBR = shape.getMBR();
+      double reference_x = Math.max(inputQueryMBR.x1, shapeMBR.x1);
+      double reference_y = Math.max(inputQueryMBR.y1, shapeMBR.y1);
+      return cellMBR.contains(reference_x, reference_y);
     }
     
     @Override
@@ -273,7 +264,7 @@ public class RTreeRecordReader3<V extends Shape> extends
   public Iterable<V> getCurrentValue() throws IOException, InterruptedException {
     if (cellMBR.isValid()) {
       // need to run a duplicate avoidance technique on all results
-      return new DuplicateAvoidanceIterator<V>(cellMBR, value.iterator());
+      return new DuplicateAvoidanceIterator<V>(cellMBR, inputQueryMBR, value.iterator());
     }
     return value;
   }
