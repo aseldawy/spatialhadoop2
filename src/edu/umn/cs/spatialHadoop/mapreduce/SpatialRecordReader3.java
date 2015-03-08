@@ -88,6 +88,8 @@ public class SpatialRecordReader3<V extends Shape> extends
 
   /**Input query range if specified in the job configuration*/
   private Shape inputQueryRange;
+  /**The MBR of the input query. Used to apply duplicate avoidance technique*/
+  private Rectangle inputQueryMBR;
 
   private CompressionCodecFactory compressionCodecFactory;
 
@@ -159,6 +161,7 @@ public class SpatialRecordReader3<V extends Shape> extends
       // Retrieve the input query range to apply on all records
       this.inputQueryRange = OperationsParams.getShape(conf,
           SpatialInputFormat3.InputQueryRange);
+      this.inputQueryMBR = this.inputQueryRange.getMBR();
     }
     
     // Check if there is an associated global index to read cell boundaries
@@ -222,15 +225,15 @@ public class SpatialRecordReader3<V extends Shape> extends
   }
   
   protected boolean isMatched(Shape shape) {
-    Rectangle shapeMBR = shape.getMBR();
     // Match with the query
     if (inputQueryRange != null && !shape.isIntersected(inputQueryRange))
       return false;
-    // Check reference point duplicate avoidance technique
     if (!cellMBR.isValid())
       return true;
-    double reference_x = Math.max(cellMBR.x1, shapeMBR.x1);
-    double reference_y = Math.max(cellMBR.y1, shapeMBR.y1);
+    // Apply reference point duplicate avoidance technique
+    Rectangle shapeMBR = shape.getMBR();
+    double reference_x = Math.max(inputQueryMBR.x1, shapeMBR.x1);
+    double reference_y = Math.max(inputQueryMBR.y1, shapeMBR.y1);
     return cellMBR.contains(reference_x, reference_y);
   }
   
