@@ -26,10 +26,11 @@ $shadoop_cmd = "hadoop jar #$shadoop_jar"
 $hadoop_home = File.expand_path("..", File.dirname(`which hadoop`))
 
 ExtraConfigParams = "-D dfs.block.size=#{1024*1024}"
+$InMBR = "0,0,10000,10000"
 
 def generate_file(prefix, shape)
   filename = "#{prefix}.#{shape}"
-  system_check "#$shadoop_cmd generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:10.mb mbr:0,0,10000,10000 -overwrite"
+  system_check "#$shadoop_cmd generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:10.mb mbr:#$InMBR -overwrite"
   filename
 end
 
@@ -63,6 +64,38 @@ end
 def range_query(input, output, query, extra_args)
   shape = File.extname(input)[1..-1]
   system_check "#$shadoop_cmd rangequery #{ExtraConfigParams} #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
+end
+
+def test_range_query
+  queries = ['40,990,1000,8000', $InMBR]
+  %w(point rect).each do |shape|
+    # Try range query with heap files
+    heap_file = generate_file('test', shape)
+    heap_file_count = `hadoop fs -cat #{heap_file}/data* | wc -l`.to_i
+    for query in queries
+      range_query(heap_file, 'results_mr', query, '-no-local')
+      results_heap_mr = `hadoop fs -cat results_mr/part* | sort`.lines.to_a
+      
+      # Try with indexed files
+      %w(grid rtree r+tree str str+).each do |sindex|
+        indexed_file = index_file(heap_file, sindex)
+        
+        # Make sure the indexed file has the same number of records as the heap file
+        # Exclude R-tree and R+-tree as they use a binary format that cannot be easily determined
+        unless %w(r+tree rtree).include?(sindex)
+          replicated = %w(grid r+tree str+).include?(sindex)
+          indexed_file_count = (replicated && shape == 'rect') ? `hadoop fs -cat #{indexed_file}/part* | sort | uniq | wc -l`.to_i :
+               `hadoop fs -cat #{indexed_file}/part* | wc -l`.to_i
+          raise "#{sindex} index size #{indexed_file_count} should be equal to heap file size #{heap_file_count}" unless heap_file_count == indexed_file_count
+        end
+        
+        # Run range query on the heap file and make sure it gives the same result as before
+        range_query(indexed_file, "results_#{sindex}_mr", query, '-no-local')
+        results_indexed_mr = `hadoop fs -cat results_#{sindex}_mr/part* | sort`.lines.to_a
+        raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_mr)
+      end
+    end
+  end
 end
 
 def test_dup_avoidance_in_range_query
@@ -101,37 +134,6 @@ def test_dup_avoidance_in_range_query
   
   raise "Error with duplicate avoidance" unless array_equal?(results_grid, results_heap)
 end
-
-def test_range_query
-  %w(point rect).each do |shape|
-    # Try range query with heap files
-    heap_file = generate_file('test', shape)
-    heap_file_count = `hadoop fs -cat #{heap_file}/data* | wc -l`.to_i
-    query = '40,990,1000,8000'
-    range_query(heap_file, 'results_mr', query, '-no-local')
-    results_heap_mr = `hadoop fs -cat results_mr/part* | sort`.lines.to_a
-    
-    # Try with indexed files
-    %w(grid rtree r+tree str str+).each do |sindex|
-      indexed_file = index_file(heap_file, sindex)
-      
-      # Make sure the indexed file has the same number of records as the heap file
-      # Exclude R-tree and R+-tree as they use a binary format that cannot be easily determined
-      unless %w(r+tree rtree).include?(sindex)
-        replicated = %w(grid r+tree str+).include?(sindex)
-        indexed_file_count = (replicated && shape == 'rect') ? `hadoop fs -cat #{indexed_file}/part* | sort | uniq | wc -l`.to_i :
-             `hadoop fs -cat #{indexed_file}/part* | wc -l`.to_i
-        raise "#{sindex} index size #{indexed_file_count} should be equal to heap file size #{heap_file_count}" unless heap_file_count == indexed_file_count
-      end
-      
-      # Run range query on the heap file and make sure it gives the same result as before
-      range_query(indexed_file, "results_#{sindex}_mr", query, '-no-local')
-      results_indexed_mr = `hadoop fs -cat results_#{sindex}_mr/part* | sort`.lines.to_a
-      raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_mr)
-    end
-  end
-end
-
 
 def knn_query(input, output, point, k, extra_args="")
   shape = File.extname(input)[1..-1]
@@ -267,10 +269,15 @@ def test_plot
   plot(heap_file, 'heap_mr.png', '-no-local')
   
   # Try with indexed files
-  %w(grid rtree r+tree str str+).each do |sindex|
+  %w(grid rtree str+).each do |sindex|
     indexed_file = index_file(heap_file, sindex)
+    # Single level plot
     plot(indexed_file, 'indexed_local.png', '-local')
     plot(indexed_file, 'indexed_mr.png', '-no-local')
+
+    # Multilevel plot
+    plot(indexed_file, 'indexed_local.png', '-local -pyramid')
+    plot(indexed_file, 'indexed_mr.png', '-no-local -pyramid')
   end
   
 end
@@ -278,6 +285,7 @@ end
 # Main
 if $0 == __FILE__
   test_range_query
+  test_dup_avoidance_in_range_query
   test_knn
   test_spatial_join
   test_custom_class
