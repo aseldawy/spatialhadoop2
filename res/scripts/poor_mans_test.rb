@@ -17,6 +17,7 @@
 #    from all implementations are the same.
 
 def system_check(cmd)
+  puts "=> '#{cmd}'"
   success = system cmd
   raise "Error running '#{cmd}'" unless success 
 end
@@ -73,8 +74,8 @@ def test_range_query
     heap_file = generate_file('test', shape)
     heap_file_count = `hadoop fs -cat #{heap_file}/data* | wc -l`.to_i
     for query in queries
-      range_query(heap_file, 'results_mr', query, '-no-local')
-      results_heap_mr = `hadoop fs -cat results_mr/part* | sort`.lines.to_a
+      range_query(heap_file, 'results_heap_mr', query, '-no-local')
+      results_heap_mr = `hadoop fs -cat results_heap_mr/part* | sort`.lines.to_a
       
       # Try with indexed files
       %w(grid rtree r+tree str str+).each do |sindex|
