@@ -137,11 +137,14 @@ public class SpatialRecordReader3<V extends Shape> extends
       in = directIn;
       filePosition = directIn;
     }
-    this.lineReader = new LineReader(in);
-    
     this.stockShape = (V) OperationsParams.getShape(conf, "shape");
     this.tempLine = new Text();
     
+    this.lineReader = new LineReader(in);
+    if (this.start != 0) {
+      // Skip first line
+      nextLine(tempLine);
+    }
     if (conf.get(SpatialInputFormat3.InputQueryRange) != null) {
       // Retrieve the input query range to apply on all records
       this.inputQueryRange = OperationsParams.getShape(conf,
