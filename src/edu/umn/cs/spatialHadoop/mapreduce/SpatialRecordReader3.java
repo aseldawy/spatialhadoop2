@@ -75,8 +75,8 @@ public class SpatialRecordReader3<V extends Shape> extends
   private FSDataInputStream directIn;
   /** Input stream that reads data from input file */
   private InputStream in;
-  /**An object that is used to read the current file position*/
-  private Seekable filePosition;
+  /**Determine current position to report progress*/
+  private Seekable progressPosition;
 
   /**Used to read text lines from the input*/
   private LineReader lineReader;
@@ -92,6 +92,14 @@ public class SpatialRecordReader3<V extends Shape> extends
   private CompressionCodecFactory compressionCodecFactory;
 
   private ShapeIterator<V> value;
+  
+  /**
+   * Number of bytes read from the input so far. This is used to determine when
+   * to stop when reading from the input directly. We canno simply rely on the
+   * position of the input file because LineReader might buffer some data in
+   * memory without actually processing it.
+   */
+  private long bytesRead;
 
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
@@ -123,27 +131,29 @@ public class SpatialRecordReader3<V extends Shape> extends
         end = cIn.getAdjustedEnd();
         // take pos from compressed stream as we adjusted both start and end
         // to match with the compressed file
-        filePosition = cIn;
+        progressPosition = cIn;
       } else {
         // Non-splittable input, need to start from the beginning
         CompressionInputStream cIn = codec.createInputStream(directIn, decompressor);
         in = cIn;
-        filePosition = cIn;
+        progressPosition = cIn;
       }
     } else {
       // Non-compressed file, seek to the desired position and use this stream
       // to get the progress and position
       directIn.seek(start);
       in = directIn;
-      filePosition = directIn;
+      progressPosition = directIn;
     }
     this.stockShape = (V) OperationsParams.getShape(conf, "shape");
     this.tempLine = new Text();
     
     this.lineReader = new LineReader(in);
+    bytesRead = 0;
+    
     if (this.start != 0) {
-      // Skip first line
-      nextLine(tempLine);
+      // Skip until first end-of-line reached
+      bytesRead += lineReader.readLine(tempLine);
     }
     if (conf.get(SpatialInputFormat3.InputQueryRange) != null) {
       // Retrieve the input query range to apply on all records
@@ -170,7 +180,15 @@ public class SpatialRecordReader3<V extends Shape> extends
   }
   
   public long getPos() throws IOException {
-    return filePosition.getPos();
+    if (codec != null) {
+      // Input is compressed. Report the progress as indicated by the
+      // decompressor
+      return progressPosition.getPos();
+    } else {
+      // Input is not compressed. Report the progress as indicated by number
+      // of bytes read from the input
+      return start + bytesRead;
+    }
   }
   
   /**
@@ -184,15 +202,15 @@ public class SpatialRecordReader3<V extends Shape> extends
     while (getPos() <= end) {
       value.clear();
 
+      int lineLength = 0;
       // Read the first line from stream
-      Text temp = new Text();
-      if (lineReader.readLine(temp) == 0) {
+      if ((lineLength = lineReader.readLine(value)) <= 0) {
         // Indicates an end of stream
         return false;
       }
       
       // Append the part read from stream to the part extracted from buffer
-      value.append(temp.getBytes(), 0, temp.getLength());
+      bytesRead += lineLength;
       
       if (value.getLength() > 1) {
         // Read a non-empty line. Note that end-of-line character is included
