@@ -130,18 +130,24 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   }
 
   public double getMinDistanceTo(double px, double py) {
-    if (this.contains(px, py))
-      return 0;
-    
-    double dx = Math.min(Math.abs(px - this.x1), Math.abs(this.x2 - px));
-    double dy = Math.min(Math.abs(py - this.y1), Math.abs(this.y2 - py));
+    double dx, dy;
+    if (px < this.x1)
+      dx = this.x1 - px;
+    else if (px < this.x2)
+      dx = 0;
+    else
+      dx = px - this.x2;
 
-    if ((px < this.x1 || px > this.x2) &&
-        (py < this.y1 || py > this.y2)) {
-      return Math.sqrt(dx * dx + dy * dy);
-    }
+    if (py < this.y1)
+      dy = this.y1 - py;
+    else if (py < this.y2)
+      dy = 0;
+    else
+      dy = py - this.y2;
     
-    return Math.min(dx, dy);
+    if (dx > 0 && dy > 0)
+      return Math.sqrt(dx * dx + dy * dy);
+    return Math.max(dx, dy);
   }
   
   public double getMinDistance(Rectangle r2) {

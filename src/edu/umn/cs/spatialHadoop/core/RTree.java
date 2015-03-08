@@ -1098,10 +1098,10 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       // Initialize result and query range
       distances.clear(); shapes.clear();
       Rectangle queryRange = new Rectangle();
-      queryRange.x1 = qx - query_radius / 2;
-      queryRange.y1 = qy - query_radius / 2;
-      queryRange.x2 = qx + query_radius / 2;
-      queryRange.y2 = qy + query_radius / 2;
+      queryRange.x1 = qx - query_radius;
+      queryRange.y1 = qy - query_radius;
+      queryRange.x2 = qx + query_radius;
+      queryRange.y2 = qy + query_radius;
       // Retrieve all results in range
       search(queryRange, new ResultCollector<T>() {
         @Override
