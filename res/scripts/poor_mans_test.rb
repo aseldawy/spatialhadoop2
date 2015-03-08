@@ -29,7 +29,7 @@ ExtraConfigParams = "-D dfs.block.size=#{1024*1024}"
 
 def generate_file(prefix, shape)
   filename = "#{prefix}.#{shape}"
-  system_check "#$shadoop_cmd generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:200.kb mbr:0,0,10000,10000 -overwrite"
+  system_check "#$shadoop_cmd generate #{ExtraConfigParams} shape:#{shape} '#{filename}' size:10.mb mbr:0,0,10000,10000 -overwrite"
   filename
 end
 
@@ -63,6 +63,43 @@ end
 def range_query(input, output, query, extra_args)
   shape = File.extname(input)[1..-1]
   system_check "#$shadoop_cmd rangequery #{ExtraConfigParams} #{input} #{output} shape:#{shape} rect:#{query} #{extra_args} -overwrite"
+end
+
+def test_dup_avoidance_in_range_query
+  shape = "rect"
+  heap_file = generate_file('test', shape)
+  
+  # Build a grid index
+  sindex = "grid"
+  grid_file = index_file(heap_file, sindex)
+  
+  # Read global index
+  gindex = `#$shadoop_cmd readfile #{grid_file}`
+  gindex = gindex.lines.grep(/\((.*)\)-\((.*)\)/).map do |line|
+    line=~ /\((.*)\)-\((.*)\)/
+    x1, y1 = $1.split(',').map(&:to_f)
+    x2, y2 = $2.split(',').map(&:to_f)
+    [x1, y1, x2, y2]
+  end
+  
+  gindex = gindex.sort_by{|cell| cell[0]}
+  file_mbr = gindex.inject do |mbr, cell| 
+    [
+      [mbr[0], cell[0]].min,
+      [mbr[1], cell[1]].min,
+      [mbr[2], cell[2]].max,
+      [mbr[3], cell[3]].max,
+    ]
+  end
+  selected_cell = gindex.last
+  query = "#{selected_cell[0]},#{file_mbr[1]},#{file_mbr[2]},#{file_mbr[3]}"
+  
+  range_query(heap_file, 'results_heap', query, '-no-local')
+  results_heap = `hadoop fs -cat results_heap/part* | sort`.lines.to_a
+  range_query(grid_file, 'results_grid', query, '-no-local')
+  results_grid = `hadoop fs -cat results_grid/part* | sort`.lines.to_a
+  
+  raise "Error with duplicate avoidance" unless array_equal?(results_grid, results_heap)
 end
 
 def test_range_query
@@ -184,7 +221,7 @@ def test_custom_class
   File.open(source_filename, "w") do |f|
     f.puts <<-JAVA
 public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {
-  public static void main(String[] args) throws java.io.IOException {
+  public static void main(String[] args) throws java.io.IOException, InterruptedException {
     edu.umn.cs.spatialHadoop.operations.FileMBR.main(args);
   }
 }
@@ -211,13 +248,13 @@ public class CustomPoint extends edu.umn.cs.spatialHadoop.core.Point {
   system_check "#$shadoop_cmd mbr -libjars #{jar_file} #{test_file} shape:CustomPoint -local"
 
   # Test running the custom main method
-  system_check "hadoop jar #{jar_file} CustomPoint -libjars #$shadoop_jar #{test_file}/data_00001 shape:CustomPoint -no-local"
-  system_check "hadoop jar #{jar_file} CustomPoint -libjars #$shadoop_jar #{test_file}/data_00001 shape:CustomPoint -local"
+  #system_check "hadoop jar #{jar_file} CustomPoint -libjars #$shadoop_jar #{test_file}/data_00001 shape:CustomPoint -no-local"
+  #system_check "hadoop jar #{jar_file} CustomPoint -libjars #$shadoop_jar #{test_file}/data_00001 shape:CustomPoint -local"
 end
 
 def plot(input, output, extra_args="")
   shape = File.extname(input)[1..-1]
-  system_check "#$shadoop_cmd plot #{ExtraConfigParams} #{input} #{output} shape:#{shape} #{extra_args} -overwrite"
+  system_check "#$shadoop_cmd gplot #{ExtraConfigParams} #{input} #{output} shape:#{shape} #{extra_args} -overwrite"
 end
 
 def test_plot
