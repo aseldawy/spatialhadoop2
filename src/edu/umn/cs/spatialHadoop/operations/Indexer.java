@@ -32,7 +32,6 @@ import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
-import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.MapReduceBase;
 import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -249,9 +248,6 @@ public class Indexer {
     job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
 
-    // Use multithreading in case the job is running locally
-    job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
-    
     // Start the job
     if (params.getBoolean("background", false)) {
       // Run in background
@@ -299,7 +295,7 @@ public class Indexer {
       }
       long estimatedOutSize = (long) (inSize * (1.0 + job.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f)));
       FileSystem outFS = out.getFileSystem(job);
-      long outBlockSize = outFS.getDefaultBlockSize(out);
+      long outBlockSize = outFS.getDefaultBlockSize();
       int numPartitions = Math.max(1, (int) Math.ceil((float)estimatedOutSize / outBlockSize));
       LOG.info("Partitioning the space into "+numPartitions+" partitions");
 

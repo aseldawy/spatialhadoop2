@@ -23,7 +23,6 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -370,9 +369,6 @@ public class SingleLevelPlot {
       //job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));        
       Partitioner.setPartitioner(conf, partitioner);
     }
-    
-    // Use multithreading in case the job is running locally
-    conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     
     // Start the job
     if (params.getBoolean("background", false)) {

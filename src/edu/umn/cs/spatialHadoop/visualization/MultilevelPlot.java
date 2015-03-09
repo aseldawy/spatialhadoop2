@@ -21,7 +21,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -485,8 +484,6 @@ public class MultilevelPlot {
     // Set number of reducers
     job.setNumReduceTasks(Math.max(1, new JobClient(new JobConf())
         .getClusterStatus().getMaxReduceTasks() * 7 / 8));
-    // Use multithreading in case the job is running locally
-    conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
     // Start the job
     if (params.getBoolean("background", false)) {

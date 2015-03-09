@@ -20,7 +20,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
@@ -77,8 +76,6 @@ public class RangeQuery {
       OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
     // Use the built-in range filter of the input format
     params.set(SpatialInputFormat3.InputQueryRange, params.get("rect"));
-    // Use multithreading in case it is running locally
-    params.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     
     Job job = new Job(params, "RangeQuery");
     job.setJarByClass(RangeQuery.class);

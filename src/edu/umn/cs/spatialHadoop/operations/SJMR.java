@@ -403,7 +403,7 @@ public class SJMR {
         LOG.info("SJMRPartitioningGrid is configured");
     }
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath)
+    int num_cells = (int) (total_size / outFs.getDefaultBlockSize()
         * sjmrPartitioningGridFactor);
     LOG.info("Number of cells is configured to be " + num_cells);
 

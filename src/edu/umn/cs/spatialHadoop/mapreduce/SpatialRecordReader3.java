@@ -25,8 +25,6 @@ import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.CompressionInputStream;
 import org.apache.hadoop.io.compress.Decompressor;
-import org.apache.hadoop.io.compress.SplitCompressionInputStream;
-import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -122,24 +120,10 @@ public class SpatialRecordReader3<V extends Shape> extends
     if (codec != null) {
       // Input is compressed, create a decompressor to decompress it
       decompressor = CodecPool.getDecompressor(codec);
-      if (codec instanceof SplittableCompressionCodec) {
-        // A splittable compression codec, can seek to the desired input pos
-        final SplitCompressionInputStream cIn =
-            ((SplittableCompressionCodec)codec).createInputStream(
-                directIn, decompressor, start, end,
-                SplittableCompressionCodec.READ_MODE.CONTINUOUS);
-        in = cIn;
-        start = cIn.getAdjustedStart();
-        end = cIn.getAdjustedEnd();
-        // take pos from compressed stream as we adjusted both start and end
-        // to match with the compressed file
-        progressPosition = cIn;
-      } else {
-        // Non-splittable input, need to start from the beginning
-        CompressionInputStream cIn = codec.createInputStream(directIn, decompressor);
-        in = cIn;
-        progressPosition = cIn;
-      }
+      // Non-splittable input, need to start from the beginning
+      CompressionInputStream cIn = codec.createInputStream(directIn, decompressor);
+      in = cIn;
+      progressPosition = directIn;
     } else {
       // Non-compressed file, seek to the desired position and use this stream
       // to get the progress and position
