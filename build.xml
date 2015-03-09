@@ -16,7 +16,7 @@
   <property name="dist1"  location="bin1/dist"/>
   <property name="build2" location="bin2/classes"/>
   <property name="dist2"  location="bin2/dist"/>
-  <property name="version" value="2.3-rc1"/>
+  <property name="version" value="2.3"/>
   
   <path id="hdflib.path.ref">
     <fileset dir="lib/hdflib" includes="*.jar"/>
