@@ -1,22 +1,19 @@
-/**
- * 
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintWriter;
-import java.net.URLConnection;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import javax.servlet.ServletException;
-import javax.servlet.ServletOutputStream;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -25,9 +22,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.mortbay.jetty.Request;
-import org.mortbay.jetty.Server;
-import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -80,9 +74,9 @@ public class SpatioTemporalAggregateQuery {
   /**A regular expression to catch the tile identifier of a MODIS grid cell*/
   private static final Pattern MODISTileID = Pattern.compile("^.*h(\\d\\d)v(\\d\\d).*$");
   /**Keeps track of total number of trees queries in last query as stats*/
-  private static int numOfTreesTouchesInLastRequest;
+  public static int numOfTreesTouchesInLastRequest;
   /**Keeps track of number of temporal partitions matched by last query as stats*/
-  private static int numOfTemporalPartitionsInLastQuery; 
+  public static int numOfTemporalPartitionsInLastQuery; 
 
 
   /**
@@ -229,145 +223,6 @@ public class SpatioTemporalAggregateQuery {
   }
   
   /**
-   * An HTTP handler that handles spatio-temporal queries sent by users.
-   * @author Ahmed Eldawy
-   *
-   */
-  public static class AggregateQueryHandler extends AbstractHandler {
-    
-    /**The path in which indexes are stored*/
-    private Path indexPath;
-    /**Common parameters for all queries*/
-    private OperationsParams commonParams;
-  
-    public AggregateQueryHandler(Path indexPath, OperationsParams params) {
-      this.indexPath = indexPath;
-      this.commonParams = new OperationsParams(params);
-    }
-  
-    @Override
-    public void handle(String target, HttpServletRequest request,
-        HttpServletResponse response, int dispatch) throws IOException,
-        ServletException {
-      LOG.info("Received request: "+target);
-      // Bypass cross-site scripting (XSS)
-      response.addHeader("Access-Control-Allow-Origin", "*");
-      response.addHeader("Access-Control-Allow-Credentials", "true");
-      ((Request) request).setHandled(true);
-      
-      OperationsParams params;
-      try {
-        if (target.equals("/aggregate_query.cgi")) {
-          String west = request.getParameter("min_lon");
-          String east = request.getParameter("max_lon");
-          String south = request.getParameter("min_lat");
-          String north = request.getParameter("max_lat");
-          
-          String[] startDateParts = request.getParameter("fromDate").split("/");
-          String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
-          String[] endDateParts = request.getParameter("toDate").split("/");
-          String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
-          
-          // Create the query parameters
-          params = new OperationsParams(commonParams);
-          params.set("rect", west+','+south+','+east+','+north);
-          params.set("time", startDate+".."+endDate);
-          
-          long t1 = System.currentTimeMillis();
-          Node result = aggregateQuery(indexPath, params);
-          long t2 = System.currentTimeMillis();
-          // Report the answer and time
-          response.setContentType("application/json;charset=utf-8");
-          PrintWriter writer = response.getWriter();
-          writer.print("{");
-          writer.print("\"results\":{");
-          writer.print("\"min\": "+result.min+',');
-          writer.print("\"max\": "+result.max+',');
-          writer.print("\"count\": "+result.count+',');
-          writer.print("\"sum\": "+result.sum);
-          writer.print("},");
-          writer.print("\"stats\":{");
-          writer.print("\"totaltime\":"+(t2-t1)+',');
-          writer.print("\"num-of-temporal-partitions\":"+numOfTemporalPartitionsInLastQuery+',');
-          writer.print("\"num-of-trees\":"+numOfTreesTouchesInLastRequest);
-          writer.print("}");
-          writer.print("}");
-          response.setStatus(HttpServletResponse.SC_OK);
-          LOG.info("Query results returned");
-        } else {
-          if (target.equals("/"))
-            target = "/aggregate_query.html";
-          tryToLoadStaticResource(target, response);
-        }
-      } catch (Exception e) {
-        reportError(response, "Error handling request", e);
-        return;
-      }
-    }
-
-
-    /**
-     * Tries to load the given resource name from class path if it exists.
-     * Used to serve static files such as HTML pages, images and JavaScript files.
-     * @param target
-     * @param response
-     * @throws IOException
-     */
-    private void tryToLoadStaticResource(String target,
-        HttpServletResponse response) throws IOException {
-      // Try to load this resource as a static page
-      InputStream resource =
-          getClass().getResourceAsStream("/webapps/static/shahedfrontend"+target);
-      if (resource == null) {
-        reportError(response, "Cannot load resource '"+target+"'", null);
-        return;
-      }
-      byte[] buffer = new byte[1024*1024];
-      ServletOutputStream outResponse = response.getOutputStream();
-      int size;
-      while ((size = resource.read(buffer)) != -1) {
-        outResponse.write(buffer, 0, size);
-      }
-      resource.close();
-      outResponse.close();
-      response.setStatus(HttpServletResponse.SC_OK);
-      response.setContentType(URLConnection.guessContentTypeFromName(target));
-    }
-    
-    private void reportError(HttpServletResponse response, String msg,
-        Exception e)
-        throws IOException {
-      if (e != null)
-        e.printStackTrace();
-      response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-      response.getWriter().println("{\"message\": '"+msg+"',");
-      if (e != null) {
-        response.getWriter().println("\"error\": '"+e.getMessage()+"',");
-        response.getWriter().println("\"stacktrace\": [");
-        for (StackTraceElement trc : e.getStackTrace()) {
-          response.getWriter().println("'"+trc.toString()+"',");
-        }
-        response.getWriter().println("]");
-      }
-      response.getWriter().println("}");
-    }
-  }
-
-  /**
-   * Create an HTTP web server (using Jetty) that will stay running to answer
-   * all queries
-   * @throws Exception 
-   */
-  private static void startServer(Path indexPath, OperationsParams params) throws Exception {
-    int port = params.getInt("port", 8888);
-    
-    Server server = new Server(port);
-    server.setHandler(new AggregateQueryHandler(indexPath, params));
-    server.start();
-    server.join();
-  }
-
-  /**
    * Prints the usage of this operation.
    */
   public static void printUsage() {
@@ -393,11 +248,6 @@ public class SpatioTemporalAggregateQuery {
     if (!params.checkInput()) {
       printUsage();
       System.exit(1);
-    }
-    
-    if (params.is("server")) {
-      startServer(params.getInputPath(), params);
-      System.exit(0);
     }
     
     if (params.get("rect") == null) {

@@ -1,15 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
@@ -205,15 +201,16 @@ public class FileMBR {
    * @param params - Additional operation parameters
    * @return
    * @throws IOException
-   */
-  private static <S extends Shape> Partition fileMBRMapReduce(Path inFile,
-      OperationsParams params) throws IOException {
+   * @throws InterruptedException 
+//   */
+  private static <S extends Shape> Partition fileMBRMapReduce(Path[] inFiles,
+      OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, FileMBR.class);
       
     Path outputPath;
     FileSystem outFs = FileSystem.get(job);
     do {
-      outputPath = new Path(inFile.getName()+".mbr_"+(int)(Math.random()*1000000));
+      outputPath = new Path(inFiles[0].getName()+".mbr_"+(int)(Math.random()*1000000));
     } while (outFs.exists(outputPath));
     
     job.setJobName("FileMBR");
@@ -229,12 +226,12 @@ public class FileMBR {
     job.setInputFormat(ShapeLineInputFormat.class);
     job.setOutputFormat(TextOutputFormat.class);
     
-    ShapeInputFormat.setInputPaths(job, inFile);
+    ShapeInputFormat.setInputPaths(job, inFiles);
     TextOutputFormat.setOutputPath(job, outputPath);
     job.setOutputCommitter(MBROutputCommitter.class);
     
     // Submit the job
-    if (OperationsParams.isLocal(job, inFile)) {
+    if (OperationsParams.isLocal(job, inFiles)) {
       // Enforce local execution if explicitly set by user or for small files
       job.set("mapred.job.tracker", "local");
     }
@@ -281,23 +278,29 @@ public class FileMBR {
    * @return
    * @throws IOException 
    */
-  private static Partition fileMBRCached(Path file, OperationsParams params) throws IOException {
-    FileSystem inFs = file.getFileSystem(params);
-    // Quickly get file MBR if it is globally indexed
-    GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, file);
-    if (globalIndex == null)
-      return null;
+  private static Partition fileMBRCached(Path[] files, OperationsParams params) throws IOException {
     Partition p = new Partition();
-    p.set(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
-    for (Partition part : globalIndex) {
-      p.expand(part);
+    for (Path file : files) {
+      FileSystem inFs = file.getFileSystem(params);
+      // Quickly get file MBR if it is globally indexed
+      GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, file);
+      if (globalIndex == null)
+        return null;
+      p.set(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
+      for (Partition part : globalIndex) {
+        p.expand(part);
+      }
+      sizeOfLastProcessedFile = p.size;
     }
-    sizeOfLastProcessedFile = p.size;
     return p;
   }
 
-  public static Partition fileMBR(Path file, OperationsParams params) throws IOException {
-    Partition cachedMBR = fileMBRCached(file, params);
+  public static Partition fileMBR(Path file, OperationsParams params) throws IOException, InterruptedException {
+    return fileMBR(new Path[] {file}, params);
+  }
+  
+  public static Partition fileMBR(Path[] files, OperationsParams params) throws IOException, InterruptedException {
+    Partition cachedMBR = fileMBRCached(files, params);
     if (cachedMBR != null)
       return cachedMBR;
     if (!params.autoDetectShape()) {
@@ -306,7 +309,7 @@ public class FileMBR {
     }
     
     // Process with MapReduce
-    return fileMBRMapReduce(file, params);
+    return fileMBRMapReduce(files, params);
   }
 
   private static void printUsage() {
@@ -320,14 +323,15 @@ public class FileMBR {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInput()) {
       printUsage();
       System.exit(1);
     }
-    Path inputFile = params.getInputPath();
+    Path[] inputFiles = params.getInputPaths();
     
     if (params.getShape("shape") == null) {
       LOG.error("Input file format not specified");
@@ -335,7 +339,7 @@ public class FileMBR {
       return;
     }
     long t1 = System.currentTimeMillis();
-    Rectangle mbr = fileMBR(inputFile, params);
+    Rectangle mbr = fileMBR(inputFiles, params);
     long t2 = System.currentTimeMillis();
     if (mbr == null) {
       LOG.error("Error computing the MBR");
@@ -343,7 +347,7 @@ public class FileMBR {
     }
       
     System.out.println("Total processing time: "+(t2-t1)+" millis");
-    System.out.println("MBR of records in file '"+inputFile+"' is "+mbr);
+    System.out.println("MBR of records in file '"+inputFiles+"' is "+mbr);
   }
 
 }

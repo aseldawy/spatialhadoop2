@@ -1,15 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
@@ -113,9 +109,10 @@ public class Union {
    *  of all shapes in it. Each line contains the category, then a comma,
    *   then the union represented as text.
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static void unionMapReduce(Path inFile, Path output,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, Union.class);
     job.setJobName("Union");
     GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFile.getFileSystem(job), inFile);
@@ -273,7 +270,7 @@ public class Union {
   }
 
   public static void union(Path inFile, Path outFile,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     unionMapReduce(inFile, outFile, params);
   }
 
@@ -281,8 +278,9 @@ public class Union {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (params.getPaths().length == 0 && params.is("local")) {
       // Special handling for union on an input stream

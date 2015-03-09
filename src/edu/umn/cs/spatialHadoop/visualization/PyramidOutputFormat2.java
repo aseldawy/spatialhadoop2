@@ -1,82 +1,164 @@
-/*******************************************************************
- * Copyright (C) 2014 by Regents of the University of Minnesota.   *
- *                                                                 *
- * This Software is released under the Apache License, Version 2.0 *
- * http://www.apache.org/licenses/LICENSE-2.0                      *
- *******************************************************************/
-
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
+import java.awt.Color;
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintStream;
 
 import javax.imageio.ImageIO;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.FileOutputFormat;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.RecordWriter;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.OutputCommitter;
+import org.apache.hadoop.mapreduce.RecordWriter;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.LineReader;
 
 /**
  * An output format that is used to plot ImageWritable to PNG image.
  * @author Ahmed Eldawy
  *
  */
-public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, BufferedImage> {
-  /**Used to indicate the progress*/
-  private Progressable progress;
-  private boolean vflip;
+public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLayer> {
   
-  class ImageRecordWriter implements RecordWriter<TileIndex, BufferedImage> {
+  static class ImageRecordWriter extends RecordWriter<TileIndex, RasterLayer> {
 
-    private final FileSystem outFs;
-    private final Path out;
+    private Rasterizer rasterizer;
+    private final FileSystem outFS;
+    private final Path outPath;
+    private boolean vflip;
+    /**Used to indicate progress to Hadoop*/
+    private TaskAttemptContext task;
     
-    ImageRecordWriter(Path out, FileSystem outFs) {
+    ImageRecordWriter(FileSystem outFs, Path taskOutPath, TaskAttemptContext task) {
+      this.task = task;
       System.setProperty("java.awt.headless", "true");
-      this.out = out;
-      this.outFs = outFs;
+      this.rasterizer = Rasterizer.getRasterizer(task.getConfiguration());
+      this.outPath = taskOutPath;
+      this.outFS = outFs;
+      this.vflip = task.getConfiguration().getBoolean("vflip", true);
     }
 
     @Override
-    public void write(TileIndex tileIndex, BufferedImage image) throws IOException {
-      progress.progress();
-
-      if (vflip) {
-        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-        tx.translate(0, -image.getHeight());
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        image = op.filter(image, null);
+    public void write(TileIndex tileIndex, RasterLayer r) throws IOException {
+      if (vflip)
         tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
-      }
-      
-      Path imagePath = new Path(out, tileIndex.getImageFileName());
-      OutputStream output = outFs.create(imagePath);
-      ImageIO.write(image, "png", output);
-      output.close();
+      Path imagePath = new Path(outPath, tileIndex.getImageFileName());
+      // Write this tile to an image
+      FSDataOutputStream outFile = outFS.create(imagePath);
+      rasterizer.writeImage(r, outFile, this.vflip);
+      outFile.close();
+      task.progress();
     }
 
-
     @Override
-    public void close(Reporter reporter) throws IOException {
+    public void close(TaskAttemptContext context) throws IOException,
+        InterruptedException {
     }
   }
   
   @Override
-  public RecordWriter<TileIndex, BufferedImage> getRecordWriter(
-      FileSystem ignored, JobConf job, String name, Progressable progress)
-      throws IOException {
-    this.progress = progress;
-    this.vflip = job.getBoolean("vflip", true);
-    Path file = FileOutputFormat.getTaskOutputPath(job, name).getParent();
-    FileSystem fs = file.getFileSystem(job);
-
-    return new ImageRecordWriter(file, fs);
+  public RecordWriter<TileIndex, RasterLayer> getRecordWriter(
+      TaskAttemptContext task) throws IOException, InterruptedException {
+    Path file = getDefaultWorkFile(task, "").getParent();
+    FileSystem fs = file.getFileSystem(task.getConfiguration());
+    return new ImageRecordWriter(fs, file, task);
   }
+  
+  /**
+   * Finalizes the job by adding a default empty tile and writing
+   * an HTML file to navigate generated images
+   * folder.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class MultiLevelOutputCommitter extends FileOutputCommitter {
+    
+    /**Job output path*/
+    private Path outPath;
+
+    public MultiLevelOutputCommitter(Path outputPath, TaskAttemptContext context)
+        throws IOException {
+      super(outputPath, context);
+      this.outPath = outputPath;
+    }
+    
+    @Override
+    public void commitJob(JobContext context) throws IOException {
+      super.commitJob(context);
+      Configuration conf = context.getConfiguration();
+      FileSystem outFs = outPath.getFileSystem(conf);
+
+      System.out.println("Writing default empty image");
+      // Write a default empty image to be displayed for non-generated tiles
+      int tileWidth = conf.getInt("tilewidth", 256);
+      int tileHeight = conf.getInt("tileheight", 256);
+      BufferedImage emptyImg = new BufferedImage(tileWidth, tileHeight,
+          BufferedImage.TYPE_INT_ARGB);
+      Graphics2D g = new SimpleGraphics(emptyImg);
+      g.setBackground(new Color(0, 0, 0, 0));
+      g.clearRect(0, 0, tileWidth, tileHeight);
+      g.dispose();
+
+      OutputStream out = outFs.create(new Path(outPath, "default.png"));
+      ImageIO.write(emptyImg, "png", out);
+      out.close();
+
+      // Get the correct levels.
+      String[] strLevels = conf.get("levels", "7").split("\\.\\.");
+      int minLevel, maxLevel;
+      if (strLevels.length == 1) {
+        minLevel = 0;
+        maxLevel = Integer.parseInt(strLevels[0]);
+      } else {
+        minLevel = Integer.parseInt(strLevels[0]);
+        maxLevel = Integer.parseInt(strLevels[1]);
+      }
+
+      // Add an HTML file that visualizes the result using Google Maps
+      System.out.println("Writing the HTML viewer file");
+      LineReader templateFileReader = new LineReader(getClass()
+          .getResourceAsStream("/zoom_view.html"));
+      PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath,
+          "index.html")));
+      Text line = new Text();
+      while (templateFileReader.readLine(line) > 0) {
+        String lineStr = line.toString();
+        lineStr = lineStr.replace("#{TILE_WIDTH}", Integer.toString(tileWidth));
+        lineStr = lineStr.replace("#{TILE_HEIGHT}",
+            Integer.toString(tileHeight));
+        lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(maxLevel));
+        lineStr = lineStr.replace("#{MIN_ZOOM}", Integer.toString(minLevel));
+        lineStr = lineStr.replace("#{TILE_URL}", "'tile_' + zoom + '_' + coord.x + '-' + coord.y + '.png'");
+
+        htmlOut.println(lineStr);
+      }
+      templateFileReader.close();
+      htmlOut.close();
+    }
+  }
+  
+  @Override
+  public synchronized OutputCommitter getOutputCommitter(
+      TaskAttemptContext context) throws IOException {
+    Path jobOutputPath = getOutputPath(context);
+    return new MultiLevelOutputCommitter(jobOutputPath, context);
+  }
+  
 }

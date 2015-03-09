@@ -1,15 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.core;
 
 import java.awt.Color;
@@ -306,7 +302,7 @@ public class OGCJTSShape implements Shape {
       
       int[] xpoints = new int[line.getNumPoints()];
       int[] ypoints = new int[line.getNumPoints()];
-      
+
       for (int i = 0; i < xpoints.length; i++) {
         double px = line.getPointN(i).getX();
         double py = line.getPointN(i).getY();
@@ -315,6 +311,7 @@ public class OGCJTSShape implements Shape {
         xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
         ypoints[i] = (int) Math.round((py - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       }
+      
       // Draw the polygon
       //graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
       graphics.drawPolyline(xpoints, ypoints, xpoints.length);

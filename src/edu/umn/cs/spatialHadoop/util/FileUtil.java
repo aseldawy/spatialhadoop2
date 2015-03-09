@@ -1,15 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.util;
 
 import java.io.BufferedWriter;
@@ -17,8 +13,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -27,9 +24,14 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.mapred.FileSplit;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.GlobalIndex;
+import edu.umn.cs.spatialHadoop.core.Partition;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * A bunch of helper functions used with files
@@ -70,21 +72,15 @@ public final class FileUtil {
 
 		FSDataInputStream in = fs.open(split.getPath());
 		in.seek(split.getStart());
+		ReadableByteChannel rbc = Channels.newChannel(in);
 
 		// Prepare output file for write
-		File tempFile = File.createTempFile(split.getPath().getName(), "hdf");
-		OutputStream out = new FileOutputStream(tempFile);
+		File tempFile = File.createTempFile(split.getPath().getName(), "tmp");
+		FileOutputStream out = new FileOutputStream(tempFile);
+		
+		out.getChannel().transferFrom(rbc, 0, length);
 
-		// A buffer used between source and destination
-		byte[] buffer = new byte[1024 * 1024];
-		while (length > 0) {
-			int numBytesRead = in.read(buffer, 0,
-					(int) Math.min(length, buffer.length));
-			out.write(buffer, 0, numBytesRead);
-			length -= numBytesRead;
-		}
-
-		in.close();
+		rbc.close();
 		out.close();
 		return tempFile.getAbsolutePath();
 	}
@@ -103,6 +99,41 @@ public final class FileUtil {
 		return copyFile(conf, fs.getFileStatus(inFile));
 	}
 
+	/**
+	 * Writes paths to a HDFS file where each path is a line.
+	 * 
+	 * @author ibrahimsabek
+	 * @param paths
+	 */
+	
+	public static Path writePathsToHDFSFile(OperationsParams params, Path[] paths){
+		String tmpFileName = "pathsDictionary.txt";
+		Configuration conf = new Configuration();
+		try {
+			FileSystem fs = params.getPaths()[0].getFileSystem(conf);
+			Path hdfsFilePath = new Path(params.getPaths()[0].toString() + "/"
+					+ tmpFileName);	
+			FSDataOutputStream out = fs.create(hdfsFilePath);
+			
+			for (int i = 0; i < paths.length; i++) {
+				StringBuilder pathStringBuilder = new StringBuilder();
+				pathStringBuilder.append(paths[i].toString());
+				pathStringBuilder.append("\n");
+				
+				byte[] bytArr = pathStringBuilder.toString().getBytes();
+				out.write(bytArr);
+			}
+					
+			out.close();
+
+			return hdfsFilePath;
+		} catch (IOException e) {
+			e.printStackTrace();
+			return null;
+		}
+		
+	}
+	
 	/**
 	 * Writes paths to a file where each path is a line.
 	 * 
@@ -165,5 +196,96 @@ public final class FileUtil {
 		localInputStream.close();
 		out.close();
 	}
+
+	/**
+	 * function to list files in a certain directory
+	 * 
+	 * @author ibrahimsabek
+	 * @param path
+	 * @return
+	 * @throws IOException
+	 */
+	public static Path[] getFilesListInPath(Path path) throws IOException{
+		FileSystem fileSystem = path.getFileSystem(new Configuration());
+		FileStatus[] matchingDirs = fileSystem.listStatus(path);
+		Path[] pathsArr = new Path[matchingDirs.length];
+		for(int i = 0; i < matchingDirs.length; i++){
+			pathsArr[i] = matchingDirs[i].getPath();
+		}
+		return pathsArr;
+	}
+
+	/**
+	 * Get the actual size of all data in the given directory. If the input is
+	 * a single file, its size is returned immediately. If the input is a
+	 * directory, we returns the total size of all data in that directory.
+	 * If there is a global index, the size is retrieved from that global index.
+	 * Otherwise, we add up all the sizes of single files.
+	 * @param fs - the file system that contains the path
+	 * @param path - the path that contains the data
+	 * @return
+	 * @throws IOException 
+	 */
+  public static long getPathSize(FileSystem fs, Path path) throws IOException {
+    FileStatus fileStatus = fs.getFileStatus(path);
+    // 1- Check if the path points to a file
+    if (!fileStatus.isDir())
+      return fileStatus.getLen();
+    // 2- Check if the input is indexed and get the cached size
+    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, path);
+    if (gIndex != null) {
+      long totalSize = 0;
+      for (Partition partition : gIndex)
+        totalSize += partition.size;
+      return totalSize;
+    }
+    // 3- Get the total size of all non-hidden files
+    long totalSize = 0;
+    FileStatus[] allFiles = fs.listStatus(path, SpatialSite.NonHiddenFileFilter);
+    for (FileStatus subFile : allFiles) {
+      if (!subFile.isDir())
+        totalSize += subFile.getLen();
+    }
+    return totalSize;
+  }
+  
+  /**
+   * Used to check whether files are compressed or not to remove their
+   * extension.
+   */
+  private static final CompressionCodecFactory compressionCodecs = 
+      new CompressionCodecFactory(new Configuration());
+  
+  /**
+   * Returns the extension of the file after removing any possible suffixes
+   * for compression
+   * @param path
+   * @return
+   */
+  public static String getExtensionWithoutCompression(Path path) {
+    String extension = "";
+    String fname = path.getName().toLowerCase();
+    if (compressionCodecs.getCodec(path) == null) {
+      // File not compressed, get the extension
+      int last_dot = fname.lastIndexOf('.');
+      if (last_dot >= 0) {
+        extension = fname.substring(last_dot + 1);
+      }
+    } else {
+      // File is comrpessed, get the extension before the compression
+      int last_dot = fname.lastIndexOf('.');
+      if (last_dot > 0) {
+        int prev_dot = fname.lastIndexOf('.', last_dot - 1);
+        if (prev_dot >= 0) {
+          extension = fname.substring(prev_dot + 1, last_dot);
+        }
+      }
+    }
+    return extension;
+  }
+
+  public static CompressionCodec getCodec(Path file) {
+    return compressionCodecs.getCodec(file);
+  }
 
 }

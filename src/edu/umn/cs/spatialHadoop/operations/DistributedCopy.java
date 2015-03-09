@@ -1,15 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 
 package edu.umn.cs.spatialHadoop.operations;
 
@@ -50,7 +46,6 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.PyramidOutputFormat;
 import edu.umn.cs.spatialHadoop.util.WritableByteArray;
 
 /**
@@ -245,7 +240,7 @@ public class DistributedCopy {
       long minSize = job.getLong("mapred.min.split.size", 10*1024*1024);
       Path outPath = BlockOutputFormat.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
-      long outputBlockSize = outFs.getDefaultBlockSize();
+      long outputBlockSize = outFs.getDefaultBlockSize(outPath);
       Vector<FileBlockSplit> splits = new Vector<FileBlockSplit>();
       Queue<FileStatus> files = new ArrayDeque<FileStatus>();
       Path[] dirs = getInputPaths(job);
@@ -394,7 +389,7 @@ public class DistributedCopy {
       super.commitJob(context);
       
       JobConf job = context.getJobConf();
-      Path outPath = PyramidOutputFormat.getOutputPath(job);
+      Path outPath = BlockOutputFormat.getOutputPath(job);
       FileSystem outFs = outPath.getFileSystem(job);
 
       // Collect all output folders

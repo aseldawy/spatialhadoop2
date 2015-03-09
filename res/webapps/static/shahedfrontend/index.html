@@ -1,0 +1,477 @@
+<!-- http://wiki.openstreetmap.org/wiki/Google_Maps_Example#Example_-_Using_Google_Maps_API_v3_setting_OSM_as_a_base_map_layer -->
+<!DOCTYPE html>
+<html>
+ <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <link rel="stylesheet" href="jquery-ui/jquery-ui.css">
+        <script src="jquery-2.0.0.min.js"></script>
+        <script src="jquery-ui/jquery-ui.js"></script>
+        
+        <title>SHAHED Demo</title>
+    	<style type="text/css">
+			html, body, #map, #map-canvas {
+				height: 100%;
+				margin: 0;
+				padding: 0;
+			}
+			#floatingImage, #floatingVideo {
+				z-index: 20;
+				background: #DEDEDE;
+				width: 190px;
+				margin: 10px;
+				margin-left: 85%;
+				margin-top: 80px;
+				padding: 15px;
+				border-radius: 25px;
+				position: absolute;
+			}
+			#panel2 {
+				position: absolute;
+				top: 5px;
+				left: 25%;
+				width: auto;
+				margin-left: -180px;
+				z-index: 1;
+				background-color: #fff;
+				padding: 5px;
+				border: 1px solid #999;
+			}
+			#Nav {
+				position: absolute;
+				margin-left: 8%;
+				margin-top: 10px;
+				width: auto;
+				z-index: 1;
+				background-color: #fff;
+				padding: 5px;
+				border: 1px solid #999;
+			}
+			#panel {
+				position: absolute;
+				top: 5px;
+				left: 88%;
+				width: auto;
+				margin-left: -180px;
+				z-index: 1;
+				background-color: #fff;
+				padding: 5px;
+				border: 1px solid #999;
+			}
+
+			.label {
+				float: left;
+				width: auto;
+				text-align: left;
+				margin-right: 0.5em;
+			}
+			#query-selector {
+				top: 10px;
+				left: 100px;
+				background-color: white;
+				position: absolute;
+				z-index: 1;
+			}
+			#top-pane {
+				background-color: lightgrey;
+				position: fixed;
+				z-index: 1;
+			}
+
+			div.dropdown {
+				width: 50%;
+				margin-left: 3%;
+				position: relative;
+			}
+			div.submenu {
+				background: #FFFFFF;
+				position: absolute;
+				left: -3px;
+				z-index: 1;
+				width: 250px;
+				display: block;
+				margin-left: 6%;
+				padding: 90% 0 0 3%;
+				border-radius: 6px;
+				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+			}
+
+			.dropdown  li a {
+
+				color: #555555;
+				display: block;
+				width: auto;
+				cursor: pointer;
+				text-decoration: none;
+			}
+
+			a.account {
+				font-size: 11px;
+				line-height: 16px;
+				color: #555;
+				position: absolute;
+				z-index: 10;
+				display: block;
+				margin-top: 2.3%;
+				margin-left: 6%;
+				height: 2px;
+				width: 171px;
+				text-decoration: none;
+				cursor: pointer;
+			}
+			.controls {
+				margin-top: 16px;
+				border: 1px solid transparent;
+				border-radius: 2px 0 0 2px;
+				box-sizing: border-box;
+				-moz-box-sizing: border-box;
+				height: 32px;
+				outline: none;
+				box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+			}
+
+			#pac-input {
+				background-color: #fff;
+				padding: 0 11px 0 13px;
+				width: 400px;
+				font-family: Roboto;
+				font-size: 15px;
+				font-weight: 300;
+				text-overflow: ellipsis;
+			}
+
+			#pac-input:focus {
+				border-color: #4d90fe;
+				margin-left: -1px;
+				padding-left: 14px; /* Regular padding-left + 1. */
+				width: 401px;
+			}
+
+			.pac-container {
+				font-family: Roboto;
+			}
+
+			#type-selector {
+				color: #fff;
+				background-color: #4d90fe;
+				padding: 5px 11px 0px 11px;
+			}
+
+			#type-selector label {
+				font-family: Roboto;
+				font-size: 13px;
+				font-weight: 300;
+			}
+			
+			#target {
+				width: 345px;
+			}
+						
+        </style>
+        <script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?libraries=places&sensor=false"></script>
+        <script src="navigation.js"></script>
+        <script src="http://malsup.github.io/jquery.blockUI.js"></script>
+		<script src="AjaxGlobalHandler.js" type="text/javascript"></script>
+        <link rel="stylesheet" href="jquery-ui/jquery-ui.css">
+ </head>
+ 
+ <body>
+ 	  <div id="panel" class="submenu" style="background:#DEDEDE;">
+            <label for="min">Minimum: </label>
+            <input type="text" id="min" readonly="readonly" size="18"/>
+            <br/>
+            <label for="max">Maximum: </label>
+            <input type="text" id="max" readonly="readonly" size="17"/>
+            <br/>
+            <label for="avg">Average: &nbsp;&nbsp; </label>
+            <input type="text" id="avg" readonly="readonly" size="17"/>
+            <br/>
+        	<label for="time">Time (ms):</label>
+            <input type="text" id="time" readonly="readonly" size="16"/>
+            <br/>
+        </div>
+ 		<div id="panel2" class="submenu" style="background:#DEDEDE;height: 70px">
+            <label for="fly-to">Fly to: </label>
+            <input type="text" id="fly-to" placeholder="Type destination ..." size="17"/>
+            <label> Data Set: </label>
+            <select id="datasets" style="display: compact;">
+                <option id="LST_Day_1km" value="MOLA/MYD11A1.005" selected="selected">Temperature Day</option>
+                <option id="LST_Night_1km" value="MOLA/MYD11A1.005">Temperature Night</option>
+            </select>
+            <br/>
+            <label for="fromDatePicker" style="display: inline;"> From Date: </label>
+            <input type="text" value="01/01/2013" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;"/>
+            <label for="toDatePicker" style="display: inline;"> To Date: </label>
+            <input type="text" value="01/15/2013" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;"/>
+            <input type="button" value="Img" name="GenerateImage" id="GenerateImage" style="display: inline; width: 40px;"/>
+            <br/>
+            <div id="date-range-selector"></div>
+        </div>
+        <div id="submissionFormDiv" class="submenu" title="submissionFormDivTitle" style="visibility: hidden">
+            <fieldset>
+                <form title="submissionFormTitle" id="submissionForm" method="post" name="submissionForm" action="aggregate_query.cgi" >
+                    <input type="text" name="title" id="title" />
+                    <input name="dataset" id="dataset" type="hidden" readonly="readonly" />
+                    <input name="dataset_url" id="dataset_url" type="hidden" readonly="readonly"/>
+                    <input id="fromDate" name="selectedFromDate" type="hidden" readonly="readonly">
+                    <input id="toDate" name="selectedToDate" type="hidden" readonly="readonly">
+                    <input type="submit" value="Submit">
+                </form>
+            </fieldset>
+
+        </div>
+		<script type="text/javascript">
+		  // The geocoder used to parse user-input addresses
+		  var geocoder;
+      // The Google Maps object created in this page
+      var map;
+      // The draggable rectangle on the map
+      var rectangle;
+      var rectangleIsDragged = false;
+		
+      $('#fly-to').keypress(function(e) {
+        if (e.keyCode == 13) {
+          Fly2Destinaiton();
+        }
+      });
+              
+      function Fly2Destinaiton() {
+        var address = document.getElementById("fly-to").value;
+        geocoder.geocode({
+            'address' : address
+          }, function(results, status) {
+            if (status == google.maps.GeocoderStatus.OK) {
+              var result = results[0];
+              var fromatted_address = result.formatted_address;
+              $("#fly-to").val(fromatted_address);
+              var bounds = result.geometry.bounds;
+              map.fitBounds(bounds);
+              MoveRectangle(bounds);
+            } else {
+              alert("Geocode was not successful for the following reason: " + status);
+            }
+          }
+        );
+      }
+      
+      // Create the draggable rectangle for the first time and initialize
+      // listeners
+      function CreateRectangle() {
+        var bounds = new google.maps.LatLngBounds(
+           new google.maps.LatLng(0, 0),
+           new google.maps.LatLng(1, 1));
+        rectangle = new google.maps.Rectangle({
+          bounds : bounds,
+          fillOpacity : 0.2,
+          strokeOpacity : 0.8,
+          draggable : true,
+          editable : true
+        });
+        google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
+        google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
+        google.maps.event.addListener(rectangle, 'bounds_changed', aggregateQuery);
+      }
+
+      // Move the draggable rectangle to a specific location on the map			      
+      function MoveRectangle(bounds) {
+        rectangle.setMap(map); // Ensure it is visible if not
+        rectangle.setBounds(bounds);
+      }
+      
+      // TODO This variable should be thread-safe
+      var processingRequest = false;
+      
+      // Process the request by submitting it to the backend server
+      function aggregateQuery(){
+      	if (rectangleIsDragged)
+        	return;
+        if (processingRequest)
+          return; // Another request already in progress
+      	if ($("#fromDatePicker").val().length == 0 || $("#toDatePicker").val().length == 0) {
+        	alert('Please specify start and end date');
+        	return;
+      	}
+      	if (rectangle == null) {
+        	alert("Please specify a rectangle");
+        	return;
+      	}
+        processingRequest = true;
+      	var fromDate = document.getElementById("fromDatePicker").value;
+      	var toDate = document.getElementById("toDatePicker").value;
+      	var ne = rectangle.getBounds().getNorthEast();
+        var sw = rectangle.getBounds().getSouthWest();
+      	requestURL = "cgi-bin/aggregate_query.cgi?"
+                      + "min_lat=" + sw.lat() + "&min_lon=" + sw.lng()
+    									+ "&max_lat=" + ne.lat() + "&max_lon=" + ne.lng()
+    									+ "&fromDate=" + fromDate
+    									+ "&toDate=" + toDate;;
+          $.getJSON(requestURL, function(data) {
+              min = ((parseInt(data.results.min)/50) - 273.15) * 1.8000 + 32.00;
+              document.getElementById("min").value = min;
+              max = ((parseInt(data.results.max)/50) - 273.15) * 1.8000 + 32.00;
+              document.getElementById("max").value = max;
+              sum = data.results.sum;
+              count = parseInt(data.results.count);
+              average = ((sum/count / 50.0)-273.15)*1.8+32;
+              document.getElementById("avg").value = average;
+              timeInMilliSec = parseInt(data.stats.totaltime);
+              document.getElementById("time").value = timeInMilliSec;
+          }).always(function() {
+              processingRequest = false;
+          });
+      }
+      
+      function generateImage() {
+        if ($("#fromDatePicker").val().length == 0 || $("#toDatePicker").val().length == 0) {
+          alert('Please specify start and end date');
+          return;
+        }
+        if (rectangle == null) {
+          alert("Please specify a rectangle");
+          return;
+        }
+        var fromDate = document.getElementById("fromDatePicker").value;
+        var toDate = document.getElementById("toDatePicker").value;
+        var ne = rectangle.getBounds().getNorthEast();
+        var sw = rectangle.getBounds().getSouthWest();
+        var selectedDatasetOption = $("#datasets option:selected");
+        var dataset = selectedDatasetOption.attr("id");
+        var url = selectedDatasetOption.val();
+        requestURL = "cgi-bin/generate_image.cgi?"
+                      + "min_lat=" + sw.lat() + "&min_lon=" + sw.lng()
+                      + "&max_lat=" + ne.lat() + "&max_lon=" + ne.lng()
+                      + "&fromDate=" + fromDate
+                      + "&toDate=" + toDate
+                      + "&dataset=" + dataset
+                      + "&dataset_url=" + url;
+        // Send using Ajax
+        $.getJSON(requestURL, function(response) {
+          alert(response);
+        });
+      }
+          
+      function formatDate(date) {
+        var year = date.getFullYear();
+        var month = (date.getMonth() + 1).toString();
+        if (month.length == 1)
+          month = "0" + month;
+        var day = (date.getDate()).toString();
+        if (day.length == 1)
+          day = "0" + day;
+        return month+"/"+day+"/"+year;         
+      }
+      
+      var slider;  
+      var MillisPerDay = 1000 * 60 * 60 * 24; // Milliseconds in one day
+      var day0 = new Date(2013, 0, 1); // Minimum day supported
+      
+      $(function() {
+  			$("#fromDatePicker").datepicker({
+  			  dateFormat : 'mm/dd/yy',
+          changeYear : true,
+          changeMonth : true,
+          yearRange : "2013:2013",
+  			}).change( function() {
+  			  var day0 = new Date(2013, 0, 1);
+          var value1 = (Date.parse($("#fromDatePicker").val()) - day0.getTime()) / MillisPerDay;
+          var value2 = (Date.parse($("#toDatePicker").val()) - day0.getTime()) / MillisPerDay;
+          slider.slider('values', [value1, value2]);
+  			});
+  			slider = $("#date-range-selector").slider( {
+    			range: true,
+          min: 0,
+          max: 365,
+          values: [ 0, 15 ],
+          slide: function( event, ui ) {
+            var value1 = ui.values[0];
+            var value2 = ui.values[1];
+            var fromDate = new Date(day0.getTime() + value1 * MillisPerDay);
+            var toDate = new Date(day0.getTime() + value2 * MillisPerDay);
+            $("#fromDatePicker").val(formatDate(fromDate));
+            $("#toDatePicker").val(formatDate(toDate));
+          }
+  			});
+			});
+			
+			$(function() {
+  			$("#toDatePicker").datepicker({
+          dateFormat : 'mm/dd/yy',
+          changeYear : true,
+          changeMonth : true,
+          yearRange : "2013:2013",
+        }).change( function() {
+          var day0 = new Date(2013, 0, 1);
+          var value1 = (Date.parse($("#fromDatePicker").val()) - day0.getTime()) / MillisPerDay;
+          var value2 = (Date.parse($("#toDatePicker").val()) - day0.getTime()) / MillisPerDay;
+          slider.slider('values', [value1, value2]);
+        });
+        $("#GenerateImage").click(generateImage);
+			});
+		</script>
+		
+ 	 	<div id="map"> </div>
+ 	 	
+ 	 	<script type="text/javascript">
+ 	 		var waitImageURL = 'wait.gif';
+ 	 		var sessionoutRedirectURL = 'aggregate_query.html';
+ 	 		$(function () {
+        var options = {
+          AjaxWait: {
+            AjaxWaitMessage: "<img style='height: 250px' src='"
+                + waitImageURL + "' />",
+            AjaxWaitMessageCss: { width: "250px", left: "40%" }
+          },
+          AjaxErrorMessage: "<h6>Error! please contact the administrator!</h6>",
+          SessionOut: {
+            StatusCode: 590,
+            RedirectUrl: sessionoutRedirectURL
+          }
+        };
+        AjaxGlobalHandler.Initiate(options);
+      });
+ 	 	</script>
+ 	 	
+ 	 	<script type="text/javascript">
+                
+      var element = document.getElementById("map");
+      
+      var mapTypeIds = [];
+      for (var type in google.maps.MapTypeId) {
+        mapTypeIds.push(google.maps.MapTypeId[type]);
+      }
+
+      map = new google.maps.Map(element, {
+        center : new google.maps.LatLng(39.502506, -98.356131),
+        zoom : 5,
+        mapTypeId : google.maps.MapTypeId.ROADMAP,
+        mapTypeControlOptions : {
+          mapTypeIds : mapTypeIds
+        }
+      });
+      
+      google.maps.event.addListener(map, 'click', function(event) {
+        // Move the selection rectangle in the clicked location
+        lat = event.latLng.lat();
+        lng = event.latLng.lng();
+
+        var ne = map.getBounds().getNorthEast();
+        var sw = map.getBounds().getSouthWest();
+        var width = (ne.lng() - sw.lng()) / 10.0;
+        var height = (ne.lat() - sw.lat()) / 10.0;
+        bounds = new google.maps.LatLngBounds(
+          new google.maps.LatLng(lat - height, lng - width),
+          new google.maps.LatLng(lat + height, lng + width));
+        
+        MoveRectangle(bounds);
+      });
+ 
+      // Create and initialize the draggable rectangle on the map
+      CreateRectangle();
+      
+      // Initialize the geocoder
+      geocoder = new google.maps.Geocoder();
+         
+    </script>
+ </body>
+</html>

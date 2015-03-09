@@ -1,16 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
-
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.awt.Color;
@@ -39,6 +34,7 @@ import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
@@ -98,8 +94,10 @@ public class MakeHDFVideo {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {
       System.exit(1);
@@ -175,7 +173,7 @@ public class MakeHDFVideo {
       MinMax scaleRange = new MinMax();
       scaleRange.minValue = Integer.parseInt(parts[0]);
       scaleRange.maxValue = Integer.parseInt(parts[1]);
-      GeometricPlot.drawScale(new Path(output, "scale.png"), scaleRange, 64, imageHeight);
+      HDFPlot2.drawScale(new Path(output, "scale.png"), scaleRange, 64, imageHeight);
     }
     
     InputStream logoInputStream = MakeHDFVideo.class.getResourceAsStream("/gistic_logo.png");
@@ -209,34 +207,17 @@ public class MakeHDFVideo {
     }
 
     // Plot the overlay image
-    String overlay = params.get("overlay");
+    Path overlay = params.get("overlay") == null ? null : new Path(params.get("overlay"));
     if (overlay != null) {
-      vargs = new Vector<String>(Arrays.asList(args));
+      // Draw an overlay image
+      OperationsParams plotParams = new OperationsParams(params);
+
       // Keep all arguments except input and output which change for each call
       // to Plot or PlotPyramid
-      for (int i = 0; i < vargs.size();) {
-        if (vargs.get(i).startsWith("-") && vargs.get(i).length() > 1) {
-          i++; // Keep this argument
-        } else if (vargs.get(i).indexOf(':') != -1 && vargs.get(i).indexOf(":/") == -1) {
-          if (vargs.get(i).toLowerCase().startsWith("scale:")
-              || vargs.get(i).startsWith("shape:")
-              || vargs.get(i).startsWith("dataset:")
-              || vargs.get(i).startsWith("width:")
-              || vargs.get(i).startsWith("height:"))
-            vargs.remove(i);
-          else
-            i++; // Keep this argument
-        } else {
-          vargs.remove(i);
-        }
-      }
-      vargs.add(overlay);
-      vargs.add("width:"+imageWidth);
-      vargs.add("height:"+imageHeight);
-      vargs.add("-no-keep-ratio");
-      vargs.add(new Path(output, "overlay.png").toString());
-      vargs.add("shape:"+OSMPolygon.class.getName());
-      GeometricPlot.main(vargs.toArray(new String[vargs.size()]));
+      plotParams.clearAllPaths();
+      Path overlayOutput = new Path(output, "overlay.png");
+      plotParams.setClass("shape", OSMPolygon.class, Shape.class);
+      GeometricPlot.plot(new Path[] {overlay}, overlayOutput, plotParams);
     }
 
     String video_command;

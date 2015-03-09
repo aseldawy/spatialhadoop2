@@ -1,10 +1,11 @@
-/*******************************************************************
- * Copyright (C) 2014 by Regents of the University of Minnesota.   *
- *                                                                 *
- * This Software is released under the Apache License, Version 2.0 *
- * http://www.apache.org/licenses/LICENSE-2.0                      *
- *******************************************************************/
-
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
@@ -19,7 +20,6 @@ import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
-import edu.umn.cs.spatialHadoop.SimpleGraphics;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
@@ -93,6 +93,9 @@ public class ImageRasterLayer extends RasterLayer {
     byte[] bytes = new byte[length];
     in.readFully(bytes);
     this.image = ImageIO.read(new ByteArrayInputStream(bytes));
+    // Calculate the scale of the image in terms of pixels per unit
+    xscale = image.getWidth() / getInputMBR().getWidth();
+    yscale = image.getHeight() / getInputMBR().getHeight();
   }
 
   public void mergeWith(ImageRasterLayer another) {

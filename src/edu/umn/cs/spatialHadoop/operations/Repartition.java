@@ -1,15 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
@@ -260,7 +256,8 @@ public class Repartition {
    * @return
    * @throws IOException 
    */
-  public static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
+@SuppressWarnings("deprecation")
+public static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
       FileSystem outFs, Path outFile, long blockSize) throws IOException {
     final float IndexingOverhead =
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);
@@ -282,13 +279,14 @@ public class Repartition {
    * @param rtree
    * @param overwrite
    * @throws IOException
+	 * @throws InterruptedException 
    * @deprecated this method is replaced with
    *   {@link #repartitionMapReduce(Path, Path, OperationsParams)}
    */
   @Deprecated
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, String sindex,
-      boolean overwrite) throws IOException {
+      boolean overwrite) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams();
     if (stockShape != null)
       params.setClass("shape", stockShape.getClass(), Shape.class);
@@ -299,7 +297,7 @@ public class Repartition {
   }
   
   public static void repartitionMapReduce(Path inFile, Path outPath, CellInfo[] cellInfos, 
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     String sindex = params.get("sindex");
     boolean overwrite = params.is("overwrite");
     Shape stockShape = params.getShape("shape");
@@ -308,11 +306,12 @@ public class Repartition {
 
     // Calculate number of partitions in output file
     // Copy blocksize from source file if it's globally indexed
-    final long blockSize = outFs.getDefaultBlockSize();
+    @SuppressWarnings("deprecation")
+	final long blockSize = outFs.getDefaultBlockSize();
     
     // Calculate the dimensions of each partition based on gindex type
     if(cellInfos == null){
-    	if (sindex.equals("grid")) {
+    		if (sindex.equals("grid")) {
     	      Rectangle input_mbr = FileMBR.fileMBR(inFile, params);
     	      long inFileSize = FileMBR.sizeOfLastProcessedFile;
     	      int num_partitions = calculateNumberOfPartitions(new Configuration(),
@@ -474,7 +473,6 @@ public class Repartition {
   public static CellInfo[] packInRectangles(Path[] files,
       Path outFile, OperationsParams params, Rectangle fileMBR)
       throws IOException {
-	  boolean clean = params.getBoolean("clean", false);
     final Vector<Point> sample = new Vector<Point>();
     
     float sample_ratio =
@@ -511,14 +509,9 @@ public class Repartition {
     }
     GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     FileSystem outFs = outFile.getFileSystem(params);
-    long blocksize = outFs.getDefaultBlockSize();
-    if(clean) {
-        //gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)) * 1000);
-        gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
-
-    } else {
-        gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
-    }
+    @SuppressWarnings("deprecation")
+	long blocksize = outFs.getDefaultBlockSize();
+    gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
     if (fileMBR == null)
       gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
     else
@@ -541,6 +534,7 @@ public class Repartition {
    * @param sindex
    * @param overwrite
    * @throws IOException
+   * @throws InterruptedException 
    * @deprecated this method is replaced with
    *   {@link #repartitionLocal(Path, Path, OperationsParams)}
    */
@@ -548,7 +542,7 @@ public class Repartition {
   public static <S extends Shape> void repartitionLocal(Path inFile,
       Path outFile, S stockShape, long blockSize, String sindex,
       boolean overwrite)
-          throws IOException {
+          throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams();
     if (stockShape != null)
       params.setClass("shape", stockShape.getClass(), Shape.class);
@@ -558,8 +552,9 @@ public class Repartition {
     repartitionLocal(inFile, outFile, params);
   }
   
-  public static <S extends Shape> void repartitionLocal(Path inFile,
-      Path outFile, OperationsParams params) throws IOException {
+  @SuppressWarnings("deprecation")
+public static <S extends Shape> void repartitionLocal(Path inFile,
+      Path outFile, OperationsParams params) throws IOException, InterruptedException {
     String sindex = params.get("sindex");
     long blockSize = params.getSize("blocksize");
 
@@ -666,9 +661,10 @@ public class Repartition {
    * @param outputPath
    * @param params
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static void repartition(Path inFile, Path outputPath,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, FileMBR.class);
     FileInputFormat.addInputPath(job, inFile);
     ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
@@ -682,7 +678,7 @@ public class Repartition {
       repartitionMapReduce(inFile, outputPath, null, params);
   }
 
-  private static void printUsage() {
+  protected static void printUsage() {
     System.out.println("Builds a spatial index on an input file");
     System.out.println("Parameters (* marks required parameters):");
     System.out.println("<input file> - (*) Path to input file");

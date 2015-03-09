@@ -1,36 +1,28 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.operations;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
+import edu.umn.cs.spatialHadoop.nasa.HDFPlot2;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
+import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
 import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
-import edu.umn.cs.spatialHadoop.nasa.VisualizationServer;
-import edu.umn.cs.spatialHadoop.visualization.GeometricPlot2;
-import edu.umn.cs.spatialHadoop.visualization.HDFPlot2;
-import edu.umn.cs.spatialHadoop.visualization.HeatMapPlot2;
 
 /**
  * The main entry point to all queries.
+ * 
  * @author eldawy
  *
  */
@@ -46,11 +38,6 @@ public class Main {
     int exitCode = -1;
     ProgramDriver pgd = new ProgramDriver();
     try {
-      ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-      System.out.println("Mappers "+clusterStatus.getMaxMapTasks());
-      System.out.println("Reducers "+clusterStatus.getMaxReduceTasks());
-      
-      
       pgd.addClass("rangequery", RangeQuery.class,
           "Finds all objects in the query range given by a rectangle");
 
@@ -67,6 +54,9 @@ public class Main {
       
       pgd.addClass("index", Repartition.class,
           "Builds an index on an input file");
+
+      pgd.addClass("partition", Indexer.class,
+          "Spatially partition a file using a specific partitioner");
       
       pgd.addClass("mbr", FileMBR.class,
           "Finds the minimal bounding rectangle of an input file");
@@ -83,18 +73,6 @@ public class Main {
       pgd.addClass("union", Union.class,
           "Computes the union of input shapes");
 
-      pgd.addClass("plot", GeometricPlot.class,
-          "Plots a file to an image");
-
-      pgd.addClass("plotp", PyramidPlot.class,
-          "Plots a file to a set of images used with Google-Maps-like engine");
-
-      pgd.addClass("ploth", HeatMapPlot.class,
-          "Plots a heatmap of an input file of points");
-      
-      pgd.addClass("plotph", PyramidHeatPlot.class,
-    	  "Plots a file to a set of heat maps used with Google-Maps-like engine");
-
       pgd.addClass("hdfplot", HDFPlot.class,
           "Plots NASA datasets in the spatiotemporal range provided by user");
 
@@ -104,10 +82,10 @@ public class Main {
       pgd.addClass("makevideo", MakeHDFVideo.class,
           "Creates a video out of a set of HDF files");
 
-      pgd.addClass("gplot2", GeometricPlot2.class,
+      pgd.addClass("gplot", GeometricPlot.class,
           "Plots a file to an image");
 
-      pgd.addClass("hplot2", HeatMapPlot2.class,
+      pgd.addClass("hplot", HeatMapPlot.class,
           "Plots a heat map to an image");
       
       pgd.addClass("hdfx", HDFToText.class,
@@ -128,7 +106,7 @@ public class Main {
       pgd.addClass("distcp", DistributedCopy.class,
           "Copies a directory or file using a MapReduce job");
       
-      pgd.addClass("vizserver", VisualizationServer.class,
+      pgd.addClass("vizserver", ShahedServer.class,
           "Starts a server that handles visualization requests");
 
       pgd.addClass("staggquery", SpatioTemporalAggregateQuery.class,

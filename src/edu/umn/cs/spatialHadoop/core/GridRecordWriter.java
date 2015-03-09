@@ -1,15 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.core;
 
 import java.io.DataOutputStream;
@@ -223,7 +219,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
           -Double.MAX_VALUE, -Double.MAX_VALUE);
     }
 
-    this.blockSize = fileSystem.getDefaultBlockSize();
+    this.blockSize = fileSystem.getDefaultBlockSize(outDir);
     
     closingThreads = new ArrayList<Thread>();
     text = new Text();
@@ -394,7 +390,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       // Create new file
       cellStream = fileSystem.create(cellFilePath, true,
           fileSystem.getConf().getInt("io.file.buffer.size", 4096),
-          fileSystem.getDefaultReplication(), this.blockSize);
+          fileSystem.getDefaultReplication(cellFilePath), this.blockSize);
     } else {
       Class<? extends CompressionCodec> codecClass =
           FileOutputFormat.getOutputCompressorClass(jobConf, GzipCodec.class);
@@ -404,7 +400,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       // Open a stream to the output file
       cellStream = fileSystem.create(cellFilePath, true,
           fileSystem.getConf().getInt("io.file.buffer.size", 4096),
-          fileSystem.getDefaultReplication(), this.blockSize);
+          fileSystem.getDefaultReplication(cellFilePath), this.blockSize);
 
       // Encode the output stream using the codec
       cellStream = new DataOutputStream(codec.createOutputStream(cellStream));

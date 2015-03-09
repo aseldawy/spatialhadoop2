@@ -1,20 +1,17 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop;
 
 import java.awt.Color;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -23,14 +20,14 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.InputSplit;
-import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -40,7 +37,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
-import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
@@ -442,6 +439,8 @@ public class OperationsParams extends Configuration {
 
 	public <S extends Shape> S[] getShapes(String key, S stock) {
 		String[] values = getArray(key);
+		if (values == null)
+		  return null;
 		S[] shapes = (S[]) Array.newInstance(stock.getClass(), values.length);
 		for (int i = 0; i < values.length; i++) {
 			shapes[i] = (S) stock.clone();
@@ -509,6 +508,64 @@ public class OperationsParams extends Configuration {
 		return sjmrPartitioningGrid;
 	}
 
+	
+	public static int getJoiningThresholdPerOnce(Configuration conf,
+			String key) {
+		String joiningThresholdPerOnce_str = conf.get(key);
+		if (joiningThresholdPerOnce_str == null)
+			LOG.error("Your joiningThresholdPerOnce is not set");
+		return Integer.parseInt(joiningThresholdPerOnce_str);
+	}
+
+	public static void setJoiningThresholdPerOnce(Configuration conf,
+			String param, int joiningThresholdPerOnce) {
+		String str = null;
+		if (joiningThresholdPerOnce < 0){
+			str = "50000";				
+		}else{
+			str = joiningThresholdPerOnce + "";
+		}
+		conf.set(param, str);
+	}
+	
+	public static void setFilterOnlyModeFlag(Configuration conf,
+			String param, boolean filterOnlyMode) {
+		String str = null;
+		if (filterOnlyMode){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
+	public static boolean getFilterOnlyModeFlag(Configuration conf,
+			String key) {
+		String filterOnlyModeFlag = conf.get(key);
+		if (filterOnlyModeFlag == null)
+			LOG.error("Your filterOnlyMode is not set");
+		return Boolean.parseBoolean(filterOnlyModeFlag);
+	}
+	
+	public static boolean getInactiveModeFlag(Configuration conf,
+			String key) {
+		String inactiveModeFlag_str = conf.get(key);
+		if (inactiveModeFlag_str == null)
+			LOG.error("Your inactiveModeFlag is not set");
+		return Boolean.parseBoolean(inactiveModeFlag_str);
+	}
+	
+	public static void setInactiveModeFlag(Configuration conf,
+			String param, boolean inactiveModeFlag) {
+		String str = null;
+		if (inactiveModeFlag){
+			str = "true";	
+		}else{
+			str = "false";
+		}
+		conf.set(param, str);
+	}
+	
 	public static Path getRepartitionJoinIndexPath(Configuration conf,
 			String key) {
 		String repartitionJoinIndexPath_str = conf.get(key);
@@ -712,14 +769,16 @@ public class OperationsParams extends Configuration {
 	 * 
 	 * @return <code>true</code> to run in local mode, <code>false</code> to run
 	 *         in MapReduce mode.
+	 * @throws IOException 
+	 * @throws InterruptedException 
 	 */
-	public static boolean isLocal(JobConf job, Path... input) {
+	public static boolean isLocal(Configuration jobConf, Path... input) throws IOException, InterruptedException {
 		final boolean LocalProcessing = true;
 		final boolean MapReduceProcessing = false;
 
-		// Whatever is explicitly set has the highest prioerity
-		if (job.get("local") != null)
-			return job.getBoolean("local", false);
+		// Whatever is explicitly set has the highest priority
+		if (jobConf.get("local") != null)
+			return jobConf.getBoolean("local", false);
 
 		// If any of the input files are hidden, use local processing
 		for (Path inputFile : input) {
@@ -732,11 +791,15 @@ public class OperationsParams extends Configuration {
 			return MapReduceProcessing;
 		}
 
-		FileInputFormat.setInputPaths(job, input);
-		ShapeLineInputFormat inputFormat = new ShapeLineInputFormat();
+		Job job = new Job(jobConf); // To ensure we don't change the original
+		SpatialInputFormat3.setInputPaths(job, input);
+		SpatialInputFormat3<Partition, Shape> inputFormat = new SpatialInputFormat3<Partition, Shape>();
+		if (jobConf.get("rect") != null)
+		  job.getConfiguration().set(SpatialInputFormat3.InputQueryRange, jobConf.get("rect"));
+		
 		try {
-			InputSplit[] splits = inputFormat.getSplits(job, 1);
-			if (splits.length > MaxSplitsForLocalProcessing)
+			List<InputSplit> splits = inputFormat.getSplits(job);
+			if (splits.size() > MaxSplitsForLocalProcessing)
 				return MapReduceProcessing;
 
 			long totalSize = 0;
@@ -753,4 +816,8 @@ public class OperationsParams extends Configuration {
 			return MapReduceProcessing;
 		}
 	}
+
+  public void clearAllPaths() {
+    this.allPaths = null;
+  }
 }

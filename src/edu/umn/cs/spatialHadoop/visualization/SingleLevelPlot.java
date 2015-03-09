@@ -1,56 +1,52 @@
-/*******************************************************************
- * Copyright (C) 2014 by Regents of the University of Minnesota.   *
- *                                                                 *
- * This Software is released under the Apache License, Version 2.0 *
- * http://www.apache.org/licenses/LICENSE-2.0                      *
- *******************************************************************/
-
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
-import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.util.Iterator;
 import java.util.Random;
 import java.util.Vector;
 
-import javax.imageio.ImageIO;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileOutputCommitter;
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobContext;
-import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.Mapper;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.RecordReader;
-import org.apache.hadoop.mapred.Reducer;
-import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.LocalJobRunner;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.TaskAttemptID;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
+import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 
-import edu.umn.cs.spatialHadoop.ImageOutputFormat;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.GridPartitioner;
+import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
+import edu.umn.cs.spatialHadoop.operations.Indexer;
+import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
@@ -61,7 +57,7 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  */
 public class SingleLevelPlot {
   private static final Log LOG = LogFactory.getLog(SingleLevelPlot.class);
-
+  
   /**Configuration line for input file MBR*/
   private static final String InputMBR = "mbr";
 
@@ -74,9 +70,8 @@ public class SingleLevelPlot {
    * @author Ahmed Eldawy
    *
    */
-  public static class NoPartitionPlot extends MapReduceBase 
-    implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, RasterLayer>,
-    Reducer<IntWritable, RasterLayer, NullWritable, RasterLayer> {
+  public static class NoPartitionPlotMap<S extends Shape>
+    extends Mapper<Partition, Iterable<S>, IntWritable, RasterLayer> {
     
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -92,23 +87,28 @@ public class SingleLevelPlot {
     private int numReducers;
     /**Random number generator to send the raster layer to a random reducer*/
     private Random random;
-
-    @Override
-    public void configure(JobConf job) {
-      super.configure(job);
-      this.imageWidth = job.getInt("width", 1000);
-      this.imageHeight = job.getInt("height", 1000);
-      this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
-      this.outputValue = new IntWritable(0);
-      this.rasterizer = Rasterizer.getRasterizer(job);
-      this.numReducers = job.getNumReduceTasks();
-      this.random = new Random();
-    }
+    /**Whether the configured rasterizer defines a smooth function or not*/
+    private boolean smooth;
     
     @Override
-    public void map(Rectangle partitionMBR, Iterable<? extends Shape> shapes,
-        OutputCollector<IntWritable, RasterLayer> output, Reporter reporter)
-        throws IOException {
+    protected void setup(Context context)
+        throws IOException, InterruptedException {
+      // TODO Auto-generated method stub
+      super.setup(context);
+      Configuration conf = context.getConfiguration();
+      this.imageWidth = conf.getInt("width", 1000);
+      this.imageHeight = conf.getInt("height", 1000);
+      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
+      this.outputValue = new IntWritable(0);
+      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.smooth = rasterizer.isSmooth();
+      this.numReducers = Math.max(1, context.getNumReduceTasks());
+      this.random = new Random();
+    }
+
+    @Override
+    protected void map(Partition partitionMBR, Iterable<S> shapes,
+        Context context) throws IOException, InterruptedException {
       // If input is not spatially partitioned, the MBR is taken from input
       if (!partitionMBR.isValid())
         partitionMBR.set(inputMBR);
@@ -123,6 +123,8 @@ public class SingleLevelPlot {
       int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partitionMBR);
+      if (smooth)
+        shapes = rasterizer.smooth(shapes);
       rasterizer.rasterize(rasterLayer, shapes);
       // If we set the output value to one constant, all intermediate layers
       // will be merged in one machine. Alternatively, We can set it to several values
@@ -130,34 +132,96 @@ public class SingleLevelPlot {
       // layers. We will need to run a follow up merge process that runs
       // on a single machine in the OutputCommitter function.
       outputValue.set(random.nextInt(numReducers));
-      output.collect(outputValue, rasterLayer);
+      context.write(outputValue, rasterLayer);
+    }
+  }
+  
+  public static class NoPartitionPlotReduce<S extends Shape>
+    extends Reducer<IntWritable, RasterLayer, NullWritable, RasterLayer> {
+
+    /**The MBR of the input file*/
+    private Rectangle inputMBR;
+    /**Generated image width in pixels*/
+    private int imageWidth;
+    /**Generated image height in pixels*/
+    private int imageHeight;
+    /**The component that rasterizes the shapes*/
+    private Rasterizer rasterizer;
+    
+    @Override
+    protected void setup(Context context)
+        throws IOException, InterruptedException {
+      // TODO Auto-generated method stub
+      super.setup(context);
+      Configuration conf = context.getConfiguration();
+      this.imageWidth = conf.getInt("width", 1000);
+      this.imageHeight = conf.getInt("height", 1000);
+      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
+      this.rasterizer = Rasterizer.getRasterizer(conf);
     }
     
     @Override
-    public void reduce(IntWritable key, Iterator<RasterLayer> intermediateLayers,
-        OutputCollector<NullWritable, RasterLayer> output, Reporter reporter)
-        throws IOException {
+    protected void reduce(IntWritable dummy,
+        Iterable<RasterLayer> intermediateLayers, Context context)
+        throws IOException, InterruptedException {
+      // TODO Auto-generated method stub
       RasterLayer finalLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
       
-      while (intermediateLayers.hasNext()) {
-        RasterLayer intermediateLayer = intermediateLayers.next();
+      for (RasterLayer intermediateLayer : intermediateLayers) {
         rasterizer.merge(finalLayer, intermediateLayer);
-        reporter.progress(); // Indicate progress to avoid reducer timeout
+        context.progress();
       }
       
-      output.collect(NullWritable.get(), finalLayer);
+      context.write(NullWritable.get(), finalLayer);
+    }
+
+  }
+  
+  
+  public static class RepartitionPlotMap<S extends Shape>
+    extends Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
+    /**The partitioner used to partitioner the data across reducers*/
+    private Partitioner partitioner;
+    
+    @Override
+    protected void setup(Context context) throws IOException,
+        InterruptedException {
+      super.setup(context);
+      Configuration conf = context.getConfiguration();
+      this.partitioner = Partitioner.getPartitioner(conf);
+    }
+    
+    @Override
+    protected void map(Rectangle key, Iterable<? extends Shape> shapes,
+        final Context context) throws IOException, InterruptedException {
+
+      final IntWritable partitionID = new IntWritable();
+      int i = 0;
+      for (final Shape shape : shapes) {
+        partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
+          @Override
+          public void collect(Integer r) {
+            partitionID.set(r);
+            try {
+              context.write(partitionID, shape);
+            } catch (IOException e) {
+              LOG.warn("Error checking overlapping partitions", e);
+            } catch (InterruptedException e) {
+              LOG.warn("Error checking overlapping partitions", e);
+            }
+          }
+        });
+        if (((++i) & 0xff) == 0) {
+          context.progress();
+        }
+      }
+    
     }
   }
-
-  /**
-   * A
-   * @author eldawy
-   *
-   */
-  public static class RepartitionPlot extends MapReduceBase 
-    implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape>,
-    Reducer<IntWritable, Shape, NullWritable, RasterLayer> {
-
+  
+  public static class RepartitionPlotReduce
+      extends Reducer<IntWritable, Shape, NullWritable, RasterLayer> {
+    
     /**The partitioner used to partitioner the data across reducers*/
     private Partitioner partitioner;
     
@@ -172,125 +236,54 @@ public class SingleLevelPlot {
     /**Generated image height in pixels*/
     private int imageHeight;
 
-
+    /**Whether the configured rasterizer defines a smooth function or not*/
+    private boolean smooth;
+    
     @Override
-    public void configure(JobConf job) {
-      super.configure(job);
-      this.partitioner = Partitioner.getPartitioner(job);
-      this.rasterizer = Rasterizer.getRasterizer(job);
-      this.inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
-      this.imageWidth = job.getInt("width", 1000);
-      this.imageHeight = job.getInt("height", 1000);
-
+    protected void setup(Context context) throws IOException,
+        InterruptedException {
+      super.setup(context);
+      Configuration conf = context.getConfiguration();
+      this.partitioner = Partitioner.getPartitioner(conf);
+      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.smooth = rasterizer.isSmooth();
+      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
+      this.imageWidth = conf.getInt("width", 1000);
+      this.imageHeight = conf.getInt("height", 1000);
     }
     
     @Override
-    public void map(Rectangle dummy, Iterable<? extends Shape> shapes,
-        final OutputCollector<IntWritable, Shape> output, Reporter reporter)
-        throws IOException {
-      final IntWritable partitionID = new IntWritable();
-      for (final Shape shape : shapes) {
-        partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
-          @Override
-          public void collect(Integer r) {
-            partitionID.set(r);
-            try {
-              output.collect(partitionID, shape);
-            } catch (IOException e) {
-              LOG.warn("Error checking overlapping partitions", e);
-            }
-          }
-        });
-      }
-    }
-
-    @Override
-    public void reduce(IntWritable partitionID, Iterator<Shape> shapes,
-        OutputCollector<NullWritable, RasterLayer> output, Reporter reporter)
-        throws IOException {
+    protected void reduce(IntWritable partitionID, Iterable<Shape> shapes,
+        Context context) throws IOException, InterruptedException {
       CellInfo partition = partitioner.getPartition(partitionID.get());
       int rasterLayerX1 = (int) Math.floor((partition.x1 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
       int rasterLayerX2 = (int) Math.ceil((partition.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
       int rasterLayerY1 = (int) Math.floor((partition.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
+      if (smooth) {
+        shapes = rasterizer.smooth(shapes);
+      }
+
       rasterizer.rasterize(rasterLayer, shapes);
-      output.collect(NullWritable.get(), rasterLayer);
+      context.write(NullWritable.get(), rasterLayer);
     }
   }
-
   
   /**
-   * Writes the final image by doing any remaining merges then generating
-   * the final image
-   * @author Ahmed Eldawy
-   *
+   * Generates a single level using a MapReduce job and returns the created job.
+   * @param inFiles
+   * @param outFile
+   * @param rasterizerClass
+   * @param params
+   * @return
+   * @throws IOException
+   * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static class ImageWriter extends FileOutputCommitter {
-    @Override
-    public void commitJob(JobContext context) throws IOException {
-      super.commitJob(context);
-      JobConf job = context.getJobConf();
-      Path outFile = ImageOutputFormat.getOutputPath(job);
-      Rasterizer rasterizer = Rasterizer.getRasterizer(job);
-      int width = job.getInt("width", 1000);
-      int height = job.getInt("height", 1000);
-      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(job, InputMBR);
-
-      boolean vflip = job.getBoolean("vflip", true);
-
-      // Combine all images in one file
-      // Rename output file
-      // Combine all output files into one file as we do with grid files
-      FileSystem outFs = outFile.getFileSystem(job);
-      Path temp = new Path(outFile.toUri().getPath()+"_"+(int)(Math.random()*1000000)+".tmp");
-      outFs.rename(outFile, temp);
-      FileStatus[] resultFiles = outFs.listStatus(temp, new PathFilter() {
-        @Override
-        public boolean accept(Path path) {
-          return path.toUri().getPath().contains("part-");
-        }
-      });
-      
-      // Read all intermediate layers and merge into one final layer
-      // Create any raster layer to be able to deserialize the output files
-      RasterLayer intermediateLayer = rasterizer.createRaster(1, 1, new Rectangle());
-      // The final raster layer contains the merge of all intermediate layers
-      RasterLayer finalLayer = rasterizer.createRaster(width, height, inputMBR);
-      LOG.info("Merging "+resultFiles.length+" layers into one");
-      for (FileStatus resultFile : resultFiles) {
-        FSDataInputStream inputStream = outFs.open(resultFile.getPath());
-        while (inputStream.getPos() < resultFile.getLen()) {
-          // Read next raster layer in file
-          intermediateLayer.readFields(inputStream);
-          rasterizer.merge(finalLayer, intermediateLayer);
-        }
-        inputStream.close();
-      }
-      
-      LOG.info("Converting the final raster layer into an image");
-      // Convert the final layer to image
-      BufferedImage finalImage = rasterizer.write(finalLayer);
-      // Flip image vertically if needed
-      if (vflip) {
-        AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-        tx.translate(0, -finalImage.getHeight());
-        AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-        finalImage = op.filter(finalImage, null);
-      }
-      
-      // Finally, write the resulting image to the given output path
-      LOG.info("Writing final image");
-      OutputStream outputFile = outFs.create(outFile);
-      ImageIO.write(finalImage, "png", outputFile);
-      outputFile.close();
-
-      outFs.delete(temp, true);
-    }
-  }
-  
-  public static void plotMapReduce(Path inFile, Path outFile,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params) throws IOException {
+  public static Job plotMapReduce(Path[] inFiles, Path outFile,
+      Class<? extends Rasterizer> rasterizerClass, OperationsParams params)
+      throws IOException, InterruptedException, ClassNotFoundException {
     Rasterizer rasterizer;
     try {
       rasterizer = rasterizerClass.newInstance();
@@ -300,19 +293,24 @@ public class SingleLevelPlot {
       throw new RuntimeException("Error creating rastierizer", e);
     }
     
-    JobConf job = new JobConf(params, SingleLevelPlot.class);
+    Job job = new Job(params, "SingleLevelPlot");
+    job.setJarByClass(SingleLevelPlot.class);
     job.setJobName("SingleLevelPlot");
     // Set rasterizer
-    Rasterizer.setRasterizer(job, rasterizerClass);
+    Configuration conf = job.getConfiguration();
+    Rasterizer.setRasterizer(conf, rasterizerClass);
     // Set input file MBR
-    Rectangle inputMBR = (Rectangle) params.getShape("rect");
+    Rectangle inputMBR = (Rectangle) params.getShape("mbr");
+    Rectangle drawRect = (Rectangle) params.getShape("rect");
     if (inputMBR == null)
-      inputMBR = FileMBR.fileMBR(inFile, params);
-    OperationsParams.setShape(job, InputMBR, inputMBR);
+      inputMBR = drawRect != null? drawRect : FileMBR.fileMBR(inFiles, params);
+    OperationsParams.setShape(conf, InputMBR, inputMBR);
+    if (drawRect != null)
+      conf.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
     
     // Adjust width and height if aspect ratio is to be kept
-    int width = job.getInt("width", 1000);
-    int height = job.getInt("height", 1000);
+    int width = conf.getInt("width", 1000);
+    int height = conf.getInt("height", 1000);
     if (params.getBoolean("keepratio", true)) {
       // Adjust width and height to maintain aspect ratio
       if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height) {
@@ -320,61 +318,81 @@ public class SingleLevelPlot {
         height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth());
         // Make divisible by two for compatibility with ffmpeg
         height &= 0xfffffffe;
-        job.setInt("height", height);
+        conf.setInt("height", height);
       } else {
         width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight());
-        job.setInt("width", width);
+        conf.setInt("width", width);
       }
     }
     
+    boolean merge = conf.getBoolean("merge", true);
     // Set input and output
-    job.setInputFormat(ShapeIterInputFormat.class);
-    ShapeIterInputFormat.setInputPaths(job, inFile);
-    job.setOutputFormat(RasterOutputFormat.class);
-    RasterOutputFormat.setOutputPath(job, outFile);
+    job.setInputFormatClass(SpatialInputFormat3.class);
+    SpatialInputFormat3.setInputPaths(job, inFiles);
+    if (conf.getBoolean("output", true)) {
+      if (merge) {
+        job.setOutputFormatClass(RasterOutputFormat.class);
+        conf.setClass("mapred.output.committer.class",
+            RasterOutputFormat.ImageWriterOld.class,
+            org.apache.hadoop.mapred.OutputCommitter.class);
+      } else {
+        job.setOutputFormatClass(ImageOutputFormat.class);
+      }
+      RasterOutputFormat.setOutputPath(job, outFile);
+    } else {
+      job.setOutputFormatClass(NullOutputFormat.class);
+    }
     
     // Set mapper and reducer based on the partitioning scheme
-    String partition = job.get("partition", "none");
+    String partition = conf.get("partition", "none");
     if (partition.equalsIgnoreCase("none")) {
-      job.setMapperClass(NoPartitionPlot.class);
+      LOG.info("Using no-partition plot");
+      job.setMapperClass(NoPartitionPlotMap.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(rasterizer.getRasterClass());
-      job.setReducerClass(NoPartitionPlot.class);
-    } else {
-      Partitioner partitioner;
-      if (partition.equalsIgnoreCase("grid")) {
-        partitioner = new GridPartitioner(inFile, job);
-      } else if (partition.equalsIgnoreCase("pixel")) {
-        // Use pixel level partitioning (one partition per pixel)
-        partitioner = new GridPartitioner(inFile, job, width, height);
+      if (merge) {
+        job.setReducerClass(NoPartitionPlotReduce.class);
+        // Set number of reduce tasks according to cluster status
+        job.setNumReduceTasks(Math.max(1, new JobClient(new JobConf())
+            .getClusterStatus().getMaxReduceTasks() * 7 / 8));
       } else {
-        throw new RuntimeException("Unknown partitioning scheme '"+partition+"'");
+        job.setNumReduceTasks(0);
       }
+    } else {
+      LOG.info("Using repartition plot");
+      Partitioner partitioner = Indexer.createPartitioner(inFiles, outFile, conf, partition);
       Shape shape = params.getShape("shape");
-      job.setMapperClass(RepartitionPlot.class);
+      job.setMapperClass(RepartitionPlotMap.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(shape.getClass());
-      job.setReducerClass(RepartitionPlot.class);
-      Partitioner.setPartitioner(job, partitioner);
+      job.setReducerClass(RepartitionPlotReduce.class);
+      // TODO set number of reducers according to cluster size
+      //job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));        
+      Partitioner.setPartitioner(conf, partitioner);
     }
-    job.setOutputCommitter(ImageWriter.class);
     
-    // Set number of mappers and reducers
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+    // Use multithreading in case the job is running locally
+    conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     
     // Start the job
-    JobClient.runJob(job);
+    if (params.getBoolean("background", false)) {
+      // Run in background
+      job.submit();
+    } else {
+      job.waitForCompletion(false);
+    }
+    return job;
   }
 
-  public static void plotLocal(Path inFile, Path outFile,
-      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
+  public static void plotLocal(Path[] inFiles, Path outFile,
+      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException, InterruptedException {
 
     boolean vflip = params.getBoolean("vflip", true);
 
-    Shape plotRange = params.getShape("rect", null);
-    final Rectangle inputMBR = plotRange == null ? FileMBR.fileMBR(inFile, params) : plotRange.getMBR();
+    
+    final Rectangle inputMBR = params.get("mbr") != null ?
+        params.getShape("mbr").getMBR() : FileMBR.fileMBR(inFiles, params);
+    OperationsParams.setShape(params, InputMBR, inputMBR);
 
     // Retrieve desired output image size and keep aspect ratio if needed
     int width = params.getInt("width", 1000);
@@ -392,27 +410,30 @@ public class SingleLevelPlot {
     final int fwidth = width, fheight = height;
 
     // Start reading input file
-    InputSplit[] splits;
-    FileSystem inFs = inFile.getFileSystem(params);
-    final ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
-    FileStatus inFStatus = inFs.getFileStatus(inFile);
-    if (inFStatus != null && !inFStatus.isDir()) {
-      // One file, retrieve it immediately.
-      // This is useful if the input is a hidden file which is automatically
-      // skipped by FileInputFormat. We need to plot a hidden file for the case
-      // of plotting partition boundaries of a spatial index
-      splits = new InputSplit[] {new FileSplit(inFile, 0, inFStatus.getLen(), new String[0])};
-    } else {
-      JobConf job = new JobConf(params);
-      ShapeIterInputFormat.addInputPath(job, inFile);
-      splits = inputFormat.getSplits(job, 1);
+    Vector<InputSplit> splits = new Vector<InputSplit>();
+    final SpatialInputFormat3<Partition, Shape> inputFormat =
+        new SpatialInputFormat3<Partition, Shape>();
+    for (Path inFile : inFiles) {
+      FileSystem inFs = inFile.getFileSystem(params);
+      FileStatus inFStatus = inFs.getFileStatus(inFile);
+      if (inFStatus != null && !inFStatus.isDir()) {
+        // One file, retrieve it immediately.
+        // This is useful if the input is a hidden file which is automatically
+        // skipped by FileInputFormat. We need to plot a hidden file for the case
+        // of plotting partition boundaries of a spatial index
+        splits.add(new FileSplit(inFile, 0, inFStatus.getLen(), new String[0]));
+      } else {
+        Job job = new Job(params);
+        SpatialInputFormat3.addInputPath(job, inFile);
+        splits.addAll(inputFormat.getSplits(job));
+      }
+      
     }
     
     // Copy splits to a final array to be used in parallel
-    final FileSplit[] fsplits = new FileSplit[splits.length];
-    System.arraycopy(splits, 0, fsplits, 0, splits.length);
+    final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
     
-    Vector<RasterLayer> partialRasters = Parallel.forEach(splits.length, new RunnableRange<RasterLayer>() {
+    Vector<RasterLayer> partialRasters = Parallel.forEach(fsplits.length, new RunnableRange<RasterLayer>() {
       @Override
       public RasterLayer run(int i1, int i2) {
         Rasterizer rasterizer;
@@ -429,26 +450,33 @@ public class SingleLevelPlot {
         
         for (int i = i1; i < i2; i++) {
           try {
-            RecordReader<Rectangle, Iterable<? extends Shape>> reader =
-                inputFormat.getRecordReader(fsplits[i], new JobConf(params), null);
-            Rectangle partitionMBR = reader.createKey();
-            Iterable<? extends Shape> shapes = reader.createValue();
+            TaskAttemptContext context = new TaskAttemptContext(params, new TaskAttemptID());
+            RecordReader<Partition, Iterable<Shape>> reader =
+                inputFormat.createRecordReader(fsplits[i], context);
+            reader.initialize(fsplits[i], context);
             
-            while (reader.next(partitionMBR, shapes)) {
-              if (!partitionMBR.isValid())
-                partitionMBR.set(inputMBR);
-              
+            while (reader.nextKeyValue()) {
+              Partition partition = reader.getCurrentKey();
+              if (!partition.isValid())
+                partition.set(inputMBR);
+
+              Iterable<Shape> shapes = reader.getCurrentValue();
               // Run the rasterize step
-              rasterizer.rasterize(partialRaster, shapes);
+              rasterizer.rasterize(partialRaster,
+                  rasterizer.isSmooth() ? rasterizer.smooth(shapes) : shapes);
             }
             reader.close();
           } catch (IOException e) {
+            e.printStackTrace();
+          } catch (InterruptedException e) {
+            // TODO Auto-generated catch block
             e.printStackTrace();
           }
         }
         return partialRaster;
       }
     });
+    boolean merge = params.getBoolean("merge", true);
     Rasterizer rasterizer;
     try {
       rasterizer = rasterizerClass.newInstance();
@@ -458,27 +486,31 @@ public class SingleLevelPlot {
     } catch (IllegalAccessException e) {
       throw new RuntimeException("Error creating rastierizer", e);
     }
-    // Create the final raster layer that will contain the final image
-    RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
-    for (RasterLayer partialRaster : partialRasters) {
-      rasterizer.merge(finalRaster, partialRaster);
+    if (merge) {
+      // Create the final raster layer that will contain the final image
+      RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
+      for (RasterLayer partialRaster : partialRasters)
+        rasterizer.merge(finalRaster, partialRaster);
+      
+      // Finally, write the resulting image to the given output path
+      LOG.info("Writing final image");
+      FileSystem outFs = outFile.getFileSystem(params);
+      FSDataOutputStream outputFile = outFs.create(outFile);
+      
+      rasterizer.writeImage(finalRaster, outputFile, vflip);
+      outputFile.close();
+    } else {
+      // No merge
+      LOG.info("Writing partial images");
+      FileSystem outFs = outFile.getFileSystem(params);
+      for (int i = 0; i < partialRasters.size(); i++) {
+        Path filename = new Path(outFile, String.format("part-%05d.png", i));
+        FSDataOutputStream outputFile = outFs.create(filename);
+        
+        rasterizer.writeImage(partialRasters.get(i), outputFile, vflip);
+        outputFile.close();
+      }
     }
-    BufferedImage finalImage = rasterizer.write(finalRaster);
-
-    // Flip image vertically if needed
-    if (vflip) {
-      AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-      tx.translate(0, -finalImage.getHeight());
-      AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-      finalImage = op.filter(finalImage, null);
-    }
-    
-    // Finally, write the resulting image to the given output path
-    LOG.info("Writing final image");
-    FileSystem outFs = outFile.getFileSystem(params);
-    OutputStream outputFile = outFs.create(outFile);
-    ImageIO.write(finalImage, "png", outputFile);
-    outputFile.close();
   }
   
   /**
@@ -488,13 +520,18 @@ public class SingleLevelPlot {
    * @param rasterizerClass
    * @param params
    * @throws IOException
+   * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void plot(Path inFile, Path outFile,
-      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException {
-    if (OperationsParams.isLocal(new JobConf(params), inFile)) {
-      plotLocal(inFile, outFile, rasterizerClass, params);
+  public static Job plot(Path[] inFiles, Path outFile,
+      final Class<? extends Rasterizer> rasterizerClass,
+      final OperationsParams params)
+          throws IOException, InterruptedException, ClassNotFoundException {
+    if (OperationsParams.isLocal(params, inFiles)) {
+      plotLocal(inFiles, outFile, rasterizerClass, params);
+      return null;
     } else {
-      plotMapReduce(inFile, outFile, rasterizerClass, params);
+      return plotMapReduce(inFiles, outFile, rasterizerClass, params);
     }
   }
 }

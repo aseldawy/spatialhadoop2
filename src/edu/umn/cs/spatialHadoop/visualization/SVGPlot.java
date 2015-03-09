@@ -1,15 +1,16 @@
-/*******************************************************************
- * Copyright (C) 2014 by Regents of the University of Minnesota.   *
- *                                                                 *
- * This Software is released under the Apache License, Version 2.0 *
- * http://www.apache.org/licenses/LICENSE-2.0                      *
- *******************************************************************/
-
+/***********************************************************************
+j* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.awt.Color;
-import java.awt.image.BufferedImage;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -20,48 +21,57 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
+ * Plots to an SVG file
  * @author Ahmed Eldawy
  *
  */
-public class GeometricPlot2 {
+public class SVGPlot {
   
-  public static class GeometricRasterizer extends Rasterizer {
-    
-    private Color strokeColor;
+  /**
+   * A rasterizer that draws the resulting image as SVG.
+   * It automatically down samples the data to match the resolution
+   * of the generated image. This means that drawing to a small image
+   * would reduce the level of details in the vector data.  
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class SVGRasterizer extends Rasterizer {
 
     @Override
     public void configure(Configuration conf) {
       super.configure(conf);
-      this.strokeColor = OperationsParams.getColor(conf, "color", Color.BLACK);
     }
 
     @Override
     public RasterLayer createRaster(int width, int height, Rectangle mbr) {
-      ImageRasterLayer imageRasterLayer = new ImageRasterLayer(mbr, width, height);
-      imageRasterLayer.setColor(strokeColor);
-      return imageRasterLayer;
+      SVGRasterLayer svgRasterLayer = new SVGRasterLayer(mbr, width, height);
+      return svgRasterLayer;
     }
 
     @Override
     public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      ImageRasterLayer imgLayer = (ImageRasterLayer) rasterLayer;
-      imgLayer.drawShape(shape);
+      SVGRasterLayer svgLayer = (SVGRasterLayer) rasterLayer;
+      svgLayer.drawShape(shape);
     }
 
     @Override
     public Class<? extends RasterLayer> getRasterClass() {
-      return ImageRasterLayer.class;
+      return SVGRasterLayer.class;
     }
 
     @Override
     public void merge(RasterLayer finalLayer,
         RasterLayer intermediateLayer) {
-      ((ImageRasterLayer)finalLayer).mergeWith((ImageRasterLayer) intermediateLayer);
+      ((SVGRasterLayer)finalLayer).mergeWith((SVGRasterLayer) intermediateLayer);
     }
 
     @Override
-    public BufferedImage write(RasterLayer layer) {
-      return ((ImageRasterLayer)layer).getImage();
+    public void writeImage(RasterLayer layer, DataOutputStream out,
+        boolean vflip) throws IOException {
+      out.flush();
+      PrintStream ps = new PrintStream(out);
+      ((SVGRasterLayer)layer).writeToFile(ps);
+      ps.flush();
     }
   }
   
@@ -85,8 +95,10 @@ public class GeometricPlot2 {
   /**
    * @param args
    * @throws IOException 
+   * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
     System.setProperty("java.awt.headless", "true");
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     if (!params.checkInputOutput()) {
@@ -94,14 +106,14 @@ public class GeometricPlot2 {
       System.exit(1);
     }
 
-    Path inFile = params.getInputPath();
+    Path[] inFiles = params.getInputPaths();
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFile, outFile, GeometricRasterizer.class, params);
+      MultilevelPlot.plot(inFiles, outFile, SVGRasterizer.class, params);
     } else {
-      SingleLevelPlot.plot(inFile, outFile, GeometricRasterizer.class, params);
+      SingleLevelPlot.plot(inFiles, outFile, SVGRasterizer.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");

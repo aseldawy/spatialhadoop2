@@ -1,15 +1,11 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. See the
- * NOTICE file distributed with this work for additional information regarding copyright ownership. The ASF
- * licenses this file to you under the Apache License, Version 2.0 (the "License"); you may not use this file
- * except in compliance with the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is
- * distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and limitations under the License.
- */
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.core;
 
 import java.io.DataInput;
@@ -137,19 +133,37 @@ public class GridInfo extends Rectangle {
     return cells;
   }
 
+  /**
+   * Computes the range of all cells that overlap a given rectangle
+   * @param rect
+   * @return
+   */
   public java.awt.Rectangle getOverlappingCells(Rectangle rect) {
     int col1, col2, row1, row2;
-    col1 = (int)Math.floor((rect.x1 - this.x1) / (this.x2 - this.x1) * columns);
+    col1 = (int)Math.floor((rect.x1 - this.x1) / this.getWidth() * columns);
     if (col1 < 0) col1 = 0;
-    col2 = (int)Math.ceil((rect.x2 - this.x1) / (this.x2 - this.x1) * columns);
+    col2 = (int)Math.ceil((rect.x2 - this.x1) / this.getWidth() * columns);
     if (col2 > columns) col2 = columns;
-    row1 = (int)Math.floor((rect.y1 - this.y1) / (this.y2 - this.y1) * rows);
+    row1 = (int)Math.floor((rect.y1 - this.y1) / this.getHeight() * rows);
     if (row1 < 0) row1 = 0;
-    row2 = (int)Math.ceil((rect.y2 - this.y1) / (this.y2 - this.y1) * rows);
+    row2 = (int)Math.ceil((rect.y2 - this.y1) / this.getHeight() * rows);
     if (row2 > rows) row2 = rows;
     return new java.awt.Rectangle(col1, row1, col2 - col1, row2 - row1);
   }
   
+  public int getOverlappingCell(double x, double y) {
+    if (!contains(x, y))
+      return -1;
+    int column = (int)Math.floor((x - this.x1) / this.getWidth() * columns);
+    int row = (int)Math.floor((y - this.y1) / this.getHeight() * rows);
+    return getCellId(column, row);
+  }
+  
+  /**
+   * Returns the information of a grid cell given it ID
+   * @param cellId
+   * @return
+   */
   public CellInfo getCell(int cellId) {
     int col = (cellId - 1) % columns;
     int row = (cellId - 1) / columns;

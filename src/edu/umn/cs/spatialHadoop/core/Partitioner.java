@@ -1,10 +1,11 @@
-/*******************************************************************
- * Copyright (C) 2014 by Regents of the University of Minnesota.   *
- *                                                                 *
- * This Software is released under the Apache License, Version 2.0 *
- * http://www.apache.org/licenses/LICENSE-2.0                      *
- *******************************************************************/
-
+/***********************************************************************
+* Copyright (c) 2015 by Regents of the University of Minnesota.
+* All rights reserved. This program and the accompanying materials
+* are made available under the terms of the Apache License, Version 2.0 which 
+* accompanies this distribution and is available at
+* http://www.opensource.org/licenses/apache2.0.php.
+*
+*************************************************************************/
 package edu.umn.cs.spatialHadoop.core;
 
 import java.io.IOException;
@@ -29,6 +30,15 @@ public abstract class Partitioner implements Writable {
   private static final String PartitionerValue = "Partitioner.Value";
 
   /**
+   * Populate this partitioner for a set of points and number of partitions
+   * @param mbr
+   * @param points
+   * @param numPartitions
+   */
+  public abstract void createFromPoints(Rectangle mbr, Point[] points,
+      int numPartitions);
+  
+  /**
    * Overlap a shape with partitions and calls a matcher for each overlapping
    * partition.
    * @param shape
@@ -38,11 +48,36 @@ public abstract class Partitioner implements Writable {
   public abstract void overlapPartitions(Shape shape, ResultCollector<Integer> matcher);
   
   /**
-   * Returns the details of a specific partition.
+   * Returns only one overlapping partition. If the given shape overlaps more
+   * than one partitions, the partitioner returns only one of them according to
+   * its own criteria. If it does not overlap any partition, it returns -1
+   * which is an invalid partition ID.
+   * 
+   * @param shape
+   * @return
+   */
+  public abstract int overlapPartition(Shape shape);
+  
+  /**
+   * Returns the details of a specific partition given its ID.
    * @param partitionID
    * @return
    */
   public abstract CellInfo getPartition(int partitionID);
+  
+  /**
+   * Returns the detail of a partition given its position starting from zero
+   * and ending at partitionCount() - 1
+   * @param partitionID
+   * @return
+   */
+  public abstract CellInfo getPartitionAt(int index);
+  
+  /**
+   * Returns total number of partitions
+   * @return
+   */
+  public abstract int getPartitionCount();
   
   /**
    * Sets the class and value of a partitioner in the given job
@@ -55,7 +90,7 @@ public abstract class Partitioner implements Writable {
     Path tempFile;
     FileSystem fs = FileSystem.get(conf);
     do {
-      tempFile = new Path("cells_"+(int)(Math.random()*1000000)+".cells");
+      tempFile = new Path("cells_"+(int)(Math.random()*1000000)+".partitions");
     } while (fs.exists(tempFile));
     FSDataOutputStream out = fs.create(tempFile);
     partitioner.write(out);
