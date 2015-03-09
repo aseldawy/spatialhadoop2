@@ -40,8 +40,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -478,7 +476,6 @@ public class KNN {
 
     SpatialInputFormat3<Partition, Shape> inputFormat =
         new SpatialInputFormat3<Partition, Shape>();
-    TaskAttemptContext context = new TaskAttemptContext(params, new TaskAttemptID());
     
     final GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, inFile);
     double kthDistance = Double.MAX_VALUE;
@@ -510,8 +507,8 @@ public class KNN {
         long length = fs.getFileStatus(partitionPath).getLen();
         FileSplit fsplit = new FileSplit(partitionPath, 0, length, new String[0]);
         RecordReader<Partition, Iterable<Shape>> reader =
-            inputFormat.createRecordReader(fsplit, context);
-        reader.initialize(fsplit, context);
+            inputFormat.createRecordReader(fsplit, null);
+        reader.initialize(fsplit, null);
         iterations++;
         
         while (reader.nextKeyValue()) {
@@ -535,8 +532,8 @@ public class KNN {
       
       for (InputSplit split : splits) {
         RecordReader<Partition, Iterable<Shape>> reader =
-            inputFormat.createRecordReader(split, context);
-        reader.initialize(split, context);
+            inputFormat.createRecordReader(split, null);
+        reader.initialize(split, null);
         iterations++;
         
         while (reader.nextKeyValue()) {

@@ -29,8 +29,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 
@@ -450,10 +448,9 @@ public class SingleLevelPlot {
         
         for (int i = i1; i < i2; i++) {
           try {
-            TaskAttemptContext context = new TaskAttemptContext(params, new TaskAttemptID());
             RecordReader<Partition, Iterable<Shape>> reader =
-                inputFormat.createRecordReader(fsplits[i], context);
-            reader.initialize(fsplits[i], context);
+                inputFormat.createRecordReader(fsplits[i], null);
+            reader.initialize(fsplits[i], null);
             
             while (reader.nextKeyValue()) {
               Partition partition = reader.getCurrentKey();

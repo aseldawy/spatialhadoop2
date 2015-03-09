@@ -107,7 +107,7 @@ public class SpatialRecordReader3<V extends Shape> extends
   public void initialize(InputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
     FileSplit fsplit = (FileSplit) split;
-    Configuration conf = context.getConfiguration();
+    Configuration conf = context != null ? context.getConfiguration() : new Configuration();
     if (compressionCodecFactory == null)
       compressionCodecFactory = new CompressionCodecFactory(conf);
 

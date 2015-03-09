@@ -68,7 +68,8 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       }
       // For backward compatibility, check if the file is RTree indexed from
       // its signature
-      if (SpatialSite.isRTree(fsplit.getPath().getFileSystem(context.getConfiguration()), fsplit.getPath())) {
+      Configuration conf = context != null? context.getConfiguration() : new Configuration();
+      if (SpatialSite.isRTree(fsplit.getPath().getFileSystem(conf), fsplit.getPath())) {
         return (RecordReader)new RTreeRecordReader3<V>();
       }
       // Read a non-indexed file

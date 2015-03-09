@@ -28,8 +28,6 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
@@ -139,10 +137,9 @@ public class RangeQuery {
         for (int i = i1; i < i2; i++) {
           try {
             FileSplit fsplit = (FileSplit) splits.get(i);
-            final TaskAttemptContext context = new TaskAttemptContext(params, new TaskAttemptID());
             final RecordReader<Partition, Iterable<S>> reader =
-                inputFormat.createRecordReader(fsplit, context);
-            reader.initialize(fsplit, context);
+                inputFormat.createRecordReader(fsplit, null);
+            reader.initialize(fsplit, null);
             while (reader.nextKeyValue()) {
               Iterable<S> shapes = reader.getCurrentValue();
               for (Shape s : shapes) {
