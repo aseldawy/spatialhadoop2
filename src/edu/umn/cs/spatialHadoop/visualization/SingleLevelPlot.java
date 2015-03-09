@@ -25,6 +25,7 @@ import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -328,10 +329,14 @@ public class SingleLevelPlot {
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.setInputPaths(job, inFiles);
     if (conf.getBoolean("output", true)) {
-      if (merge)
+      if (merge) {
         job.setOutputFormatClass(RasterOutputFormat.class);
-      else
+        conf.setClass("mapred.output.committer.class",
+            RasterOutputFormat.ImageWriterOld.class,
+            org.apache.hadoop.mapred.OutputCommitter.class);
+      } else {
         job.setOutputFormatClass(ImageOutputFormat.class);
+      }
       RasterOutputFormat.setOutputPath(job, outFile);
     } else {
       job.setOutputFormatClass(NullOutputFormat.class);
@@ -366,7 +371,7 @@ public class SingleLevelPlot {
     
     // Use multithreading in case the job is running locally
     conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
-
+    
     // Start the job
     if (params.getBoolean("background", false)) {
       // Run in background

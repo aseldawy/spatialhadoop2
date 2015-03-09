@@ -76,7 +76,7 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLaye
   @Override
   public RecordWriter<TileIndex, RasterLayer> getRecordWriter(
       TaskAttemptContext task) throws IOException, InterruptedException {
-    Path file = getDefaultWorkFile(task, "");
+    Path file = getDefaultWorkFile(task, "").getParent();
     FileSystem fs = file.getFileSystem(task.getConfiguration());
     return new ImageRecordWriter(fs, file, task);
   }
