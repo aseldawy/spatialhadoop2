@@ -21,11 +21,12 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapred.JobClient;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -351,8 +352,9 @@ public class SingleLevelPlot {
       job.setMapOutputValueClass(rasterizer.getRasterClass());
       if (merge) {
         job.setReducerClass(NoPartitionPlotReduce.class);
-        // TODO set number of reduce tasks according to cluster status
-        // job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));        
+        // Set number of reduce tasks according to cluster status
+        job.setNumReduceTasks(Math.max(1, new JobClient(new JobConf())
+            .getClusterStatus().getMaxReduceTasks() * 7 / 8));
       } else {
         job.setNumReduceTasks(0);
       }

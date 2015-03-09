@@ -19,6 +19,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.JobClient;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -480,7 +482,9 @@ public class MultilevelPlot {
     } else {
       throw new RuntimeException("Unknown partitioning technique '"+partitionTechnique+"'");
     }
-    
+    // Set number of reducers
+    job.setNumReduceTasks(Math.max(1, new JobClient(new JobConf())
+        .getClusterStatus().getMaxReduceTasks() * 7 / 8));
     // Use multithreading in case the job is running locally
     conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
