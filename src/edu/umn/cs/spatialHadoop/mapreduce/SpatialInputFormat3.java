@@ -34,6 +34,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.CombineBlockFilter;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
 import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
@@ -58,9 +59,7 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       // extension
       if (extension.equals("hdf")) {
         // HDF File. Create HDFRecordReader
-//        return (RecordReader)new HDFRecordReader(job, fsplit,
-//            job.get(HDFRecordReader.DatasetName),
-//            job.getBoolean(HDFRecordReader.SkipFillValue, true));
+        return (RecordReader)new HDFRecordReader3();
       }
       if (extension.equals("rtree")) {
         // File is locally indexed as RTree

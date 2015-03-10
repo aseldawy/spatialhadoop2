@@ -30,7 +30,6 @@ import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
@@ -53,7 +52,7 @@ public class MultilevelPlot {
   private static final String FlatPartitioningLevelThreshold = "MultilevelPlot.FlatPartitioningLevelThreshold";
   
   public static class FlatPartitionMap extends
-      Mapper<Partition, Iterable<? extends Shape>, TileIndex, RasterLayer> {
+      Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, RasterLayer> {
     /**Minimum and maximum levels of the pyramid to plot (inclusive and zero-based)*/
     private int minLevel, maxLevel;
     
@@ -106,7 +105,7 @@ public class MultilevelPlot {
     }
     
     @Override
-    protected void map(Partition partition, Iterable<? extends Shape> shapes,
+    protected void map(Rectangle partition, Iterable<? extends Shape> shapes,
         Context context) throws IOException, InterruptedException {
       if (smooth)
         shapes = rasterizer.smooth(shapes);
@@ -214,7 +213,7 @@ public class MultilevelPlot {
   }
   
   public static class PyramidPartitionMap extends
-      Mapper<Partition, Iterable<? extends Shape>, TileIndex, Shape> {
+      Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Shape> {
 
     private int minLevel, maxLevel;
     /**Maximum level to replicate to*/
@@ -259,7 +258,7 @@ public class MultilevelPlot {
     }
     
     @Override
-    protected void map(Partition partition, Iterable<? extends Shape> shapes,
+    protected void map(Rectangle partition, Iterable<? extends Shape> shapes,
         Context context) throws IOException, InterruptedException {
       TileIndex outKey = new TileIndex();
       for (Shape shape : shapes) {

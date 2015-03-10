@@ -370,7 +370,7 @@ public class AggregateQuadTree {
     
     Group root =
         (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
-    Dataset matchedDataset = HDFRecordReader.findDataset(root, datasetName, false);
+    Dataset matchedDataset = HDFRecordReader3.findDataset(root, datasetName, false);
     if (matchedDataset != null) {
       List<Attribute> metadata = matchedDataset.getMetadata();
       short fillValue = 0;

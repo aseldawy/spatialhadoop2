@@ -34,14 +34,16 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.operations.Indexer;
 import edu.umn.cs.spatialHadoop.operations.RangeFilter;
@@ -69,7 +71,7 @@ public class SingleLevelPlot {
    *
    */
   public static class NoPartitionPlotMap<S extends Shape>
-    extends Mapper<Partition, Iterable<S>, IntWritable, RasterLayer> {
+    extends Mapper<Rectangle, Iterable<S>, IntWritable, RasterLayer> {
     
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -105,7 +107,7 @@ public class SingleLevelPlot {
     }
 
     @Override
-    protected void map(Partition partitionMBR, Iterable<S> shapes,
+    protected void map(Rectangle partitionMBR, Iterable<S> shapes,
         Context context) throws IOException, InterruptedException {
       // If input is not spatially partitioned, the MBR is taken from input
       if (!partitionMBR.isValid())
@@ -409,8 +411,8 @@ public class SingleLevelPlot {
 
     // Start reading input file
     Vector<InputSplit> splits = new Vector<InputSplit>();
-    final SpatialInputFormat3<Partition, Shape> inputFormat =
-        new SpatialInputFormat3<Partition, Shape>();
+    final SpatialInputFormat3<Rectangle, Shape> inputFormat =
+        new SpatialInputFormat3<Rectangle, Shape>();
     for (Path inFile : inFiles) {
       FileSystem inFs = inFile.getFileSystem(params);
       FileStatus inFStatus = inFs.getFileStatus(inFile);
@@ -448,12 +450,20 @@ public class SingleLevelPlot {
         
         for (int i = i1; i < i2; i++) {
           try {
-            RecordReader<Partition, Iterable<Shape>> reader =
+            RecordReader<Rectangle, Iterable<Shape>> reader =
                 inputFormat.createRecordReader(fsplits[i], null);
-            reader.initialize(fsplits[i], null);
-            
+            if (reader instanceof SpatialRecordReader3) {
+              ((SpatialRecordReader3)reader).initialize(fsplits[i], params);
+            } else if (reader instanceof RTreeRecordReader3) {
+              ((RTreeRecordReader3)reader).initialize(fsplits[i], params);
+            } else if (reader instanceof HDFRecordReader3) {
+              ((HDFRecordReader3)reader).initialize(fsplits[i], params);
+            } else {
+              throw new RuntimeException("Unknown record reader");
+            }
+
             while (reader.nextKeyValue()) {
-              Partition partition = reader.getCurrentKey();
+              Rectangle partition = reader.getCurrentKey();
               if (!partition.isValid())
                 partition.set(inputMBR);
 

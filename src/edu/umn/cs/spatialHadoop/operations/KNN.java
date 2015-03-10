@@ -59,7 +59,10 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
 
 /**
  * Performs k Nearest Neighbor (kNN) query over a spatial file.
@@ -474,8 +477,8 @@ public class KNN {
     // Top-k objects are retained in this object
     PriorityQueue<ShapeWithDistance<S>> knn = new KNNObjects<ShapeWithDistance<S>>(k);
 
-    SpatialInputFormat3<Partition, Shape> inputFormat =
-        new SpatialInputFormat3<Partition, Shape>();
+    SpatialInputFormat3<Rectangle, Shape> inputFormat =
+        new SpatialInputFormat3<Rectangle, Shape>();
     
     final GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(fs, inFile);
     double kthDistance = Double.MAX_VALUE;
@@ -506,9 +509,17 @@ public class KNN {
         Path partitionPath = new Path(inFile, partitionToProcess.shape.filename);
         long length = fs.getFileStatus(partitionPath).getLen();
         FileSplit fsplit = new FileSplit(partitionPath, 0, length, new String[0]);
-        RecordReader<Partition, Iterable<Shape>> reader =
+        RecordReader<Rectangle, Iterable<Shape>> reader =
             inputFormat.createRecordReader(fsplit, null);
-        reader.initialize(fsplit, null);
+        if (reader instanceof SpatialRecordReader3) {
+          ((SpatialRecordReader3)reader).initialize(fsplit, params);
+        } else if (reader instanceof RTreeRecordReader3) {
+          ((RTreeRecordReader3)reader).initialize(fsplit, params);
+        } else if (reader instanceof HDFRecordReader3) {
+          ((HDFRecordReader3)reader).initialize(fsplit, params);
+        } else {
+          throw new RuntimeException("Unknown record reader");
+        }
         iterations++;
         
         while (reader.nextKeyValue()) {
@@ -531,9 +542,17 @@ public class KNN {
       List<InputSplit> splits = inputFormat.getSplits(job);
       
       for (InputSplit split : splits) {
-        RecordReader<Partition, Iterable<Shape>> reader =
+        RecordReader<Rectangle, Iterable<Shape>> reader =
             inputFormat.createRecordReader(split, null);
-        reader.initialize(split, null);
+        if (reader instanceof SpatialRecordReader3) {
+          ((SpatialRecordReader3)reader).initialize(split, params);
+        } else if (reader instanceof RTreeRecordReader3) {
+          ((RTreeRecordReader3)reader).initialize(split, params);
+        } else if (reader instanceof HDFRecordReader3) {
+          ((HDFRecordReader3)reader).initialize(split, params);
+        } else {
+          throw new RuntimeException("Unknown record reader");
+        }
         iterations++;
         
         while (reader.nextKeyValue()) {

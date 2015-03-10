@@ -10,26 +10,21 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.Counters;
-import org.apache.hadoop.mapred.Counters.Counter;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.Mapper;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapreduce.Counter;
+import org.apache.hadoop.mapreduce.Counters;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat3;
-import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 
 /**
  * This operation transforms one or more HDF files into text files which can
@@ -40,13 +35,17 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
  */
 public class HDFToText {
   public static int date;
-  public static class HDFToTextMap extends MapReduceBase implements
-      Mapper<NASADataset, NASAShape, Rectangle, NASAShape> {
-
-    public void map(NASADataset dataset, NASAShape value,
-        OutputCollector<Rectangle, NASAShape> output, Reporter reporter)
-            throws IOException {
-      output.collect(dataset, value);
+  public static class HDFToTextMap extends
+      Mapper<NASADataset, Iterable<? extends NASAShape>, Rectangle, NASAShape> {
+    
+    @Override
+    protected void map(
+        NASADataset dataset,
+        Iterable<? extends NASAShape> values,
+        Context context)
+        throws IOException, InterruptedException {
+      for (NASAShape s : values)
+        context.write(dataset, s);
     }
   }
   
@@ -59,35 +58,37 @@ public class HDFToText {
    * @param skipFillValue
    * @return
    * @throws IOException
+   * @throws ClassNotFoundException 
+   * @throws InterruptedException 
    */
   public static long HDFToTextMapReduce(Path inPath, Path outPath,
-      String datasetName, boolean skipFillValue) throws IOException {
-    JobConf job = new JobConf(HDFToText.class);
+      String datasetName, boolean skipFillValue) throws IOException,
+      InterruptedException, ClassNotFoundException {
+    Job job = new Job();
+    Configuration conf = job.getConfiguration();
+    job.setJarByClass(HDFToText.class);
     job.setJobName("HDFToText");
-
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
 
     // Set Map function details
     job.setMapperClass(HDFToTextMap.class);
     job.setMapOutputKeyClass(Rectangle.class);
     job.setMapOutputValueClass(NASAPoint.class);
-    job.setNumMapTasks(clusterStatus.getMaxMapTasks() * 5);
     job.setNumReduceTasks(0);
     
     // Set input information
-    job.setInputFormat(ShapeInputFormat.class);
-    ShapeInputFormat.setInputPaths(job, inPath);
-    job.setClass("shape", NASAPoint.class, Shape.class);
-    job.set(HDFRecordReader.DatasetName, datasetName);
-    job.setBoolean(HDFRecordReader.SkipFillValue, skipFillValue);
+    job.setInputFormatClass(SpatialInputFormat3.class);
+    SpatialInputFormat3.setInputPaths(job, inPath);
+    conf.setClass("shape", NASAPoint.class, Shape.class);
+    conf.set("dataset", datasetName);
+    conf.setBoolean("skipfillvalue", skipFillValue);
     
     // Set output information
-    job.setOutputFormat(GridOutputFormat3.class);
-    GridOutputFormat3.setOutputPath(job, outPath);
+    job.setOutputFormatClass(TextOutputFormat.class);
+    TextOutputFormat.setOutputPath(job, outPath);
     
     // Run the job
-    RunningJob lastSubmittedJob = JobClient.runJob(job);
-    Counters counters = lastSubmittedJob.getCounters();
+    job.waitForCompletion(false);
+    Counters counters = job.getCounters();
     Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
     final long resultCount = outputRecordCounter.getValue();
     
@@ -105,11 +106,12 @@ public class HDFToText {
   /**
    * @param args
    * @throws IOException 
+   * @throws ClassNotFoundException 
+   * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException {
-    OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
-    JobConf conf = new JobConf(HDFToText.class);
-    Path[] paths = cla.getPaths();
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    Path[] paths = params.getPaths();
     if (paths.length < 2) {
       printUsage();
       System.err.println("Please provide both input and output files");
@@ -118,15 +120,15 @@ public class HDFToText {
     Path inPath = paths[0];
     Path outPath = paths[1];
     
-    FileSystem fs = inPath.getFileSystem(conf);
+    FileSystem fs = inPath.getFileSystem(params);
     if (!fs.exists(inPath)) {
       printUsage();
       System.err.println("Input file does not exist");
       return;
     }
     
-    boolean overwrite = cla.is("overwrite");
-    FileSystem outFs = outPath.getFileSystem(conf);
+    boolean overwrite = params.getBoolean("overwrite", false);
+    FileSystem outFs = outPath.getFileSystem(params);
     if (outFs.exists(outPath)) {
       if (overwrite)
         outFs.delete(outPath, true);
@@ -134,16 +136,15 @@ public class HDFToText {
         throw new RuntimeException("Output file exists and overwrite flag is not set");
     }
 
-    String datasetName = cla.get("dataset");
+    String datasetName = params.get("dataset");
     if (datasetName == null) {
       printUsage();
       System.err.println("Please specify the dataset you want to extract");
       return;
     }
-    boolean skipFillValue = cla.is("skipfillvalue", true);
-    date = cla.getInt("date", 0);
+    boolean skipFillValue = params.getBoolean("skipfillvalue", true);
+    date = params.getInt("date", 0);
     
-
     HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
   }
 }

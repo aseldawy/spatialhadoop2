@@ -28,18 +28,22 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
@@ -123,9 +127,9 @@ public class RangeQuery {
     // Set MBR of query shape in job configuration to work with the spatial filter
     OperationsParams.setShape(params, SpatialInputFormat3.InputQueryRange, queryRange.getMBR());
     // 1- Split the input path/file to get splits that can be processed independently
-    final SpatialInputFormat3<Partition, S> inputFormat =
-        new SpatialInputFormat3<Partition, S>();
-    Job job = new Job(params);
+    final SpatialInputFormat3<Rectangle, S> inputFormat =
+        new SpatialInputFormat3<Rectangle, S>();
+    Job job = Job.getInstance(params);
     SpatialInputFormat3.setInputPaths(job, inPath);
     final List<InputSplit> splits = inputFormat.getSplits(job);
     
@@ -137,9 +141,17 @@ public class RangeQuery {
         for (int i = i1; i < i2; i++) {
           try {
             FileSplit fsplit = (FileSplit) splits.get(i);
-            final RecordReader<Partition, Iterable<S>> reader =
+            final RecordReader<Rectangle, Iterable<S>> reader =
                 inputFormat.createRecordReader(fsplit, null);
-            reader.initialize(fsplit, null);
+            if (reader instanceof SpatialRecordReader3) {
+              ((SpatialRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof RTreeRecordReader3) {
+              ((RTreeRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof HDFRecordReader3) {
+              ((HDFRecordReader3)reader).initialize(fsplit, params);
+            } else {
+              throw new RuntimeException("Unknown record reader");
+            }
             while (reader.nextKeyValue()) {
               Iterable<S> shapes = reader.getCurrentValue();
               for (Shape s : shapes) {

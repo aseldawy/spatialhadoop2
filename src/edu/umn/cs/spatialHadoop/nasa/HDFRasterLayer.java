@@ -268,6 +268,8 @@ public class HDFRasterLayer extends RasterLayer {
    * @param waterMask
    */
   public void recoverHoles(BitArray waterMask) {
+    // XXX Since all values are set in the first round (x-direction), the
+    // second round will be basically useless
     // Sets a bit for values that were copied (not interpolated) in the
     // first round
     BitArray valuesCopied = new BitArray(getWidth() * getHeight());
@@ -298,10 +300,10 @@ public class HDFRasterLayer extends RasterLayer {
             }
           }
         } else {
+          long average1 = sum[x1-1][y] / count[x1-1][y];
+          long average2 = sum[x2][y] / count[x2][y];
           // Two end point. Interpolate between them
           for (int x = x1; x < x2; x++) {
-            long average1 = sum[x1-1][y] / count[x1-1][y];
-            long average2 = sum[x2][y] / count[x2][y];
             if (!waterMask.get(y * width + x)) {
               // Adjust the sum and count so that the average is correct
               sum[x][y] = average1 * (x2 - x) + average2 * (x - x1);

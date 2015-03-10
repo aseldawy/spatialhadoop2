@@ -36,7 +36,6 @@ import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.HTTPFileSystem;
 
 /**
@@ -76,12 +75,6 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       compressionCodecs = new CompressionCodecFactory(job);
     if (split instanceof FileSplit) {
       FileSplit fsplit = (FileSplit) split;
-      if (fsplit.getPath().getName().toLowerCase().endsWith(".hdf")) {
-        // HDF File. Create HDFRecordReader
-        return (RecordReader<K, V>) new HDFRecordReader(job, fsplit,
-            job.get(HDFRecordReader.DatasetName),
-            job.getBoolean(HDFRecordReader.SkipFillValue, true));
-      }
       try {
         @SuppressWarnings("rawtypes")
         Constructor<? extends RecordReader> rrConstructor;
