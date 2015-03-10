@@ -34,7 +34,6 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
  *
  */
 public class HDFToText {
-  public static int date;
   public static class HDFToTextMap extends
       Mapper<NASADataset, Iterable<? extends NASAShape>, Rectangle, NASAShape> {
     
@@ -64,7 +63,7 @@ public class HDFToText {
   public static long HDFToTextMapReduce(Path inPath, Path outPath,
       String datasetName, boolean skipFillValue) throws IOException,
       InterruptedException, ClassNotFoundException {
-    Job job = new Job();
+    Job job = Job.getInstance();
     Configuration conf = job.getConfiguration();
     job.setJarByClass(HDFToText.class);
     job.setJobName("HDFToText");
@@ -143,7 +142,6 @@ public class HDFToText {
       return;
     }
     boolean skipFillValue = params.getBoolean("skipfillvalue", true);
-    date = params.getInt("date", 0);
     
     HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
   }
