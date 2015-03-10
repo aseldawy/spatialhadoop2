@@ -163,9 +163,9 @@ def test_knn
   # Try with heap files
   heap_file = generate_file('test', shape)
   knn_query(heap_file, 'knn_heap_local', point, k, '-local')
-  results_heap_local = results_grid 'knn_heap_local'
+  results_heap_local = read_results 'knn_heap_local'
   knn_query(heap_file, 'knn_heap_mr', point, k, '-no-local')
-  results_heap_mr = results_grid 'knn_heap_mr'
+  results_heap_mr = read_results 'knn_heap_mr'
   raise "Results of range query with local and MapReduce implementations differ" unless array_equal?(results_heap_local, results_heap_mr)
   
   # Try with indexed files
@@ -174,11 +174,11 @@ def test_knn
     
     # Run knn on the heap file and make sure it gives the same result as before
     knn_query(indexed_file, "results_#{sindex}_local", point, k, '-local')
-    results_indexed_local = results_grid "results_#{sindex}_local"
+    results_indexed_local = read_results "results_#{sindex}_local"
     raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_local, results_heap_local)
       
     knn_query(indexed_file, "results_#{sindex}_mr", point, k, '-no-local')
-    results_indexed_mr = results_grid "results_#{sindex}_mr"
+    results_indexed_mr = read_results "results_#{sindex}_mr"
     raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_local) 
   end
 end
@@ -194,9 +194,9 @@ def test_spatial_join
   heap_file2 = generate_file('test2', 'rect')
 
   spatial_join('sjmr', heap_file1, heap_file2, 'sjmr_heap')
-  sjmr_heap_results = results_grid "sjmr_heap"
+  sjmr_heap_results = read_results "sjmr_heap"
   spatial_join('dj', heap_file1, heap_file2, 'bnlj')
-  bnlj_results = results_grid "bnlj"
+  bnlj_results = read_results "bnlj"
   raise "Results of SJMR and BNLJ on heap files do not match" unless array_equal?(sjmr_heap_results, bnlj_results)
 
   # Try with indexes (same index for both files)
@@ -206,26 +206,26 @@ def test_spatial_join
 
     # Run both SJMR and DJ on indexed files and check the result
     spatial_join('sjmr', indexed_file1, indexed_file2, "sjmr_#{sindex}")
-    sjmr_indexed_results = results_grid "sjmr_#{sindex}"
+    sjmr_indexed_results = read_results "sjmr_#{sindex}"
     raise "SJMR results with #{sindex} file does not match the heap file" unless array_equal?(sjmr_indexed_results, sjmr_heap_results) 
     
     spatial_join('dj', indexed_file1, indexed_file2, "dj_#{sindex}")
-    dj_indexed_results = results_grid "dj_#{sindex}"
+    dj_indexed_results = read_results "dj_#{sindex}"
     raise "Distributed Join results with #{sindex} file does not match the heap file" unless array_equal?(dj_indexed_results, bnlj_results)
 
     # Try one indexed file and one non-indexed file
     spatial_join('sjmr', indexed_file1, heap_file2, "sjmr_#{sindex}_heap")
-    sjmr_one_side_results = results_grid "sjmr_#{sindex}_heap"
+    sjmr_one_side_results = read_results "sjmr_#{sindex}_heap"
     raise "SJMR results with one heap file and one #{sindex} file" unless array_equal?(sjmr_one_side_results, sjmr_heap_results)
     
     spatial_join('dj', indexed_file1, heap_file2, "dj_#{sindex}_heap")
-    dj_one_side_results = results_grid "dj_#{sindex}_heap"
+    dj_one_side_results = read_results "dj_#{sindex}_heap"
     raise "DJ results with one heap file and one #{sindex} file" unless array_equal?(dj_one_side_results, bnlj_results)
 
     # Try one indexed file with a heap file (direct file not a directory struct)
     heap_file_name = `hadoop fs -ls #{heap_file2}`.lines.grep(/data/).first.split.grep(/data/).first
     spatial_join('dj', indexed_file1, heap_file_name, "dj_#{sindex}_heap")
-    dj_one_side_results = results_grid "dj_#{sindex}_heap"
+    dj_one_side_results = read_results "dj_#{sindex}_heap"
     raise "DJ results with one heap file and one #{sindex} file" unless array_equal?(dj_one_side_results, sjmr_heap_results)
   end
 end
