@@ -18,12 +18,12 @@ import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 
 /**
@@ -82,8 +82,8 @@ public class HDFToText {
     conf.setBoolean("skipfillvalue", skipFillValue);
     
     // Set output information
-    job.setOutputFormatClass(TextOutputFormat.class);
-    TextOutputFormat.setOutputPath(job, outPath);
+    job.setOutputFormatClass(TextOutputFormat3.class);
+    TextOutputFormat3.setOutputPath(job, outPath);
     
     // Run the job
     job.waitForCompletion(false);

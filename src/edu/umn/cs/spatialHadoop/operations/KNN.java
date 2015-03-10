@@ -41,7 +41,6 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.PriorityQueue;
 
@@ -59,6 +58,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -355,8 +355,8 @@ public class KNN {
             ".knn_"+(int)(Math.random() * 1000000));
       } while (inFs.exists(outputPath));
     }
-    job.setOutputFormatClass(TextOutputFormat.class);
-    TextOutputFormat.setOutputPath(job, outputPath);
+    job.setOutputFormatClass(TextOutputFormat3.class);
+    TextOutputFormat3.setOutputPath(job, outputPath);
     
     GlobalIndex<Partition> globalIndex = SpatialSite.getGlobalIndex(inFs, inputPath);
     Configuration templateConf = job.getConfiguration();

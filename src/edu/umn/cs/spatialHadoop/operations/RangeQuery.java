@@ -28,11 +28,8 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -40,6 +37,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -92,8 +90,8 @@ public class RangeQuery {
     job.setMapperClass(RangeQueryMap.class);
 
     if (params.getBoolean("output", true) && outFile != null) {
-      job.setOutputFormatClass(TextOutputFormat.class);
-      TextOutputFormat.setOutputPath(job, outFile);
+      job.setOutputFormatClass(TextOutputFormat3.class);
+      TextOutputFormat3.setOutputPath(job, outFile);
     } else {
       // Skip writing the output for the sake of debugging
       job.setOutputFormatClass(NullOutputFormat.class);
@@ -226,21 +224,21 @@ public class RangeQuery {
           @Override
           public void run() {
             FSDataOutputStream outFile = null;
-            final String newLine = System.getProperty("line.separator", "\n");
+            final byte[] newLine = System.getProperty("line.separator", "\n").getBytes();
             try {
               ResultCollector<Shape> collector = null;
               if (output != null) {
                 FileSystem outFS = output.getFileSystem(queryParams);
                 final FSDataOutputStream foutFile = outFile = outFS.create(output);
-                final Text tempText = new Text2();
                 collector = new ResultCollector<Shape>() {
+                  final Text tempText = new Text2();
                   @Override
-                  public void collect(Shape r) {
+                  public synchronized void collect(Shape r) {
                     try {
                       tempText.clear();
                       r.toText(tempText);
                       foutFile.write(tempText.getBytes(), 0, tempText.getLength());
-                      foutFile.writeChars(newLine);
+                      foutFile.write(newLine);
                     } catch (IOException e) {
                       e.printStackTrace();
                     }
