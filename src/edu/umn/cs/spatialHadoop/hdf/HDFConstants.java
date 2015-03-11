@@ -138,9 +138,35 @@ public final class HDFConstants {
   public static final int DFTAG_IMCOMP = 12;
   public static final int DFTAG_JPEG = 13;
   public static final int DFTAG_GREYJPED = 14;
+
+  /** A marker of extended tags */ 
+  public static final int DFTAG_EXTENDED = 0x4000;
+
+  /* Special codes for extended blocks */
+  /** Fixed-size Linked blocks */
+  public static final int SPECIAL_LINKED = 1;
+  /** External */
+  public static final int SPECIAL_EXT = 2;    
+  /** Compressed */
+  public static final int SPECIAL_COMP = 3;     
+  /** Variable-length linked blocks */
+  public static final int SPECIAL_VLINKED = 4;   
+  /** chunked element */
+  public static final int SPECIAL_CHUNKED = 5;
+  /** Buffered element */
+  public static final int SPECIAL_BUFFERED = 6;
+  /** Compressed Raster element */
+  public static final int SPECIAL_COMPRAS = 7;
   
-  public static final int DFTAG_SD_E = 0x42BE;
-  /**The short name of each tag indexed by its number*/
+  /* Compression types */
+  
+  public static final int COMP_CODE_NONE = 0;
+  public static final int COMP_CODE_RLE = 1;
+  public static final int COMP_CODE_NBIT = 2;
+  public static final int COMP_CODE_SKPHUFF = 3;
+  public static final int COMP_CODE_DEFLATE = 4;
+
+  
   public static final String[] TagNames = new String[32768];
   
   static {
@@ -150,6 +176,5 @@ public final class HDFConstants {
     TagNames[DFTAG_VERSION] = "DFTAG_VERSION";
     TagNames[DFTAG_COMPRESSED] = "DFTAG_COMPRESSED";
     TagNames[DFTAG_SD] = "DFTAG_SD";
-    TagNames[DFTAG_SD_E] = "DFTAG_SD_E";
   }
 }

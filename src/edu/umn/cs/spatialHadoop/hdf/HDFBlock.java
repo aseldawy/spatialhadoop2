@@ -37,13 +37,21 @@ public class HDFBlock {
     dataDescriptors = new DataDescriptor[numDD];
     for (int iDD = 0; iDD < numDD; iDD++) {
       int tagID = in.readUnsignedShort();
-      if (tagID == HDFConstants.DFTAG_VERSION) {
+      boolean extended = (tagID & HDFConstants.DFTAG_EXTENDED) != 0;
+      tagID &= 0x3FFF;
+      if (extended) {
+        // Extended block
+        dataDescriptors[iDD] = new DDExtendedBlock();
+      } else if (tagID == HDFConstants.DFTAG_VERSION) {
         // Version
         dataDescriptors[iDD] = new DDVersion();
       } else if (tagID == HDFConstants.DFTAG_NULL || tagID == 0) {
         // No data
         dataDescriptors[iDD] = new DDNull();
-      } else if (tagID == HDFConstants.DFTAG_SD || tagID == HDFConstants.DFTAG_SD_E) {
+      } else if (tagID == HDFConstants.DFTAG_SD) {
+        if (extended) {
+          // TODO handle extended tags
+        }
         // Scientific data
         dataDescriptors[iDD] = new DDScientificData();
       } else if (tagID == HDFConstants.DFTAG_SDD) {

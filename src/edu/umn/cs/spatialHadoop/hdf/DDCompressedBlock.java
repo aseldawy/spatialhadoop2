@@ -11,12 +11,14 @@ package edu.umn.cs.spatialHadoop.hdf;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.zip.DeflaterInputStream;
+import java.io.InputStream;
+import java.util.zip.InflaterInputStream;
 
 import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
- * @author Eldawy
+ * A block that stores compressed data.
+ * @author Ahmed Eldawy
  *
  */
 public class DDCompressedBlock extends DataDescriptor {
@@ -29,7 +31,7 @@ public class DDCompressedBlock extends DataDescriptor {
   @Override
   public void readFields(FSDataInputStream in) throws IOException {
     byte[] compressedData = readRawData(in);
-    DeflaterInputStream dis = new DeflaterInputStream(new ByteArrayInputStream(compressedData));
+    InputStream dis = new InflaterInputStream(new ByteArrayInputStream(compressedData));
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     byte[] buffer = new byte[4096];
     int bufferLength;
@@ -44,6 +46,6 @@ public class DDCompressedBlock extends DataDescriptor {
   public String toString() {
     byte[] head = new byte[Math.min(uncompressedData.length, 64)];
     System.arraycopy(uncompressedData, 0, head, 0, head.length);
-    return String.format("Successfully deflated %d bytes of data '%s'", uncompressedData.length, new String(head));
+    return String.format("Successfully deflated %d bytes out of %d bytes of data for refNo %d", uncompressedData.length, length, refNo);
   }
 }
