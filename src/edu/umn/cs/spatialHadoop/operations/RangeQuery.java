@@ -124,7 +124,7 @@ public class RangeQuery {
     // 1- Split the input path/file to get splits that can be processed independently
     final SpatialInputFormat3<Rectangle, S> inputFormat =
         new SpatialInputFormat3<Rectangle, S>();
-    Job job = Job.getInstance(params);
+    Job job = new Job(params);
     SpatialInputFormat3.setInputPaths(job, inPath);
     final List<InputSplit> splits = inputFormat.getSplits(job);
     

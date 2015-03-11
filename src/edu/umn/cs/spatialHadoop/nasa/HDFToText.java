@@ -63,7 +63,7 @@ public class HDFToText {
   public static long HDFToTextMapReduce(Path inPath, Path outPath,
       String datasetName, boolean skipFillValue) throws IOException,
       InterruptedException, ClassNotFoundException {
-    Job job = Job.getInstance();
+    Job job = new Job();
     Configuration conf = job.getConfiguration();
     job.setJarByClass(HDFToText.class);
     job.setJobName("HDFToText");

@@ -418,7 +418,7 @@ public class SingleLevelPlot {
         splits.add(new FileSplit(inFile, 0,
             inFs.getFileStatus(inFile).getLen(), new String[0]));
       } else {
-        Job job = Job.getInstance(params);
+        Job job = new Job(params);
         SpatialInputFormat3.addInputPath(job, inFile);
         splits.addAll(inputFormat.getSplits(job));
       }
