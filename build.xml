@@ -12,12 +12,15 @@
   <property name="src" location="src"/>
 	<property name="res" location="res"/>
   <property name="doc" location="doc"/>
-  <property name="build0" location="bin0/classes"/>
-  <property name="dist0"  location="bin0/dist"/>
-  <property name="build1" location="bin1/classes"/>
-  <property name="dist1"  location="bin1/dist"/>
-  <property name="build2" location="bin2/classes"/>
-  <property name="dist2"  location="bin2/dist"/>
+  <property name="bin0" location="bin0"/>
+  <property name="bin1" location="bin1"/>
+  <property name="bin2" location="bin2"/>
+  <property name="build0" location="${bin0}/classes"/>
+  <property name="dist0"  location="${bin0}/dist"/>
+  <property name="build1" location="${bin1}/classes"/>
+  <property name="dist1"  location="${bin1}/dist"/>
+  <property name="build2" location="${bin2}/classes"/>
+  <property name="dist2"  location="${bin2}/dist"/>
   <property name="version" value="2.3"/>
   
   <path id="hdflib.path.ref">
@@ -345,10 +348,9 @@
 	</target>
 
 	<target name="clean" description="clean up" >
-    <!-- Delete the ${build} and ${dist} directory trees -->
-    <delete dir="${build1}"/>
-    <delete dir="${dist1}"/>
-    <delete dir="${build2}"/>
-    <delete dir="${dist2}"/>
+    <!-- Delete the binary directory trees -->
+    <delete dir="${bin0}"/>
+    <delete dir="${bin1}"/>
+    <delete dir="${bin2}"/>
   </target>
 </project>

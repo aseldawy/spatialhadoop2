@@ -28,7 +28,7 @@ public class NASAPoint extends Point implements NASAShape {
   /**Value stored at this point*/
   public int value;
   
-  /** date of the given point*/
+  /** Timestamp of this point as appear in the HDF file*/
   public long timestamp;
   
   public NASAPoint() {}

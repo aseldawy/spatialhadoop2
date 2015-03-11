@@ -97,7 +97,12 @@ public class RTreeRecordReader3<V extends Shape> extends
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
-    Configuration conf = context.getConfiguration();
+    Configuration conf = context != null? context.getConfiguration() : new Configuration();
+    initialize(split, conf);
+  }
+
+  public void initialize(InputSplit split, Configuration conf)
+      throws IOException, InterruptedException {
     LOG.info("Open a SpatialRecordReader to split: "+split);
     FileSplit fsplit = (FileSplit) split;
     this.path = fsplit.getPath();
