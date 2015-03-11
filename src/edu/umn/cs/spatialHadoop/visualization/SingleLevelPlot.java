@@ -16,7 +16,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -415,15 +414,15 @@ public class SingleLevelPlot {
         new SpatialInputFormat3<Rectangle, Shape>();
     for (Path inFile : inFiles) {
       FileSystem inFs = inFile.getFileSystem(params);
-      FileStatus inFStatus = inFs.getFileStatus(inFile);
-      if (inFStatus != null && !inFStatus.isDir()) {
+      if (inFs.exists(inFile) && !inFs.isDirectory(inFile)) {
         // One file, retrieve it immediately.
         // This is useful if the input is a hidden file which is automatically
         // skipped by FileInputFormat. We need to plot a hidden file for the case
         // of plotting partition boundaries of a spatial index
-        splits.add(new FileSplit(inFile, 0, inFStatus.getLen(), new String[0]));
+        splits.add(new FileSplit(inFile, 0,
+            inFs.getFileStatus(inFile).getLen(), new String[0]));
       } else {
-        Job job = new Job(params);
+        Job job = Job.getInstance(params);
         SpatialInputFormat3.addInputPath(job, inFile);
         splits.addAll(inputFormat.getSplits(job));
       }

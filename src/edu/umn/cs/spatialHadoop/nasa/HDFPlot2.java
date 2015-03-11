@@ -273,8 +273,11 @@ public class HDFPlot2 {
     } else if (recover.equals("write")) {
       // Recover holes upon writing the final image
       params.setBoolean("recoverholes", false);
-      if (params.get(WATER_MASK_PATH) == null)
+      if (params.get(WATER_MASK_PATH) == null) {
+        // TODO if not set, create it first using a separate job with
+        // HDFRasterizerWaterMask
         throw new RuntimeException("You need to set 'water_mask' to recover holes on write");
+      }
     }
     if (params.getBoolean("pyramid", false))
       return MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
@@ -294,6 +297,7 @@ public class HDFPlot2 {
     System.out.println("color1:<c1> - The color associated with v1");
     System.out.println("color2:<c2> - The color associated with v2");
     System.out.println("gradient:<rgb|hsb> - Type of gradient to use");
+    System.out.println("recover:<read|write|none> - (none) How to recover holes in the data");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     GenericOptionsParser.printGenericCommandUsage(System.out);
@@ -320,6 +324,11 @@ public class HDFPlot2 {
     } else if (!(params.getShape("shape") instanceof NASAShape)) {
       System.err.println("The specified shape "+params.get("shape")+" in not an instance of NASAShape");
       System.exit(1);
+    }
+    
+    if (params.get("mbr") == null) {
+      // Set to the same value as query rectangle or the whole world
+      params.set("mbr", params.get("rect", "-180,-90,180,90"));
     }
 
     Path[] inFiles = params.getInputPaths();

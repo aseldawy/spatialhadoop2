@@ -14,6 +14,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 
@@ -32,6 +33,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.nasa.HTTPFileSystem;
 
 /**
  * A bunch of helper functions used with files
@@ -58,10 +60,21 @@ public final class FileUtil {
 	public static String copyFileSplit(Configuration conf, FileSplit split)
 			throws IOException {
 		FileSystem fs = split.getPath().getFileSystem(conf);
-
+		File destFile = File.createTempFile(split.getPath().getName(), "tmp");
+		
 		// Special case of a local file. Skip copying the file
 		if (fs instanceof LocalFileSystem && split.getStart() == 0)
 			return split.getPath().toUri().getPath();
+		
+		// Special handling for HTTP files for more efficiency
+		/*if (fs instanceof HTTPFileSystem && split.getStart() == 0) {
+		  URL website = split.getPath().toUri().toURL();
+		  ReadableByteChannel rbc = Channels.newChannel(website.openStream());
+		  FileOutputStream fos = new FileOutputStream(destFile);
+		  fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
+		  fos.close();
+		  return destFile.getAbsolutePath();
+		}*/
 
 		// Length of input file. We do not depend on split.length because it is
 		// not
@@ -75,14 +88,13 @@ public final class FileUtil {
 		ReadableByteChannel rbc = Channels.newChannel(in);
 
 		// Prepare output file for write
-		File tempFile = File.createTempFile(split.getPath().getName(), "tmp");
-		FileOutputStream out = new FileOutputStream(tempFile);
+		FileOutputStream out = new FileOutputStream(destFile);
 		
 		out.getChannel().transferFrom(rbc, 0, length);
 
 		rbc.close();
 		out.close();
-		return tempFile.getAbsolutePath();
+		return destFile.getAbsolutePath();
 	}
 
 	/**
