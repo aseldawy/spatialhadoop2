@@ -8,9 +8,8 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.DataInput;
 import java.io.IOException;
-
-import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * Header of VData
@@ -28,8 +27,8 @@ public class DDVDataHeader extends DataDescriptor {
   /** Field indicating the data type of the nth field of the Vdata*/
   protected int[] types;
   /** Size in bytes of the nth field of the Vdata*/
-  protected int[] isizes;
-  /** Offset of the nth field within the Vdata*/
+  protected int[] sizes;
+  /** Offset of the nth field within the Vdata (offset in file)*/
   protected int[] offsets;
   /** Order of the nth field of the Vdata*/
   protected int[] order;
@@ -46,61 +45,83 @@ public class DDVDataHeader extends DataDescriptor {
   /** Version number of DFTAG_VH information */
   protected int version;
 
-  public DDVDataHeader() {
+  DDVDataHeader(HDFFile hdfFile, int tagID, int refNo, int offset,
+      int length, boolean extended) {
+    super(hdfFile, tagID, refNo, offset, length, extended);
   }
-  
+
   @Override
-  public void readFields(FSDataInputStream in) throws IOException {
-    in.seek(offset);
-    this.interlace = in.readUnsignedShort();
-    this.nvert = in.readInt();
-    this.ivsize = in.readUnsignedShort();
-    int nfields = in.readUnsignedShort();
+  protected void readFields(DataInput input) throws IOException {
+    this.interlace = input.readUnsignedShort();
+    this.nvert = input.readInt();
+    this.ivsize = input.readUnsignedShort();
+    int nfields = input.readUnsignedShort();
     this.types = new int[nfields];
     for (int i = 0; i < nfields; i++)
-      this.types[i] = in.readUnsignedShort();
-    this.isizes = new int[nfields];
+      this.types[i] = input.readUnsignedShort();
+    this.sizes = new int[nfields];
     for (int i = 0; i < nfields; i++)
-      this.isizes[i] = in.readUnsignedShort();
+      this.sizes[i] = input.readUnsignedShort();
     this.offsets = new int[nfields];
     for (int i = 0; i < nfields; i++)
-      this.offsets[i] = in.readUnsignedShort();
+      this.offsets[i] = input.readUnsignedShort();
     this.order = new int[nfields];
     for (int i = 0; i < nfields; i++)
-      this.order[i] = in.readUnsignedShort();
+      this.order[i] = input.readUnsignedShort();
     int maxLength = 0;
     int[] fieldNameLength = new int[nfields];
     for (int i = 0; i < nfields; i++) {
-      fieldNameLength[i] = in.readUnsignedShort();
+      fieldNameLength[i] = input.readUnsignedShort();
       if (fieldNameLength[i] > maxLength)
         maxLength = fieldNameLength[i];
     }
     byte[] nameBytes = new byte[maxLength];
     fieldNames = new String[nfields];
     for (int i = 0; i < nfields; i++) {
-      in.readFully(nameBytes, 0, fieldNameLength[i]);
+      input.readFully(nameBytes, 0, fieldNameLength[i]);
       fieldNames[i] = new String(nameBytes, 0, fieldNameLength[i]);
     }
-    int nameLength = in.readUnsignedShort();
+    int nameLength = input.readUnsignedShort();
     if (nameLength > nameBytes.length)
       nameBytes = new byte[nameLength];
-    in.readFully(nameBytes, 0, nameLength);
+    input.readFully(nameBytes, 0, nameLength);
     name = new String(nameBytes, 0, nameLength);
     
-    int classLength = in.readUnsignedShort();
+    int classLength = input.readUnsignedShort();
     if (classLength > nameBytes.length)
       nameBytes = new byte[classLength];
-    in.readFully(nameBytes, 0, classLength);
+    input.readFully(nameBytes, 0, classLength);
     klass = new String(nameBytes, 0, classLength);
 
-    this.extag = in.readUnsignedShort();
-    this.exref = in.readUnsignedShort();
-    this.version = in.readUnsignedShort();
+    this.extag = input.readUnsignedShort();
+    this.exref = input.readUnsignedShort();
+    this.version = input.readUnsignedShort();
+  }
+  
+  public Object getValueAt(int i) throws IOException {
+    lazyLoad();
+    hdfFile.inStream.seek(offsets[i]);
+    byte[] value = new byte[sizes[i]];
+    hdfFile.inStream.readFully(value);
+    switch (types[i]) {
+    case HDFConstants.DFNT_CHAR: return new String(value);
+    default: return null;
+    }
   }
   
   @Override
   public String toString() {
-    return String.format("VHeader with %d fields with type %d and name '%s', overall name '%s'", types.length, types[0], fieldNames[0], name);
+    try {
+      lazyLoad();
+      return String.format("VHeader with %d fields with type %d, size %d, and name '%s', overall name '%s'", types.length, types[0], sizes[0], fieldNames[0], name);
+    } catch (IOException e) {
+      return "Error reading "+super.toString();
+    }
+  }
+
+  public String getName() throws IOException {
+    lazyLoad();
+    return name;
   }
 
 }

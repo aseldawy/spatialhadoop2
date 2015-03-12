@@ -8,9 +8,8 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.DataInput;
 import java.io.IOException;
-
-import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * Data descriptor for array of scientific data.
@@ -21,21 +20,30 @@ public class DDScientificData extends DataDescriptor {
 
   /**Raw data*/
   public byte[] data;
-
-  public DDScientificData() {
+  
+  DDScientificData(HDFFile hdfFile, int tagID, int refNo, int offset,
+      int length, boolean extended) {
+    super(hdfFile, tagID, refNo, offset, length, extended);
   }
 
   @Override
-  public void readFields(FSDataInputStream in) throws IOException {
-    data = new byte[length];
-    in.seek(offset);
-    in.readFully(data);
+  protected void readFields(DataInput input) throws IOException {
+    data = new byte[getLength()];
+    input.readFully(data);
   }
 
   @Override
   public String toString() {
-    byte[] head = new byte[Math.min(data.length, 16)];
-    System.arraycopy(data, 0, head, 0, head.length);
-    return String.format("Scientific data of size %d '%s' ...", length, new String(head));
+    try {
+      lazyLoad();
+      return String.format("Scientific data of size %d", getLength());
+    } catch (IOException e) {
+      return "Error loading "+super.toString();
+    }
+  }
+
+  public byte[] getData() throws IOException {
+    lazyLoad();
+    return data;
   }
 }

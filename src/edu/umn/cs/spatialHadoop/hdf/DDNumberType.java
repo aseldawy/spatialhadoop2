@@ -8,9 +8,8 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.DataInput;
 import java.io.IOException;
-
-import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * @author Ahmed Eldawy
@@ -18,7 +17,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
  */
 public class DDNumberType extends DataDescriptor {
 
-  /**Version number of th NT information*/
+  /**Version number of the number type information*/
   protected int version;
   
   /**
@@ -33,24 +32,35 @@ public class DDNumberType extends DataDescriptor {
 
   /**
    * A generic value, with different interpretations depending on type:
-   * flaoting point, integer, or character
+   * floating point, integer, or character.
    */
   protected int klass;
 
-  public DDNumberType() {
+  DDNumberType(HDFFile hdfFile, int tagID, int refNo, int offset,
+      int length, boolean extended) {
+    super(hdfFile, tagID, refNo, offset, length, extended);
   }
   
   @Override
-  public void readFields(FSDataInputStream in) throws IOException {
-    in.seek(offset);
-    this.version = in.readUnsignedByte();
-    this.type = in.readUnsignedByte();
-    this.width = in.readUnsignedByte();
-    this.klass = in.readUnsignedByte();
+  protected void readFields(DataInput input) throws IOException {
+    this.version = input.readUnsignedByte();
+    this.type = input.readUnsignedByte();
+    this.width = input.readUnsignedByte();
+    this.klass = input.readUnsignedByte();
   }
 
   @Override
   public String toString() {
-    return String.format("Number type %d %d %d %d", version, type, width, klass);
+    try {
+      lazyLoad();
+      return String.format("Number type %d %d %d %d", version, type, width, klass);
+    } catch (IOException e) {
+      return "Error loading "+super.toString();
+    }
+  }
+
+  public int getNumberType() throws IOException {
+    lazyLoad();
+    return type;
   }
 }

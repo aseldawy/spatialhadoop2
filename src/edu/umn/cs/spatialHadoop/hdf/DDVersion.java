@@ -8,9 +8,8 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.DataInput;
 import java.io.IOException;
-
-import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * Data descriptor for the library version number. It contains the complete
@@ -36,23 +35,29 @@ public class DDVersion extends DataDescriptor {
    */
   public String name;
 
-  public DDVersion() {
+  DDVersion(HDFFile hdfFile, int tagID, int refNo, int offset, int length,
+      boolean extended) {
+    super(hdfFile, tagID, refNo, offset, length, extended);
   }
 
   @Override
-  public void readFields(FSDataInputStream in) throws IOException {
-    in.seek(offset);
-    this.majorVersion = in.readInt();
-    this.minorVersion = in.readInt();
-    this.release = in.readInt();
-    byte[] nameBytes = new byte[length - 12];
-    in.readFully(nameBytes);
+  protected void readFields(DataInput input) throws IOException {
+    this.majorVersion = input.readInt();
+    this.minorVersion = input.readInt();
+    this.release = input.readInt();
+    byte[] nameBytes = new byte[getLength() - 12];
+    input.readFully(nameBytes);
     name = new String(nameBytes);
   }
   
   @Override
   public String toString() {
-    return String.format("Version %d.%d.%d '%s'", majorVersion, minorVersion, release, name);
+    try {
+      lazyLoad();
+      return String.format("Version %d.%d.%d '%s'", majorVersion, minorVersion, release, name);
+    } catch (IOException e) {
+      return "Error loading "+super.toString();
+    }
   }
 
 }

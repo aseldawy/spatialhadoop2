@@ -8,9 +8,8 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.DataInput;
 import java.io.IOException;
-
-import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * @author Ahmed Eldawy
@@ -23,16 +22,23 @@ public class DDVSet extends DataDescriptor {
    */
   protected byte[] rawData;
 
-  public DDVSet() {
+  DDVSet(HDFFile hdfFile, int tagID, int refNo, int offset, int length,
+      boolean extended) {
+    super(hdfFile, tagID, refNo, offset, length, extended);
   }
 
   @Override
-  public void readFields(FSDataInputStream in) throws IOException {
-    this.rawData = readRawData(in);
+  protected void readFields(DataInput input) throws IOException {
+    this.rawData = readRawData();
   }
   
   @Override
   public String toString() {
-    return String.format("VSet of total size %d", rawData.length);
+    try {
+      lazyLoad();
+      return String.format("VSet of total size %d", rawData.length);
+    } catch (IOException e) {
+      return "Error loading "+super.toString();
+    }
   }
 }

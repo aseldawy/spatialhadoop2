@@ -9,33 +9,35 @@
 
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.DataInput;
 import java.io.IOException;
-
-import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * A place holder for data descriptors with unsupported tag number
- * @author Eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class DDUnknown extends DataDescriptor {
 
   public byte[] rawData;
   
-  public DDUnknown() {
+  DDUnknown(HDFFile hdfFile, int tagID, int refNo, int offset, int length,
+      boolean extended) {
+    super(hdfFile, tagID, refNo, offset, length, extended);
   }
-
+  
   @Override
-  public void readFields(FSDataInputStream in) throws IOException {
-    rawData = new byte[length];
-    in.seek(offset);
-    in.readFully(rawData);
+  protected void readFields(DataInput input) throws IOException {
+    rawData = super.readRawData();
   }
 
   @Override
   public String toString() {
-    byte[] head = new byte[Math.min(rawData.length, 16)];
-    System.arraycopy(rawData, 0, head, 0, head.length);
-    return String.format("Unknown tag %d with data of size %d '%s' ...", tagID, length, new String(head));
+    try {
+      lazyLoad();
+      return String.format("Unknown tag %d with data of size %d", tagID, getLength());
+    } catch (IOException e) {
+      return "Error loading "+super.toString();
+    }
   }
 }

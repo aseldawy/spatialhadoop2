@@ -94,7 +94,7 @@ public final class HDFConstants {
   /* Scientific dataset */
   /** Scientific Data Group */
   public static final int DFTAG_SDG = 700;
-  /** Scientific Data DimRec */
+  /** Scientific Data Dimension Record */
   public static final int DFTAG_SDD = 701;
   /** Scientific Data */
   public static final int DFTAG_SD = 702;
@@ -166,6 +166,11 @@ public final class HDFConstants {
   public static final int COMP_CODE_SKPHUFF = 3;
   public static final int COMP_CODE_DEFLATE = 4;
 
+  /* Data types */
+  /** character */
+  public static final int DFNT_CHAR = 4;
+  /** unsigned integer */
+  public static final int DFNT_UINT16 = 23;
   
   public static final String[] TagNames = new String[32768];
   

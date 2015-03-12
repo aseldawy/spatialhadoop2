@@ -8,9 +8,8 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.DataInput;
 import java.io.IOException;
-
-import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
  * Data descriptor with no data. This tag is used for place holding and to fill
@@ -21,11 +20,13 @@ import org.apache.hadoop.fs.FSDataInputStream;
  */
 public class DDNull extends DataDescriptor {
 
-  public DDNull() {
+  public DDNull(HDFFile hdfFile, int tagID, int refNo, int offset,
+      int length) {
+    super(hdfFile, tagID, refNo, offset, length, false);
   }
-
+  
   @Override
-  public void readFields(FSDataInputStream in) throws IOException {
+  protected void readFields(DataInput input) throws IOException {
     // Nothing to read
   }
 

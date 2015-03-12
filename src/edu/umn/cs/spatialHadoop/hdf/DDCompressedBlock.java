@@ -9,43 +9,45 @@
 package edu.umn.cs.spatialHadoop.hdf;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+import java.io.DataInput;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.zip.InflaterInputStream;
 
-import org.apache.hadoop.fs.FSDataInputStream;
-
 /**
  * A block that stores compressed data.
+ * TagID DFTAG_COMPRESSED
  * @author Ahmed Eldawy
  *
  */
 public class DDCompressedBlock extends DataDescriptor {
 
-  protected byte[] uncompressedData;
-  
-  public DDCompressedBlock() {
+  DDCompressedBlock(HDFFile hdfFile, int tagID, int refNo, int offset,
+      int length, boolean extended) {
+    super(hdfFile, tagID, refNo, offset, length, extended);
   }
 
   @Override
-  public void readFields(FSDataInputStream in) throws IOException {
-    byte[] compressedData = readRawData(in);
-    InputStream dis = new InflaterInputStream(new ByteArrayInputStream(compressedData));
-    ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    byte[] buffer = new byte[4096];
-    int bufferLength;
-    while ((bufferLength = dis.read(buffer)) > 0) {
-      baos.write(buffer, 0, bufferLength);
-    }
-    dis.close();
-    baos.close();
-    uncompressedData = baos.toByteArray();
+  protected void readFields(DataInput input) throws IOException {
+    // This method is not expected to be called directly because this block
+    // does not have the necessary compression information to decompress
+    // the raw data correctly
+    System.err.println("This method should never be called directly on compressed blocks");
+  }
+  
+  protected InputStream decompressDeflate(int level) throws IOException {
+    // We need to retrieve the raw data first and then pass it to the
+    // decompressor. Otherwise, the decompressor will not be able to determine
+    // the end-of-file
+    // TODO try to create a wrapper stream that reads only the correct amount
+    // of bytes without having to load everythin in memory
+    byte[] rawData = super.readRawData();
+    InputStream decompressedData =
+        new InflaterInputStream(new ByteArrayInputStream(rawData));
+    return decompressedData;
   }
 
   public String toString() {
-    byte[] head = new byte[Math.min(uncompressedData.length, 64)];
-    System.arraycopy(uncompressedData, 0, head, 0, head.length);
-    return String.format("Successfully deflated %d bytes out of %d bytes of data for refNo %d", uncompressedData.length, length, refNo);
+    return String.format("Compressed block <%d, %d>", tagID, refNo);
   }
 }
