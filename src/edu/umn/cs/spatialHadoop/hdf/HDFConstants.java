@@ -171,6 +171,8 @@ public final class HDFConstants {
   public static final int DFNT_CHAR = 4;
   /** unsigned integer */
   public static final int DFNT_UINT16 = 23;
+  /** signed integer */
+  public static final int DFNT_INT32 = 24;
   
   public static final String[] TagNames = new String[32768];
   
@@ -181,5 +183,31 @@ public final class HDFConstants {
     TagNames[DFTAG_VERSION] = "DFTAG_VERSION";
     TagNames[DFTAG_COMPRESSED] = "DFTAG_COMPRESSED";
     TagNames[DFTAG_SD] = "DFTAG_SD";
+  }
+  
+  /**
+   * Reads a 32-bit integer from a specific offset in a given array
+   * @param bytes
+   * @param offset
+   * @return
+   */
+  public static int readInt32(byte[] bytes, int offset) {
+    int ch1 = bytes[offset];
+    int ch2 = bytes[offset+1];
+    int ch3 = bytes[offset+2];
+    int ch4 = bytes[offset+3];
+    return ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4 << 0));
+  }
+  
+  public static int readUnsignedShort(byte[] bytes, int offset) {
+    int ch1 = bytes[offset];
+    int ch2 = bytes[offset+1];
+    return (ch1 << 8) + (ch2 << 0);
+  }
+
+  public static short readSignedShort(byte[] bytes, int offset) {
+    int ch1 = bytes[offset];
+    int ch2 = bytes[offset+1];
+    return (short)((ch1 << 8) + (ch2 << 0));
   }
 }
