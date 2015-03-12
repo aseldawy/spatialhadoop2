@@ -169,9 +169,11 @@ public final class HDFConstants {
   /* Data types */
   /** character */
   public static final int DFNT_CHAR = 4;
-  /** unsigned integer */
+  /** Unsigned 8-bit integer */
+  public static final int DFNT_UINT8 = 21;
+  /** Unsigned integer */
   public static final int DFNT_UINT16 = 23;
-  /** signed integer */
+  /** Signed integer */
   public static final int DFNT_INT32 = 24;
   
   public static final String[] TagNames = new String[32768];

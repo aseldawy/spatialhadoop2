@@ -104,6 +104,9 @@ public class HDFFile implements Closeable {
       } else if (tagID == HDFConstants.DFTAG_NDG) {
         // Numeric data group
         dd = new DDNumericDataGroup(this, tagID, refNo, offset, length, extended);
+      } else if (tagID == HDFConstants.DFTAG_CHUNK) {
+        // Data chunk
+        dd = new DDChunkData(this, tagID, refNo, offset, length, extended);
       } else {
         System.err.printf("Found an unknown block <%d,%d> @%d\n", tagID, refNo, inStream.getPos());
         dd = new DDUnknown(this, tagID, refNo, offset, length, extended);

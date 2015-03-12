@@ -8,6 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -38,8 +39,11 @@ public abstract class DataDescriptor {
   /**Number of bytes in this data descriptor*/
   private final int length;
   
-  /**Only set if this is an extended block with a compressed extension*/
-  private int uncompressedLength;
+  /**
+   * Only set if this is an extended block and it tells the size of the extended
+   * data
+   */
+  private int extendedLength;
   
   /**The HDFFile that contains this group*/
   protected HDFFile hdfFile;
@@ -83,7 +87,7 @@ public abstract class DataDescriptor {
    */
   private void readCompressedData() throws IOException {
     int compressionVersion = hdfFile.inStream.readUnsignedShort();
-    uncompressedLength = hdfFile.inStream.readInt();
+    extendedLength = hdfFile.inStream.readInt();
     int linkedRefNo = hdfFile.inStream.readUnsignedShort();
     int modelType = hdfFile.inStream.readUnsignedShort();
     int compressionType = hdfFile.inStream.readUnsignedShort();
@@ -122,15 +126,6 @@ public abstract class DataDescriptor {
     int tag = hdfFile.inStream.readUnsignedShort();
     int ref = hdfFile.inStream.readUnsignedShort();
     DDID chunkTableID = new DDID(tag, ref);
-    
-    DDVDataHeader chunkTable = (DDVDataHeader) hdfFile.retrieveElementByID(chunkTableID);
-    int chunks = chunkTable.getEntryCount();
-    for (int i = 0; i < chunks; i++) {
-      Object chunkData = chunkTable.getEntryAt(i);
-      System.out.println(chunkData);
-    }
-    
-    
     tag = hdfFile.inStream.readUnsignedShort();
     ref = hdfFile.inStream.readUnsignedShort();
     // For future use. Speical table for 'ghost' chunks.
@@ -145,10 +140,21 @@ public abstract class DataDescriptor {
       dimensionLengths[i] = hdfFile.inStream.readInt();
       chunkLengths[i] = hdfFile.inStream.readInt();
     }
-    // Read fill value
-    int fill_value_num_bytes = hdfFile.inStream.readInt();
-    byte[] fill_value = new byte[fill_value_num_bytes];
-    hdfFile.inStream.readFully(fill_value);
+    
+    // Retrieve the chunk table to read chunked data
+    DDVDataHeader chunkTable = (DDVDataHeader) hdfFile.retrieveElementByID(chunkTableID);
+    int chunks = chunkTable.getEntryCount();
+    if (chunks == 1) {
+      // For now, we can handle only data consisting of one chunk
+      Object[] chunkInformation = (Object[]) chunkTable.getEntryAt(0);
+      DDID chunkedID = new DDID((Integer)chunkInformation[1], (Integer)chunkInformation[2]);
+      DDChunkData chunkObject = (DDChunkData) hdfFile.retrieveElementByID(chunkedID);
+      byte[] dataInChunk = chunkObject.getData();
+      this.extendedLength = dataInChunk.length;
+      DataInputStream dis = new DataInputStream(new ByteArrayInputStream(dataInChunk));
+      this.readFields(dis);
+      dis.close();
+    }
   }
   
   /**
@@ -158,7 +164,7 @@ public abstract class DataDescriptor {
    * @return
    */
   public int getLength() {
-    return extended && uncompressedLength > 0? uncompressedLength : length;
+    return extended && extendedLength > 0? extendedLength : length;
   }
   
   /**

@@ -71,12 +71,15 @@ public class DDNumericDataGroup extends DataDescriptor {
       return null;
     }
     ByteBuffer bbuffer = ByteBuffer.wrap(rawData);
-    if (type == HDFConstants.DFNT_UINT16) {
+    switch (type) {
+    case HDFConstants.DFNT_UINT16:
       short[] values = new short[overallSize];
       for (int i = 0; i < values.length; i++)
         values[i] = bbuffer.getShort();
       return values;
-    } else {
+    case HDFConstants.DFNT_UINT8:
+      return rawData;
+    default:
       throw new RuntimeException("Unsupported type "+type);
     }
   }
