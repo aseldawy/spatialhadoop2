@@ -65,29 +65,81 @@ public abstract class DataDescriptor {
         // Extended block. Need to retrieve extended data first
         int extensionType = hdfFile.inStream.readUnsignedShort();
         if (extensionType == HDFConstants.SPECIAL_COMP) {
-          // Compressed block
-          int compressionVersion = hdfFile.inStream.readUnsignedShort();
-          uncompressedLength = hdfFile.inStream.readInt();
-          int linkedRefNo = hdfFile.inStream.readUnsignedShort();
-          int modelType = hdfFile.inStream.readUnsignedShort();
-          int compressionType = hdfFile.inStream.readUnsignedShort();
-          if (compressionType == HDFConstants.COMP_CODE_DEFLATE) {
-            int deflateLevel = hdfFile.inStream.readUnsignedShort();
-            // Retrieve the associated compressed block
-            DDID linkedBlockID = new DDID(HDFConstants.DFTAG_COMPRESSED, linkedRefNo);
-            DDCompressedBlock linkedBlock =
-                (DDCompressedBlock) hdfFile.retrieveElementByID(linkedBlockID);
-            InputStream decompressedData = linkedBlock.decompressDeflate(deflateLevel);
-            readFields(new DataInputStream(decompressedData));
-          } else {
-            System.err.println("Unsupported compression "+compressionType);
-          }
+          readCompressedData();
+        } else if (extensionType == HDFConstants.SPECIAL_CHUNKED) {
+          // Chunked data
+          readChunkedData();
         } else {
           System.err.println("Unsupported extension type "+extensionType);
         }
       }
       loaded = true;
     }
+  }
+
+  /**
+   * Read extended block that is available as compressed data
+   * @throws IOException
+   */
+  private void readCompressedData() throws IOException {
+    int compressionVersion = hdfFile.inStream.readUnsignedShort();
+    uncompressedLength = hdfFile.inStream.readInt();
+    int linkedRefNo = hdfFile.inStream.readUnsignedShort();
+    int modelType = hdfFile.inStream.readUnsignedShort();
+    int compressionType = hdfFile.inStream.readUnsignedShort();
+    if (compressionType == HDFConstants.COMP_CODE_DEFLATE) {
+      int deflateLevel = hdfFile.inStream.readUnsignedShort();
+      // Retrieve the associated compressed block
+      DDID linkedBlockID = new DDID(HDFConstants.DFTAG_COMPRESSED, linkedRefNo);
+      DDCompressedBlock linkedBlock =
+          (DDCompressedBlock) hdfFile.retrieveElementByID(linkedBlockID);
+      InputStream decompressedData = linkedBlock.decompressDeflate(deflateLevel);
+      readFields(new DataInputStream(decompressedData));
+    } else {
+      System.err.println("Unsupported compression "+compressionType);
+    }
+  }
+  
+  /**
+   * Read chunked data
+   * @throws IOException
+   */
+  private void readChunkedData() throws IOException {
+    int sp_tag_head_len = hdfFile.inStream.readInt();
+    int version = hdfFile.inStream.readUnsignedByte();
+    int flag = hdfFile.inStream.readInt();
+    // Valid logical length of the entire element. The logical physical length
+    // is this value multiplied by nt_size. The actual physical length used for
+    // storage can be greated than the dataset size due to the presence of ghost
+    // areas in chunks. Partial chunks are not distinguished from regular
+    // chunks.
+    int elem_total_length = hdfFile.inStream.readInt();
+    // Logical size of data chunks
+    int chunk_size = hdfFile.inStream.readInt();
+    // Number type size. i.e., the size of the data type
+    int nt_size = hdfFile.inStream.readInt();
+    // ID of the chunk table
+    int tag = hdfFile.inStream.readUnsignedShort();
+    int ref = hdfFile.inStream.readUnsignedShort();
+    DDID chunkTableID = new DDID(tag, ref);
+    tag = hdfFile.inStream.readUnsignedShort();
+    ref = hdfFile.inStream.readUnsignedShort();
+    // For future use. Speical table for 'ghost' chunks.
+    DDID specialTableID = new DDID(tag, ref);
+    // Number of dimensions of the chunked element
+    int nDims = hdfFile.inStream.readUnsignedShort();
+    int[] flags = new int[nDims];
+    int[] dimensionLengths = new int[nDims];
+    int[] chunkLengths = new int[nDims];
+    for (int i = 0; i < nDims; i++) {
+      flags[i] = hdfFile.inStream.readInt();
+      dimensionLengths[i] = hdfFile.inStream.readInt();
+      chunkLengths[i] = hdfFile.inStream.readInt();
+    }
+    // Read fill value
+    int fill_value_num_bytes = hdfFile.inStream.readInt();
+    byte[] fill_value = new byte[fill_value_num_bytes];
+    hdfFile.inStream.readFully(fill_value);
   }
   
   /**

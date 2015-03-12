@@ -67,6 +67,9 @@ public class DDNumericDataGroup extends DataDescriptor {
         rawData = ((DDScientificData)hdfFile.retrieveElementByID(members[i])).getData();
       }
     }
+    if (rawData == null) {
+      return null;
+    }
     ByteBuffer bbuffer = ByteBuffer.wrap(rawData);
     if (type == HDFConstants.DFNT_UINT16) {
       short[] values = new short[overallSize];

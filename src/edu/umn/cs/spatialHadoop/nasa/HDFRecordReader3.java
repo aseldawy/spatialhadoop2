@@ -33,6 +33,7 @@ import edu.umn.cs.spatialHadoop.hdf.DDVDataHeader;
 import edu.umn.cs.spatialHadoop.hdf.DDVGroup;
 import edu.umn.cs.spatialHadoop.hdf.DataDescriptor;
 import edu.umn.cs.spatialHadoop.hdf.HDFFile;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
  * A record reader for HDF files with the new mapreduce interface
@@ -117,11 +118,8 @@ public class HDFRecordReader3<S extends NASAShape>
     } else {
       // Whether we need to recover fill values or not
       boolean recoverFillValues = conf.getBoolean("recoverholes", true);
-      try {
-        if (recoverFillValues)
-          recoverFillValues(conf);
-      } catch (Exception e) {
-      }
+      if (recoverFillValues)
+        recoverFillValues(conf);
     }
     this.nasaShape = (S) OperationsParams.getShape(conf, "shape", new NASARectangle());
     this.value = new NASAIterator();
@@ -282,7 +280,12 @@ public class HDFRecordReader3<S extends NASAShape>
         LOG.warn("Could not find water mask for tile '"+tileIdentifier+"'");
         return;
       }
-      waterMaskFile = new HDFFile(wmFs.open(wmFile[0].getPath()));
+      Path wmFileToLoad = wmFile[0].getPath();
+      if (wmFs instanceof HTTPFileSystem) {
+        wmFileToLoad = new Path(FileUtil.copyFile(conf, wmFileToLoad));
+        wmFs = FileSystem.getLocal(conf);
+      }
+      waterMaskFile = new HDFFile(wmFs.open(wmFileToLoad));
       DDVGroup waterMaskGroup = waterMaskFile.findGroupByName("water_mask");
       if (waterMaskGroup == null) {
         LOG.warn("Water mask dataset 'water_mask' not found in file "+wmFile[0]);
