@@ -100,7 +100,7 @@ public class DDVDataHeader extends DataDescriptor {
   
   public Object getValueAt(int i) throws IOException {
     lazyLoad();
-    hdfFile.inStream.seek(offsets[i]);
+    hdfFile.inStream.seek(offset - ivsize + offsets[i]);
     byte[] value = new byte[sizes[i]];
     hdfFile.inStream.readFully(value);
     switch (types[i]) {

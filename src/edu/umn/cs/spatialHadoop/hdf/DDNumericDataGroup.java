@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.hdf;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 /**
@@ -44,6 +45,48 @@ public class DDNumericDataGroup extends DataDescriptor {
     for (int i = 0; i < contents.length; i++)
       contents[i] = hdfFile.retrieveElementByID(members[i]);
     return contents;
+  }
+  
+  public Object getAsAnArray() throws IOException {
+    lazyLoad();
+    int overallSize = 0;
+    int type = 0;
+    byte[] rawData = null;
+    for (int i = 0; i < members.length; i++) {
+      if (members[i].tagID == HDFConstants.DFTAG_SDD) {
+        // Dimensions of the array
+        DDScientificDDR ddr = (DDScientificDDR)hdfFile.retrieveElementByID(members[i]);
+        overallSize = 1;
+        for (int dim : ddr.getDimensions())
+          overallSize *= dim;
+      } else if (members[i].tagID == HDFConstants.DFTAG_NT) {
+        // Number type
+        DDNumberType nt = (DDNumberType)hdfFile.retrieveElementByID(members[i]);
+        type = nt.getNumberType();
+      } else if (members[i].tagID == HDFConstants.DFTAG_SD) {
+        rawData = ((DDScientificData)hdfFile.retrieveElementByID(members[i])).getData();
+      }
+    }
+    ByteBuffer bbuffer = ByteBuffer.wrap(rawData);
+    if (type == HDFConstants.DFNT_UINT16) {
+      short[] values = new short[overallSize];
+      for (int i = 0; i < values.length; i++)
+        values[i] = bbuffer.getShort();
+      return values;
+    } else {
+      throw new RuntimeException("Unsupported type "+type);
+    }
+  }
+  
+  public int[] getDimensions() throws IOException {
+    for (int i = 0; i < members.length; i++) {
+      if (members[i].tagID == HDFConstants.DFTAG_SDD) {
+        // Dimensions of the array
+        DDScientificDDR ddr = (DDScientificDDR)hdfFile.retrieveElementByID(members[i]);
+        return ddr.getDimensions();
+      }
+    }
+    return null;
   }
   
   @Override
