@@ -11,20 +11,11 @@ package edu.umn.cs.spatialHadoop.nasa;
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Stack;
-
-import javax.swing.tree.DefaultMutableTreeNode;
-
-import ncsa.hdf.object.Attribute;
-import ncsa.hdf.object.Dataset;
-import ncsa.hdf.object.FileFormat;
-import ncsa.hdf.object.Group;
-import ncsa.hdf.object.HObject;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -37,7 +28,11 @@ import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.util.FileUtil;
+import edu.umn.cs.spatialHadoop.hdf.DDNumericDataGroup;
+import edu.umn.cs.spatialHadoop.hdf.DDVDataHeader;
+import edu.umn.cs.spatialHadoop.hdf.DDVGroup;
+import edu.umn.cs.spatialHadoop.hdf.DataDescriptor;
+import edu.umn.cs.spatialHadoop.hdf.HDFFile;
 
 /**
  * A record reader for HDF files with the new mapreduce interface
@@ -52,9 +47,6 @@ public class HDFRecordReader3<S extends NASAShape>
   /**Configuration line for the path to water mask*/
   private static final String WATER_MASK_PATH = "HDFRecordReader.WaterMaskPath";
   
-  /** The HDF file being read*/
-  private FileFormat hdfFile;
-
   /**Information about the dataset being read*/
   private NASADataset nasaDataset;
   
@@ -77,9 +69,6 @@ public class HDFRecordReader3<S extends NASAShape>
   /**Position to read next in the data array*/
   private int position;
 
-  /**HDF file format used to open HDF files.*/
-  private FileFormat fileFormat;
-
   /**The iterator that is returned to MapReduce calls*/
   private NASAIterator value;
 
@@ -90,71 +79,53 @@ public class HDFRecordReader3<S extends NASAShape>
     initialize(split, conf);
   }
 
-  public void initialize(InputSplit split, Configuration conf) {
-    try {
-      // HDF library can only deal with local files. So, we need to copy the file
-      // to a local temporary directory before using the HDF Java library
-      String localFile = FileUtil.copyFileSplit(conf, (FileSplit)split);
-
-      fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
-
-      hdfFile = fileFormat.createInstance(localFile, FileFormat.READ);
-
-      // open the file and retrieve the file structure
-      hdfFile.open();
-
-      // Retrieve the root of the HDF file structure
-      Group root =
-          (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
-
-      String datasetName = conf.get("dataset");
-      Dataset matchDataset = findDataset(root, datasetName, true);
-
-      nasaDataset = new NASADataset(root);
-      nasaDataset.datasetName = datasetName;
-      @SuppressWarnings("unchecked")
-      List<Attribute> attrs = matchDataset.getMetadata();
-      String fillValueStr = null;
-      for (Attribute attr : attrs) {
-        if (attr.getName().equals("_FillValue")) {
-          fillValueStr = Array.get(attr.getValue(), 0).toString();
-        } else if (attr.getName().equals("valid_range")) {
-          nasaDataset.minValue = Integer.parseInt(Array.get(attr.getValue(), 0).toString());
-          nasaDataset.maxValue = Integer.parseInt(Array.get(attr.getValue(), 1).toString());
-          if (nasaDataset.maxValue < 0) {
-            // Convert unsigned to signed
-            nasaDataset.maxValue += 65536;
-          }
+  public void initialize(InputSplit split, Configuration conf) throws IOException {
+    String datasetName = conf.get("dataset");
+    if (datasetName == null)
+      throw new RuntimeException("Dataset name should be provided");
+    FileSplit fsplit = (FileSplit) split;
+    FileSystem fs = fsplit.getPath().getFileSystem(conf);
+    FSDataInputStream input = fs.open(fsplit.getPath());
+    HDFFile hdfFile = new HDFFile(input);
+    
+    // Retrieve meta data
+    nasaDataset = new NASADataset((String) hdfFile.findHeaderByName("CoreMetadata.0").getEntryAt(0));
+    
+    // Retrieve the data array
+    boolean fillValueFound = false;
+    DDVGroup dataGroup = hdfFile.findGroupByName(datasetName);
+    int resolution = 0;
+    for (DataDescriptor dd : dataGroup.getContents()) {
+      if (dd instanceof DDNumericDataGroup) {
+        DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
+        dataArray = (short[])numericDataGroup.getAsAnArray();
+        resolution = numericDataGroup.getDimensions()[0];
+      } else if (dd instanceof DDVDataHeader) {
+        DDVDataHeader vheader = (DDVDataHeader) dd;
+        if (vheader.getName().equals("_FillValue")) {
+          this.fillValue = (Integer) vheader.getEntryAt(0);
+          fillValueFound = true;
+        } else if (vheader.getName().equals("valid_range")) {
+          nasaDataset.minValue = (Integer) vheader.getEntryAt(0);
+          nasaDataset.maxValue = (Integer) vheader.getEntryAt(1);
         }
       }
-
-      if (fillValueStr == null) {
-        this.skipFillValue = false;
-      } else {
-        this.fillValue = Integer.parseInt(fillValueStr);
-      }
-
-      dataArray = (short[])matchDataset.read();
-
+    }
+    nasaDataset.resolution = resolution;
+    if (!fillValueFound) {
+      skipFillValue = false;
+    } else {
       // Whether we need to recover fill values or not
       boolean recoverFillValues = conf.getBoolean("recoverholes", true);
-
-      if (recoverFillValues && fillValueStr != null)
-        recoverFillValues(conf);
-
-      this.nasaShape = (S) OperationsParams.getShape(conf, "shape", new NASARectangle());
-      this.value = new NASAIterator();
-    } catch (Exception e) {
-      LOG.error("Error opening HDF file", e);
-    } finally {
-      if (hdfFile != null)
-        try {
-          hdfFile.close();
-        } catch (Exception e) {
-          LOG.error("Error closing HDF file", e);
-        }
+      try {
+        if (recoverFillValues)
+          recoverFillValues(conf);
+      } catch (Exception e) {
+      }
     }
-
+    this.nasaShape = (S) OperationsParams.getShape(conf, "shape", new NASARectangle());
+    this.value = new NASAIterator();
+    hdfFile.close();
   }
 
 
@@ -292,10 +263,11 @@ public class HDFRecordReader3<S extends NASAShape>
   /**
    * Recover fill values in the array {@link Values}.
    * @param conf
+   * @throws IOException 
    * @throws Exception 
    */
-  private void recoverFillValues(Configuration conf) throws Exception {
-    FileFormat wmHDFFile = null;
+  private void recoverFillValues(Configuration conf) throws IOException {
+    HDFFile waterMaskFile = null;
     try {
       // Read water mask
       Path wmPath = new Path(conf.get(WATER_MASK_PATH, "http://e4ftl01.cr.usgs.gov/MOLT/MOD44W.005/2000.02.24/"));
@@ -310,32 +282,29 @@ public class HDFRecordReader3<S extends NASAShape>
         LOG.warn("Could not find water mask for tile '"+tileIdentifier+"'");
         return;
       }
-      String localFile = FileUtil.copyFile(conf, wmFile[0]);
-      wmHDFFile = fileFormat.createInstance(localFile, FileFormat.READ);
-      wmHDFFile.open();
-      
-      Group root = (Group)((DefaultMutableTreeNode)wmHDFFile.getRootNode()).getUserObject();
-      
-      // Search for the datset of interest in file
-      Dataset matchDataset = findDataset(root, "water_mask", false);
-      
-      if (matchDataset == null) {
-        LOG.warn("Water mask dataset 'water_mask' not found in file "+localFile);
+      waterMaskFile = new HDFFile(wmFs.open(wmFile[0].getPath()));
+      DDVGroup waterMaskGroup = waterMaskFile.findGroupByName("water_mask");
+      if (waterMaskGroup == null) {
+        LOG.warn("Water mask dataset 'water_mask' not found in file "+wmFile[0]);
         return;
       }
-      
+      byte[] waterMask = null;
+      for (DataDescriptor dd : waterMaskGroup.getContents()) {
+        if (dd instanceof DDNumericDataGroup) {
+          DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
+          waterMask = (byte[])numericDataGroup.getAsAnArray();
+        }
+      }
+
       // Stores which values has been recovered by copying a single value
       // without interpolation in the x-direction
-      byte[] valueStatus = new byte[Array.getLength(dataArray)];
+      byte[] valueStatus = new byte[dataArray.length];
       
-      // Extract the water mask
-      byte[] water_mask = (byte[]) matchDataset.read();
-
-      recoverXDirection(water_mask, valueStatus);
-      recoverYDirection(water_mask, valueStatus);
+      recoverXDirection(waterMask, valueStatus);
+      recoverYDirection(waterMask, valueStatus);
     } finally {
-      if (wmHDFFile != null)
-        wmHDFFile.close();
+      if (waterMaskFile != null)
+        waterMaskFile.close();
     }
   }
 
@@ -487,47 +456,5 @@ public class HDFRecordReader3<S extends NASAShape>
       return true;
     return false;
   }
-
-  /**
-   * @param split
-   * @param datasetName
-   * @param root
-   * @param matchAny
-   * @return
-   */
-  public static Dataset findDataset(Group root, String datasetName, boolean matchAny) {
-    // Search for the datset of interest in file
-    Stack<Group> groups2bSearched = new Stack<Group>();
-    groups2bSearched.add(root);
-
-    Dataset firstDataset = null;
-    Dataset matchDataset = null;
-
-    while (!groups2bSearched.isEmpty()) {
-      Group top = groups2bSearched.pop();
-      List<HObject> memberList = top.getMemberList();
-
-      for (HObject member : memberList) {
-        if (member instanceof Group) {
-          groups2bSearched.add((Group) member);
-        } else if (member instanceof Dataset) {
-          if (firstDataset == null)
-            firstDataset = (Dataset) member;
-          if (member.getName().equalsIgnoreCase(datasetName)) {
-            matchDataset = (Dataset) member;
-            break;
-          }
-        }
-      }
-    }
-
-    if (matchDataset == null && matchAny) {
-      LOG.warn("Dataset "+datasetName+" not found in file");
-      // Just work on the first dataset to ensure we return some data
-      matchDataset = firstDataset;
-    }
-    return matchDataset;
-  }
-
 
 }

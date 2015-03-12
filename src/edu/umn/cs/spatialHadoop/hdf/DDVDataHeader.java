@@ -98,15 +98,29 @@ public class DDVDataHeader extends DataDescriptor {
     this.version = input.readUnsignedShort();
   }
   
-  public Object getValueAt(int i) throws IOException {
+  public Object getEntryAt(int i) throws IOException {
     lazyLoad();
-    hdfFile.inStream.seek(offset - ivsize + offsets[i]);
-    byte[] value = new byte[sizes[i]];
-    hdfFile.inStream.readFully(value);
-    switch (types[i]) {
-    case HDFConstants.DFNT_CHAR: return new String(value);
-    default: return null;
+    if (i >= nvert)
+      throw new ArrayIndexOutOfBoundsException(i);
+    hdfFile.inStream.seek(offset - ivsize * (nvert - i));
+    Object[] fields = new Object[types.length];
+    for (int iField = 0; iField < fields.length; iField++) {
+      byte[] bytes;
+      //byte[] bytes = new byte[sizes[iField]];
+      //hdfFile.inStream.readFully(bytes);
+      switch (types[iField]) {
+      case HDFConstants.DFNT_CHAR:
+        bytes = new byte[sizes[iField]];
+        hdfFile.inStream.readFully(bytes);
+        fields[iField] = new String(bytes);
+        break;
+      case HDFConstants.DFNT_UINT16: fields[iField] = hdfFile.inStream.readUnsignedShort(); break;
+      default: return null;
+      }
     }
+    if (fields.length == 1)
+      return fields[0];
+    return fields;
   }
   
   @Override

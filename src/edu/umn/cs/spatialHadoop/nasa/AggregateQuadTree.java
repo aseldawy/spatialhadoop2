@@ -35,6 +35,7 @@ import ncsa.hdf.object.Attribute;
 import ncsa.hdf.object.Dataset;
 import ncsa.hdf.object.FileFormat;
 import ncsa.hdf.object.Group;
+import ncsa.hdf.object.HObject;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -370,7 +371,7 @@ public class AggregateQuadTree {
     
     Group root =
         (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
-    Dataset matchedDataset = HDFRecordReader3.findDataset(root, datasetName, false);
+    Dataset matchedDataset = findDataset(root, datasetName, false);
     if (matchedDataset != null) {
       List<Attribute> metadata = matchedDataset.getMetadata();
       short fillValue = 0;
@@ -1008,6 +1009,47 @@ public class AggregateQuadTree {
     while (!components.isEmpty())
       relative = new Path(relative, components.pop());
     return relative;
+  }
+  
+  /**
+   * @param split
+   * @param datasetName
+   * @param root
+   * @param matchAny
+   * @return
+   */
+  public static Dataset findDataset(Group root, String datasetName, boolean matchAny) {
+    // Search for the datset of interest in file
+    Stack<Group> groups2bSearched = new Stack<Group>();
+    groups2bSearched.add(root);
+
+    Dataset firstDataset = null;
+    Dataset matchDataset = null;
+
+    while (!groups2bSearched.isEmpty()) {
+      Group top = groups2bSearched.pop();
+      List<HObject> memberList = top.getMemberList();
+
+      for (HObject member : memberList) {
+        if (member instanceof Group) {
+          groups2bSearched.add((Group) member);
+        } else if (member instanceof Dataset) {
+          if (firstDataset == null)
+            firstDataset = (Dataset) member;
+          if (member.getName().equalsIgnoreCase(datasetName)) {
+            matchDataset = (Dataset) member;
+            break;
+          }
+        }
+      }
+    }
+
+    if (matchDataset == null && matchAny) {
+      LOG.warn("Dataset "+datasetName+" not found in file");
+      // Just work on the first dataset to ensure we return some data
+      matchDataset = firstDataset;
+    }
+    return matchDataset;
   }
 }
 
