@@ -105,6 +105,7 @@ public class HDFFile implements Closeable {
         // Numeric data group
         dd = new DDNumericDataGroup(this, tagID, refNo, offset, length, extended);
       } else {
+        System.err.printf("Found an unknown block <%d,%d> @%d\n", tagID, refNo, inStream.getPos());
         dd = new DDUnknown(this, tagID, refNo, offset, length, extended);
       }
       
