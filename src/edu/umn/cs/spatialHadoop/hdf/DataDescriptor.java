@@ -110,7 +110,7 @@ public abstract class DataDescriptor {
     int flag = hdfFile.inStream.readInt();
     // Valid logical length of the entire element. The logical physical length
     // is this value multiplied by nt_size. The actual physical length used for
-    // storage can be greated than the dataset size due to the presence of ghost
+    // storage can be greater than the dataset size due to the presence of ghost
     // areas in chunks. Partial chunks are not distinguished from regular
     // chunks.
     int elem_total_length = hdfFile.inStream.readInt();
@@ -122,6 +122,15 @@ public abstract class DataDescriptor {
     int tag = hdfFile.inStream.readUnsignedShort();
     int ref = hdfFile.inStream.readUnsignedShort();
     DDID chunkTableID = new DDID(tag, ref);
+    
+    DDVDataHeader chunkTable = (DDVDataHeader) hdfFile.retrieveElementByID(chunkTableID);
+    int chunks = chunkTable.getEntryCount();
+    for (int i = 0; i < chunks; i++) {
+      Object chunkData = chunkTable.getEntryAt(i);
+      System.out.println(chunkData);
+    }
+    
+    
     tag = hdfFile.inStream.readUnsignedShort();
     ref = hdfFile.inStream.readUnsignedShort();
     // For future use. Speical table for 'ghost' chunks.

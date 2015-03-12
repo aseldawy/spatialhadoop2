@@ -17,10 +17,10 @@ import java.io.IOException;
 public class DDVSet extends DataDescriptor {
 
   /**
-   * The raw data stored in this set. This data can be interpreted only
+   * The data stored in this set. This data can be interpreted only
    * according to the corresponding {@link DDVDataHeader}
    */
-  protected byte[] rawData;
+  protected byte[] data;
 
   DDVSet(HDFFile hdfFile, int tagID, int refNo, int offset, int length,
       boolean extended) {
@@ -29,14 +29,20 @@ public class DDVSet extends DataDescriptor {
 
   @Override
   protected void readFields(DataInput input) throws IOException {
-    this.rawData = readRawData();
+    this.data = new byte[getLength()];
+    input.readFully(data);
+  }
+  
+  byte[] getData() throws IOException {
+    lazyLoad();
+    return data;
   }
   
   @Override
   public String toString() {
     try {
       lazyLoad();
-      return String.format("VSet of total size %d", rawData.length);
+      return String.format("VSet of total size %d", data.length);
     } catch (IOException e) {
       return "Error loading "+super.toString();
     }

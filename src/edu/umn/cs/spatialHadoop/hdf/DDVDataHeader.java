@@ -98,25 +98,31 @@ public class DDVDataHeader extends DataDescriptor {
     this.version = input.readUnsignedShort();
   }
   
+  public int getEntryCount() throws IOException {
+    lazyLoad();
+    return nvert;
+  }
+  
   public Object getEntryAt(int i) throws IOException {
     lazyLoad();
     if (i >= nvert)
       throw new ArrayIndexOutOfBoundsException(i);
-    hdfFile.inStream.seek(offset - ivsize * (nvert - i));
+    // Read the corresponding data in VSet
+    DDVSet vset = (DDVSet) hdfFile.retrieveElementByID(
+        new DDID(HDFConstants.DFTAG_VS, this.refNo));
+    byte[] data = vset.getData();
+    int offset = i * ivsize;
     Object[] fields = new Object[types.length];
     for (int iField = 0; iField < fields.length; iField++) {
-      byte[] bytes;
-      //byte[] bytes = new byte[sizes[iField]];
-      //hdfFile.inStream.readFully(bytes);
       switch (types[iField]) {
       case HDFConstants.DFNT_CHAR:
-        bytes = new byte[sizes[iField]];
-        hdfFile.inStream.readFully(bytes);
-        fields[iField] = new String(bytes);
+        fields[iField] = new String(data, offset, sizes[iField]);
         break;
-      case HDFConstants.DFNT_UINT16: fields[iField] = hdfFile.inStream.readUnsignedShort(); break;
+      case HDFConstants.DFNT_UINT16: fields[iField] = HDFConstants.readUnsignedShort(data, offset); break;
+      case HDFConstants.DFNT_INT32: fields[iField] = HDFConstants.readInt32(data, offset); break;
       default: return null;
       }
+      offset += sizes[iField];
     }
     if (fields.length == 1)
       return fields[0];
@@ -137,5 +143,6 @@ public class DDVDataHeader extends DataDescriptor {
     lazyLoad();
     return name;
   }
+
 
 }
