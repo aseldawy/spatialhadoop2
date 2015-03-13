@@ -71,7 +71,7 @@ public class HDFPlot2 {
     @Override
     public void configure(Configuration conf) {
       super.configure(conf);
-      this.color1 = OperationsParams.getColor(conf, "color1", new Color(0, 0, 255, 0));
+      this.color1 = OperationsParams.getColor(conf, "color1", new Color(0, 0, 255, 255));
       this.color2 = OperationsParams.getColor(conf, "color2", new Color(255, 0, 0, 255));
       this.gradientType = conf.get("gradient", "hsb").equals("hsb") ?
           HDFRasterLayer.GradientType.GT_HSB : HDFRasterLayer.GradientType.GT_RGB;

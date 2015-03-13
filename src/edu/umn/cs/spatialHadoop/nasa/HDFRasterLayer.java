@@ -179,8 +179,12 @@ public class HDFRasterLayer extends RasterLayer {
     BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
     for (int x = 0; x < this.getWidth(); x++) {
       for (int y = 0; y < this.getHeight(); y++) {
-        Color color = calculateColor(avg[x][y], min, max);
-        image.setRGB(x, y, color.getRGB());
+        if (count[x][y] > 0) {
+          Color color = calculateColor(avg[x][y], min, max);
+          image.setRGB(x, y, color.getRGB());
+        } else {
+          image.setRGB(x, y, 0);
+        }
       }
     }
     return image;

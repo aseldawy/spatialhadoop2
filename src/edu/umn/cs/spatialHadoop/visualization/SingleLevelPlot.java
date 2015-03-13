@@ -42,7 +42,7 @@ import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.operations.Indexer;
 import edu.umn.cs.spatialHadoop.operations.RangeFilter;
@@ -455,8 +455,8 @@ public class SingleLevelPlot {
               ((SpatialRecordReader3)reader).initialize(fsplits[i], params);
             } else if (reader instanceof RTreeRecordReader3) {
               ((RTreeRecordReader3)reader).initialize(fsplits[i], params);
-            } else if (reader instanceof HDFRecordReader3) {
-              ((HDFRecordReader3)reader).initialize(fsplits[i], params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplits[i], params);
             } else {
               throw new RuntimeException("Unknown record reader");
             }

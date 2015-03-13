@@ -40,10 +40,10 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
  * @author Ahmed Eldawy
  *
  */
-public class HDFRecordReader3<S extends NASAShape>
+public class HDFRecordReader<S extends NASAShape>
     extends RecordReader<NASADataset, Iterable<S>> {
   /**Logger*/
-  private static final Log LOG = LogFactory.getLog(HDFRecordReader3.class);
+  private static final Log LOG = LogFactory.getLog(HDFRecordReader.class);
   
   /**Configuration line for the path to water mask*/
   private static final String WATER_MASK_PATH = "HDFRecordReader.WaterMaskPath";
@@ -223,7 +223,7 @@ public class HDFRecordReader3<S extends NASAShape>
     protected S last;
 
     public NASAIterator() throws IOException {
-      last = HDFRecordReader3.this.nasaShape;
+      last = HDFRecordReader.this.nasaShape;
       next = (S) last.clone();
       if (!nextObject(nasaDataset, next))
         next = null;
