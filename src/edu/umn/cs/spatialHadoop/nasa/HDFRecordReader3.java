@@ -93,8 +93,8 @@ public class HDFRecordReader3<S extends NASAShape>
     nasaDataset = new NASADataset((String) hdfFile.findHeaderByName("CoreMetadata.0").getEntryAt(0));
     
     // Retrieve the data array
-    boolean fillValueFound = false;
     DDVGroup dataGroup = hdfFile.findGroupByName(datasetName);
+    boolean fillValueFound = false;
     int resolution = 0;
     for (DataDescriptor dd : dataGroup.getContents()) {
       if (dd instanceof DDNumericDataGroup) {
@@ -315,10 +315,10 @@ public class HDFRecordReader3<S extends NASAShape>
    * Recover fill values in x-direction (horizontally)
    * @param water_mask
    * @param valueStatus - (output) tells the status of each entry in the input <br/>
-   *  0 - the value does not need to be recovered <br/>
-   *  1 - Needs to be recovered, but not touched <br/>
-   *  2 - Needs to be recovered, copied from a neighboring value <br/>
-   *  3 - Needs to be recovered, interpolated from two neighboring values <br/>
+   *  0 - the corresponding entry originally contained a value<br/>
+   *  1 - the entry did not contain a value and still does not contain one<br/>
+   *  2 - the entry did not contain a value and its current value is copied<br/>
+   *  3 - the entry did not contain a value and its current value is interpolated<br/>
    */
   private void recoverXDirection(byte[] water_mask, byte[] valueStatus) {
     // Resolution of the input dataset
@@ -340,8 +340,9 @@ public class HDFRecordReader3<S extends NASAShape>
         // Recover all points in the range [x1, x2)
         if (x1 == 0 && x2 == inputRes) {
           // The whole line is empty. Nothing to do
-          for (int x = x1; x < x2; x++)
+          for (int x = x1; x < x2; x++) {
             valueStatus[y * inputRes + x] = 1;
+          }
         } else if (x1 == 0 || x2 == inputRes) {
           // We have only one value at one end of the missing run
           short copyVal = dataArray[y * inputRes + (x1 == 0 ? x2 : (x1 - 1))];
@@ -357,7 +358,7 @@ public class HDFRecordReader3<S extends NASAShape>
           short val2 = dataArray[y * inputRes + x2];
           for (int x = x1; x < x2; x++) {
             if (onLand(water_mask, x, y, inputRes)) {
-              short interpolatedValue = (short) ((val1 * (x2 - x) + val2 * (x - x1)) / (x2 - x1));
+              short interpolatedValue = (short) (((double)val1 * (x2 - x) + (double)val2 * (x - x1)) / (x2 - x1));
               dataArray[y * inputRes + x] = interpolatedValue;
               valueStatus[y * inputRes + x] = 3;
             }
@@ -371,10 +372,10 @@ public class HDFRecordReader3<S extends NASAShape>
    * Recover fill values in the y-direction (vertically).
    * @param water_mask
    * @param valueStatus - (input) tells the status of each entry in the input <br/>
-   *  0 - the value does not need to be recovered <br/>
-   *  1 - Needs to be recovered, has not been touched <br/>
-   *  2 - Needs to be recovered, copied from a neighboring value <br/>
-   *  3 - Needs to be recovered, interpolated from two neighboring values <br/>
+   *  0 - the corresponding entry originally contained a value<br/>
+   *  1 - the entry did not contain a value and still does not contain one<br/>
+   *  2 - the entry did not contain a value and its current value is copied<br/>
+   *  3 - the entry did not contain a value and its current value is interpolated<br/>
    */
   private void recoverYDirection(byte[] water_mask, byte[] valueStatus) {
     // Resolution of the input dataset
@@ -407,7 +408,7 @@ public class HDFRecordReader3<S extends NASAShape>
               } else if (valueStatus[y * inputRes + x] == 2) {
                 // Value has been previously copied. Take average
                 dataArray[y * inputRes + x] =
-                    (short) ((dataArray[y * inputRes + x] + copyVal) / 2);
+                    (short) (((int)dataArray[y * inputRes + x] + copyVal) / 2);
               }
             }
           }
@@ -418,14 +419,14 @@ public class HDFRecordReader3<S extends NASAShape>
           for (int y = y1; y < y2; y++) {
             if (onLand(water_mask, x, y, inputRes)) {
               short interValue =
-                  (short) ((val1 * (y2 - y) + val2 * (y - y1)) / (y2 - y1));
+                  (short) (((double)val1 * (y2 - y) + (double)val2 * (y - y1)) / (y2 - y1));
               if (valueStatus[y * inputRes + x] <= 2) {
                 // Value has never been recovered or has been copied
                 dataArray[y * inputRes + x] = interValue;
               } else {
-                // Value has been previously interpolated, takea verage
+                // Value has been previously interpolated, take average
                 dataArray[y * inputRes + x] = 
-                    (short) ((dataArray[y * inputRes + x] + interValue) / 2);
+                    (short) (((int)dataArray[y * inputRes + x] + interValue) / 2);
               }
             }
           }
