@@ -45,9 +45,10 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
  */
 public class HDFPlot2 {
 
-  private static final String WATER_MASK_PATH = "water_mask";
+  /**Configuration line for setting a file that contains water_mask*/
+  private static final String PREPROCESSED_WATERMARK = "water_mask";
 
-  /***
+  /**
    * Rasterizes HDF files as heat map images.
    * @author Ahmed Eldawy
    *
@@ -86,7 +87,7 @@ public class HDFPlot2 {
       }
       if (conf.get("recover", "none").equals("write")) {
         try {
-          waterMaskPath = new Path(conf.get(WATER_MASK_PATH));
+          waterMaskPath = new Path(conf.get(PREPROCESSED_WATERMARK));
           waterMaskFS = waterMaskPath.getFileSystem(conf);
         } catch (IOException e) {
           e.printStackTrace();
@@ -273,10 +274,21 @@ public class HDFPlot2 {
     } else if (recover.equals("write")) {
       // Recover holes upon writing the final image
       params.setBoolean("recoverholes", false);
-      if (params.get(WATER_MASK_PATH) == null) {
-        // TODO if not set, create it first using a separate job with
-        // HDFRasterizerWaterMask
-        throw new RuntimeException("You need to set 'water_mask' to recover holes on write");
+      if (params.get(PREPROCESSED_WATERMARK) == null) {
+        // Need to recover holes on write but the water mask is not set,
+        // need to put it first
+        Path wmPath = new Path(params.get(HDFRecordReader.WATER_MASK_PATH,
+            "http://e4ftl01.cr.usgs.gov/MOLT/MOD44W.005/2000.02.24/"));
+        Path wmImage = new Path(outFile.getParent(), outFile.getName()+"_WaterMask");
+        OperationsParams params2 = new OperationsParams(params);
+        params2.setBoolean("background", false);
+        params2.set("recover", "none");
+        params2.set("dataset", "water_mask");
+        SingleLevelPlot.plot(new Path[] {wmPath}, wmImage,
+            HDFRasterizeWaterMask.class, params2);
+        FileSystem outFS = wmImage.getFileSystem(params);
+        outFS.deleteOnExit(wmImage);
+        params.set(PREPROCESSED_WATERMARK, wmImage.toString());
       }
     }
     if (params.getBoolean("pyramid", false))

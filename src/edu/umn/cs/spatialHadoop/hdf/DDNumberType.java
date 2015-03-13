@@ -49,6 +49,21 @@ public class DDNumberType extends DataDescriptor {
     this.klass = input.readUnsignedByte();
   }
 
+  public int getNumberType() throws IOException {
+    lazyLoad();
+    return type;
+  }
+
+  public int getDataSize() throws IOException {
+    lazyLoad();
+    switch (type) {
+    case HDFConstants.DFNT_UINT8: return 1;
+    case HDFConstants.DFNT_UINT16: return 2;
+    case HDFConstants.DFNT_INT32: return 4;
+    default: return 0;
+    }
+  }
+
   @Override
   public String toString() {
     try {
@@ -59,8 +74,4 @@ public class DDNumberType extends DataDescriptor {
     }
   }
 
-  public int getNumberType() throws IOException {
-    lazyLoad();
-    return type;
-  }
 }

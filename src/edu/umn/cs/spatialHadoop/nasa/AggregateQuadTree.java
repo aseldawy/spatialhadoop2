@@ -379,7 +379,7 @@ public class AggregateQuadTree {
       for (DataDescriptor dd : dataGroup.getContents()) {
         if (dd instanceof DDNumericDataGroup) {
           DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
-          values = (short[])numericDataGroup.getAsAnArray();
+          values = (short[])numericDataGroup.getAsTypedArray();
         } else if (dd instanceof DDVDataHeader) {
           DDVDataHeader vheader = (DDVDataHeader) dd;
           if (vheader.getName().equals("_FillValue")) {

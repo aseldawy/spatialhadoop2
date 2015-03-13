@@ -378,7 +378,7 @@ public class SingleLevelPlot {
       // Run in background
       job.submit();
     } else {
-      job.waitForCompletion(false);
+      job.waitForCompletion(params.getBoolean("verbose", false));
     }
     return job;
   }
@@ -387,7 +387,6 @@ public class SingleLevelPlot {
       final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException, InterruptedException {
 
     boolean vflip = params.getBoolean("vflip", true);
-
     
     final Rectangle inputMBR = params.get("mbr") != null ?
         params.getShape("mbr").getMBR() : FileMBR.fileMBR(inFiles, params);

@@ -9,7 +9,6 @@
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.util.Iterator;
 
 import org.apache.commons.logging.Log;
@@ -24,14 +23,17 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
+import org.omg.CORBA.portable.ValueInputStream;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.hdf.DDNumericDataGroup;
 import edu.umn.cs.spatialHadoop.hdf.DDVDataHeader;
 import edu.umn.cs.spatialHadoop.hdf.DDVGroup;
 import edu.umn.cs.spatialHadoop.hdf.DataDescriptor;
+import edu.umn.cs.spatialHadoop.hdf.HDFConstants;
 import edu.umn.cs.spatialHadoop.hdf.HDFFile;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
@@ -46,7 +48,7 @@ public class HDFRecordReader<S extends NASAShape>
   private static final Log LOG = LogFactory.getLog(HDFRecordReader.class);
   
   /**Configuration line for the path to water mask*/
-  private static final String WATER_MASK_PATH = "HDFRecordReader.WaterMaskPath";
+  public static final String WATER_MASK_PATH = "HDFRecordReader.WaterMaskPath";
   
   /**Information about the dataset being read*/
   private NASADataset nasaDataset;
@@ -61,17 +63,23 @@ public class HDFRecordReader<S extends NASAShape>
   private boolean skipFillValue;
   
   /**
-   * Array of values in the dataset being read. Notice that this would work
-   * only if the values stored in HDF file are of type short. Otherwise,
-   * this record reader would not work
+   * The raw data (unparsed) of the underlying dataset. We have to keep it as
+   * an unparsed byte array because Java has very limited support to generic
+   * arrays of primitive data types.
    */
-  private short[] dataArray;
+  private byte[] unparsedDataArray;
+  
+  /**Number of bytes per data entry*/
+  private int valueSize;
   
   /**Position to read next in the data array*/
   private int position;
 
   /**The iterator that is returned to MapReduce calls*/
   private NASAIterator value;
+
+  /**The underlying HDF file*/
+  private HDFFile hdfFile;
 
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
@@ -84,10 +92,15 @@ public class HDFRecordReader<S extends NASAShape>
     String datasetName = conf.get("dataset");
     if (datasetName == null)
       throw new RuntimeException("Dataset name should be provided");
-    FileSplit fsplit = (FileSplit) split;
-    FileSystem fs = fsplit.getPath().getFileSystem(conf);
-    FSDataInputStream input = fs.open(fsplit.getPath());
-    HDFFile hdfFile = new HDFFile(input);
+    Path inFile = ((FileSplit) split).getPath();
+    FileSystem fs = inFile.getFileSystem(conf);
+    if (fs instanceof HTTPFileSystem) {
+      // For performance reasons, we don't open HDF files from HTTP
+      inFile = new Path(FileUtil.copyFile(conf, inFile));
+      fs = FileSystem.getLocal(conf);
+    }
+    FSDataInputStream input = fs.open(inFile);
+    hdfFile = new HDFFile(input);
     
     // Retrieve meta data
     nasaDataset = new NASADataset((String) hdfFile.findHeaderByName("CoreMetadata.0").getEntryAt(0));
@@ -99,16 +112,31 @@ public class HDFRecordReader<S extends NASAShape>
     for (DataDescriptor dd : dataGroup.getContents()) {
       if (dd instanceof DDNumericDataGroup) {
         DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
-        dataArray = (short[])numericDataGroup.getAsAnArray();
+        unparsedDataArray = numericDataGroup.getAsByteArray();
+        valueSize = numericDataGroup.getDataSize();
         resolution = numericDataGroup.getDimensions()[0];
+        if (valueSize * resolution * resolution != unparsedDataArray.length)
+          throw new RuntimeException("Error parsing metadata");
       } else if (dd instanceof DDVDataHeader) {
         DDVDataHeader vheader = (DDVDataHeader) dd;
         if (vheader.getName().equals("_FillValue")) {
-          this.fillValue = (Integer) vheader.getEntryAt(0);
+          Object fillValue = vheader.getEntryAt(0);
+          if (fillValue instanceof Integer)
+            this.fillValue = (Integer) fillValue;
+          else if (fillValue instanceof Byte)
+            this.fillValue = (Byte) fillValue;
           fillValueFound = true;
         } else if (vheader.getName().equals("valid_range")) {
-          nasaDataset.minValue = (Integer) vheader.getEntryAt(0);
-          nasaDataset.maxValue = (Integer) vheader.getEntryAt(1);
+          Object minValue = vheader.getEntryAt(0);
+          if (minValue instanceof Integer)
+            nasaDataset.minValue = (Integer) minValue;
+          else if (minValue instanceof Byte)
+            nasaDataset.minValue = (Byte) minValue;
+          Object maxValue = vheader.getEntryAt(1);
+          if (maxValue instanceof Integer)
+            nasaDataset.maxValue = (Integer) maxValue;
+          else if (maxValue instanceof Byte)
+            nasaDataset.maxValue = (Byte) maxValue;
         }
       }
     }
@@ -124,7 +152,6 @@ public class HDFRecordReader<S extends NASAShape>
     }
     this.nasaShape = (S) OperationsParams.getShape(conf, "shape", new NASARectangle());
     this.value = new NASAIterator();
-    hdfFile.close();
   }
 
 
@@ -140,7 +167,7 @@ public class HDFRecordReader<S extends NASAShape>
 
   @Override
   public float getProgress() throws IOException, InterruptedException {
-    return dataArray == null ? 0 : (float) position / dataArray.length;
+    return unparsedDataArray == null? 0 : (float) position / unparsedDataArray.length;
   }
 
   @Override
@@ -150,115 +177,117 @@ public class HDFRecordReader<S extends NASAShape>
   
   @Override
   public void close() throws IOException {
-    // Nothing to do because the file has been completely loaded in memory
-    // and the original file is already closed
+    hdfFile.close();
   }
   
   /**
-   * Reads next NASA object from the array
-   * @param key
-   * @param shape
-   * @return
-   * @throws IOException
+   * Sets the geometry information for the given object according to its
+   * position in the array
+   * @param p
+   * @param position
    */
-  protected boolean nextObject(NASADataset key, NASAShape shape) throws IOException {
-    if (dataArray == null)
-      return false;
-    // Key doesn't need to be changed because all points in the same dataset
-    // have the same key
-    while (position < Array.getLength(dataArray)) {
-      // Set the x and y to longitude and latitude by doing the correct projection
-      int row = position / nasaDataset.resolution;
-      int col = position % nasaDataset.resolution;
-      if (shape instanceof Point) {
-        Point pt = (Point) shape;
-        pt.y = (90 - nasaDataset.v * 10) -
-            (double) row * 10 / nasaDataset.resolution;
-        pt.x = (nasaDataset.h * 10 - 180) +
-            (double) (col) * 10 / nasaDataset.resolution;
-        pt.x /= Math.cos(pt.y * Math.PI / 180);
-      } else if (shape instanceof Rectangle) {
-        Rectangle rect = (Rectangle) shape;
-        rect.y2 = (90 - nasaDataset.v * 10) -
-            (double) row * 10 / nasaDataset.resolution;
-        rect.y1 = (90 - nasaDataset.v * 10) -
-            (double) (row + 1) * 10 / nasaDataset.resolution;
-        double[] xs = new double[4];
-        xs[0] = xs[1] = (nasaDataset.h * 10 - 180) +
-            (double) (col) * 10 / nasaDataset.resolution;
-        xs[2] = xs[3] = (nasaDataset.h * 10 - 180) +
-            (double) (col+1) * 10 / nasaDataset.resolution;
-
-        // Project all four corners and select the min-max for the rectangle
-        xs[0] /= Math.cos(rect.y1 * Math.PI / 180);
-        xs[1] /= Math.cos(rect.y2 * Math.PI / 180);
-        xs[2] /= Math.cos(rect.y1 * Math.PI / 180);
-        xs[3] /= Math.cos(rect.y2 * Math.PI / 180);
-        rect.x1 = rect.x2 = xs[0];
-        for (double x : xs) {
-          if (x < rect.x1)
-            rect.x1 = x;
-          if (x > rect.x2)
-            rect.x2 = x;
-        }
-      }
-//      if (projector != null)
-//        projector.project(shape);
-      shape.setTimestamp(key.time);
+  protected void setShapeGeometry(Shape s, int position) {
+    position /= valueSize;
+    int row = position / nasaDataset.resolution;
+    int col = position % nasaDataset.resolution;
+    if (s instanceof Point) {
+      Point p = (Point)s;
+      p.y = (90 - nasaDataset.v * 10) -
+          (double) row * 10 / nasaDataset.resolution;
+      p.x = (nasaDataset.h * 10 - 180) +
+          (double) (col) * 10 / nasaDataset.resolution;
+      p.x /= Math.cos(p.y * Math.PI / 180);
+    } else if (s instanceof Rectangle) {
+      Rectangle r = (Rectangle)s;
+      r.y2 = (90 - nasaDataset.v * 10) -
+          (double) row * 10 / nasaDataset.resolution;
+      r.y1 = (90 - nasaDataset.v * 10) -
+          (double) (row + 1) * 10 / nasaDataset.resolution;
+      double[] xs = new double[4];
+      xs[0] = xs[1] = (nasaDataset.h * 10 - 180) +
+          (double) (col) * 10 / nasaDataset.resolution;
+      xs[2] = xs[3] = (nasaDataset.h * 10 - 180) +
+          (double) (col+1) * 10 / nasaDataset.resolution;
       
-      // Read next value
-      shape.setValue(dataArray[position]);
-      position++;
-      if (!skipFillValue || shape.getValue() != fillValue)
-        return true;
+      // Project all four corners and select the min-max for the rectangle
+      xs[0] /= Math.cos(r.y1 * Math.PI / 180);
+      xs[1] /= Math.cos(r.y2 * Math.PI / 180);
+      xs[2] /= Math.cos(r.y1 * Math.PI / 180);
+      xs[3] /= Math.cos(r.y2 * Math.PI / 180);
+      r.x1 = r.x2 = xs[0];
+      for (double x : xs) {
+        if (x < r.x1)
+          r.x1 = x;
+        if (x > r.x2)
+          r.x2 = x;
+      }
+    } else {
+      throw new RuntimeException("Unsupported shape "+s.getClass());
     }
-    return false;
   }
   
-  
   public class NASAIterator implements Iterable<S>, Iterator<S> {
+    /**The underlying shape*/
+    protected S shape;
+    /**Next position to be read from the array*/
+    protected int position;
     
-    /**Next value to be returned*/
-    protected S next;
-    /**Last value returned*/
-    protected S last;
-
-    public NASAIterator() throws IOException {
-      last = HDFRecordReader.this.nasaShape;
-      next = (S) last.clone();
-      if (!nextObject(nasaDataset, next))
-        next = null;
+    public NASAIterator() {
+      shape = (S) HDFRecordReader.this.nasaShape.clone();
+      // Initialize position on the first element to be read
+      this.position = 0;
+      skipFillValue();
     }
     
+    private void skipFillValue() {
+      while (position < unparsedDataArray.length
+          && (!skipFillValue || HDFConstants.readAsAinteger(unparsedDataArray,
+              position, valueSize) == fillValue))
+        position += valueSize;
+    }
+
+
     @Override
     public Iterator<S> iterator() {
       return this;
     }
-
+    
     @Override
     public boolean hasNext() {
-      return next != null;
+      return position < unparsedDataArray.length;
     }
-
+    
     @Override
     public S next() {
-      try {
-        last = next;
-        if (!nextObject(nasaDataset, next))
-          next = null;
-        return last;
-      } catch (IOException e) {
-        LOG.warn("Error getting next shape", e);
-        return null;
-      }
+      shape.setValue(HDFConstants.readAsAinteger(unparsedDataArray, position, valueSize));
+      setShapeGeometry(shape, position);
+      position += valueSize;
+      skipFillValue();
+      return shape;
     }
-
+    
     @Override
     public void remove() {
       throw new RuntimeException("Method not implemented");
     }
   }
+  
+  /**
+   * Return the value at the given offset in the array
+   * @param x
+   * @param y
+   * @return
+   */
+  private int getValueAt(int x, int y) {
+    int position = (y * nasaDataset.resolution + x) * valueSize;
+    return HDFConstants.readAsAinteger(unparsedDataArray, position, valueSize);
+  }
 
+  private void setValueAt(int x, int y, int value) {
+    int position = (y * nasaDataset.resolution + x) * valueSize;
+    HDFConstants.writeAt(unparsedDataArray, position, value, valueSize);
+  }
+  
   /**
    * Recover fill values in the array {@link Values}.
    * @param conf
@@ -266,6 +295,7 @@ public class HDFRecordReader<S extends NASAShape>
    * @throws Exception 
    */
   private void recoverFillValues(Configuration conf) throws IOException {
+    // For now, we can only recover values of type short
     HDFFile waterMaskFile = null;
     try {
       // Read water mask
@@ -296,13 +326,13 @@ public class HDFRecordReader<S extends NASAShape>
       for (DataDescriptor dd : waterMaskGroup.getContents()) {
         if (dd instanceof DDNumericDataGroup) {
           DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
-          waterMask = (byte[])numericDataGroup.getAsAnArray();
+          waterMask = (byte[])numericDataGroup.getAsByteArray();
         }
       }
 
       // Stores which values has been recovered by copying a single value
       // without interpolation in the x-direction
-      byte[] valueStatus = new byte[dataArray.length];
+      byte[] valueStatus = new byte[unparsedDataArray.length / valueSize];
       
       recoverXDirection(waterMask, valueStatus);
       recoverYDirection(waterMask, valueStatus);
@@ -330,13 +360,11 @@ public class HDFRecordReader<S extends NASAShape>
       while (x2 < inputRes) {
         int x1 = x2;
         // x1 should point to the first missing point
-        while (x1 < inputRes &&
-            dataArray[y * inputRes + x1] != fillValue)
+        while (x1 < inputRes && getValueAt(x1, y) != fillValue)
           x1++;
         // Now advance x2 until it reaches the first non-missing value
         x2 = x1;
-        while (x2 < inputRes &&
-            dataArray[y * inputRes + x2] == fillValue)
+        while (x2 < inputRes && getValueAt(x2, y) == fillValue)
           x2++;
         // Recover all points in the range [x1, x2)
         if (x1 == 0 && x2 == inputRes) {
@@ -346,21 +374,21 @@ public class HDFRecordReader<S extends NASAShape>
           }
         } else if (x1 == 0 || x2 == inputRes) {
           // We have only one value at one end of the missing run
-          short copyVal = dataArray[y * inputRes + (x1 == 0 ? x2 : (x1 - 1))];
+          int copyVal = getValueAt(x1 == 0 ? x2 : (x1 - 1), y);
           for (int x = x1; x < x2; x++) {
             if (onLand(water_mask, x, y, inputRes)) {
-              dataArray[y * inputRes + x] = copyVal;
+              setValueAt(x, y, copyVal);
             }
             valueStatus[y * inputRes + x] = 2;
           }
         } else {
           // Interpolate values between x1 and x2
-          short val1 = dataArray[y * inputRes + (x1-1)];
-          short val2 = dataArray[y * inputRes + x2];
+          int val1 = getValueAt(x1 - 1, y);
+          int val2 = getValueAt(x2, y);
           for (int x = x1; x < x2; x++) {
             if (onLand(water_mask, x, y, inputRes)) {
               short interpolatedValue = (short) (((double)val1 * (x2 - x) + (double)val2 * (x - x1)) / (x2 - x1));
-              dataArray[y * inputRes + x] = interpolatedValue;
+              setValueAt(x, y, interpolatedValue);
             }
             valueStatus[y * inputRes + x] = 3;
           }
@@ -398,34 +426,32 @@ public class HDFRecordReader<S extends NASAShape>
           // The whole column is empty. Nothing to do
         } else if (y1 == 0 || y2 == inputRes) {
           // We have only one value at one end of the missing run
-          short copyVal = dataArray[(y1 == 0 ? y2 : (y1 - 1)) * inputRes + x];
+          int copyVal = getValueAt(x, y1 == 0 ? y2 : (y1 - 1));
           for (int y = y1; y < y2; y++) {
             if (onLand(water_mask, x, y, inputRes)) {
               if (valueStatus[y * inputRes + x] == 1) {
                 // Value has never been recovered but needs to
-                dataArray[y * inputRes + x] = copyVal;
+                setValueAt(x, y, copyVal);
               } else if (valueStatus[y * inputRes + x] == 2) {
                 // Value has been previously copied. Take average
-                dataArray[y * inputRes + x] =
-                    (short) (((int)dataArray[y * inputRes + x] + copyVal) / 2);
+                setValueAt(x, y,  ((getValueAt(x, y) + copyVal) / 2));
               }
             }
           }
         } else {
           // Interpolate values between x1 and x2
-          short val1 = dataArray[(y1-1) * inputRes + x];
-          short val2 = dataArray[y2 * inputRes + x];
+          int val1 = getValueAt(x, y1 - 1);
+          int val2 = getValueAt(x, y2);
           for (int y = y1; y < y2; y++) {
             if (onLand(water_mask, x, y, inputRes)) {
               short interValue =
                   (short) (((double)val1 * (y2 - y) + (double)val2 * (y - y1)) / (y2 - y1));
               if (valueStatus[y * inputRes + x] <= 2) {
                 // Value has never been recovered or has been copied
-                dataArray[y * inputRes + x] = interValue;
+                setValueAt(x, y, interValue);
               } else {
                 // Value has been previously interpolated, take average
-                dataArray[y * inputRes + x] = 
-                    (short) (((int)dataArray[y * inputRes + x] + interValue) / 2);
+                setValueAt(x, y, (getValueAt(x, y) + interValue) / 2);
               }
             }
           }

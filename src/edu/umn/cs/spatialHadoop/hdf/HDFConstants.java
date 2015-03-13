@@ -204,12 +204,45 @@ public final class HDFConstants {
   public static int readUnsignedShort(byte[] bytes, int offset) {
     int ch1 = bytes[offset];
     int ch2 = bytes[offset+1];
+    if (ch1 < 0) ch1 += 256; // Remove the effect of two's complement
+    if (ch2 < 0) ch1 += 256; // Remove the effect of two's complement
     return (ch1 << 8) + (ch2 << 0);
   }
 
   public static short readSignedShort(byte[] bytes, int offset) {
     int ch1 = bytes[offset];
     int ch2 = bytes[offset+1];
+    if (ch1 < 0) ch1 += 256; // Remove the effect of two's complement
+    if (ch2 < 0) ch1 += 256; // Remove the effect of two's complement
     return (short)((ch1 << 8) + (ch2 << 0));
+  }
+  
+  public static int readAsAinteger(byte[] bytes, int offset, int length) {
+    if (length > 4)
+      throw new RuntimeException("Value too long");
+    int value = 0;
+    while (length-- > 0) {
+      int byteValue = bytes[offset++];
+      // Remove the effect of twos complement
+      if (byteValue < 0)
+        byteValue += 256;
+      value = (value << 8) | byteValue;
+    }
+    return value;
+  }
+  
+  /**
+   * Writes a numeric value of any size at the given position. The length
+   * determines number of bytes that should be written there
+   * @param bytes
+   * @param offset
+   * @param value
+   * @param length
+   */
+  public static void writeAt(byte[] bytes, int offset, int value, int length) {
+    while (length-- > 0) {
+      bytes[offset + length] = (byte)(value & 0xff);
+      value >>>= 8;
+    }
   }
 }

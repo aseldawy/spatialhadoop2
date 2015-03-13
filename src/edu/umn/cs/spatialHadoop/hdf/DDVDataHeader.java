@@ -118,6 +118,7 @@ public class DDVDataHeader extends DataDescriptor {
       case HDFConstants.DFNT_CHAR:
         fields[iField] = new String(data, offset, sizes[iField]);
         break;
+      case HDFConstants.DFNT_UINT8: fields[iField] = data[offset]; break;
       case HDFConstants.DFNT_UINT16: fields[iField] = HDFConstants.readUnsignedShort(data, offset); break;
       case HDFConstants.DFNT_INT32: fields[iField] = HDFConstants.readInt32(data, offset); break;
       default: return null;
