@@ -116,6 +116,7 @@ public class HDFRecordReader<S extends NASAShape>
     if (!fillValueFound) {
       skipFillValue = false;
     } else {
+      skipFillValue = conf.getBoolean("skipfill", true);
       // Whether we need to recover fill values or not
       boolean recoverFillValues = conf.getBoolean("recoverholes", true);
       if (recoverFillValues)
@@ -349,8 +350,8 @@ public class HDFRecordReader<S extends NASAShape>
           for (int x = x1; x < x2; x++) {
             if (onLand(water_mask, x, y, inputRes)) {
               dataArray[y * inputRes + x] = copyVal;
-              valueStatus[y * inputRes + x] = 2;
             }
+            valueStatus[y * inputRes + x] = 2;
           }
         } else {
           // Interpolate values between x1 and x2
@@ -360,8 +361,8 @@ public class HDFRecordReader<S extends NASAShape>
             if (onLand(water_mask, x, y, inputRes)) {
               short interpolatedValue = (short) (((double)val1 * (x2 - x) + (double)val2 * (x - x1)) / (x2 - x1));
               dataArray[y * inputRes + x] = interpolatedValue;
-              valueStatus[y * inputRes + x] = 3;
             }
+            valueStatus[y * inputRes + x] = 3;
           }
         }
       }
@@ -386,15 +387,13 @@ public class HDFRecordReader<S extends NASAShape>
       while (y2 < inputRes) {
         int y1 = y2;
         // y1 should point to the first missing point
-        while (y1 < inputRes &&
-            valueStatus[y1 * inputRes + x] != 0)
+        while (y1 < inputRes && valueStatus[y1 * inputRes + x] == 0)
           y1++;
         // Now advance y2 until it reaches the first non-missing value
         y2 = y1;
-        while (y2 < inputRes &&
-            valueStatus[y2 * inputRes + x] == 0)
+        while (y2 < inputRes && valueStatus[y2 * inputRes + x] != 0)
           y2++;
-        // Recover all points in the range [x1, x2)
+        // Recover all points in the range [y1, y2)
         if (y1 == 0 && y2 == inputRes) {
           // The whole column is empty. Nothing to do
         } else if (y1 == 0 || y2 == inputRes) {
