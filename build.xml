@@ -68,11 +68,10 @@
     <mkdir dir="${build2}"/>
   </target>
 	
-  <target name="compile0" depends="init0"
-        description="compile the source " >
+  <target name="compile0" depends="init0" description="compile the source for Hadoop 0" >
     <!-- Compile the java code from ${src} into ${build} -->
     <javac srcdir="${src}" destdir="${build0}"
-    	  classpath="${toString:hdflib.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop0.lib.path.ref}"
+    	  classpath="${toString:other.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop0.lib.path.ref}"
     	  target="1.6" source="1.6" debug="true" debuglevel="lines,vars,source"/>
     <copy todir="${build0}">
     	<fileset dir="${res}">
