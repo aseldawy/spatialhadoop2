@@ -343,7 +343,7 @@ public class ShahedServer extends AbstractHandler {
       plotParams.setBoolean("recoverholes", true);
       plotParams.set("dataset", datasetName);
       
-      HDFPlot2.plotHeatMap(new Path[] {inputURL}, outputPath, plotParams);
+      HDFPlot.plotHeatMap(new Path[] {inputURL}, outputPath, plotParams);
       
       FileSystem fs = outputPath.getFileSystem(commonParams);
       if (!fs.exists(outputPath)) {

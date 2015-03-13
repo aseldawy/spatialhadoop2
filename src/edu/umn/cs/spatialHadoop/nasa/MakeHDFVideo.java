@@ -133,7 +133,7 @@ public class MakeHDFVideo {
     }
 
     // 1- Call HDF plot to generate all images
-    HDFPlot.main(vargs.toArray(new String[vargs.size()]));
+    MultiHDFPlot.main(vargs.toArray(new String[vargs.size()]));
     
     // 2- Call RecoverHoles to recover holes (surprise)
     if (recoverHoles) {
@@ -172,7 +172,7 @@ public class MakeHDFVideo {
       String[] parts = scaleRangeStr.split("\\.\\.");
       int min = Integer.parseInt(parts[0]);
       int max = Integer.parseInt(parts[1]);
-      HDFPlot2.drawScale(new Path(output, "scale.png"), min, max, 64,
+      HDFPlot.drawScale(new Path(output, "scale.png"), min, max, 64,
           imageHeight, params);
     }
     
