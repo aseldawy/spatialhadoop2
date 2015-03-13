@@ -10,13 +10,7 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Hashtable;
-import java.util.List;
-import java.util.Map;
-import java.util.Stack;
 
-import ncsa.hdf.object.Attribute;
-import ncsa.hdf.object.Group;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 /**
@@ -59,7 +53,7 @@ public class NASADataset extends Rectangle {
    * file.
    * @param root
    */
-  public NASADataset(Group root) {
+/*  public NASADataset(Group root) {
     try {
       Map<String, Object> metadata = parseMetadata(root.getMetadata());
       String resolution = findMetadata(metadata, "StructMetadata.0/GridStructure/GRID_1/XDim");
@@ -84,14 +78,32 @@ public class NASADataset extends Rectangle {
       e.printStackTrace();
     }
   }
-  
+*/  
+  public NASADataset(String metadata) {
+    // Retrieve the h value
+    int offset = metadata.indexOf("HORIZONTALTILENUMBER");
+    offset = metadata.indexOf(" VALUE", offset);
+    offset = metadata.indexOf('"', offset);
+    int end = metadata.indexOf('"', offset + 1);
+    this.h = Integer.parseInt(metadata.substring(offset+1, end));
+    // Retrieve the v value
+    offset = metadata.indexOf("VERTICALTILENUMBER");
+    offset = metadata.indexOf(" VALUE", offset);
+    offset = metadata.indexOf('"', offset);
+    end = metadata.indexOf('"', offset+1);
+    this.v = Integer.parseInt(metadata.substring(offset+1, end));
+    
+    // MBR
+    
+  }
+
   @Override
   public String toString() {
     String formattedTime = SimpleDateFormat.getInstance().format(new Date(time));
     return datasetName+": "+super.toString()+" ("+cellName+") @"+formattedTime+"-"+resolution;
   }
   
-  public static Map<String, Object> parseMetadata(List<Attribute> attrs) {
+/*  public static Map<String, Object> parseMetadata(List<Attribute> attrs) {
     // Keep a lineage of all open groups or objects
     Stack<Map<String,Object>> lineage = new Stack<Map<String,Object>>();
     // Push the root group that contains all top-level data
@@ -174,5 +186,5 @@ public class NASADataset extends Rectangle {
     }
     return null;
   }
-  
+*/  
 }

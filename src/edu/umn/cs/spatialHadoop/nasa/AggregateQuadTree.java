@@ -16,25 +16,18 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Stack;
 import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import javax.swing.tree.DefaultMutableTreeNode;
-
-import ncsa.hdf.object.Attribute;
-import ncsa.hdf.object.Dataset;
-import ncsa.hdf.object.FileFormat;
-import ncsa.hdf.object.Group;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -45,11 +38,17 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+import edu.umn.cs.spatialHadoop.hdf.DDNumericDataGroup;
+import edu.umn.cs.spatialHadoop.hdf.DDVDataHeader;
+import edu.umn.cs.spatialHadoop.hdf.DDVGroup;
+import edu.umn.cs.spatialHadoop.hdf.DataDescriptor;
+import edu.umn.cs.spatialHadoop.hdf.HDFFile;
 import edu.umn.cs.spatialHadoop.io.RandomCompressedInputStream;
 import edu.umn.cs.spatialHadoop.io.RandomCompressedOutputStream;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
@@ -355,31 +354,41 @@ public class AggregateQuadTree {
    * @param inFile
    * @param datasetIndex
    * @param outFile
+   * @throws IOException 
    * @throws Exception 
    */
   public static void build(Configuration conf, Path inFile, String datasetName,
-      Path outFile) throws Exception {
-    String localFile = FileUtil.copyFile(conf, inFile);
-    // retrieve an instance of H4File format
-    FileFormat fileFormat = FileFormat.getFileFormat(FileFormat.FILE_TYPE_HDF4);
+      Path outFile) throws IOException {
+    FileSystem inFs = inFile.getFileSystem(conf);
+    if (inFs instanceof HTTPFileSystem) {
+      // HDF files are really bad to read over HTTP due to seeks
+      inFile = new Path(FileUtil.copyFile(conf, inFile));
+      inFs = FileSystem.getLocal(conf);
+    }
+    HDFFile hdfFile = null;
+    try {
+      hdfFile = new HDFFile(inFs.open(inFile));
+      DDVGroup dataGroup = hdfFile.findGroupByName(datasetName);
 
-    FileFormat hdfFile = fileFormat.createInstance(localFile, FileFormat.READ);
-
-    // open the file and retrieve the file structure
-    hdfFile.open();
-    
-    Group root =
-        (Group)((DefaultMutableTreeNode)hdfFile.getRootNode()).getUserObject();
-    Dataset matchedDataset = HDFRecordReader3.findDataset(root, datasetName, false);
-    if (matchedDataset != null) {
-      List<Attribute> metadata = matchedDataset.getMetadata();
+      if (dataGroup == null) 
+        throw new RuntimeException("Cannot find dataset '"+datasetName+"' in file "+inFile);
+      
+      boolean fillValueFound = false;
       short fillValue = 0;
-      for (Attribute attr : metadata) {
-        if (attr.getName().equals("_FillValue")) {
-          fillValue = Short.parseShort(Array.get(attr.getValue(), 0).toString());
+      short[] values = null;
+      for (DataDescriptor dd : dataGroup.getContents()) {
+        if (dd instanceof DDNumericDataGroup) {
+          DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
+          values = (short[])numericDataGroup.getAsAnArray();
+        } else if (dd instanceof DDVDataHeader) {
+          DDVDataHeader vheader = (DDVDataHeader) dd;
+          if (vheader.getName().equals("_FillValue")) {
+            fillValue = (short)(int)(Integer)vheader.getEntryAt(0);
+            fillValueFound = true;
+          }
         }
       }
-      Object values = matchedDataset.read();
+
       if (values instanceof short[]) {
         FileSystem outFs = outFile.getFileSystem(conf);
         DataOutputStream out = new DataOutputStream(
@@ -390,8 +399,10 @@ public class AggregateQuadTree {
         throw new RuntimeException("Indexing of values of type "
             + "'" + Array.get(values, 0).getClass()+"' is not supported");
       }
+    } finally {
+      if (hdfFile != null)
+        hdfFile.close();
     }
-    hdfFile.close();
   }
   
   /**
@@ -847,8 +858,10 @@ public class AggregateQuadTree {
 
   /**
    * Creates a full spatio-temporal hierarchy for a source folder
+   * @throws ParseException 
    */
-  public static void directoryIndexer(final OperationsParams params) throws Exception  {
+  public static void directoryIndexer(final OperationsParams params)
+      throws IOException, ParseException {
     Path sourceDir = params.getInputPath();
     FileSystem sourceFs = sourceDir.getFileSystem(params);
     sourceDir = sourceDir.makeQualified(sourceFs);
@@ -1008,6 +1021,11 @@ public class AggregateQuadTree {
     while (!components.isEmpty())
       relative = new Path(relative, components.pop());
     return relative;
+  }
+  
+  public static void main(String[] args) throws IOException, ParseException {
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
+    directoryIndexer(params);
   }
 }
 

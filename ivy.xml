@@ -34,7 +34,5 @@
     
     <!-- canceled as we use our custom version which includes the patch of bug PIG 3373 -->
     <!-- dependency org="org.apache.pig" name="piggybank" rev="0.13.0"/ -->
-    <!-- disabled because it supports HDF5 only while we need HDF 4 -->
-    <!-- dependency org="org.hdfgroup" name="hdf-java" rev="2.6.1"/ -->
   </dependencies>
 </ivy-module>

@@ -23,8 +23,7 @@
   <property name="dist2"  location="${bin2}/dist"/>
   <property name="version" value="2.3"/>
   
-  <path id="hdflib.path.ref">
-    <fileset dir="lib/hdflib" includes="*.jar"/>
+  <path id="other.path.ref">
   	<fileset dir="lib" includes="*.jar"/>
   </path>
 
@@ -89,7 +88,7 @@
         description="compile the source " >
     <!-- Compile the java code from ${src} into ${build} -->
     <javac srcdir="${src}" destdir="${build1}"
-    	  classpath="${toString:hdflib.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop1.lib.path.ref}"
+    	  classpath="${toString:other.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop1.lib.path.ref}"
     	  target="1.6" source="1.6" debug="true" debuglevel="lines,vars,source"/>
     <copy todir="${build1}">
     	<fileset dir="${res}">
@@ -106,7 +105,7 @@
         description="compile the source " >
     <!-- Compile the java code from ${src} into ${build} -->
     <javac srcdir="${src}" destdir="${build2}"
-        classpath="${toString:hdflib.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop2.lib.path.ref}"
+        classpath="${toString:other.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop2.lib.path.ref}"
         target="1.6" source="1.6" debug="true" debuglevel="lines,vars,source"/>
     <copy todir="${build2}">
       <fileset dir="${res}">
@@ -268,8 +267,6 @@
       <tarfileset dir="${dist1}">
         <include name="spatialhadoop-main.jar"/>
       </tarfileset>
-
-    	<tarfileset dir="lib/hdflib" prefix="lib/"/>
     </tar>
   </target>
 
@@ -311,8 +308,6 @@
       <tarfileset dir="${dist2}">
         <include name="spatialhadoop-main.jar"/>
       </tarfileset>
-
-      <tarfileset dir="lib/hdflib" prefix="share/hadoop/common/lib/"/>
     </tar>
 	</target>
 	
