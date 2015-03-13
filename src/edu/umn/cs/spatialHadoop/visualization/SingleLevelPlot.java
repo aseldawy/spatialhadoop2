@@ -397,11 +397,13 @@ public class SingleLevelPlot {
     int height = params.getInt("height", 1000);
     if (params.getBoolean("keepratio", true)) {
       // Adjust width and height to maintain aspect ratio
+      // Store the adjusted values back in params in case the caller needs to
+      // retrieve them
       if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height) {
         // Fix width and change height
-        height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth());
+        params.setInt("height", height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth()));
       } else {
-        width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight());
+        params.setInt("width", width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight()));
       }
     }
     // Store width and height in final variables to make them accessible in parallel

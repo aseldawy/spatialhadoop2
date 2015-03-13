@@ -108,7 +108,8 @@ public class OperationsParams extends Configuration {
 
 	public OperationsParams(OperationsParams params) {
 		super(params);
-		this.allPaths = params.allPaths.clone();
+		if (params.allPaths != null)
+		  this.allPaths = params.allPaths.clone();
 	}
 
 	public void initialize(String... args) {
@@ -794,9 +795,7 @@ public class OperationsParams extends Configuration {
 		Job job = new Job(jobConf); // To ensure we don't change the original
 		SpatialInputFormat3.setInputPaths(job, input);
 		SpatialInputFormat3<Partition, Shape> inputFormat = new SpatialInputFormat3<Partition, Shape>();
-		if (jobConf.get("rect") != null)
-		  job.getConfiguration().set(SpatialInputFormat3.InputQueryRange, jobConf.get("rect"));
-		
+
 		try {
 			List<InputSplit> splits = inputFormat.getSplits(job);
 			if (splits.size() > MaxSplitsForLocalProcessing)

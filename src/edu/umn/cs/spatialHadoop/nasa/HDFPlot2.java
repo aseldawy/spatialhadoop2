@@ -31,7 +31,6 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
 import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
@@ -46,7 +45,7 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
 public class HDFPlot2 {
 
   /**Configuration line for setting a file that contains water_mask*/
-  private static final String PREPROCESSED_WATERMARK = "water_mask";
+  public static final String PREPROCESSED_WATERMARK = "water_mask";
 
   /**
    * Rasterizes HDF files as heat map images.
@@ -98,7 +97,7 @@ public class HDFPlot2 {
     @Override
     public RasterLayer createRaster(int width, int height, Rectangle mbr) {
       HDFRasterLayer rasterLayer = new HDFRasterLayer(mbr, width, height);
-      rasterLayer.setGradientInfor(color1, color2, gradientType);
+      rasterLayer.setGradientInfo(color1, color2, gradientType);
       if (this.minValue <= maxValue)
         rasterLayer.setValueRange(minValue, maxValue);
       return rasterLayer;
@@ -195,31 +194,33 @@ public class HDFPlot2 {
    * @param height
    * @throws IOException
    */
-  public static void drawScale(Path output, MinMax valueRange, int width, int height) throws IOException {
+  public static void drawScale(Path output, double min, double max, int width, int height, OperationsParams params) throws IOException {
     BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
     Graphics2D g = image.createGraphics();
     g.setBackground(Color.BLACK);
     g.clearRect(0, 0, width, height);
 
     // fix this part to work according to color1, color2 and gradient type
+    HDFRasterizer gradient = new HDFRasterizer();
+    gradient.configure(params);
+    HDFRasterLayer gradientLayer = (HDFRasterLayer) gradient.createRaster(0, 0, new Rectangle());
     for (int y = 0; y < height; y++) {
-      Color color = NASARectangle.calculateColor(y);
+      Color color = gradientLayer.calculateColor(height - y, 0, height);
       g.setColor(color);
       g.drawRect(width * 3 / 4, y, width / 4, 1);
     }
 
     int fontSize = 24;
     g.setFont(new Font("Arial", Font.BOLD, fontSize));
-    int step = (valueRange.maxValue - valueRange.minValue) * fontSize * 10 / height;
-    step = (int) Math.pow(10, Math.round(Math.log10(step)));
-    int min_value = valueRange.minValue / step * step;
-    int max_value = valueRange.maxValue / step * step;
+    double step = (max - min) * fontSize * 10 / height;
+    step = (int)(Math.pow(10.0, Math.round(Math.log10(step))));
+    double min_value = Math.floor(min / step) * step;
+    double max_value = Math.floor(max / step) * step;
 
-    for (int value = min_value; value <= max_value; value += step) {
-      int y = fontSize + (height - fontSize) - value * (height - fontSize) /
-          (valueRange.maxValue - valueRange.minValue);
-      g.setColor(Color.WHITE);
-      g.drawString(String.valueOf(value), 5, y);
+    g.setColor(Color.WHITE);
+    for (double value = min_value; value <= max_value; value += step) {
+      double y = ((value - min) + (max - value) * (height - fontSize))/(max - min);
+      g.drawString(String.valueOf((int)value), 5, (int)y);
     }
 
     g.dispose();
@@ -259,6 +260,19 @@ public class HDFPlot2 {
   public static Job plotHeatMap(Path[] inFiles, Path outFile,
       OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {
+    if (params.get("shape") == null) {
+      // Set the default shape value
+      params.setClass("shape", NASARectangle.class, Shape.class);
+    } else if (!(params.getShape("shape") instanceof NASAShape)) {
+      System.err.println("The specified shape "+params.get("shape")+" in not an instance of NASAShape");
+      System.exit(1);
+    }
+    
+    if (params.get("mbr") == null) {
+      // Set to the same value as query rectangle or the whole world
+      params.set("mbr", params.get("rect", "-180,-90,180,90"));
+    }
+
     // Restrict to HDF files if working on a directory
     for (int i = 0; i < inFiles.length; i++) {
       if (!inFiles[i].getName().toLowerCase().endsWith(".hdf"))
@@ -275,19 +289,10 @@ public class HDFPlot2 {
       // Recover holes upon writing the final image
       params.setBoolean("recoverholes", false);
       if (params.get(PREPROCESSED_WATERMARK) == null) {
-        // Need to recover holes on write but the water mask is not set,
-        // need to put it first
-        Path wmPath = new Path(params.get(HDFRecordReader.WATER_MASK_PATH,
-            "http://e4ftl01.cr.usgs.gov/MOLT/MOD44W.005/2000.02.24/"));
-        Path wmImage = new Path(outFile.getParent(), outFile.getName()+"_WaterMask");
         OperationsParams params2 = new OperationsParams(params);
         params2.setBoolean("background", false);
-        params2.set("recover", "none");
-        params2.set("dataset", "water_mask");
-        SingleLevelPlot.plot(new Path[] {wmPath}, wmImage,
-            HDFRasterizeWaterMask.class, params2);
-        FileSystem outFS = wmImage.getFileSystem(params);
-        outFS.deleteOnExit(wmImage);
+        Path wmImage = new Path(outFile.getParent(), outFile.getName()+"_WaterMask");
+        generateWaterMask(wmImage, params2);
         params.set(PREPROCESSED_WATERMARK, wmImage.toString());
       }
     }
@@ -295,6 +300,34 @@ public class HDFPlot2 {
       return MultilevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
     else
       return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizer.class, params);
+  }
+
+  public static void generateWaterMask(Path wmImage, OperationsParams params)
+      throws IOException, InterruptedException, ClassNotFoundException {
+    // Need to recover holes on write but the water mask is not set,
+    // need to put it first
+    Path wmPath = new Path(params.get(HDFRecordReader.WATER_MASK_PATH,
+        "http://e4ftl01.cr.usgs.gov/MOLT/MOD44W.005/2000.02.24/"));
+    params.set("recover", "none");
+    params.setBoolean("recoverholes", false);
+    params.set("dataset", "water_mask");
+    if (params.get("shape") == null) {
+      // Set the default shape value
+      params.setClass("shape", NASARectangle.class, Shape.class);
+    } else if (!(params.getShape("shape") instanceof NASAShape)) {
+      System.err.println("The specified shape "+params.get("shape")+" in not an instance of NASAShape");
+      System.exit(1);
+    }
+    
+    if (params.get("mbr") == null) {
+      // Set to the same value as query rectangle or the whole world
+      params.set("mbr", params.get("rect", "-180,-90,180,90"));
+    }
+
+    SingleLevelPlot.plot(new Path[] {wmPath}, wmImage,
+        HDFRasterizeWaterMask.class, params);
+    FileSystem outFS = wmImage.getFileSystem(params);
+    outFS.deleteOnExit(wmImage);
   }
 
   private static void printUsage() {
@@ -330,19 +363,6 @@ public class HDFPlot2 {
       System.exit(1);
     }
     
-    if (params.get("shape") == null) {
-      // Set the default shape value
-      params.setClass("shape", NASARectangle.class, Shape.class);
-    } else if (!(params.getShape("shape") instanceof NASAShape)) {
-      System.err.println("The specified shape "+params.get("shape")+" in not an instance of NASAShape");
-      System.exit(1);
-    }
-    
-    if (params.get("mbr") == null) {
-      // Set to the same value as query rectangle or the whole world
-      params.set("mbr", params.get("rect", "-180,-90,180,90"));
-    }
-
     Path[] inFiles = params.getInputPaths();
     Path outFile = params.getOutputPath();
 

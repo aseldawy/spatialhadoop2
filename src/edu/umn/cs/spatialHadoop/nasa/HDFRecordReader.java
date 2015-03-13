@@ -23,7 +23,6 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
-import org.omg.CORBA.portable.ValueInputStream;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -103,7 +102,8 @@ public class HDFRecordReader<S extends NASAShape>
     hdfFile = new HDFFile(input);
     
     // Retrieve meta data
-    nasaDataset = new NASADataset((String) hdfFile.findHeaderByName("CoreMetadata.0").getEntryAt(0));
+    String archiveMetadata = (String) hdfFile.findHeaderByName("ArchiveMetadata.0").getEntryAt(0);
+    nasaDataset = new NASADataset(archiveMetadata);
     
     // Retrieve the data array
     DDVGroup dataGroup = hdfFile.findGroupByName(datasetName);

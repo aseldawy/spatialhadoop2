@@ -220,7 +220,7 @@ public class HDFRasterLayer extends RasterLayer {
   public enum GradientType {GT_HSB, GT_RGB};
   protected GradientType gradientType;
   
-  public void setGradientInfor(Color color1, Color color2, GradientType gradientType) {
+  public void setGradientInfo(Color color1, Color color2, GradientType gradientType) {
     this.colors = new Color[] {color1, color2};
     this.hues = new float[colors.length];
     this.saturations = new float[colors.length];

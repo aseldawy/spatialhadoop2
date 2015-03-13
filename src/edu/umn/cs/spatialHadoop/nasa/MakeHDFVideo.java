@@ -170,10 +170,10 @@ public class MakeHDFVideo {
     String scaleRangeStr = params.get("scale-range");
     if (scaleRangeStr != null) {
       String[] parts = scaleRangeStr.split("\\.\\.");
-      MinMax scaleRange = new MinMax();
-      scaleRange.minValue = Integer.parseInt(parts[0]);
-      scaleRange.maxValue = Integer.parseInt(parts[1]);
-      HDFPlot2.drawScale(new Path(output, "scale.png"), scaleRange, 64, imageHeight);
+      int min = Integer.parseInt(parts[0]);
+      int max = Integer.parseInt(parts[1]);
+      HDFPlot2.drawScale(new Path(output, "scale.png"), min, max, 64,
+          imageHeight, params);
     }
     
     InputStream logoInputStream = MakeHDFVideo.class.getResourceAsStream("/gistic_logo.png");

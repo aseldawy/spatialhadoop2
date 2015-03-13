@@ -16,7 +16,6 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -25,8 +24,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.operations.Aggregate;
-import edu.umn.cs.spatialHadoop.operations.Aggregate.MinMax;
 
 /**
  * Plots all datasets from NASA satisfying the following criteria:
@@ -43,8 +40,6 @@ public class HDFPlot {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(HDFPlot.class);
 
-  public static MinMax lastRange;
-  
   private static void printUsage() {
     System.out.println("Plots all NASA datasets matching user criteria");
     System.out.println("Parameters: (* marks required parameters)");
@@ -69,20 +64,26 @@ public class HDFPlot {
    * @throws ClassNotFoundException 
    */
   public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
+    if (!params.checkInputOutput()) {
+      System.err.println("Output directly already exists and overwrite flag is not set");
+      printUsage();
+      System.exit(1);
+    }
     Path[] input = params.getInputPaths();
     Path output = params.getOutputPath();
     String timeRange = params.get("time");
     if (timeRange == null) {
-      System.err.println("timerange must be specified");
+      System.err.println("time range must be specified");
       printUsage();
       System.exit(1);
     }
     final Date dateFrom, dateTo;
     final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd");
     try {
-      dateFrom = dateFormat.parse(timeRange.split("\\.\\.")[0]);
-      dateTo = dateFormat.parse(timeRange.split("\\.\\.")[1]);
+      String[] parts = timeRange.split("\\.\\.");
+      dateFrom = dateFormat.parse(parts[0]);
+      dateTo = dateFormat.parse(parts[1]);
     } catch (ArrayIndexOutOfBoundsException e) {
       System.err.println("Use the seperator two periods '..' to seperate from and to dates");
       printUsage();
@@ -95,10 +96,9 @@ public class HDFPlot {
       return;
     }
     // Retrieve all matching input directories based on date range
-    Configuration conf = new Configuration();
     Vector<Path> matchingPathsV = new Vector<Path>();
     for (Path inputFile : input) {
-      FileSystem inFs = inputFile.getFileSystem(conf);
+      FileSystem inFs = inputFile.getFileSystem(params);
       FileStatus[] matchingDirs = inFs.listStatus(input, new PathFilter() {
         @Override
         public boolean accept(Path p) {
@@ -123,55 +123,65 @@ public class HDFPlot {
     
     Path[] matchingPaths = matchingPathsV.toArray(new Path[matchingPathsV.size()]);
     
-    // Retrieve the scale
-    MinMax valueRange = null;
-    if (params.get("valuerange") == null) {
-      String scale = params.get("scale", "preset");
-      if (scale.equals("preset") || scale.equals("tight")) {
-        params.setBoolean("force", true);
-        valueRange = Aggregate.aggregate(matchingPaths, params);
-      } else if (scale.matches("\\d+,\\d+")) {
-        String[] parts = scale.split(",");
-        valueRange = new MinMax(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
-      } else {
-        valueRange = Aggregate.aggregate(matchingPaths, params);
-      }
-      lastRange = valueRange;
-    }
-
+    // Clear all paths to ensure we set our own paths for each job
     params.clearAllPaths();
-    
+
+    // Create a water mask if we need to recover holes on write
+    if (params.get("recover", "none").equals("write")) {
+      // Recover images on write requires a water mask image to be generated first
+      OperationsParams wmParams = new OperationsParams(params);
+      wmParams.setBoolean("background", false);
+      Path wmImage = new Path(output, new Path("water_mask"));
+      HDFPlot2.generateWaterMask(wmImage, wmParams);
+      params.set(HDFPlot2.PREPROCESSED_WATERMARK, wmImage.toString());
+    }
+    // Start a job for each path
+    int imageHeight = -1;
     boolean overwrite = params.is("overwrite");
     boolean pyramid = params.is("pyramid");
-    FileSystem outFs = output.getFileSystem(conf);
+    FileSystem outFs = output.getFileSystem(params);
     Vector<Job> jobs = new Vector<Job>();
     boolean background = params.is("background");
     for (Path inputPath : matchingPaths) {
-      Path outputPath = new Path(output+"/"+inputPath.getParent().getName()+
-          (pyramid? "" : ".png"));
+      Path outputPath = new Path(output,
+          inputPath.getParent().getName()+ (pyramid? "" : ".png"));
       if (overwrite || !outFs.exists(outputPath)) {
         // Need to plot
         Job rj = HDFPlot2.plotHeatMap(new Path[] {inputPath}, outputPath, params);
+        if (imageHeight == -1) {
+          if (rj != null)
+            imageHeight = rj.getConfiguration().getInt("height", 1000);
+          else
+            imageHeight = params.getInt("height", 1000);
+        }
         if (background)
           jobs.add(rj);
       }
     }
+    // Wait until all jobs are done
     while (!jobs.isEmpty()) {
-      int i_job = 0;
-      int size_before = jobs.size();
-      while (i_job < jobs.size()) {
-        if (jobs.get(i_job).isComplete())
-          jobs.remove(i_job);
-        else
-          i_job++;
+      Job firstJob = jobs.firstElement();
+      firstJob.waitForCompletion(false);
+      if (!firstJob.isSuccessful()) {
+        System.err.println("Error running job "+firstJob);
+        System.err.println("Killing all remaining jobs");
+        for (int j = 1; j < jobs.size(); j++)
+          jobs.get(j).killJob();
+        System.exit(1);
       }
-      if (jobs.size() != size_before) {
-        LOG.info(jobs.size()+" plot jobs remaining");
-      }
-      try {
-        Thread.sleep(5000);
-      } catch (InterruptedException e) {
-        e.printStackTrace();
+      jobs.remove(0);
+    }
+    
+    // Draw the scale in the output path if needed
+    if (params.getBoolean("drawscale", true)) {
+      String scalerange = params.get("scalerange");
+      if (scalerange != null) {
+        String[] parts = scalerange.split("\\.\\.");
+        double min = Double.parseDouble(parts[0]);
+        double max = Double.parseDouble(parts[1]);
+        
+        HDFPlot2.drawScale(new Path(output, "scale.png"), min, max, 64,
+            imageHeight, params);
       }
     }
   }

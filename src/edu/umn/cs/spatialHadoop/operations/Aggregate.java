@@ -230,7 +230,7 @@ public class Aggregate {
    */
   public static MinMax aggregate(Path[] inFiles, OperationsParams params)
       throws IOException {
-    boolean forceCompute = params.is("force");
+    boolean forceCompute = params.getBoolean("force", false);
 
     // Check if we have hard-coded cached values for the given dataset
     String inPathStr = inFiles[0].toString();

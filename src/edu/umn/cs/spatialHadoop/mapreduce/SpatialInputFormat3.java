@@ -48,7 +48,7 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
   private static final Log LOG = LogFactory.getLog(SpatialInputFormat3.class);
   
   /**Query range to apply upon reading the input*/
-  public static final String InputQueryRange = "SpatialInputFormat.QueryRange";
+  public static final String InputQueryRange = "rect";
 
   @Override
   public RecordReader<K, Iterable<V>> createRecordReader(InputSplit split,
