@@ -415,7 +415,7 @@ public class SingleLevelPlot {
         new SpatialInputFormat3<Rectangle, Shape>();
     for (Path inFile : inFiles) {
       FileSystem inFs = inFile.getFileSystem(params);
-      if (inFs.exists(inFile) && !inFs.isDirectory(inFile)) {
+      if (inFs.exists(inFile) && !OperationsParams.isWildcard(inFile) && !inFs.isDirectory(inFile)) {
         // One file, retrieve it immediately.
         // This is useful if the input is a hidden file which is automatically
         // skipped by FileInputFormat. We need to plot a hidden file for the case
@@ -427,7 +427,6 @@ public class SingleLevelPlot {
         SpatialInputFormat3.addInputPath(job, inFile);
         splits.addAll(inputFormat.getSplits(job));
       }
-      
     }
     
     // Copy splits to a final array to be used in parallel
