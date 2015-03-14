@@ -13,10 +13,9 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
-import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
-import edu.umn.cs.spatialHadoop.nasa.MakeHDFVideo;
+import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
 import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
 
@@ -73,15 +72,12 @@ public class Main {
       pgd.addClass("union", Union.class,
           "Computes the union of input shapes");
 
-      pgd.addClass("hdfplot", MultiHDFPlot.class,
+      pgd.addClass("multihdfplot", MultiHDFPlot.class,
           "Plots NASA datasets in the spatiotemporal range provided by user");
 
-      pgd.addClass("hdfplot2", HDFPlot.class,
-          "Plots NASA datasets in the spatiotemporal range provided by user");
+      pgd.addClass("hdfplot", HDFPlot.class,
+          "Plots a heat map for a give NASA dataset");
       
-      pgd.addClass("makevideo", MakeHDFVideo.class,
-          "Creates a video out of a set of HDF files");
-
       pgd.addClass("gplot", GeometricPlot.class,
           "Plots a file to an image");
 

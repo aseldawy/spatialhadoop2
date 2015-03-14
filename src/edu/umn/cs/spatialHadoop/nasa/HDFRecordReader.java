@@ -103,7 +103,8 @@ public class HDFRecordReader<S extends NASAShape>
     
     // Retrieve meta data
     String archiveMetadata = (String) hdfFile.findHeaderByName("ArchiveMetadata.0").getEntryAt(0);
-    nasaDataset = new NASADataset(archiveMetadata);
+    String coreMetadata = (String) hdfFile.findHeaderByName("CoreMetadata.0").getEntryAt(0);
+    nasaDataset = new NASADataset(coreMetadata, archiveMetadata);
     
     // Retrieve the data array
     DDVGroup dataGroup = hdfFile.findGroupByName(datasetName);
@@ -151,6 +152,7 @@ public class HDFRecordReader<S extends NASAShape>
         recoverFillValues(conf);
     }
     this.nasaShape = (S) OperationsParams.getShape(conf, "shape", new NASARectangle());
+    this.nasaShape.setTimestamp(nasaDataset.time);
     this.value = new NASAIterator();
   }
 

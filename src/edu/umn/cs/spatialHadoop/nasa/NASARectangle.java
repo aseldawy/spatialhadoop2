@@ -176,6 +176,7 @@ public class NASARectangle extends Rectangle implements NASAShape {
   public Rectangle clone() {
     NASARectangle c = new NASARectangle(this);
     c.value = this.value;
+    c.timestamp = this.timestamp;
     return c;
   }
 }

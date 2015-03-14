@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.hdf;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.nio.charset.Charset;
 
 /**
  * Header of VData

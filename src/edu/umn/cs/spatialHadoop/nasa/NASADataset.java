@@ -62,7 +62,7 @@ public class NASADataset extends Rectangle {
    * @param root
    * @throws ParseException 
    */
-  public NASADataset(String archiveMetadata) {
+  public NASADataset(String coreMetadata, String archiveMetadata) {
     // Retrieve the h value
     try {
       this.h = getIntByName(archiveMetadata, "HORIZONTALTILENUMBER");
@@ -80,7 +80,9 @@ public class NASADataset extends Rectangle {
     try {
       // Date
       final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-      String dateStr = getStringByName(archiveMetadata, "RANGEBEGINNINGDATE");
+      String dateStr = getStringByName(coreMetadata, "RANGEBEGINNINGDATE");
+      if (dateStr == null)
+        dateStr = getStringByName(archiveMetadata, "RANGEBEGINNINGDATE");
       if (dateStr == null)
         LOG.warn("Could not find 'date' in metadata");
       else

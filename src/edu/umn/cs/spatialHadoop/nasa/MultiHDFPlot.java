@@ -9,8 +9,11 @@
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.Vector;
 
@@ -24,6 +27,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 /**
  * Plots all datasets from NASA satisfying the following criteria:
@@ -45,16 +49,23 @@ public class MultiHDFPlot {
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<input file> - (*) Path to NASA repository of all datasets");
     System.out.println("<output file> - (*) Path to output images");
-    System.out.println("shape:<point|rectangle|polygon|ogc> - (*) Type of shapes stored in input file");
-    System.out.println("tilewidth:<w> - Width of each tile in pixels");
-    System.out.println("tileheight:<h> - Height of each tile in pixels");
-    System.out.println("color:<c> - Main color used to draw shapes (black)");
-    System.out.println("numlevels:<n> - Number of levels in the pyrmaid");
+    System.out.println("-pyramid - Draw a multilevel image");
+    System.out.println("width:<w> - Width of the whole image (for single level plot)");
+    System.out.println("height:<w> - Height of the whole image (for single level plot)");
+    System.out.println("tilewidth:<w> - Width of each tile in pixels (for pyramid plot)");
+    System.out.println("tileheight:<h> - Height of each tile in pixels (for pyramid plot)");
+    System.out.println("numlevels:<n> - Number of levels in the pyrmaid (7)");
+    System.out.println("color1:<c1> - The color associated with v1");
+    System.out.println("color2:<c2> - The color associated with v2");
+    System.out.println("gradient:<rgb|hsb> - Type of gradient to use");
+    System.out.println("recover:<read|write|none> - How to recover holes in the data (none)");
     System.out.println("dataset:<d> - Dataset to plot from HDF files");
     System.out.println("time:<from..to> - Time range each formatted as yyyy.mm.dd");
-    System.out.println("-overwrite: Override output file without notice");
     System.out.println("rect:<x1,y1,x2,y2> - Limit drawing to the selected area");
-    System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
+    System.out.println("-adddate - Write the date on each generated image (false)");
+    System.out.println("output:<frames|video|kmz> - The format of the output (frames)");
+    System.out.println("dateformat<df>: The format of the date to write on each image (dd-MM-yyyy)");
+    System.out.println("-overwrite: Overwrite output file without notice");
   }
 
   /**
@@ -62,8 +73,9 @@ public class MultiHDFPlot {
    * @throws IOException 
    * @throws InterruptedException 
    * @throws ClassNotFoundException 
+   * @throws ParseException 
    */
-  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException, ParseException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     if (!params.checkInputOutput()) {
       System.err.println("Output directly already exists and overwrite flag is not set");
@@ -105,10 +117,9 @@ public class MultiHDFPlot {
           String dirName = p.getName();
           try {
             Date date = dateFormat.parse(dirName);
-            return date.compareTo(dateFrom) >= 0 &&
-                date.compareTo(dateTo) <= 0;
+            return date.compareTo(dateFrom) >= 0 && date.compareTo(dateTo) <= 0;
           } catch (ParseException e) {
-            LOG.warn("Cannot parse directory name: "+dirName);
+            LOG.warn("Cannot parse directory name: " + dirName);
             return false;
           }
         }
@@ -142,6 +153,7 @@ public class MultiHDFPlot {
     FileSystem outFs = output.getFileSystem(params);
     Vector<Job> jobs = new Vector<Job>();
     boolean background = params.is("background");
+    Rectangle mbr = new Rectangle(-180, -90, 180, 90);
     for (Path inputPath : matchingPaths) {
       Path outputPath = new Path(output,
           inputPath.getParent().getName()+ (pyramid? "" : ".png"));
@@ -149,10 +161,12 @@ public class MultiHDFPlot {
         // Need to plot
         Job rj = HDFPlot.plotHeatMap(new Path[] {inputPath}, outputPath, params);
         if (imageHeight == -1) {
-          if (rj != null)
+          if (rj != null) {
             imageHeight = rj.getConfiguration().getInt("height", 1000);
-          else
+            mbr = (Rectangle) OperationsParams.getShape(rj.getConfiguration(), "mbr");
+          } else {
             imageHeight = params.getInt("height", 1000);
+          }
         }
         if (background)
           jobs.add(rj);
@@ -184,5 +198,94 @@ public class MultiHDFPlot {
             imageHeight, params);
       }
     }
+    
+    String outputType = params.get("output", "frames").toLowerCase();
+    if (outputType.equals("video")) {
+      // Put all images otgether in a video
+      boolean addLogo = params.getBoolean("addlogo", false);
+      createVideo(outFs, output, addLogo);
+    } else if (outputType.equals("kmz")) {
+      // Add the KML file
+      createKMZ(outFs, output, mbr);
+    }
+  }
+
+  private static void createKMZ(FileSystem outFs, Path output, Rectangle mbr) throws IOException, ParseException {
+    FileStatus[] all_images = outFs.listStatus(output, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.getName().matches("\\d+\\.\\d+\\.\\d+\\.png");
+      }
+    });
+    
+    Path kmlPath = new Path(output, "index.kml");
+    PrintStream ps = new PrintStream(outFs.create(kmlPath));
+    ps.println("<?xml version='1.0' encoding='UTF-8'?>");
+    ps.println("<kml xmlns='http://www.opengis.net/kml/2.2'>");
+    ps.println("<Folder>");
+    String mbrStr = String.format("<LatLonBox><west>%f</west><south>%f</south><east>%f</east><north>%f</north></LatLonBox>", mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+    for (FileStatus image : all_images) {
+      SimpleDateFormat fileDateFormat = new SimpleDateFormat("yyyy.MM.dd");
+      SimpleDateFormat kmlDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+      String name = image.getPath().getName();
+      int dotIndex = name.lastIndexOf('.');
+      name = name.substring(0, dotIndex);
+      Date date = fileDateFormat.parse(name);
+      String kmlDate = kmlDateFormat.format(date);
+      ps.println("<GroundOverlay>");
+      ps.println("<name>"+kmlDate+"</name>");
+      ps.println("<TimeStamp><when>"+kmlDate+"</when></TimeStamp>");
+      ps.println("<Icon><href>"+image.getPath().getName()+"</href></Icon>");
+      ps.println(mbrStr);
+      ps.println("</GroundOverlay>");
+    }
+    ps.println("</Folder>");
+    ps.println("</kml>");
+    ps.close();
+  }
+
+  private static void createVideo(FileSystem outFs, Path output, boolean addLogo)
+      throws IOException {
+    // Rename all generated files to be day_%3d.png
+    // Rename files to be ready to use with ffmpeg
+    FileStatus[] all_images = outFs.listStatus(output, new PathFilter() {
+      @Override
+      public boolean accept(Path path) {
+        return path.getName().matches("\\d+\\.\\d+\\.\\d+\\.png");
+      }
+    });
+    
+    Arrays.sort(all_images, new Comparator<FileStatus>() {
+      @Override
+      public int compare(FileStatus f1, FileStatus f2) {
+        return f1.getPath().getName().compareTo(f2.getPath().getName());
+      }
+    });
+    
+    int day = 1;
+    for (FileStatus image : all_images) {
+      String newFileName = String.format("day_%03d.png", day++);
+      outFs.rename(image.getPath(), new Path(output, newFileName));
+    }
+    
+    String videoCommand;
+    if (addLogo) {
+      // Puts frames together into a video
+      videoCommand = "avconv -r 4 -i day_%3d.png -vf "
+          + "\"movie=gistic_logo.png [watermark]; "
+          + "movie=scale.png [scale]; "
+          + "[in][watermark] overlay=main_w-overlay_w-10:10 [mid]; "
+          + "[mid] pad=iw+64:ih [mid2]; "
+          + "[mid2][scale] overlay=main_w-overlay_w:0 [out]\" "
+          + "-r 4 -pix_fmt yuv420p output.mp4 ";
+    } else {
+      videoCommand = "avconv -r 4 -i day_%3d.png -vf \""
+          + "movie=scale.png [scale]; "
+          + "[in] pad=iw+64:ih [mid2]; "
+          + "[mid2][scale] overlay=main_w-overlay_w:0 [out]\" "
+          + "-r 4 -pix_fmt yuv420p output.mp4 ";
+    }
+    System.out.println("Run the following command to generate the video");
+    System.out.println(videoCommand);
   }
 }

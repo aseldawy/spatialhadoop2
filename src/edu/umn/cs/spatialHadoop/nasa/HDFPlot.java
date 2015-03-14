@@ -16,6 +16,8 @@ import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Iterator;
 
 import javax.imageio.ImageIO;
 
@@ -67,6 +69,8 @@ public class HDFPlot {
     private Path waterMaskPath;
     /**FileSystem of the water mask*/
     private FileSystem waterMaskFS;
+    /**The date format if we need to add date to the generated image*/
+    private SimpleDateFormat dateFormat;
 
     @Override
     public void configure(Configuration conf) {
@@ -92,6 +96,9 @@ public class HDFPlot {
           e.printStackTrace();
         }
       }
+      if (conf.getBoolean("adddate", false)) {
+        dateFormat = new SimpleDateFormat(conf.get("dateformat", "dd-MM-yyyy"));
+      }
     }
     
     @Override
@@ -102,7 +109,21 @@ public class HDFPlot {
         rasterLayer.setValueRange(minValue, maxValue);
       return rasterLayer;
     }
-
+    
+    @Override
+    public void rasterize(RasterLayer layer, Iterable<? extends Shape> shapes) {
+      Iterator<? extends Shape> iShapes = shapes.iterator();
+      if (!iShapes.hasNext())
+        return;
+      // Retrieve timestamp
+      Shape s = iShapes.next();
+      ((HDFRasterLayer)layer).setTimestamp(((NASAShape)s).getTimestamp());
+      this.rasterize(layer, s);
+      while (iShapes.hasNext()) {
+        this.rasterize(layer, iShapes.next());
+      }
+    }
+    
     @Override
     public void rasterize(RasterLayer rasterLayer, Shape shape) {
       HDFRasterLayer hdfMap = (HDFRasterLayer) rasterLayer;
@@ -160,6 +181,18 @@ public class HDFPlot {
         img = op.filter(img, null);
       }
       
+      if (dateFormat != null) {
+        long timestamp = hdfLayer.getTimestamp();
+        String strDate = dateFormat.format(timestamp);
+        final int fontSize = 48;
+        Graphics2D g = img.createGraphics();
+        g.setFont(new Font("Arial", Font.BOLD, fontSize));
+        g.setColor(Color.BLACK);
+        g.drawString(strDate, 10, img.getHeight() - 10);
+        g.setColor(Color.WHITE);
+        g.drawString(strDate, 10-2, img.getHeight() - 10 - 2);
+        g.dispose();
+      }
       ImageIO.write(img, "png", out);
     }
   }
@@ -212,7 +245,7 @@ public class HDFPlot {
 
     int fontSize = 24;
     g.setFont(new Font("Arial", Font.BOLD, fontSize));
-    double step = (max - min) * fontSize * 10 / height;
+    double step = (max - min) * fontSize * 5 / height;
     step = (int)(Math.pow(10.0, Math.round(Math.log10(step))));
     double min_value = Math.floor(min / step) * step;
     double max_value = Math.floor(max / step) * step;
@@ -343,6 +376,8 @@ public class HDFPlot {
     System.out.println("color2:<c2> - The color associated with v2");
     System.out.println("gradient:<rgb|hsb> - Type of gradient to use");
     System.out.println("recover:<read|write|none> - (none) How to recover holes in the data");
+    System.out.println("-adddate: Write the date on each generated image (false)");
+    System.out.println("dateformat<df>: The format of the date to write on each image (dd-MM-yyyy)");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
     GenericOptionsParser.printGenericCommandUsage(System.out);

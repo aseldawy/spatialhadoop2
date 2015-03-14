@@ -47,6 +47,9 @@ public class HDFRasterLayer extends RasterLayer {
   /**The maximum value to be used while drawing the heat map*/
   private float max;
   
+  /**Timestamp of this dataset*/
+  private long timestamp;
+  
   /**
    * Initialize an empty frequency map to be used to deserialize 
    */
@@ -87,6 +90,7 @@ public class HDFRasterLayer extends RasterLayer {
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);
+    out.writeLong(timestamp);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     GZIPOutputStream gzos = new GZIPOutputStream(baos);
     ByteBuffer bbuffer = ByteBuffer.allocate(getHeight() * 2 * 8 + 8);
@@ -111,6 +115,7 @@ public class HDFRasterLayer extends RasterLayer {
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
+    this.timestamp = in.readLong();
     int length = in.readInt();
     byte[] serializedData = new byte[length];
     in.readFully(serializedData);
@@ -142,6 +147,7 @@ public class HDFRasterLayer extends RasterLayer {
   }
   
   public void mergeWith(HDFRasterLayer another) {
+    this.timestamp = Math.max(this.timestamp, another.timestamp);
     Point offset = projectToImageSpace(another.getInputMBR().x1, another.getInputMBR().y1);
     int xmin = Math.max(0, offset.x);
     int ymin = Math.max(0, offset.y);
@@ -211,6 +217,14 @@ public class HDFRasterLayer extends RasterLayer {
   }
   
   /* The following methods are used to compute the gradient */
+
+  public void setTimestamp(long ts) {
+    this.timestamp = ts;
+  }
+
+  public long getTimestamp() {
+    return this.timestamp;
+  }
 
   protected Color[] colors;
   protected float[] hues;
