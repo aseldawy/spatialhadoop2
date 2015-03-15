@@ -30,7 +30,6 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.util.BitArray;
@@ -127,26 +126,24 @@ public class HDFPlot {
     @Override
     public void rasterize(RasterLayer rasterLayer, Shape shape) {
       HDFRasterLayer hdfMap = (HDFRasterLayer) rasterLayer;
-      double x, y;
-      if (shape instanceof Point) {
-        Point np = (Point) shape;
-        x = np.x;
-        y = np.y;
-      } else if (shape instanceof Rectangle) {
-        Rectangle r = (Rectangle) shape;
-        x = (r.x1 + r.x2)/2;
-        y = (r.y1 + r.y2)/2;
-      } else {
-        Rectangle r = shape.getMBR();
-        x = (r.x1 + r.x2)/2;
-        y = (r.y1 + r.y2)/2;
-      }
-      
+      int x1, y1, x2, y2;
       Rectangle inputMBR = rasterLayer.getInputMBR();
-      int centerx = (int) Math.round((x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
-      int centery = (int) Math.round((y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+      if (shape instanceof NASAPoint) {
+        NASAPoint p = (NASAPoint) shape;
+        x1 = (int) Math.round((p.x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
+        y1 = (int) Math.round((p.y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+        hdfMap.addPoints(x1, y1, 1, 1, p.getValue());
+      } else if (shape instanceof NASARectangle) {
+        NASARectangle r = (NASARectangle) shape;
+        x1 = (int) Math.round((r.x1 - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
+        y1 = (int) Math.round((r.y1 - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+        x2 = (int) Math.ceil((r.x2 - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
+        y2 = (int) Math.ceil((r.y2 - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+        hdfMap.addPoints(x1, y1, x2, y2, r.getValue());
+      } else {
+        throw new RuntimeException("Cannot parse shapes of type "+shape.getClass());
+      }
 
-      hdfMap.addPoint(centerx, centery, ((NASAShape)shape).getValue());
     }
 
     @Override

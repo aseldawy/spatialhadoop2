@@ -196,15 +196,31 @@ public class HDFRasterLayer extends RasterLayer {
     return image;
   }
 
+  public void addPoints(int x, int y, int weight) {
+    if (x >= 0 && x < getWidth() && y >= 0 && y < getHeight()) {
+      sum[x][y] += weight;
+      count[x][y]++;
+    }
+  }
   /**
    * Adds a point to the frequency map
    * @param cx
    * @param cy
    */
-  public void addPoint(int cx, int cy, int weight) {
-    if (cx >= 0 && cy >= 0 && cx < getWidth() && cy < getHeight()) {
-      sum[cx][cy] += weight;
-      count[cx][cy]++;
+  public void addPoints(int x1, int y1, int x2, int y2, int weight) {
+    if (x1 < 0)
+      x1 = 0;
+    if (y1 < 0)
+      y1 = 0;
+    if (x2 >= getWidth())
+      x2 = getWidth() - 1;
+    if (y2 >= getHeight())
+      y2 = getHeight() - 1;
+    for (int x = x1; x < x2; x++) {
+      for (int y = y1; y < y2; y++) {
+        sum[x][y] += weight;
+        count[x][y]++;
+      }
     }
   }
 

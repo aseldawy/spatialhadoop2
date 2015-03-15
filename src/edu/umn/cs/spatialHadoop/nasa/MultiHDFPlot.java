@@ -63,7 +63,6 @@ public class MultiHDFPlot {
     System.out.println("time:<from..to> - Time range each formatted as yyyy.mm.dd");
     System.out.println("rect:<x1,y1,x2,y2> - Limit drawing to the selected area");
     System.out.println("-adddate - Write the date on each generated image (false)");
-    System.out.println("output:<frames|video|kmz> - The format of the output (frames)");
     System.out.println("dateformat<df>: The format of the date to write on each image (dd-MM-yyyy)");
     System.out.println("-overwrite: Overwrite output file without notice");
   }
@@ -82,14 +81,21 @@ public class MultiHDFPlot {
       printUsage();
       System.exit(1);
     }
-    Path[] input = params.getInputPaths();
-    Path output = params.getOutputPath();
     String timeRange = params.get("time");
     if (timeRange == null) {
       System.err.println("time range must be specified");
       printUsage();
       System.exit(1);
     }
+    Path[] input = params.getInputPaths();
+    Path output = params.getOutputPath();
+    multiplot(input, output, params);
+  }
+
+  public static boolean multiplot(Path[] input, Path output,
+      OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException, ParseException {
+    String timeRange = params.get("time");
     final Date dateFrom, dateTo;
     final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd");
     try {
@@ -98,14 +104,10 @@ public class MultiHDFPlot {
       dateTo = dateFormat.parse(parts[1]);
     } catch (ArrayIndexOutOfBoundsException e) {
       System.err.println("Use the seperator two periods '..' to seperate from and to dates");
-      printUsage();
-      System.exit(1);
-      return; // To avoid an error that causes dateFrom to be uninitialized
+      return false; // To avoid an error that causes dateFrom to be uninitialized
     } catch (ParseException e) {
       System.err.println("Illegal date format in "+timeRange);
-      printUsage();
-      System.exit(1);
-      return;
+      return false;
     }
     // Retrieve all matching input directories based on date range
     Vector<Path> matchingPathsV = new Vector<Path>();
@@ -129,7 +131,7 @@ public class MultiHDFPlot {
     }
     if (matchingPathsV.size() == 0) {
       LOG.warn("No matching directories to given input");
-      return;
+      return false;
     }
     
     Path[] matchingPaths = matchingPathsV.toArray(new Path[matchingPathsV.size()]);
@@ -166,6 +168,7 @@ public class MultiHDFPlot {
             mbr = (Rectangle) OperationsParams.getShape(rj.getConfiguration(), "mbr");
           } else {
             imageHeight = params.getInt("height", 1000);
+            mbr = (Rectangle) OperationsParams.getShape(params, "mbr");
           }
         }
         if (background)
@@ -198,19 +201,12 @@ public class MultiHDFPlot {
             imageHeight, params);
       }
     }
-    
-    String outputType = params.get("output", "frames").toLowerCase();
-    if (outputType.equals("video")) {
-      // Put all images otgether in a video
-      boolean addLogo = params.getBoolean("addlogo", false);
-      createVideo(outFs, output, addLogo);
-    } else if (outputType.equals("kmz")) {
-      // Add the KML file
-      createKMZ(outFs, output, mbr);
-    }
+    // Add the KML file
+    createKML(outFs, output, mbr);
+    return true;
   }
 
-  private static void createKMZ(FileSystem outFs, Path output, Rectangle mbr) throws IOException, ParseException {
+  private static void createKML(FileSystem outFs, Path output, Rectangle mbr) throws IOException, ParseException {
     FileStatus[] all_images = outFs.listStatus(output, new PathFilter() {
       @Override
       public boolean accept(Path path) {

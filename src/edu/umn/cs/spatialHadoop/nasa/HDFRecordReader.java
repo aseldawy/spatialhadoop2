@@ -93,7 +93,6 @@ public class HDFRecordReader<S extends NASAShape>
       throw new RuntimeException("Dataset name should be provided");
     Path inFile = ((FileSplit) split).getPath();
     FileSystem fs = inFile.getFileSystem(conf);
-    System.out.println("Processing HDF file "+inFile);
     if (fs instanceof HTTPFileSystem) {
       // For performance reasons, we don't open HDF files from HTTP
       inFile = new Path(FileUtil.copyFile(conf, inFile));

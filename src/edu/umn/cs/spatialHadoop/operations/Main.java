@@ -17,7 +17,7 @@ import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
-import edu.umn.cs.spatialHadoop.nasa.SpatioTemporalAggregateQuery;
+import edu.umn.cs.spatialHadoop.nasa.SpatioAggregateQueries;
 
 /**
  * The main entry point to all queries.
@@ -105,7 +105,7 @@ public class Main {
       pgd.addClass("vizserver", ShahedServer.class,
           "Starts a server that handles visualization requests");
 
-      pgd.addClass("staggquery", SpatioTemporalAggregateQuery.class,
+      pgd.addClass("staggquery", SpatioAggregateQueries.class,
           "Runs a spatio temporal aggregate query on HDF files");
       
       pgd.driver(args);

@@ -587,6 +587,20 @@ public class AggregateQuadTree {
     }
   }
   
+  public static int selectionQuery(FileSystem fs, Path p, Rectangle query_mbr,
+      ResultCollector2<Point, Short> output) throws IOException {
+    FSDataInputStream inStream = null;
+    try {
+      inStream = new FSDataInputStream(new RandomCompressedInputStream(fs, p));
+      //inStream = fs.open(p);
+      return selectionQuery(inStream, query_mbr, output);
+    } finally {
+      if (inStream != null)
+        inStream.close();
+    }
+
+  }
+  
   /**
    * Perform a selection query that retrieves all points in the given range.
    * The range is specified in the two-dimensional array positions.
