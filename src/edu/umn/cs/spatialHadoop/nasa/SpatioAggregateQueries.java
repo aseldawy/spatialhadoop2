@@ -223,8 +223,8 @@ public class SpatioAggregateQueries {
     final int resolution = 1200;
     
     final java.awt.Point queryInMatchingTile = new java.awt.Point();
-    queryInMatchingTile.x = (int) Math.floor((queryPoint.x - h * 10) * resolution);
-    queryInMatchingTile.y = (int) Math.floor((queryPoint.y - v * 10) * resolution);
+    queryInMatchingTile.x = (int) Math.floor((queryPoint.x - h) * resolution);
+    queryInMatchingTile.y = (int) Math.floor((queryPoint.y - v) * resolution);
     
     final ResultCollector2<java.awt.Point, Short> internalOutput = output == null ? null :
       new ResultCollector2<java.awt.Point, Short>() {
