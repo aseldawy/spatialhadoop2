@@ -323,6 +323,34 @@
       }
       
       function generateImage() {
+        if ($("#fromDatePicker").val().length == 0) {
+          alert('Please specify start date');
+          return;
+        }
+        if (rectangle == null) {
+          alert("Please specify a rectangle");
+          return;
+        }
+        var fromDate = document.getElementById("fromDatePicker").value;
+        var ne = rectangle.getBounds().getNorthEast();
+        var sw = rectangle.getBounds().getSouthWest();
+        var selectedDatasetOption = $("#datasets option:selected");
+        var dataset = selectedDatasetOption.attr("id");
+        var url = selectedDatasetOption.val();
+        requestURL = "cgi-bin/generate_image.cgi?"
+                      + "min_lat=" + sw.lat() + "&min_lon=" + sw.lng()
+                      + "&max_lat=" + ne.lat() + "&max_lon=" + ne.lng()
+                      + "&fromDate=" + fromDate
+                      + "&toDate=" + fromDate // For images, from and to date are the same
+                      + "&dataset=" + dataset
+                      + "&dataset_url=" + url;
+        // Send using Ajax
+        $.getJSON(requestURL, function(response) {
+          alert(response);
+        });
+      }
+          
+      function generateVideo() {
         if ($("#fromDatePicker").val().length == 0 || $("#toDatePicker").val().length == 0) {
           alert('Please specify start and end date');
           return;

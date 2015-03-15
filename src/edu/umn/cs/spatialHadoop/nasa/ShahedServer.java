@@ -176,41 +176,50 @@ public class ShahedServer extends AbstractHandler {
    */
   private void handleAggregateQuery(HttpServletRequest request,
       HttpServletResponse response) throws ParseException, IOException {
-    String west = request.getParameter("min_lon");
-    String east = request.getParameter("max_lon");
-    String south = request.getParameter("min_lat");
-    String north = request.getParameter("max_lat");
-    
-    String[] startDateParts = request.getParameter("fromDate").split("/");
-    String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
-    String[] endDateParts = request.getParameter("toDate").split("/");
-    String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
-    
-    // Create the query parameters
-    OperationsParams params = new OperationsParams(commonParams);
-    params.set("rect", west+','+south+','+east+','+north);
-    params.set("time", startDate+".."+endDate);
-    
-    long t1 = System.currentTimeMillis();
-    Node result = SpatioAggregateQueries.aggregateQuery(indexPath, params);
-    long t2 = System.currentTimeMillis();
-    // Report the answer and time
-    response.setContentType("application/json;charset=utf-8");
-    PrintWriter writer = response.getWriter();
-    writer.print("{");
-    writer.print("\"results\":{");
-    writer.print("\"min\": "+result.min+',');
-    writer.print("\"max\": "+result.max+',');
-    writer.print("\"count\": "+result.count+',');
-    writer.print("\"sum\": "+result.sum);
-    writer.print("},");
-    writer.print("\"stats\":{");
-    writer.print("\"totaltime\":"+(t2-t1)+',');
-    writer.print("\"num-of-temporal-partitions\":"+SpatioAggregateQueries.numOfTemporalPartitionsInLastQuery+',');
-    writer.print("\"num-of-trees\":"+SpatioAggregateQueries.numOfTreesTouchesInLastRequest);
-    writer.print("}");
-    writer.print("}");
-    response.setStatus(HttpServletResponse.SC_OK);
+    try {
+      String west = request.getParameter("min_lon");
+      String east = request.getParameter("max_lon");
+      String south = request.getParameter("min_lat");
+      String north = request.getParameter("max_lat");
+      
+      String[] startDateParts = request.getParameter("fromDate").split("/");
+      String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+      String[] endDateParts = request.getParameter("toDate").split("/");
+      String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+      
+      // Create the query parameters
+      OperationsParams params = new OperationsParams(commonParams);
+      params.set("rect", west+','+south+','+east+','+north);
+      params.set("time", startDate+".."+endDate);
+      
+      long t1 = System.currentTimeMillis();
+      Node result = SpatioAggregateQueries.aggregateQuery(indexPath, params);
+      long t2 = System.currentTimeMillis();
+      // Report the answer and time
+      response.setContentType("application/json;charset=utf-8");
+      PrintWriter writer = response.getWriter();
+      writer.print("{");
+      writer.print("\"results\":{");
+      writer.print("\"min\": "+result.min+',');
+      writer.print("\"max\": "+result.max+',');
+      writer.print("\"count\": "+result.count+',');
+      writer.print("\"sum\": "+result.sum);
+      writer.print("},");
+      writer.print("\"stats\":{");
+      writer.print("\"totaltime\":"+(t2-t1)+',');
+      writer.print("\"num-of-temporal-partitions\":"+SpatioAggregateQueries.numOfTemporalPartitionsInLastQuery+',');
+      writer.print("\"num-of-trees\":"+SpatioAggregateQueries.numOfTreesTouchesInLastRequest);
+      writer.print("}");
+      writer.print("}");
+      writer.close();
+      response.setStatus(HttpServletResponse.SC_OK);
+    } catch (Exception e) {
+      response.setContentType("text/plain;charset=utf-8");
+      PrintWriter writer = response.getWriter();
+      e.printStackTrace(writer);
+      writer.close();
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
   }
   
   /**
@@ -222,45 +231,54 @@ public class ShahedServer extends AbstractHandler {
    */
   private void handleSelectionQuery(HttpServletRequest request,
       HttpServletResponse response) throws ParseException, IOException {
-    final String lat = request.getParameter("lat");
-    final String lon = request.getParameter("long");
-    
-    String[] startDateParts = request.getParameter("fromDate").split("/");
-    String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
-    String[] endDateParts = request.getParameter("toDate").split("/");
-    String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
-    
-    // Create the query parameters
-    OperationsParams params = new OperationsParams(commonParams);
-    params.set("point", lon+","+lat);
-    params.set("time", startDate+".."+endDate);
-    
-    final SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
-    final PrintWriter writer = response.getWriter();
-    response.setContentType("application/json;charset=utf-8");
-    writer.print("{");
-    writer.print("\"results\":{");
-    writer.print("\"points\":[");
-    long t1 = System.currentTimeMillis();
-    long numOfResults = SpatioAggregateQueries.selectionQuery(indexPath, new ResultCollector<NASAPoint>() {
-      @Override
-      public void collect(NASAPoint r) {
-        synchronized (writer) {
-          writer.printf("{\"lat\":%f, \"lon\":%f, timestamp:\"%s\", value:\"%d\"},",
-              r.y, r.x, dateFormat.format(r.timestamp), r.getValue());
+    try {
+      final String lat = request.getParameter("lat");
+      final String lon = request.getParameter("long");
+      
+      String[] startDateParts = request.getParameter("fromDate").split("/");
+      String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+      String[] endDateParts = request.getParameter("toDate").split("/");
+      String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+      
+      // Create the query parameters
+      OperationsParams params = new OperationsParams(commonParams);
+      params.set("point", lon+","+lat);
+      params.set("time", startDate+".."+endDate);
+      
+      final SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+      final PrintWriter writer = response.getWriter();
+      response.setContentType("application/json;charset=utf-8");
+      writer.print("{");
+      writer.print("\"results\":{");
+      writer.print("\"points\":[");
+      long t1 = System.currentTimeMillis();
+      long numOfResults = SpatioAggregateQueries.selectionQuery(indexPath, new ResultCollector<NASAPoint>() {
+        @Override
+        public void collect(NASAPoint r) {
+          synchronized (writer) {
+            writer.printf("{\"lat\":%f, \"lon\":%f, timestamp:\"%s\", value:\"%d\"},",
+                r.y, r.x, dateFormat.format(r.timestamp), r.getValue());
+          }
         }
-      }
-    }, params);
-    long t2 = System.currentTimeMillis();
-    writer.print("],");
-    writer.printf("\"result-size\":%d},", numOfResults);
-    writer.print("\"stats\":{");
-    writer.print("\"totaltime\":"+(t2-t1)+',');
-    writer.print("\"num-of-temporal-partitions\":"+SpatioAggregateQueries.numOfTemporalPartitionsInLastQuery+',');
-    writer.print("\"num-of-trees\":"+SpatioAggregateQueries.numOfTreesTouchesInLastRequest);
-    writer.print("}");
-    writer.print("}");
-    response.setStatus(HttpServletResponse.SC_OK);
+      }, params);
+      long t2 = System.currentTimeMillis();
+      writer.print("],");
+      writer.printf("\"result-size\":%d},", numOfResults);
+      writer.print("\"stats\":{");
+      writer.print("\"totaltime\":"+(t2-t1)+',');
+      writer.print("\"num-of-temporal-partitions\":"+SpatioAggregateQueries.numOfTemporalPartitionsInLastQuery+',');
+      writer.print("\"num-of-trees\":"+SpatioAggregateQueries.numOfTreesTouchesInLastRequest);
+      writer.print("}");
+      writer.print("}");
+      writer.close();
+      response.setStatus(HttpServletResponse.SC_OK);
+    } catch (Exception e) {
+      response.setContentType("text/plain;charset=utf-8");
+      PrintWriter writer = response.getWriter();
+      e.printStackTrace(writer);
+      writer.close();
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
   }
 
   /**
