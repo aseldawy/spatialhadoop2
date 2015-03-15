@@ -90,7 +90,7 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
 
   
   protected static void mergeImages(final Configuration conf, final Path outPath)
-      throws IOException {
+      throws IOException, InterruptedException {
     final int width = conf.getInt("width", 1000);
     final int height = conf.getInt("height", 1000);
     final Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
@@ -193,7 +193,11 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
       
       final Configuration conf = context.getConfiguration();
       
-      mergeImages(conf, outPath);
+      try {
+        mergeImages(conf, outPath);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
     }
   }
   
@@ -211,7 +215,12 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
         throws IOException {
       super.commitJob(context);
       Path outPath = RasterOutputFormat.getOutputPath(context);
-      mergeImages(context.getConfiguration(), outPath);
+      try {
+        mergeImages(context.getConfiguration(), outPath);
+      } catch (InterruptedException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
     }
   }
   

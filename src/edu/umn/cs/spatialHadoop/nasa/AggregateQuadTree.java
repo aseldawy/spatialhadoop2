@@ -873,9 +873,10 @@ public class AggregateQuadTree {
   /**
    * Creates a full spatio-temporal hierarchy for a source folder
    * @throws ParseException 
+   * @throws InterruptedException 
    */
   public static void directoryIndexer(final OperationsParams params)
-      throws IOException, ParseException {
+      throws IOException, ParseException, InterruptedException {
     Path sourceDir = params.getInputPath();
     FileSystem sourceFs = sourceDir.getFileSystem(params);
     sourceDir = sourceDir.makeQualified(sourceFs);
@@ -1037,7 +1038,7 @@ public class AggregateQuadTree {
     return relative;
   }
   
-  public static void main(String[] args) throws IOException, ParseException {
+  public static void main(String[] args) throws IOException, ParseException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     directoryIndexer(params);
   }

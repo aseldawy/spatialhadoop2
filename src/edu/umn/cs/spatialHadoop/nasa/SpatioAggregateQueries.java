@@ -88,8 +88,9 @@ public class SpatioAggregateQueries {
    * @param params
    * @throws ParseException 
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static AggregateQuadTree.Node aggregateQuery(Path inFile, OperationsParams params) throws ParseException, IOException {
+  public static AggregateQuadTree.Node aggregateQuery(Path inFile, OperationsParams params) throws ParseException, IOException, InterruptedException {
     // 1- Find matching temporal partitions
     final FileSystem fs = inFile.getFileSystem(params);
     Vector<Path> matchingPartitions = selectTemporalPartitions(inFile, params);
@@ -182,10 +183,11 @@ public class SpatioAggregateQueries {
    * @param params
    * @throws ParseException 
    * @throws IOException 
+   * @throws InterruptedException 
    */
   public static long selectionQuery(Path inFile,
       final ResultCollector<NASAPoint> output, OperationsParams params)
-      throws ParseException, IOException {
+      throws ParseException, IOException, InterruptedException {
     // 1- Find matching temporal partitions
     final FileSystem fs = inFile.getFileSystem(params);
     Vector<Path> matchingPartitions = selectTemporalPartitions(inFile, params);

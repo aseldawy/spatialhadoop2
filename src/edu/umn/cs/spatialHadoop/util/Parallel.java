@@ -51,27 +51,31 @@ public class Parallel {
     }
   }
   
-  public static <T> Vector<T> forEach(int size, RunnableRange<T> r) {
-    try {
-      int parallelism = Math.min(size, Runtime.getRuntime().availableProcessors());
-      final int[] partitions = new int[parallelism + 1];
-      for (int i_thread = 0; i_thread <= parallelism; i_thread++)
-        partitions[i_thread] = i_thread * size / parallelism;
-      final Vector<RunnableRangeThread<T>> threads = new Vector<RunnableRangeThread<T>>();
-      Vector<T> results = new Vector<T>();
-      for (int i_thread = 0; i_thread < parallelism; i_thread++) {
-        threads.add(new RunnableRangeThread<T>(r, partitions[i_thread], partitions[i_thread+1]));
-        threads.lastElement().start();
+  public static <T> Vector<T> forEach(int size, RunnableRange<T> r) throws InterruptedException {
+    final Vector<Throwable> exceptions = new Vector<Throwable>();
+    Thread.UncaughtExceptionHandler h = new Thread.UncaughtExceptionHandler() {
+      public void uncaughtException(Thread th, Throwable ex) {
+        exceptions.add(ex);
       }
-      for (int i_thread = 0; i_thread < parallelism; i_thread++) {
-        threads.get(i_thread).join();
-        results.add(threads.get(i_thread).getResult());
-      }
-      return results;
-    } catch (InterruptedException e) {
-      e.printStackTrace();
+    };
+    int parallelism = Math.min(size, Runtime.getRuntime().availableProcessors());
+    final int[] partitions = new int[parallelism + 1];
+    for (int i_thread = 0; i_thread <= parallelism; i_thread++)
+      partitions[i_thread] = i_thread * size / parallelism;
+    final Vector<RunnableRangeThread<T>> threads = new Vector<RunnableRangeThread<T>>();
+    Vector<T> results = new Vector<T>();
+    for (int i_thread = 0; i_thread < parallelism; i_thread++) {
+      threads.add(new RunnableRangeThread<T>(r, partitions[i_thread], partitions[i_thread+1]));
+      threads.lastElement().start();
     }
-    return null;
+    for (int i_thread = 0; i_thread < parallelism; i_thread++) {
+      threads.get(i_thread).join();
+      results.add(threads.get(i_thread).getResult());
+    }
+    if (!exceptions.isEmpty())
+      throw new RuntimeException(exceptions.size()+" unhandled exceptions",
+          exceptions.firstElement());
+    return results;
   }
 
   /**

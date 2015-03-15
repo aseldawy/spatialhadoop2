@@ -361,13 +361,21 @@ public class ShahedServer extends AbstractHandler {
         sendConfirmEmail();
         boolean imageSuccess = generateImage();
         if (!imageSuccess) {
-          sendFailureEmail();
+          sendFailureEmail(null);
         } else {
           sendSuccessEmail();
         }
       } catch (Exception e) {
-        LOG.info("Error handling request");
         e.printStackTrace();
+        try {
+          sendFailureEmail(e);
+        } catch (AddressException e1) {
+          e1.printStackTrace();
+        } catch (UnsupportedEncodingException e1) {
+          e1.printStackTrace();
+        } catch (MessagingException e1) {
+          e1.printStackTrace();
+        }
       }
     }
 
@@ -503,7 +511,7 @@ public class ShahedServer extends AbstractHandler {
       LOG.info("Request finished successfully");
     }
     
-    private void sendFailureEmail() throws AddressException, MessagingException, UnsupportedEncodingException {
+    private void sendFailureEmail(Exception e) throws AddressException, MessagingException, UnsupportedEncodingException {
       Properties props = new Properties(MAIL_PROPERTIES);
       
       props.put("mail.smtp.user", from);
@@ -519,7 +527,8 @@ public class ShahedServer extends AbstractHandler {
       message.addRecipient(RecipientType.BCC, adminAddress);
       message.setSubject("Confirmation: Your request has failed");
       message.setText("Dear "+requesterName+",\n"+
-          "Unfortunately there was an internal error while processing your request. "+
+          "Unfortunately there was an internal error while processing your request.\n"+
+          e.getMessage() + "\n" +
           "Sorry for inconvenience. \n\n Shahed team");
       InternetAddress shahedAddress = new InternetAddress(from, "SHAHED Team");
       

@@ -17,22 +17,8 @@
  </head>
  
  <body>
-  <div id="results-panel" class="submenu" style="background:#DEDEDE;">
-    <label for="min">Minimum: </label>
-    <input type="text" id="min" readonly="readonly" size="18"/>
-    <br/>
-    <label for="max">Maximum: </label>
-    <input type="text" id="max" readonly="readonly" size="17"/>
-    <br/>
-    <label for="avg">Average: &nbsp;&nbsp; </label>
-    <input type="text" id="avg" readonly="readonly" size="17"/>
-    <br/>
-  	<label for="time">Time (ms):</label>
-    <input type="text" id="time" readonly="readonly" size="16"/>
-    <br/>
-  </div>
 
-	<div id="panel2" class="submenu" style="background:#DEDEDE;height: 70px">
+	<div id="panel2" class="submenu" style="background:#DEDEDE;height: 120px">
     <label for="fly-to">Fly to: </label>
     <input type="text" id="fly-to" placeholder="Type destination ..." size="17"/>
     <label> Data Set: </label>
@@ -45,24 +31,18 @@
     <input type="text" value="01/01/2013" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;"/>
     <label for="toDatePicker" style="display: inline;"> To Date: </label>
     <input type="text" value="01/15/2013" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;"/>
-    <input type="button" value="Img" name="GenerateImage" id="GenerateImage" style="display: inline; width: 40px;"/>
     <br/>
+    <label for="userName" style="display: inline;"> Name: </label>
+    <input type="text" placeholder="Name" id="userName" style="display: inline; width: 120px;"/>
+    <label for="userEmail" style="display: inline;"> Email: </label>
+    <input type="email" placeholder="Email" id="email" style="display: inline; width: 120px;"/>
+    <input type="button" value="Image" name="GenerateImage" id="GenerateImage" style="display: inline; width: 80px;"/>
+    <input type="button" value="Video" name="GenerateVideo" id="GenerateVideo" style="display: inline; width: 80px;"/>
+    <br/>
+    <label>Date range</label>
     <div id="date-range-selector"></div>
   </div>
 
-  <div id="submissionFormDiv" class="submenu" title="submissionFormDivTitle" style="visibility: hidden">
-    <fieldset>
-      <form title="submissionFormTitle" id="submissionForm" method="post" name="submissionForm" action="aggregate_query.cgi" >
-        <input type="text" name="title" id="title" />
-        <input name="dataset" id="dataset" type="hidden" readonly="readonly" />
-        <input name="dataset_url" id="dataset_url" type="hidden" readonly="readonly"/>
-        <input id="fromDate" name="selectedFromDate" type="hidden" readonly="readonly">
-        <input id="toDate" name="selectedToDate" type="hidden" readonly="readonly">
-        <input type="submit" value="Submit">
-      </form>
-    </fieldset>
-  </div>
-	
  	<div id="map"> </div>
  	
  	<!-- Global ajax wait icon -->

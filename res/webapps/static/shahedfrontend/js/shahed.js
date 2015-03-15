@@ -9,24 +9,22 @@ var rectangleIsDragged = false;
 function Fly2Destinaiton() {
   var address = document.getElementById("fly-to").value;
   geocoder.geocode({
-      'address' : address
-    }, function(results, status) {
-      if (status == google.maps.GeocoderStatus.OK) {
-        var result = results[0];
-        var fromatted_address = result.formatted_address;
-        $("#fly-to").val(fromatted_address);
-        var bounds = result.geometry.bounds;
-        map.fitBounds(bounds);
-        MoveRectangle(bounds);
-      } else {
-        alert("Geocode was not successful for the following reason: " + status);
-      }
+    'address' : address
+  }, function(results, status) {
+    if (status == google.maps.GeocoderStatus.OK) {
+      var result = results[0];
+      var fromatted_address = result.formatted_address;
+      $("#fly-to").val(fromatted_address);
+      var bounds = result.geometry.bounds;
+      map.fitBounds(bounds);
+      MoveRectangle(bounds);
+    } else {
+      alert("Geocode was not successful for the following reason: " + status);
     }
-  );
+  });
 }
 
-// Create the draggable rectangle for the first time and initialize
-// listeners
+// Create the draggable rectangle for the first time and initialize listeners
 function CreateRectangle() {
   var bounds = new google.maps.LatLngBounds(
      new google.maps.LatLng(0, 0),
@@ -40,7 +38,8 @@ function CreateRectangle() {
   });
   google.maps.event.addListener(rectangle, 'mousedown', function() {rectangleIsDragged = true;});
   google.maps.event.addListener(rectangle, 'mouseup', function() {rectangleIsDragged = false;});
-  google.maps.event.addListener(rectangle, 'bounds_changed', aggregateQuery);
+  if ($("#results-panel").length > 0)
+    google.maps.event.addListener(rectangle, 'bounds_changed', aggregateQuery);
 }
 
 // Move the draggable rectangle to a specific location on the map           
@@ -101,19 +100,28 @@ function generateImage() {
     alert("Please specify a rectangle");
     return;
   }
-  var fromDate = document.getElementById("fromDatePicker").value;
+  var username = $("#userName").val();
+  var email = $("#email").val();
+  var emailRegexp = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+  if (!emailRegexp.test(email)) {
+    alert("Please enter a valid email address to email you the generated files");
+    return;
+  }
+  var fromDate = $("#fromDatePicker").val();
   var ne = rectangle.getBounds().getNorthEast();
   var sw = rectangle.getBounds().getSouthWest();
   var selectedDatasetOption = $("#datasets option:selected");
   var dataset = selectedDatasetOption.attr("id");
-  var url = selectedDatasetOption.val();
+  var datasetURL = selectedDatasetOption.val();
   requestURL = "cgi-bin/generate_image.cgi?"
                 + "min_lat=" + sw.lat() + "&min_lon=" + sw.lng()
                 + "&max_lat=" + ne.lat() + "&max_lon=" + ne.lng()
                 + "&fromDate=" + fromDate
                 + "&toDate=" + fromDate // For images, from and to date are the same
                 + "&dataset=" + dataset
-                + "&dataset_url=" + url;
+                + "&dataset_url=" + datasetURL
+                + "&user_name=" + username
+                + "&email=" + email;
   // Send using Ajax
   jQuery.ajax(requestURL, {success: function(response) {
     alert(response);
@@ -129,20 +137,29 @@ function generateVideo() {
     alert("Please specify a rectangle");
     return;
   }
-  var fromDate = document.getElementById("fromDatePicker").value;
-  var toDate = document.getElementById("toDatePicker").value;
+  var username = $("#userName").val();
+  var email = $("#email").val();
+  var emailRegexp = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+  if (!emailRegexp.test(email)) {
+    alert("Please enter a valid email address to email you the generated files");
+    return;
+  }
+  var fromDate = $("#fromDatePicker").val();
+  var toDate = $("#toDatePicker").val();
   var ne = rectangle.getBounds().getNorthEast();
   var sw = rectangle.getBounds().getSouthWest();
   var selectedDatasetOption = $("#datasets option:selected");
   var dataset = selectedDatasetOption.attr("id");
-  var url = selectedDatasetOption.val();
+  var datasetURL = selectedDatasetOption.val();
   var requestURL = "cgi-bin/generate_image.cgi?"
                 + "min_lat=" + sw.lat() + "&min_lon=" + sw.lng()
                 + "&max_lat=" + ne.lat() + "&max_lon=" + ne.lng()
                 + "&fromDate=" + fromDate
                 + "&toDate=" + toDate
                 + "&dataset=" + dataset
-                + "&dataset_url=" + url;
+                + "&dataset_url=" + datasetURL
+                + "&user_name=" + username
+                + "&email=" + email;
   // Send using Ajax
   jQuery.ajax(requestURL, {success: function(response) {
     alert(response);
@@ -224,6 +241,7 @@ $(function () {
   
   // Assign event handler for the image generation button
   $("#GenerateImage").click(generateImage);
+  $("#GenerateVideo").click(generateVideo);
   
   // Initialize Google Map
   var element = document.getElementById("map");
