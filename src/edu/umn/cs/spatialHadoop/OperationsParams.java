@@ -672,16 +672,13 @@ public class OperationsParams extends Configuration {
 
 			// Collect some stats about the sample to help detecting shape type
 			final String Separators[] = { ",", "\t" };
-			int[] numOfSplits = { 0, 0 }; // Number of splits with each
-											// separator
-			boolean allNumbersInAllSample = true; // Whether or not all values
-													// are numbers
+			int[] numOfSplits = { 0, 0 }; // Number of splits with each separator
+			boolean allNumericAllLines = true; // Whether or not all values are numbers
 			int ogcIndex = -1; // The index of the column with OGC data
 
 			for (String sampleLine : sampleLines) {
-				// This flag is raised if all splits are numbers with any
-				// separator
-				boolean allNumbersWithAnySeparator = false;
+				// This flag is raised if all splits are numbers with one separator
+				boolean allNumericCurrentLine = false;
 				// Try to parse with commas and tabs
 				for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
 					String separator = Separators[iSeparator];
@@ -691,19 +688,19 @@ public class OperationsParams extends Configuration {
 						numOfSplits[iSeparator] = parts.length;
 					else if (numOfSplits[iSeparator] != parts.length)
 						numOfSplits[iSeparator] = -1;
-					boolean allSplitsNumbersWithCurrentSeparator = true;
+					boolean allNumericCurrentLineCurrentSeparator = true;
 					for (int i = 0; i < parts.length; i++) {
 						String part = parts[i];
-						try {
-							Double.parseDouble(part);
-						} catch (NumberFormatException e) {
-							allSplitsNumbersWithCurrentSeparator = false;
+						if (allNumericCurrentLineCurrentSeparator) {
+						  try {
+						    Double.parseDouble(part);
+						  } catch (NumberFormatException e) {
+						    allNumericCurrentLineCurrentSeparator = false;
+						  }
 						}
 						try {
-							TextSerializerHelper.consumeGeometryJTS(new Text(
-									part), '\0');
-							// Reaching this point means the geometry was parsed
-							// successfully
+							TextSerializerHelper.consumeGeometryJTS(new Text(part), '\0');
+							// Reaching this point means the geometry was parsed successfully
 							if (ogcIndex == -1)
 								ogcIndex = i;
 							else if (ogcIndex != i)
@@ -712,14 +709,15 @@ public class OperationsParams extends Configuration {
 							// Couldn't parse OGC for this column
 						}
 					}
-					if (allSplitsNumbersWithCurrentSeparator)
-						allNumbersWithAnySeparator = true;
+					if (allNumericCurrentLineCurrentSeparator)
+						allNumericCurrentLine = true;
 				}
-				if (!allNumbersWithAnySeparator)
-					allNumbersInAllSample = false;
+				// One line does not have all numeric fields
+				if (!allNumericCurrentLine)
+					allNumericAllLines = false;
 			}
 
-			if (numOfSplits[0] != -1 && allNumbersInAllSample) {
+			if (numOfSplits[0] != -1 && allNumericAllLines) {
 				// Each line is comma separated and all values are numbers
 				if (numOfSplits[0] == 2) {
 					// Point
@@ -746,8 +744,7 @@ public class OperationsParams extends Configuration {
 		} catch (IOException e) {
 		}
 		if (autoDetectedShape == null) {
-			LOG.warn("Could not autodetect shape for input '"
-					+ sampleLines.get(0) + "'");
+			LOG.warn("Cannot detect shape for input '" + sampleLines.get(0) + "'");
 			return false;
 		} else {
 			LOG.info("Autodetected shape '" + autoDetectedShape
