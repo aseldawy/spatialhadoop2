@@ -20,7 +20,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
-import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -193,7 +192,7 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       if (file.getName().toLowerCase().endsWith(".hdf"))
         return false;
       final CompressionCodec codec = compressionCodecs.getCodec(file);
-      if (codec != null && !(codec instanceof SplittableCompressionCodec))
+      if (codec != null)
         return false;
       
       // To avoid opening the file and checking the first 8-bytes to look for
