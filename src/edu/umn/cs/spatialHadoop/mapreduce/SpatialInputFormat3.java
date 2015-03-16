@@ -81,7 +81,15 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       if (SpatialSite.isRTree(fsplit.getPath().getFileSystem(conf), fsplit.getPath())) {
         return (RecordReader)new RTreeRecordReader3<V>();
       }
-      // Read a non-indexed file
+      // Check if a custom record reader is configured with this extension
+      Class<?> recordReaderClass = conf.getClass("SpatialInputFormat."
+          + extension + ".recordreader", SpatialRecordReader3.class);
+      try {
+        return (RecordReader<K, Iterable<V>>) recordReaderClass.newInstance();
+      } catch (InstantiationException e) {
+      } catch (IllegalAccessException e) {
+      }
+      // Use the default SpatialRecordReader if none of the above worked
       return (RecordReader)new SpatialRecordReader3<V>();
   }
   

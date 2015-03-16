@@ -291,8 +291,11 @@ public class Indexer {
           throw new RuntimeException("Unknown index type '"+partitionerName+"'");
         }
       }
-      boolean replicate = PartitionerReplicate.get(partitionerName.toLowerCase());
-      job.setBoolean("replicate", replicate);
+      
+      if (PartitionerReplicate.containsKey(partitionerName.toLowerCase())) {
+        boolean replicate = PartitionerReplicate.get(partitionerName.toLowerCase());
+        job.setBoolean("replicate", replicate);
+      }
       partitioner = partitionerClass.newInstance();
       
       long t1 = System.currentTimeMillis();
