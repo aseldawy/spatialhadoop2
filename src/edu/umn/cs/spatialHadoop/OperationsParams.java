@@ -39,7 +39,6 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
-import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
 import edu.umn.cs.spatialHadoop.operations.Sampler2;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
@@ -170,14 +169,6 @@ public class OperationsParams extends Configuration {
 		return inputPaths;
 	}
 
-	public boolean is(String flag, boolean defaultValue) {
-		return getBoolean(flag, defaultValue);
-	}
-
-	public boolean is(String flag) {
-		return is(flag, false);
-	}
-
 	/*
 	 * public CellInfo[] getCells() { String cell_of = (String) get("cells-of");
 	 * if (cell_of == null) return null; Path path = new Path(cell_of);
@@ -253,7 +244,7 @@ public class OperationsParams extends Configuration {
 		if (outputPath != null) {
 			FileSystem fs = outputPath.getFileSystem(this);
 			if (fs.exists(outputPath)) {
-				if (this.is("overwrite")) {
+				if (this.getBoolean("overwrite", false)) {
 					fs.delete(outputPath, true);
 				} else {
 					LOG.error("Output file '" + outputPath
@@ -271,7 +262,7 @@ public class OperationsParams extends Configuration {
 		if (outputPath != null) {
 			FileSystem fs = outputPath.getFileSystem(this);
 			if (fs.exists(outputPath)) {
-				if (this.is("overwrite")) {
+				if (this.getBoolean("overwrite", false)) {
 					fs.delete(outputPath, true);
 				} else {
 					LOG.error("Output file '" + outputPath
@@ -615,27 +606,6 @@ public class OperationsParams extends Configuration {
 			return null;
 		}
 		return dir;
-	}
-
-	public NASAPoint.GradientType getGradientType(String key,
-			GradientType defaultValue) {
-		return getGradientType(this, key, defaultValue);
-	}
-
-	public static NASAPoint.GradientType getGradientType(Configuration conf,
-			String key, GradientType defaultValue) {
-		String strGradientType = conf.get(key);
-		if (strGradientType == null) {
-			return defaultValue;
-		} else if (strGradientType.equalsIgnoreCase("hue")) {
-			return GradientType.GT_HUE;
-		} else if (strGradientType.equalsIgnoreCase("color")) {
-			return GradientType.GT_COLOR;
-		} else {
-			LOG.warn("Unknown gradient type '" + strGradientType
-					+ "'. Possible values are 'hue', 'color'");
-			return defaultValue;
-		}
 	}
 
 	/**

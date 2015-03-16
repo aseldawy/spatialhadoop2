@@ -97,7 +97,7 @@ public class RangeQuery {
       job.setOutputFormatClass(NullOutputFormat.class);
     }
     // Submit the job
-    if (!params.is("background")) {
+    if (!params.getBoolean("background", false)) {
       job.waitForCompletion(false);
     } else {
       job.submit();

@@ -150,11 +150,11 @@ public class MultiHDFPlot {
     }
     // Start a job for each path
     int imageHeight = -1;
-    boolean overwrite = params.is("overwrite");
-    boolean pyramid = params.is("pyramid");
+    boolean overwrite = params.getBoolean("overwrite", false);
+    boolean pyramid = params.getBoolean("pyramid", false);
     FileSystem outFs = output.getFileSystem(params);
     Vector<Job> jobs = new Vector<Job>();
-    boolean background = params.is("background");
+    boolean background = params.getBoolean("background", false);
     Rectangle mbr = new Rectangle(-180, -90, 180, 90);
     for (Path inputPath : matchingPaths) {
       Path outputPath = new Path(output,

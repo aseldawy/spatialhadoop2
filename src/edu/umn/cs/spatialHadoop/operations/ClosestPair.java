@@ -292,7 +292,7 @@ public class ClosestPair {
 	public static void main(String[] args) throws IOException {
 	  GenericOptionsParser parser = new GenericOptionsParser(args);
 	  OperationsParams params = new OperationsParams(parser);
-	  if (params.getPaths().length == 0 && params.is("local")) {
+	  if (params.getPaths().length == 0 && params.getBoolean("local", false)) {
 	    long t1 = System.currentTimeMillis();
 	    closestPairStream((Point)params.getShape("shape"));
       long t2 = System.currentTimeMillis();

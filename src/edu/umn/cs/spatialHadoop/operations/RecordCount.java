@@ -214,7 +214,7 @@ public class RecordCount {
     if (!fs.exists(inputFile)) {
       throw new RuntimeException("Input file does not exist");
     }
-    boolean random = params.is("random");
+    boolean random = params.getBoolean("random", false);
     long lineCount;
     if (random) {
       lineCount = recordCountApprox(fs, inputFile);

@@ -377,7 +377,7 @@ public class KNN {
           range_for_this_iteration);
 
       // Submit the job
-      if (params.is("background")) {
+      if (params.getBoolean("background", false)) {
         // XXX this is incorrect because if the job needs multiple iterations,
         // it will run only the first one
         job.waitForCompletion(false);

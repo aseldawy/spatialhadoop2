@@ -60,7 +60,7 @@ public class RepartitionTemporal extends Repartition {
 	public static void repartitionMapReduce(Path[] inputPaths, Path outputPath,
 			OperationsParams params) throws IOException, InterruptedException {
 		String sindex = params.get("sindex");
-		boolean overwrite = params.is("overwrite");
+		boolean overwrite = params.getBoolean("overwrite", false);
 		Shape stockShape = params.getShape("shape");
 
 		FileSystem outFs = outputPath.getFileSystem(params);

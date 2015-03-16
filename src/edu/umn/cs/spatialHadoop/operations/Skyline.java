@@ -330,7 +330,7 @@ public class Skyline {
     ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
 
     boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
-    boolean isLocal = params.is("local", autoLocal);
+    boolean isLocal = params.getBoolean("local", autoLocal);
     
     if (!isLocal) {
       // Process with MapReduce

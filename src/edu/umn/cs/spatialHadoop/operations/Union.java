@@ -285,7 +285,7 @@ public class Union {
    */
   public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    if (params.getPaths().length == 0 && params.is("local")) {
+    if (params.getPaths().length == 0 && params.getBoolean("local", false)) {
       // Special handling for union on an input stream
       long t1 = System.currentTimeMillis();
       unionStream((OGCJTSShape)params.getShape("shape"));

@@ -239,7 +239,7 @@ public class FileMBR {
       job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     }
     
-    if (params.is("background")) {
+    if (params.getBoolean("background", false)) {
       JobClient jc = new JobClient(job);
       lastSubmittedJob = jc.submitJob(job);
       return null;

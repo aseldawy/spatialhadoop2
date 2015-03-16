@@ -268,7 +268,7 @@ public class ConvexHull {
       } while (outFs.exists(outPath));
     } else {
       if (outFs.exists(outPath)) {
-        if (params.is("overwrite")) {
+        if (params.getBoolean("overwrite", false)) {
           outFs.delete(outPath, true);
         } else {
           throw new RuntimeException("Output path already exists and -overwrite flag is not set");
@@ -308,7 +308,7 @@ public class ConvexHull {
   public static void main(String[] args) throws IOException {
     GenericOptionsParser parser = new GenericOptionsParser(args);
     OperationsParams params = new OperationsParams(parser);
-    if (params.is("local") && params.getPaths().length == 0) {
+    if (params.getBoolean("local", false) && params.getPaths().length == 0) {
       long t1 = System.currentTimeMillis();
       convexHullStream((Point)params.getShape("shape"));
       long t2 = System.currentTimeMillis();
@@ -322,7 +322,7 @@ public class ConvexHull {
     }
     Path inFile = paths[0];
     Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = params.is("overwrite");
+    boolean overwrite = params.getBoolean("overwrite", false);
     if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
       System.err.println("Output path already exists and overwrite flag is not set");
       return;
