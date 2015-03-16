@@ -40,7 +40,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
+import edu.umn.cs.spatialHadoop.operations.Sampler2;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -658,17 +658,12 @@ public class OperationsParams extends Configuration {
 			// the auto detected shape is consistent in many lines
 			final int sampleCount = 10;
 			OperationsParams sampleParams = new OperationsParams(this);
-			sampleParams.setInt("count", sampleCount);
-			sampleParams.setClass("shape", Text2.class, TextSerializable.class);
-			sampleParams.setClass("outshape", Text2.class,
-					TextSerializable.class);
-			sampleParams.setBoolean("local", true);
-			Sampler.sample(this.getInputPaths(), new ResultCollector<Text2>() {
-				@Override
-				public void collect(Text2 line) {
-					sampleLines.add(line.toString());
-				}
-			}, sampleParams);
+			Sampler2.sampleLocalByCount(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
+        @Override
+        public void collect(Text line) {
+          sampleLines.add(line.toString());
+        }
+      }, sampleParams);
 
 			if (sampleLines.isEmpty()) {
 				LOG.warn("No input to detect in '" + this.getInputPath() + "-");
