@@ -298,6 +298,10 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
     return x2 - x1;
   }
 
+  /**
+   * Compares two rectangles according to a lexicographic order of the
+   * attributes (x1, y1, x2, y2)
+   */
   @Override
   public int compareTo(Rectangle r2) {
     if (this.x1 < r2.x1)
@@ -345,17 +349,14 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   }
 
   /**
-   * Returns a new rectangle after tanslating with the given amount
+   * Returns a new rectangle after translating with the given amount
    */
   public Rectangle translate(double dx, double dy) {
     return new Rectangle(this.x1 + dx, this.y1 + dy, this.x2 + dx, this.y2 + dy);
   }
   
   public String toWKT() {
-    return String.format("POLYGON((%g %g, %g %g, %g %g, %g %g, %g %g))", this.x1, this.y1,
-        this.x1, this.y2,
-        this.x2, this.y2,
-        this.x2, this.y1,
-        this.x1, this.y1);
+    return String.format("POLYGON((%g %g, %g %g, %g %g, %g %g, %g %g))",
+        x1, y1,   x1, y2,   x2, y2,   x2, y1,   x1, y1);
   }
 }
