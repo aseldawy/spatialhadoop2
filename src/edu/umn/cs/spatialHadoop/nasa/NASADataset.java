@@ -8,8 +8,12 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.nasa;
 
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
@@ -28,6 +32,10 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  *
  */
 public class NASADataset extends Rectangle {
+  
+  /**Logger for RangeQuery*/
+  static final Log LOG = LogFactory.getLog(NASADataset.class);
+  
   /**Time instance of this dataset as millis since the epoch*/
   public long time;
   
@@ -52,49 +60,72 @@ public class NASADataset extends Rectangle {
    * Inititalizes the dataset from the metadata stored at the root of an HDF
    * file.
    * @param root
+   * @throws ParseException 
    */
-/*  public NASADataset(Group root) {
-    try {
-      Map<String, Object> metadata = parseMetadata(root.getMetadata());
-      String resolution = findMetadata(metadata, "StructMetadata.0/GridStructure/GRID_1/XDim");
-      this.resolution = Integer.parseInt(resolution);
-
-      String date = findMetadata(metadata, "CoreMetadata.0/INVENTORYMETADATA/RANGEDATETIME/RANGEBEGINNINGDATE/VALUE");
-      String time = findMetadata(metadata, "CoreMetadata.0/INVENTORYMETADATA/RANGEDATETIME/RANGEBEGINNINGTIME/VALUE");
-      final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-      this.time = dateFormat.parse(date+" "+time).getTime();
-      String granuleId = findMetadata(metadata, "CoreMetadata.0/INVENTORYMETADATA/ECSDATAGRANULE/LOCALGRANULEID/VALUE");
-      this.cellName = granuleId.split("\\.")[2];
-      this.h = Integer.parseInt(this.cellName.substring(1, 3));
-      this.v = Integer.parseInt(this.cellName.substring(4, 6));
-
-      String north = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/NORTHBOUNDINGCOORDINATE/VALUE");
-      String south = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/SOUTHBOUNDINGCOORDINATE/VALUE");
-      String west = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/WESTBOUNDINGCOORDINATE/VALUE");
-      String east = findMetadata(metadata, "ArchiveMetadata.0/ARCHIVEDMETADATA/BOUNDINGRECTANGLE/EASTBOUNDINGCOORDINATE/VALUE");
-      super.set(Double.parseDouble(west), Double.parseDouble(south),
-          Double.parseDouble(east), Double.parseDouble(north));
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-  }
-*/  
-  public NASADataset(String metadata) {
+  public NASADataset(String coreMetadata, String archiveMetadata) {
     // Retrieve the h value
-    int offset = metadata.indexOf("HORIZONTALTILENUMBER");
-    offset = metadata.indexOf(" VALUE", offset);
-    offset = metadata.indexOf('"', offset);
-    int end = metadata.indexOf('"', offset + 1);
-    this.h = Integer.parseInt(metadata.substring(offset+1, end));
-    // Retrieve the v value
-    offset = metadata.indexOf("VERTICALTILENUMBER");
-    offset = metadata.indexOf(" VALUE", offset);
-    offset = metadata.indexOf('"', offset);
-    end = metadata.indexOf('"', offset+1);
-    this.v = Integer.parseInt(metadata.substring(offset+1, end));
+    try {
+      this.h = getIntByName(archiveMetadata, "HORIZONTALTILENUMBER");
+      this.v = getIntByName(archiveMetadata, "VERTICALTILENUMBER");
+    } catch (RuntimeException e) {
+      LOG.warn("Could not retrieve tile number. "+e.getMessage());
+    }
     
     // MBR
+    this.x1 = getDoubleByName(archiveMetadata, "WESTBOUNDINGCOORDINATE");
+    this.x2 = getDoubleByName(archiveMetadata, "EASTBOUNDINGCOORDINATE");
+    this.y1 = getDoubleByName(archiveMetadata, "SOUTHBOUNDINGCOORDINATE");
+    this.y2 = getDoubleByName(archiveMetadata, "NORTHBOUNDINGCOORDINATE");
     
+    try {
+      // Date
+      final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+      String dateStr = getStringByName(coreMetadata, "RANGEBEGINNINGDATE");
+      if (dateStr == null)
+        dateStr = getStringByName(archiveMetadata, "RANGEBEGINNINGDATE");
+      if (dateStr == null)
+        LOG.warn("Could not find 'date' in metadata");
+      else
+        this.time = dateFormat.parse(dateStr).getTime();
+    } catch (ParseException e) {
+      LOG.warn("Could not parse date from metadata");
+    }
+  }
+  
+  private static String getStringByName(String metadata, String name) {
+    int offset = metadata.indexOf(name);
+    if (offset == -1)
+      return null;
+    offset = metadata.indexOf("VALUE", offset);
+    if (offset == -1)
+      return null;
+    offset = metadata.indexOf('=', offset);
+    if (offset == -1)
+      return null;
+    do offset++; while (offset < metadata.length() &&
+        metadata.charAt(offset) == ' ' || metadata.charAt(offset) == '"');
+    int endOffset = offset;
+    do endOffset++;  while (endOffset < metadata.length() && metadata.charAt(endOffset) != ' '
+        && metadata.charAt(endOffset) != '"'
+        && metadata.charAt(endOffset) != '\n'
+        && metadata.charAt(endOffset) != '\r');
+    if (offset < metadata.length())
+      return metadata.substring(offset, endOffset);
+    return null;
+  }
+  
+  private static int getIntByName(String metadata, String name) {
+    String strValue = getStringByName(metadata, name);
+    if (strValue == null)
+      throw new RuntimeException("Couldn't find value with name '"+name+"'");
+    return Integer.parseInt(strValue);
+  }
+
+  private static double getDoubleByName(String metadata, String name) {
+    String strValue = getStringByName(metadata, name);
+    if (strValue == null)
+      throw new RuntimeException("Couldn't find value with name '"+name+"'");
+    return Double.parseDouble(strValue);
   }
 
   @Override

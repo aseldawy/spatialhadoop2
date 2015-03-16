@@ -72,16 +72,6 @@ public abstract class Rasterizer {
   }
 
   /**
-   * Rasterize a set of records by calling the rasterize function on each one.
-   * @param layer
-   * @param shapes
-   */
-  public void rasterize(RasterLayer layer, Iterator<? extends Shape> shapes) {
-    while (shapes.hasNext())
-      rasterize(layer, shapes.next());
-  }
-
-  /**
    * Rasterizes one shape to the given layer
    * @param layer - the layer to rasterize to. This layer has to be created
    * using the method {@link #createRaster(int, int, Rectangle)}.

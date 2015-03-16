@@ -41,7 +41,7 @@ import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.operations.Indexer;
 import edu.umn.cs.spatialHadoop.operations.RangeFilter;
@@ -374,7 +374,7 @@ public class SingleLevelPlot {
       // Run in background
       job.submit();
     } else {
-      job.waitForCompletion(false);
+      job.waitForCompletion(params.getBoolean("verbose", false));
     }
     return job;
   }
@@ -383,7 +383,6 @@ public class SingleLevelPlot {
       final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException, InterruptedException {
 
     boolean vflip = params.getBoolean("vflip", true);
-
     
     final Rectangle inputMBR = params.get("mbr") != null ?
         params.getShape("mbr").getMBR() : FileMBR.fileMBR(inFiles, params);
@@ -394,11 +393,13 @@ public class SingleLevelPlot {
     int height = params.getInt("height", 1000);
     if (params.getBoolean("keepratio", true)) {
       // Adjust width and height to maintain aspect ratio
+      // Store the adjusted values back in params in case the caller needs to
+      // retrieve them
       if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height) {
         // Fix width and change height
-        height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth());
+        params.setInt("height", height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth()));
       } else {
-        width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight());
+        params.setInt("width", width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight()));
       }
     }
     // Store width and height in final variables to make them accessible in parallel
@@ -410,7 +411,7 @@ public class SingleLevelPlot {
         new SpatialInputFormat3<Rectangle, Shape>();
     for (Path inFile : inFiles) {
       FileSystem inFs = inFile.getFileSystem(params);
-      if (inFs.exists(inFile) && !inFs.isDirectory(inFile)) {
+      if (inFs.exists(inFile) && !OperationsParams.isWildcard(inFile) && !inFs.isDirectory(inFile)) {
         // One file, retrieve it immediately.
         // This is useful if the input is a hidden file which is automatically
         // skipped by FileInputFormat. We need to plot a hidden file for the case
@@ -422,7 +423,6 @@ public class SingleLevelPlot {
         SpatialInputFormat3.addInputPath(job, inFile);
         splits.addAll(inputFormat.getSplits(job));
       }
-      
     }
     
     // Copy splits to a final array to be used in parallel
@@ -451,8 +451,8 @@ public class SingleLevelPlot {
               ((SpatialRecordReader3)reader).initialize(fsplits[i], params);
             } else if (reader instanceof RTreeRecordReader3) {
               ((RTreeRecordReader3)reader).initialize(fsplits[i], params);
-            } else if (reader instanceof HDFRecordReader3) {
-              ((HDFRecordReader3)reader).initialize(fsplits[i], params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplits[i], params);
             } else {
               throw new RuntimeException("Unknown record reader");
             }

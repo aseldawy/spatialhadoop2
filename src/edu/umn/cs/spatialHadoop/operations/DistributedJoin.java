@@ -727,7 +727,7 @@ public class DistributedJoin {
 
 		TextOutputFormat.setOutputPath(job, outputPath);
 
-		if (!params.is("background")) {
+		if (!params.getBoolean("background", false)) {
 			LOG.info("Submit job in sync mode");
 			RunningJob runningJob = JobClient.runJob(job);
 			Counters counters = runningJob.getCounters();
@@ -896,7 +896,7 @@ public class DistributedJoin {
 			int fileToRepartition, Path outputFile, OperationsParams params)
 			throws IOException {
 
-		boolean overwrite = params.is("overwrite");
+		boolean overwrite = params.getBoolean("overwrite", false);
 		Shape stockShape = params.getShape("shape");
 
 		// Do the repartition step

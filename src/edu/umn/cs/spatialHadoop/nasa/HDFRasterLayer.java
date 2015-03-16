@@ -47,6 +47,9 @@ public class HDFRasterLayer extends RasterLayer {
   /**The maximum value to be used while drawing the heat map*/
   private float max;
   
+  /**Timestamp of this dataset*/
+  private long timestamp;
+  
   /**
    * Initialize an empty frequency map to be used to deserialize 
    */
@@ -87,6 +90,7 @@ public class HDFRasterLayer extends RasterLayer {
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);
+    out.writeLong(timestamp);
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
     GZIPOutputStream gzos = new GZIPOutputStream(baos);
     ByteBuffer bbuffer = ByteBuffer.allocate(getHeight() * 2 * 8 + 8);
@@ -111,6 +115,7 @@ public class HDFRasterLayer extends RasterLayer {
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
+    this.timestamp = in.readLong();
     int length = in.readInt();
     byte[] serializedData = new byte[length];
     in.readFully(serializedData);
@@ -142,6 +147,7 @@ public class HDFRasterLayer extends RasterLayer {
   }
   
   public void mergeWith(HDFRasterLayer another) {
+    this.timestamp = Math.max(this.timestamp, another.timestamp);
     Point offset = projectToImageSpace(another.getInputMBR().x1, another.getInputMBR().y1);
     int xmin = Math.max(0, offset.x);
     int ymin = Math.max(0, offset.y);
@@ -179,22 +185,42 @@ public class HDFRasterLayer extends RasterLayer {
     BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
     for (int x = 0; x < this.getWidth(); x++) {
       for (int y = 0; y < this.getHeight(); y++) {
-        Color color = calculateColor(avg[x][y], min, max);
-        image.setRGB(x, y, color.getRGB());
+        if (count[x][y] > 0) {
+          Color color = calculateColor(avg[x][y], min, max);
+          image.setRGB(x, y, color.getRGB());
+        } else {
+          image.setRGB(x, y, 0);
+        }
       }
     }
     return image;
   }
 
+  public void addPoints(int x, int y, int weight) {
+    if (x >= 0 && x < getWidth() && y >= 0 && y < getHeight()) {
+      sum[x][y] += weight;
+      count[x][y]++;
+    }
+  }
   /**
    * Adds a point to the frequency map
    * @param cx
    * @param cy
    */
-  public void addPoint(int cx, int cy, int weight) {
-    if (cx >= 0 && cy >= 0 && cx < getWidth() && cy < getHeight()) {
-      sum[cx][cy] += weight;
-      count[cx][cy]++;
+  public void addPoints(int x1, int y1, int x2, int y2, int weight) {
+    if (x1 < 0)
+      x1 = 0;
+    if (y1 < 0)
+      y1 = 0;
+    if (x2 >= getWidth())
+      x2 = getWidth() - 1;
+    if (y2 >= getHeight())
+      y2 = getHeight() - 1;
+    for (int x = x1; x < x2; x++) {
+      for (int y = y1; y < y2; y++) {
+        sum[x][y] += weight;
+        count[x][y]++;
+      }
     }
   }
 
@@ -208,6 +234,14 @@ public class HDFRasterLayer extends RasterLayer {
   
   /* The following methods are used to compute the gradient */
 
+  public void setTimestamp(long ts) {
+    this.timestamp = ts;
+  }
+
+  public long getTimestamp() {
+    return this.timestamp;
+  }
+
   protected Color[] colors;
   protected float[] hues;
   protected float[] saturations;
@@ -216,7 +250,7 @@ public class HDFRasterLayer extends RasterLayer {
   public enum GradientType {GT_HSB, GT_RGB};
   protected GradientType gradientType;
   
-  public void setGradientInfor(Color color1, Color color2, GradientType gradientType) {
+  public void setGradientInfo(Color color1, Color color2, GradientType gradientType) {
     this.colors = new Color[] {color1, color2};
     this.hues = new float[colors.length];
     this.saturations = new float[colors.length];

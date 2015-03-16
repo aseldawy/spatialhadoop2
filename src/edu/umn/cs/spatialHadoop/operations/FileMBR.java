@@ -236,7 +236,7 @@ public class FileMBR {
       job.set("mapred.job.tracker", "local");
     }
     
-    if (params.is("background")) {
+    if (params.getBoolean("background", false)) {
       JobClient jc = new JobClient(job);
       lastSubmittedJob = jc.submitJob(job);
       return null;

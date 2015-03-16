@@ -40,7 +40,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
@@ -94,7 +94,7 @@ public class RangeQuery {
       job.setOutputFormatClass(NullOutputFormat.class);
     }
     // Submit the job
-    if (!params.is("background")) {
+    if (!params.getBoolean("background", false)) {
       job.waitForCompletion(false);
     } else {
       job.submit();
@@ -142,8 +142,8 @@ public class RangeQuery {
               ((SpatialRecordReader3)reader).initialize(fsplit, params);
             } else if (reader instanceof RTreeRecordReader3) {
               ((RTreeRecordReader3)reader).initialize(fsplit, params);
-            } else if (reader instanceof HDFRecordReader3) {
-              ((HDFRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplit, params);
             } else {
               throw new RuntimeException("Unknown record reader");
             }

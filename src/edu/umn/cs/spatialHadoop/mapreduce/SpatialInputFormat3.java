@@ -18,6 +18,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.SplittableCompressionCodec;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -34,7 +37,8 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.CombineBlockFilter;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.nasa.HTTPFileSystem;
 import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
@@ -48,7 +52,13 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
   private static final Log LOG = LogFactory.getLog(SpatialInputFormat3.class);
   
   /**Query range to apply upon reading the input*/
-  public static final String InputQueryRange = "SpatialInputFormat.QueryRange";
+  public static final String InputQueryRange = "rect";
+  
+  /**
+   * Used to check whether files are compressed or not. Some compressed files
+   * (e.g., gz) are not splittable.
+   */
+  private CompressionCodecFactory compressionCodecs = null;
 
   @Override
   public RecordReader<K, Iterable<V>> createRecordReader(InputSplit split,
@@ -59,7 +69,7 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       // extension
       if (extension.equals("hdf")) {
         // HDF File. Create HDFRecordReader
-        return (RecordReader)new HDFRecordReader3();
+        return (RecordReader)new HDFRecordReader();
       }
       if (extension.equals("rtree")) {
         // File is locally indexed as RTree
@@ -71,7 +81,15 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       if (SpatialSite.isRTree(fsplit.getPath().getFileSystem(conf), fsplit.getPath())) {
         return (RecordReader)new RTreeRecordReader3<V>();
       }
-      // Read a non-indexed file
+      // Check if a custom record reader is configured with this extension
+      Class<?> recordReaderClass = conf.getClass("SpatialInputFormat."
+          + extension + ".recordreader", SpatialRecordReader3.class);
+      try {
+        return (RecordReader<K, Iterable<V>>) recordReaderClass.newInstance();
+      } catch (InstantiationException e) {
+      } catch (IllegalAccessException e) {
+      }
+      // Use the default SpatialRecordReader if none of the above worked
       return (RecordReader)new SpatialRecordReader3<V>();
   }
   
@@ -161,6 +179,34 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
     } catch (IllegalAccessException e) {
       LOG.warn(e);
       return super.listStatus(job);
+    }
+  }
+  
+  @Override
+  protected boolean isSplitable(JobContext context, Path file) {
+    try {
+      // Create compressionCodecs to be used by isSplitable method
+      if (compressionCodecs == null)
+        compressionCodecs = new CompressionCodecFactory(context.getConfiguration());
+      FileSystem fs = file.getFileSystem(context.getConfiguration());
+      // HDF files are not splittable
+      if (file.getName().toLowerCase().endsWith(".hdf"))
+        return false;
+      final CompressionCodec codec = compressionCodecs.getCodec(file);
+      if (codec != null && !(codec instanceof SplittableCompressionCodec))
+        return false;
+      
+      // To avoid opening the file and checking the first 8-bytes to look for
+      // an R-tree signature, we never split a file read over HTTP
+      if (fs instanceof HTTPFileSystem)
+        return false;
+      // ... and never split a file less than 150MB to perform better with many small files
+      if (fs.getFileStatus(file).getLen() < 150 * 1024 * 1024)
+        return false;
+      return !SpatialSite.isRTree(fs, file);
+    } catch (IOException e) {
+      LOG.warn("Error while determining whether a file is splittable", e);
+      return false; // Safer to not split it
     }
   }
 }

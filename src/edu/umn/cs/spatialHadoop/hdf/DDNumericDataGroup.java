@@ -46,8 +46,51 @@ public class DDNumericDataGroup extends DataDescriptor {
       contents[i] = hdfFile.retrieveElementByID(members[i]);
     return contents;
   }
+
+  /**
+   * Return the underlying data without doing any reformatting.
+   * @return
+   * @throws IOException
+   */
+  public byte[] getAsByteArray() throws IOException {
+    lazyLoad();
+    for (int i = 0; i < members.length; i++)
+      if (members[i].tagID == HDFConstants.DFTAG_SD)
+        return ((DDScientificData)hdfFile.retrieveElementByID(members[i])).getData();
+    return null;
+  }
   
-  public Object getAsAnArray() throws IOException {
+  /**
+   * Returns the type of the underlying data
+   * @return
+   * @throws IOException
+   */
+  public int getDataType() throws IOException {
+    lazyLoad();
+    for (int i = 0; i < members.length; i++) {
+      if (members[i].tagID == HDFConstants.DFTAG_NT) {
+        // Number type
+        DDNumberType nt = (DDNumberType)hdfFile.retrieveElementByID(members[i]);
+        return nt.getNumberType();
+      }
+    }
+    return -1;
+  }
+  
+  public int getDataSize() throws IOException {
+    lazyLoad();
+    for (int i = 0; i < members.length; i++) {
+      if (members[i].tagID == HDFConstants.DFTAG_NT) {
+        // Number type
+        DDNumberType nt = (DDNumberType)hdfFile.retrieveElementByID(members[i]);
+        return nt.getDataSize();
+      }
+    }
+    return 0;
+  }
+
+  
+  public Object getAsTypedArray() throws IOException {
     lazyLoad();
     int overallSize = 0;
     int type = 0;

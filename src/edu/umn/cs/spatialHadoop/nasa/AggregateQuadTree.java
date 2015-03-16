@@ -379,7 +379,7 @@ public class AggregateQuadTree {
       for (DataDescriptor dd : dataGroup.getContents()) {
         if (dd instanceof DDNumericDataGroup) {
           DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
-          values = (short[])numericDataGroup.getAsAnArray();
+          values = (short[])numericDataGroup.getAsTypedArray();
         } else if (dd instanceof DDVDataHeader) {
           DDVDataHeader vheader = (DDVDataHeader) dd;
           if (vheader.getName().equals("_FillValue")) {
@@ -585,6 +585,20 @@ public class AggregateQuadTree {
       }
       outputNode.write(outTree);
     }
+  }
+  
+  public static int selectionQuery(FileSystem fs, Path p, Rectangle query_mbr,
+      ResultCollector2<Point, Short> output) throws IOException {
+    FSDataInputStream inStream = null;
+    try {
+      inStream = new FSDataInputStream(new RandomCompressedInputStream(fs, p));
+      //inStream = fs.open(p);
+      return selectionQuery(inStream, query_mbr, output);
+    } finally {
+      if (inStream != null)
+        inStream.close();
+    }
+
   }
   
   /**
@@ -859,9 +873,10 @@ public class AggregateQuadTree {
   /**
    * Creates a full spatio-temporal hierarchy for a source folder
    * @throws ParseException 
+   * @throws InterruptedException 
    */
   public static void directoryIndexer(final OperationsParams params)
-      throws IOException, ParseException {
+      throws IOException, ParseException, InterruptedException {
     Path sourceDir = params.getInputPath();
     FileSystem sourceFs = sourceDir.getFileSystem(params);
     sourceDir = sourceDir.makeQualified(sourceFs);
@@ -1023,7 +1038,7 @@ public class AggregateQuadTree {
     return relative;
   }
   
-  public static void main(String[] args) throws IOException, ParseException {
+  public static void main(String[] args) throws IOException, ParseException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     directoryIndexer(params);
   }

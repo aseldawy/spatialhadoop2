@@ -196,7 +196,7 @@ public class CatUnion {
     // Check output file existence
     FileSystem outFs = output.getFileSystem(job);
     if (outFs.exists(output)) {
-      if (params.is("overwrite")) {
+      if (params.getBoolean("overwrite", false)) {
         outFs.delete(output, true);
       } else {
         throw new RuntimeException("Output path already exists and -overwrite flag is not set");
@@ -373,7 +373,7 @@ public class CatUnion {
 
     long t1 = System.currentTimeMillis();
     // TODO automatically decide whether to do local or not if not explicitly specified
-    if (params.is("local")) {
+    if (params.getBoolean("local", false)) {
       Map<Integer, OGCGeometry> union = unionLocal(allFiles[0], allFiles[1]);
 //    for (Map.Entry<Text, Geometry> category : union.entrySet()) {
 //      System.out.println(category.getValue().toText()+","+category);

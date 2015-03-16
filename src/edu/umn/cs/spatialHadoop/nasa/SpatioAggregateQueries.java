@@ -24,7 +24,10 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree.Node;
 import edu.umn.cs.spatialHadoop.temporal.TemporalIndex;
 import edu.umn.cs.spatialHadoop.temporal.TemporalIndex.TemporalPartition;
@@ -36,9 +39,9 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  * @author Ahmed Eldawy
  *
  */
-public class SpatioTemporalAggregateQuery {
+public class SpatioAggregateQueries {
   
-  private static final Log LOG = LogFactory.getLog(SpatioTemporalAggregateQuery.class);
+  private static final Log LOG = LogFactory.getLog(SpatioAggregateQueries.class);
   
   public static class TimeRange {
     /**Date format of time range*/
@@ -85,60 +88,12 @@ public class SpatioTemporalAggregateQuery {
    * @param params
    * @throws ParseException 
    * @throws IOException 
+   * @throws InterruptedException 
    */
-  public static AggregateQuadTree.Node aggregateQuery(Path inFile, OperationsParams params) throws ParseException, IOException {
-    // 1- Run a temporal filter step to find all matching temporal partitions
-    Vector<Path> matchingPartitions = new Vector<Path>();
-    // List of time ranges to check. Initially it contains one range as
-    // specified by the user. Eventually, it can be split into at most two
-    // partitions if partially matched by a partition.
-    Vector<TimeRange> temporalRanges = new Vector<TimeRange>();
-    temporalRanges.add(new TimeRange(params.get("time")));
-    Path[] temporalIndexes = new Path[] {
-      new Path(inFile, "yearly"),
-      new Path(inFile, "monthly"),
-      new Path(inFile, "daily")
-    };
-    int index = 0;
+  public static AggregateQuadTree.Node aggregateQuery(Path inFile, OperationsParams params) throws ParseException, IOException, InterruptedException {
+    // 1- Find matching temporal partitions
     final FileSystem fs = inFile.getFileSystem(params);
-    while (index < temporalIndexes.length && !temporalRanges.isEmpty()) {
-      Path indexDir = temporalIndexes[index];
-      LOG.info("Checking index dir "+indexDir);
-      TemporalIndex temporalIndex = new TemporalIndex(fs, indexDir);
-      for (int iRange = 0; iRange < temporalRanges.size(); iRange++) {
-        TimeRange range = temporalRanges.get(iRange);
-        TemporalPartition[] matches = temporalIndex.selectContained(range.start, range.end);
-        if (matches != null) {
-          LOG.info("Matched "+matches.length+" partitions in "+indexDir);
-          for (TemporalPartition match : matches) {
-            LOG.info("Matched temporal partition: "+match.dirName);
-            matchingPartitions.add(new Path(indexDir, match.dirName));
-          }
-          // Update range to remove matching part
-          TemporalPartition firstMatch = matches[0];
-          TemporalPartition lastMatch = matches[matches.length - 1];
-          if (range.start < firstMatch.start && range.end > lastMatch.end) {
-            // Need to split the range into two
-            temporalRanges.setElementAt(
-                new TimeRange(range.start, firstMatch.start), iRange);
-            temporalRanges.insertElementAt(
-                new TimeRange(lastMatch.end, range.end), iRange);
-          } else if (range.start < firstMatch.start) {
-            // Update range in-place
-            range.end = firstMatch.start;
-          } else if (range.end > lastMatch.end) {
-            // Update range in-place
-            range.start = lastMatch.end;
-          } else {
-            // Current range was completely covered. Remove it
-            temporalRanges.remove(iRange);
-          }
-        }
-      }
-      index++;
-    }
-    
-    numOfTemporalPartitionsInLastQuery = matchingPartitions.size();
+    Vector<Path> matchingPartitions = selectTemporalPartitions(inFile, params);
     
     // 2- Find all matching files (AggregateQuadTrees) in matching partitions
     final Rectangle spatialRange = params.getShape("rect", new Rectangle()).getMBR();
@@ -222,6 +177,155 @@ public class SpatioTemporalAggregateQuery {
     return finalResult;
   }
   
+  /**
+   * Performs a spatio-temporal aggregate query on an indexed directory
+   * @param inFile
+   * @param params
+   * @throws ParseException 
+   * @throws IOException 
+   * @throws InterruptedException 
+   */
+  public static long selectionQuery(Path inFile,
+      final ResultCollector<NASAPoint> output, OperationsParams params)
+      throws ParseException, IOException, InterruptedException {
+    // 1- Find matching temporal partitions
+    final FileSystem fs = inFile.getFileSystem(params);
+    Vector<Path> matchingPartitions = selectTemporalPartitions(inFile, params);
+    
+    // 2- Find the matching tile and the position in that tile
+    final Point queryPoint = (Point) params.getShape("point");
+    final double userQueryLon = queryPoint.x;
+    final double userQueryLat = queryPoint.y;
+    // Convert query point from lat/lng space to Sinusoidal space
+    double cosPhiRad = Math.cos(queryPoint.y * Math.PI / 180);
+    double projectedX = queryPoint.x * cosPhiRad;
+    queryPoint.x = (projectedX + 180.0) / 10.0;
+    queryPoint.y = (90.0 - queryPoint.y) / 10.0;
+    final int h = (int) Math.floor(queryPoint.x);
+    final int v = (int) Math.floor(queryPoint.y);
+    final String tileID = String.format("h%02dv%02d", h, v);
+    PathFilter rangeFilter = new PathFilter() {
+      @Override
+      public boolean accept(Path p) {
+        return p.getName().indexOf(tileID) >= 0;
+      }
+    };
+  
+    final Vector<Path> allMatchingFiles = new Vector<Path>();
+    
+    for (Path matchingPartition : matchingPartitions) {
+      // Select all matching files
+      FileStatus[] matchingFiles = fs.listStatus(matchingPartition, rangeFilter);
+      for (FileStatus matchingFile : matchingFiles) {
+        allMatchingFiles.add(matchingFile.getPath());
+      }
+    }
+    
+    
+    final int resolution = 1200;
+    
+    final java.awt.Point queryInMatchingTile = new java.awt.Point();
+    queryInMatchingTile.x = (int) Math.floor((queryPoint.x - h) * resolution);
+    queryInMatchingTile.y = (int) Math.floor((queryPoint.y - v) * resolution);
+    
+    final ResultCollector2<java.awt.Point, Short> internalOutput = output == null ? null :
+      new ResultCollector2<java.awt.Point, Short>() {
+        @Override
+        public void collect(java.awt.Point r, Short s) {
+          output.collect(new NASAPoint(userQueryLon, userQueryLat, s, 0));
+        }
+    };
+    
+    // 3- Query all matching files in parallel
+    Vector<Long> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<Long>() {
+      @Override
+      public Long run(int i1, int i2) {
+        long numOfResults = 0;
+        for (int i_file = i1; i_file < i2; i_file++) {
+          try {
+            Path matchingFile = allMatchingFiles.get(i_file);
+                java.awt.Rectangle query = new java.awt.Rectangle(
+                    queryInMatchingTile.x, queryInMatchingTile.y, 1, 1);
+            AggregateQuadTree.selectionQuery(fs, matchingFile, query, internalOutput);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        }
+        return numOfResults;
+      }
+    });
+    long totalResults = 0;
+    for (long result : threadsResults) {
+      totalResults += result;
+    }
+    return totalResults;
+  }
+
+  /**
+   * Return all matching partitions according to a time range
+   * @param inFile 
+   * @param params
+   * @return
+   * @throws ParseException
+   * @throws IOException
+   */
+  private static Vector<Path> selectTemporalPartitions(Path inFile,
+      OperationsParams params) throws ParseException, IOException {
+    // 1- Run a temporal filter step to find all matching temporal partitions
+    Vector<Path> matchingPartitions = new Vector<Path>();
+    // List of time ranges to check. Initially it contains one range as
+    // specified by the user. Eventually, it can be split into at most two
+    // partitions if partially matched by a partition.
+    Vector<TimeRange> temporalRanges = new Vector<TimeRange>();
+    temporalRanges.add(new TimeRange(params.get("time")));
+    Path[] temporalIndexes = new Path[] {
+      new Path(inFile, "yearly"),
+      new Path(inFile, "monthly"),
+      new Path(inFile, "daily")
+    };
+    int index = 0;
+    final FileSystem fs = inFile.getFileSystem(params);
+    while (index < temporalIndexes.length && !temporalRanges.isEmpty()) {
+      Path indexDir = temporalIndexes[index];
+      LOG.info("Checking index dir "+indexDir);
+      TemporalIndex temporalIndex = new TemporalIndex(fs, indexDir);
+      for (int iRange = 0; iRange < temporalRanges.size(); iRange++) {
+        TimeRange range = temporalRanges.get(iRange);
+        TemporalPartition[] matches = temporalIndex.selectContained(range.start, range.end);
+        if (matches != null) {
+          LOG.info("Matched "+matches.length+" partitions in "+indexDir);
+          for (TemporalPartition match : matches) {
+            LOG.info("Matched temporal partition: "+match.dirName);
+            matchingPartitions.add(new Path(indexDir, match.dirName));
+          }
+          // Update range to remove matching part
+          TemporalPartition firstMatch = matches[0];
+          TemporalPartition lastMatch = matches[matches.length - 1];
+          if (range.start < firstMatch.start && range.end > lastMatch.end) {
+            // Need to split the range into two
+            temporalRanges.setElementAt(
+                new TimeRange(range.start, firstMatch.start), iRange);
+            temporalRanges.insertElementAt(
+                new TimeRange(lastMatch.end, range.end), iRange);
+          } else if (range.start < firstMatch.start) {
+            // Update range in-place
+            range.end = firstMatch.start;
+          } else if (range.end > lastMatch.end) {
+            // Update range in-place
+            range.start = lastMatch.end;
+          } else {
+            // Current range was completely covered. Remove it
+            temporalRanges.remove(iRange);
+          }
+        }
+      }
+      index++;
+    }
+    
+    numOfTemporalPartitionsInLastQuery = matchingPartitions.size();
+    return matchingPartitions;
+  }
+
   /**
    * Prints the usage of this operation.
    */

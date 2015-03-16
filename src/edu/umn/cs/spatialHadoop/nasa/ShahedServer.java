@@ -15,6 +15,7 @@ import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLConnection;
 import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -41,6 +42,7 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -49,6 +51,7 @@ import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree.Node;
 
@@ -121,6 +124,8 @@ public class ShahedServer extends AbstractHandler {
   private static void startServer(Path dataPath, Path indexPath,
       OperationsParams params) throws Exception {
     int port = params.getInt("port", 8889);
+    if (params.get("shape") == null)
+      params.setClass("shape", NASARectangle.class, Shape.class);
 
     Server server = new Server(port);
     server.setHandler(new ShahedServer(dataPath, indexPath, params));
@@ -147,7 +152,10 @@ public class ShahedServer extends AbstractHandler {
         response.getWriter().println("Image request received successfully");
       } else if (target.endsWith("/aggregate_query.cgi")) {
         handleAggregateQuery(request, response);
-        LOG.info("Query results returned");
+        LOG.info("Aggregate query results returned");
+      } else if (target.endsWith("/selection_query.cgi")) {
+        handleSelectionQuery(request, response);
+        LOG.info("Selection query results returned");
       } else {
         if (target.equals("/"))
           target = "/index.html";
@@ -168,41 +176,109 @@ public class ShahedServer extends AbstractHandler {
    */
   private void handleAggregateQuery(HttpServletRequest request,
       HttpServletResponse response) throws ParseException, IOException {
-    String west = request.getParameter("min_lon");
-    String east = request.getParameter("max_lon");
-    String south = request.getParameter("min_lat");
-    String north = request.getParameter("max_lat");
-    
-    String[] startDateParts = request.getParameter("fromDate").split("/");
-    String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
-    String[] endDateParts = request.getParameter("toDate").split("/");
-    String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
-    
-    // Create the query parameters
-    OperationsParams params = new OperationsParams(commonParams);
-    params.set("rect", west+','+south+','+east+','+north);
-    params.set("time", startDate+".."+endDate);
-    
-    long t1 = System.currentTimeMillis();
-    Node result = SpatioTemporalAggregateQuery.aggregateQuery(indexPath, params);
-    long t2 = System.currentTimeMillis();
-    // Report the answer and time
-    response.setContentType("application/json;charset=utf-8");
-    PrintWriter writer = response.getWriter();
-    writer.print("{");
-    writer.print("\"results\":{");
-    writer.print("\"min\": "+result.min+',');
-    writer.print("\"max\": "+result.max+',');
-    writer.print("\"count\": "+result.count+',');
-    writer.print("\"sum\": "+result.sum);
-    writer.print("},");
-    writer.print("\"stats\":{");
-    writer.print("\"totaltime\":"+(t2-t1)+',');
-    writer.print("\"num-of-temporal-partitions\":"+SpatioTemporalAggregateQuery.numOfTemporalPartitionsInLastQuery+',');
-    writer.print("\"num-of-trees\":"+SpatioTemporalAggregateQuery.numOfTreesTouchesInLastRequest);
-    writer.print("}");
-    writer.print("}");
-    response.setStatus(HttpServletResponse.SC_OK);
+    try {
+      String west = request.getParameter("min_lon");
+      String east = request.getParameter("max_lon");
+      String south = request.getParameter("min_lat");
+      String north = request.getParameter("max_lat");
+      
+      String[] startDateParts = request.getParameter("fromDate").split("/");
+      String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+      String[] endDateParts = request.getParameter("toDate").split("/");
+      String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+      
+      // Create the query parameters
+      OperationsParams params = new OperationsParams(commonParams);
+      params.set("rect", west+','+south+','+east+','+north);
+      params.set("time", startDate+".."+endDate);
+      
+      long t1 = System.currentTimeMillis();
+      Node result = SpatioAggregateQueries.aggregateQuery(indexPath, params);
+      long t2 = System.currentTimeMillis();
+      // Report the answer and time
+      response.setContentType("application/json;charset=utf-8");
+      PrintWriter writer = response.getWriter();
+      writer.print("{");
+      writer.print("\"results\":{");
+      writer.print("\"min\": "+result.min+',');
+      writer.print("\"max\": "+result.max+',');
+      writer.print("\"count\": "+result.count+',');
+      writer.print("\"sum\": "+result.sum);
+      writer.print("},");
+      writer.print("\"stats\":{");
+      writer.print("\"totaltime\":"+(t2-t1)+',');
+      writer.print("\"num-of-temporal-partitions\":"+SpatioAggregateQueries.numOfTemporalPartitionsInLastQuery+',');
+      writer.print("\"num-of-trees\":"+SpatioAggregateQueries.numOfTreesTouchesInLastRequest);
+      writer.print("}");
+      writer.print("}");
+      writer.close();
+      response.setStatus(HttpServletResponse.SC_OK);
+    } catch (Exception e) {
+      response.setContentType("text/plain;charset=utf-8");
+      PrintWriter writer = response.getWriter();
+      e.printStackTrace(writer);
+      writer.close();
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
+  }
+  
+  /**
+   * Handle a request for a spatio-temporal aggregate query.
+   * @param request
+   * @param response
+   * @throws ParseException
+   * @throws IOException
+   */
+  private void handleSelectionQuery(HttpServletRequest request,
+      HttpServletResponse response) throws ParseException, IOException {
+    try {
+      final String lat = request.getParameter("lat");
+      final String lon = request.getParameter("long");
+      
+      String[] startDateParts = request.getParameter("fromDate").split("/");
+      String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+      String[] endDateParts = request.getParameter("toDate").split("/");
+      String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+      
+      // Create the query parameters
+      OperationsParams params = new OperationsParams(commonParams);
+      params.set("point", lon+","+lat);
+      params.set("time", startDate+".."+endDate);
+      
+      final SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+      final PrintWriter writer = response.getWriter();
+      response.setContentType("application/json;charset=utf-8");
+      writer.print("{");
+      writer.print("\"results\":{");
+      writer.print("\"points\":[");
+      long t1 = System.currentTimeMillis();
+      long numOfResults = SpatioAggregateQueries.selectionQuery(indexPath, new ResultCollector<NASAPoint>() {
+        @Override
+        public void collect(NASAPoint r) {
+          synchronized (writer) {
+            writer.printf("{\"lat\":%f, \"lon\":%f, timestamp:\"%s\", value:\"%d\"},",
+                r.y, r.x, dateFormat.format(r.timestamp), r.getValue());
+          }
+        }
+      }, params);
+      long t2 = System.currentTimeMillis();
+      writer.print("],");
+      writer.printf("\"result-size\":%d},", numOfResults);
+      writer.print("\"stats\":{");
+      writer.print("\"totaltime\":"+(t2-t1)+',');
+      writer.print("\"num-of-temporal-partitions\":"+SpatioAggregateQueries.numOfTemporalPartitionsInLastQuery+',');
+      writer.print("\"num-of-trees\":"+SpatioAggregateQueries.numOfTreesTouchesInLastRequest);
+      writer.print("}");
+      writer.print("}");
+      writer.close();
+      response.setStatus(HttpServletResponse.SC_OK);
+    } catch (Exception e) {
+      response.setContentType("text/plain;charset=utf-8");
+      PrintWriter writer = response.getWriter();
+      e.printStackTrace(writer);
+      writer.close();
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
   }
 
   /**
@@ -241,7 +317,10 @@ public class ShahedServer extends AbstractHandler {
     private String requesterName;
     private String email;
     private String datasetName;
+    /**Start date in the format "yyyy.MM.dd" */
     private String startDate;
+    /**End date in the format "yyyy.MM.dd" */
+    private String endDate;
     private String rect;
     private String west;
     private String east;
@@ -249,6 +328,8 @@ public class ShahedServer extends AbstractHandler {
     private String north;
     private Path inputURL;
     private Path outDir;
+    /**Output format one of the values {"images", "kmz", "video"}*/
+    private String output;
 
     public ImageRequestHandler(HttpServletRequest request) throws IOException {
       FileSystem fs = FileSystem.get(commonParams);
@@ -263,9 +344,12 @@ public class ShahedServer extends AbstractHandler {
       this.east = request.getParameter("max_lon");
       this.south = request.getParameter("min_lat");
       this.north = request.getParameter("max_lat");
+      this.output = request.getParameter("output");
 
       String[] startDateParts = request.getParameter("fromDate").split("/");
       this.startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+      String[] endDateParts = request.getParameter("toDate").split("/");
+      this.endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
 
       // Create the query parameters
       this.rect = west+','+south+','+east+','+north;
@@ -275,12 +359,23 @@ public class ShahedServer extends AbstractHandler {
     public void run() {
       try {
         sendConfirmEmail();
-        byte[] imageFile = plotImage();
-        byte[] kmlFile = createKMLFile();
-        sendResponseEmail(imageFile, kmlFile);
+        boolean imageSuccess = generateImage();
+        if (!imageSuccess) {
+          sendFailureEmail(null);
+        } else {
+          sendSuccessEmail();
+        }
       } catch (Exception e) {
-        LOG.info("Error handling request");
         e.printStackTrace();
+        try {
+          sendFailureEmail(e);
+        } catch (AddressException e1) {
+          e1.printStackTrace();
+        } catch (UnsupportedEncodingException e1) {
+          e1.printStackTrace();
+        } catch (MessagingException e1) {
+          e1.printStackTrace();
+        }
       }
     }
 
@@ -328,13 +423,14 @@ public class ShahedServer extends AbstractHandler {
 
     /**
      * Plots the image as the user requested
+     * @return - whether the image generation was successful or not
      * @throws IOException
      * @throws InterruptedException 
      * @throws ClassNotFoundException 
+     * @throws ParseException 
      */
-    private byte[] plotImage() throws IOException, InterruptedException, ClassNotFoundException {
-      this.inputURL = new Path(dataPath, datasetPath+"/"+startDate);
-      Path outputPath = new Path(outDir, "image.png");
+    private boolean generateImage() throws IOException, InterruptedException, ClassNotFoundException, ParseException {
+      this.inputURL = new Path(dataPath, datasetPath);
       // Launch the MapReduce job that plots the dataset
       OperationsParams plotParams = new OperationsParams(commonParams);
       plotParams.setBoolean("vflip", true);
@@ -342,68 +438,20 @@ public class ShahedServer extends AbstractHandler {
       plotParams.set("rect", rect);
       plotParams.setBoolean("recoverholes", true);
       plotParams.set("dataset", datasetName);
+      plotParams.set("time", startDate+".."+endDate);
+      plotParams.setBoolean("background", false);
       
-      HDFPlot2.plotHeatMap(new Path[] {inputURL}, outputPath, plotParams);
-      
-      FileSystem fs = outputPath.getFileSystem(commonParams);
-      if (!fs.exists(outputPath)) {
-        LOG.error("Image not generated");
-        return null;
-      }
-      FSDataInputStream inputStream = fs.open(outputPath);
-      ByteArrayOutputStream baos = new ByteArrayOutputStream();
-      byte[] buffer = new byte[1024*1024];
-      int size;
-      while ((size = inputStream.read(buffer)) != -1) {
-        baos.write(buffer, 0, size);
-      }
-      inputStream.close();
-      baos.close();
-      byte[] imageData = baos.toByteArray();
-      fs.delete(outDir, true);
-      return imageData;
+      return MultiHDFPlot.multiplot(new Path[] {inputURL}, outDir, plotParams);
     }
 
     /**
-     * Creates a KML file that displays the generated image in Google Earth
-     * @return
-     */
-    private byte[] createKMLFile() {
-      ByteArrayOutputStream baos = new ByteArrayOutputStream();
-      PrintWriter printWriter = new PrintWriter(baos);
-      printWriter.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-      printWriter.println("<kml xmlns=\"http://www.opengis.net/kml/2.2\">");
-      printWriter.println("  <Folder>");
-      printWriter.println("    <name>Generated Image</name>");
-      printWriter.println("    <description>No describtion available</description>");
-      printWriter.println("    <GroundOverlay>");
-      printWriter.println("      <name></name>");
-      printWriter.println("      <description>None available</description>");
-      printWriter.println("      <Icon>");
-      printWriter.println("        <href>image.png</href>");
-      printWriter.println("      </Icon>");
-      printWriter.println("      <LatLonBox>");
-      printWriter.println("        <north>"+ north +"</north>");
-      printWriter.println("        <south>"+ south +"</south>");
-      printWriter.println("        <east>"+ east +"</east>");
-      printWriter.println("        <west>"+ west +"</west>");
-      printWriter.println("        <rotation>0</rotation>");
-      printWriter.println("      </LatLonBox>");
-      printWriter.println("    </GroundOverlay>");
-      printWriter.println("  </Folder>");
-      printWriter.println("</kml>");
-      printWriter.close();
-      return baos.toByteArray();
-    }
-
-    /**
-     * Sends an email to the client with the generated image.
+     * Sends an email to the client with the generated image uon success.
      * @param kmlBytes
      * @throws MessagingException 
      * @throws AddressException 
      * @throws IOException 
      */
-    private void sendResponseEmail(byte[] imageBytes, byte[] kmlBytes) throws AddressException, MessagingException, IOException {
+    private void sendSuccessEmail() throws AddressException, MessagingException, IOException {
       Properties props = new Properties(MAIL_PROPERTIES);
       
       props.put("mail.smtp.user", from);
@@ -426,25 +474,24 @@ public class ShahedServer extends AbstractHandler {
           "Thank you for using Shahed. \n\n Shahed team");
       multipart.addBodyPart(textPart);
       
-      MimeBodyPart imagePart = new MimeBodyPart();
-      DataSource source1 = new ByteArrayDataSource(imageBytes, "image/png");
-      imagePart.setDataHandler(new DataHandler(source1));
-      imagePart.setFileName("image.png");
-      multipart.addBodyPart(imagePart);
+      FileSystem outFS = outDir.getFileSystem(commonParams);
+      FileStatus[] generatedFiles = outFS.listStatus(outDir);
       
       // Create a KMZ file and attach it to the email
       ByteArrayOutputStream kmzFile = new ByteArrayOutputStream();
       ZipOutputStream zipOut = new ZipOutputStream(kmzFile);
-      ZipEntry ze = new ZipEntry("image.png");
-      zipOut.putNextEntry(ze);
-      zipOut.write(imageBytes);
-      zipOut.closeEntry();
-      
-      ze = new ZipEntry("heatmap.kml");
-      zipOut.putNextEntry(ze);
-      zipOut.write(kmlBytes);
-      zipOut.closeEntry();
-      
+      byte[] buffer = new byte[1024*1024];
+      for (FileStatus generatedFile : generatedFiles) {
+        ZipEntry ze = new ZipEntry(generatedFile.getPath().getName());
+        zipOut.putNextEntry(ze);
+        FSDataInputStream in = outFS.open(generatedFile.getPath());
+        int size;
+        while ((size = in.read(buffer)) > 0) {
+          zipOut.write(buffer, 0, size);
+        }
+        in.close();
+        zipOut.closeEntry();
+      }
       zipOut.close();
       byte[] kmzBytes = kmzFile.toByteArray();
 
@@ -463,6 +510,39 @@ public class ShahedServer extends AbstractHandler {
       transport.close();
       LOG.info("Request finished successfully");
     }
+    
+    private void sendFailureEmail(Exception e) throws AddressException, MessagingException, UnsupportedEncodingException {
+      Properties props = new Properties(MAIL_PROPERTIES);
+      
+      props.put("mail.smtp.user", from);
+      props.put("mail.smtp.password", password);
+
+      Session mailSession = Session.getDefaultInstance(props);
+      
+      Message message = new MimeMessage(mailSession);
+      InternetAddress requesterAddress = new InternetAddress(email, requesterName);
+      message.setFrom(new InternetAddress(username));
+      message.addRecipient(RecipientType.TO, requesterAddress);
+      InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
+      message.addRecipient(RecipientType.BCC, adminAddress);
+      message.setSubject("Confirmation: Your request has failed");
+      message.setText("Dear "+requesterName+",\n"+
+          "Unfortunately there was an internal error while processing your request.\n"+
+          e.getMessage() + "\n" +
+          "Sorry for inconvenience. \n\n Shahed team");
+      InternetAddress shahedAddress = new InternetAddress(from, "SHAHED Team");
+      
+      message.setFrom(shahedAddress);
+      message.setReplyTo(new InternetAddress[] {shahedAddress});
+      
+      Transport transport = mailSession.getTransport();
+      transport.connect(MAIL_HOST, username, password);
+      
+      transport.sendMessage(message, message.getAllRecipients());
+      transport.close();
+      LOG.info("Message sent successfully to '"+requesterAddress+"'");
+    }
+
   }
   
   private void reportError(HttpServletResponse response, String msg,
@@ -508,6 +588,11 @@ public class ShahedServer extends AbstractHandler {
         new OperationsParams(new GenericOptionsParser(args), false);
     if (params.get("username") == null || params.get("password") == null) {
       System.err.println("Please specify username and password for mail server");
+      printUsage();
+      System.exit(1);
+    }
+    if (!params.checkInput()) {
+      System.err.println("Please specify the path of the indexed data");
       printUsage();
       System.exit(1);
     }

@@ -473,7 +473,7 @@ public class FarthestPair {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] paths = params.getPaths();
     if (paths.length == 0) {
-      if (params.is("local")) {
+      if (params.getBoolean("local", false)) {
         long t1 = System.currentTimeMillis();
         farthestPairStream((Point)params.getShape("shape"));
         long t2 = System.currentTimeMillis();

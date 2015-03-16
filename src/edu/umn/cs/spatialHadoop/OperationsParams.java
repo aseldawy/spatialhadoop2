@@ -39,8 +39,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
-import edu.umn.cs.spatialHadoop.nasa.NASAPoint.GradientType;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
+import edu.umn.cs.spatialHadoop.operations.Sampler2;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -108,7 +107,8 @@ public class OperationsParams extends Configuration {
 
 	public OperationsParams(OperationsParams params) {
 		super(params);
-		this.allPaths = params.allPaths.clone();
+		if (params.allPaths != null)
+		  this.allPaths = params.allPaths.clone();
 	}
 
 	public void initialize(String... args) {
@@ -167,14 +167,6 @@ public class OperationsParams extends Configuration {
 		Path[] inputPaths = new Path[allPaths.length - 1];
 		System.arraycopy(allPaths, 0, inputPaths, 0, inputPaths.length);
 		return inputPaths;
-	}
-
-	public boolean is(String flag, boolean defaultValue) {
-		return getBoolean(flag, defaultValue);
-	}
-
-	public boolean is(String flag) {
-		return is(flag, false);
 	}
 
 	/*
@@ -252,7 +244,7 @@ public class OperationsParams extends Configuration {
 		if (outputPath != null) {
 			FileSystem fs = outputPath.getFileSystem(this);
 			if (fs.exists(outputPath)) {
-				if (this.is("overwrite")) {
+				if (this.getBoolean("overwrite", false)) {
 					fs.delete(outputPath, true);
 				} else {
 					LOG.error("Output file '" + outputPath
@@ -270,7 +262,7 @@ public class OperationsParams extends Configuration {
 		if (outputPath != null) {
 			FileSystem fs = outputPath.getFileSystem(this);
 			if (fs.exists(outputPath)) {
-				if (this.is("overwrite")) {
+				if (this.getBoolean("overwrite", false)) {
 					fs.delete(outputPath, true);
 				} else {
 					LOG.error("Output file '" + outputPath
@@ -616,27 +608,6 @@ public class OperationsParams extends Configuration {
 		return dir;
 	}
 
-	public NASAPoint.GradientType getGradientType(String key,
-			GradientType defaultValue) {
-		return getGradientType(this, key, defaultValue);
-	}
-
-	public static NASAPoint.GradientType getGradientType(Configuration conf,
-			String key, GradientType defaultValue) {
-		String strGradientType = conf.get(key);
-		if (strGradientType == null) {
-			return defaultValue;
-		} else if (strGradientType.equalsIgnoreCase("hue")) {
-			return GradientType.GT_HUE;
-		} else if (strGradientType.equalsIgnoreCase("color")) {
-			return GradientType.GT_COLOR;
-		} else {
-			LOG.warn("Unknown gradient type '" + strGradientType
-					+ "'. Possible values are 'hue', 'color'");
-			return defaultValue;
-		}
-	}
-
 	/**
 	 * Auto detect shape type based on input format
 	 * 
@@ -657,17 +628,12 @@ public class OperationsParams extends Configuration {
 			// the auto detected shape is consistent in many lines
 			final int sampleCount = 10;
 			OperationsParams sampleParams = new OperationsParams(this);
-			sampleParams.setInt("count", sampleCount);
-			sampleParams.setClass("shape", Text2.class, TextSerializable.class);
-			sampleParams.setClass("outshape", Text2.class,
-					TextSerializable.class);
-			sampleParams.setBoolean("local", true);
-			Sampler.sample(this.getInputPaths(), new ResultCollector<Text2>() {
-				@Override
-				public void collect(Text2 line) {
-					sampleLines.add(line.toString());
-				}
-			}, sampleParams);
+			Sampler2.sampleLocalByCount(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
+        @Override
+        public void collect(Text line) {
+          sampleLines.add(line.toString());
+        }
+      }, sampleParams);
 
 			if (sampleLines.isEmpty()) {
 				LOG.warn("No input to detect in '" + this.getInputPath() + "-");
@@ -676,16 +642,13 @@ public class OperationsParams extends Configuration {
 
 			// Collect some stats about the sample to help detecting shape type
 			final String Separators[] = { ",", "\t" };
-			int[] numOfSplits = { 0, 0 }; // Number of splits with each
-											// separator
-			boolean allNumbersInAllSample = true; // Whether or not all values
-													// are numbers
+			int[] numOfSplits = { 0, 0 }; // Number of splits with each separator
+			boolean allNumericAllLines = true; // Whether or not all values are numbers
 			int ogcIndex = -1; // The index of the column with OGC data
 
 			for (String sampleLine : sampleLines) {
-				// This flag is raised if all splits are numbers with any
-				// separator
-				boolean allNumbersWithAnySeparator = false;
+				// This flag is raised if all splits are numbers with one separator
+				boolean allNumericCurrentLine = false;
 				// Try to parse with commas and tabs
 				for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
 					String separator = Separators[iSeparator];
@@ -695,19 +658,19 @@ public class OperationsParams extends Configuration {
 						numOfSplits[iSeparator] = parts.length;
 					else if (numOfSplits[iSeparator] != parts.length)
 						numOfSplits[iSeparator] = -1;
-					boolean allSplitsNumbersWithCurrentSeparator = true;
+					boolean allNumericCurrentLineCurrentSeparator = true;
 					for (int i = 0; i < parts.length; i++) {
 						String part = parts[i];
-						try {
-							Double.parseDouble(part);
-						} catch (NumberFormatException e) {
-							allSplitsNumbersWithCurrentSeparator = false;
+						if (allNumericCurrentLineCurrentSeparator) {
+						  try {
+						    Double.parseDouble(part);
+						  } catch (NumberFormatException e) {
+						    allNumericCurrentLineCurrentSeparator = false;
+						  }
 						}
 						try {
-							TextSerializerHelper.consumeGeometryJTS(new Text(
-									part), '\0');
-							// Reaching this point means the geometry was parsed
-							// successfully
+							TextSerializerHelper.consumeGeometryJTS(new Text(part), '\0');
+							// Reaching this point means the geometry was parsed successfully
 							if (ogcIndex == -1)
 								ogcIndex = i;
 							else if (ogcIndex != i)
@@ -716,14 +679,15 @@ public class OperationsParams extends Configuration {
 							// Couldn't parse OGC for this column
 						}
 					}
-					if (allSplitsNumbersWithCurrentSeparator)
-						allNumbersWithAnySeparator = true;
+					if (allNumericCurrentLineCurrentSeparator)
+						allNumericCurrentLine = true;
 				}
-				if (!allNumbersWithAnySeparator)
-					allNumbersInAllSample = false;
+				// One line does not have all numeric fields
+				if (!allNumericCurrentLine)
+					allNumericAllLines = false;
 			}
 
-			if (numOfSplits[0] != -1 && allNumbersInAllSample) {
+			if (numOfSplits[0] != -1 && allNumericAllLines) {
 				// Each line is comma separated and all values are numbers
 				if (numOfSplits[0] == 2) {
 					// Point
@@ -750,8 +714,7 @@ public class OperationsParams extends Configuration {
 		} catch (IOException e) {
 		}
 		if (autoDetectedShape == null) {
-			LOG.warn("Could not autodetect shape for input '"
-					+ sampleLines.get(0) + "'");
+			LOG.warn("Cannot detect shape for input '" + sampleLines.get(0) + "'");
 			return false;
 		} else {
 			LOG.info("Autodetected shape '" + autoDetectedShape
@@ -794,9 +757,7 @@ public class OperationsParams extends Configuration {
 		Job job = new Job(jobConf); // To ensure we don't change the original
 		SpatialInputFormat3.setInputPaths(job, input);
 		SpatialInputFormat3<Partition, Shape> inputFormat = new SpatialInputFormat3<Partition, Shape>();
-		if (jobConf.get("rect") != null)
-		  job.getConfiguration().set(SpatialInputFormat3.InputQueryRange, jobConf.get("rect"));
-		
+
 		try {
 			List<InputSplit> splits = inputFormat.getSplits(job);
 			if (splits.size() > MaxSplitsForLocalProcessing)

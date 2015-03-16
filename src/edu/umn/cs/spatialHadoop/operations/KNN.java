@@ -62,7 +62,7 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 
 /**
  * Performs k Nearest Neighbor (kNN) query over a spatial file.
@@ -377,7 +377,7 @@ public class KNN {
           range_for_this_iteration);
 
       // Submit the job
-      if (params.is("background")) {
+      if (params.getBoolean("background", false)) {
         // XXX this is incorrect because if the job needs multiple iterations,
         // it will run only the first one
         job.waitForCompletion(false);
@@ -515,8 +515,8 @@ public class KNN {
           ((SpatialRecordReader3)reader).initialize(fsplit, params);
         } else if (reader instanceof RTreeRecordReader3) {
           ((RTreeRecordReader3)reader).initialize(fsplit, params);
-        } else if (reader instanceof HDFRecordReader3) {
-          ((HDFRecordReader3)reader).initialize(fsplit, params);
+        } else if (reader instanceof HDFRecordReader) {
+          ((HDFRecordReader)reader).initialize(fsplit, params);
         } else {
           throw new RuntimeException("Unknown record reader");
         }
@@ -548,8 +548,8 @@ public class KNN {
           ((SpatialRecordReader3)reader).initialize(split, params);
         } else if (reader instanceof RTreeRecordReader3) {
           ((RTreeRecordReader3)reader).initialize(split, params);
-        } else if (reader instanceof HDFRecordReader3) {
-          ((HDFRecordReader3)reader).initialize(split, params);
+        } else if (reader instanceof HDFRecordReader) {
+          ((HDFRecordReader)reader).initialize(split, params);
         } else {
           throw new RuntimeException("Unknown record reader");
         }

@@ -299,7 +299,7 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
   public static void repartitionMapReduce(Path inFile, Path outPath, CellInfo[] cellInfos, 
       OperationsParams params) throws IOException, InterruptedException {
     String sindex = params.get("sindex");
-    boolean overwrite = params.is("overwrite");
+    boolean overwrite = params.getBoolean("overwrite", false);
     Shape stockShape = params.getShape("shape");
     
     FileSystem outFs = outPath.getFileSystem(params);
@@ -670,7 +670,7 @@ public static <S extends Shape> void repartitionLocal(Path inFile,
     ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
 
     boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
-    boolean isLocal = params.is("local", autoLocal);
+    boolean isLocal = params.getBoolean("local", autoLocal);
     
     if (isLocal)
       repartitionLocal(inFile, outputPath, params);
