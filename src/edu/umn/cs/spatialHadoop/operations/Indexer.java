@@ -284,7 +284,12 @@ public class Indexer {
       Class<? extends Partitioner> partitionerClass =
           PartitionerClasses.get(partitionerName.toLowerCase());
       if (partitionerClass == null) {
-        throw new RuntimeException("Unknown index type '"+partitionerName+"'");
+        // Try to parse the name as a class name
+        try {
+          partitionerClass = Class.forName(partitionerName).asSubclass(Partitioner.class);
+        } catch (ClassNotFoundException e) {
+          throw new RuntimeException("Unknown index type '"+partitionerName+"'");
+        }
       }
       boolean replicate = PartitionerReplicate.get(partitionerName.toLowerCase());
       job.setBoolean("replicate", replicate);
