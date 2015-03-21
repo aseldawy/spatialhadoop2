@@ -200,10 +200,12 @@ public class ShahedServer extends AbstractHandler {
       PrintWriter writer = response.getWriter();
       writer.print("{");
       writer.print("\"results\":{");
-      writer.print("\"min\": "+result.min+',');
-      writer.print("\"max\": "+result.max+',');
-      writer.print("\"count\": "+result.count+',');
-      writer.print("\"sum\": "+result.sum);
+      if (result != null) {
+        writer.print("\"min\": "+result.min+',');
+        writer.print("\"max\": "+result.max+',');
+        writer.print("\"count\": "+result.count+',');
+        writer.print("\"sum\": "+result.sum);
+      }
       writer.print("},");
       writer.print("\"stats\":{");
       writer.print("\"totaltime\":"+(t2-t1)+',');
