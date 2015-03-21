@@ -13,6 +13,7 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
+import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
@@ -107,6 +108,9 @@ public class Main {
 
       pgd.addClass("staggquery", SpatioAggregateQueries.class,
           "Runs a spatio temporal aggregate query on HDF files");
+      
+      pgd.addClass("shahedindexer", AggregateQuadTree.class,
+          "Creates a multilevel spatio-temporal indexer for NASA data");
       
       pgd.driver(args);
       

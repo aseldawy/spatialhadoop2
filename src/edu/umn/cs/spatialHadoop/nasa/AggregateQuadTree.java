@@ -44,7 +44,6 @@ import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
-import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.hdf.DDNumericDataGroup;
 import edu.umn.cs.spatialHadoop.hdf.DDVDataHeader;
 import edu.umn.cs.spatialHadoop.hdf.DDVGroup;
@@ -606,6 +605,7 @@ public class AggregateQuadTree {
    * @author Ahmed Eldawy
    *
    */
+  @SuppressWarnings("serial")
   public static class PointValue extends java.awt.Point {
     /**Value at this point*/
     public int value;
@@ -937,9 +937,7 @@ public class AggregateQuadTree {
           tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
         } while (destFs.exists(tmpFile));
         tmpFile = tmpFile.makeQualified(destFs);
-        AggregateQuadTree.build(params,
-            sourceFile.getPath(),
-            "LST_Day_1km",
+        AggregateQuadTree.build(params, sourceFile.getPath(), "LST_Day_1km",
             tmpFile);
         destFs.rename(tmpFile, destFilePath);
       }
