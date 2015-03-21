@@ -182,11 +182,14 @@
     	<tarfileset dir="${res}" filemode="755">
         <include name="bin/shadoop"/>
       </tarfileset>
-      <tarfileset dir="${res}">
+      
+    	<tarfileset dir="${res}">
         <include name="webapps/**"/>
     		<include name="conf/spatial-site.xml"/>
     	</tarfileset>
-      
+
+    	<tarfileset file="${toString:other.path.ref}" prefix="share/hadoop/common/lib/"/>
+
     	<tarfileset dir="lib/ivy/common" prefix="lib/">
         <include name="esri-geometry-api-*.jar"/>
         <exclude name="*sources.jar"/>
@@ -227,6 +230,8 @@
       <tarfileset dir="${res}" prefix="hadoop/hdfs/webapps/hdfs">
         <include name="webapps/**"/>
       </tarfileset>
+    	
+      <tarfileset file="${toString:other.path.ref}" prefix="share/hadoop/common/lib/"/>
       
       <tarfileset dir="lib/ivy/common" prefix="share/hadoop/common/lib/">
         <include name="esri-geometry-api-*.jar"/>
