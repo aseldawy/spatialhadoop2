@@ -43,6 +43,7 @@ import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.hdf.DDNumericDataGroup;
 import edu.umn.cs.spatialHadoop.hdf.DDVDataHeader;
@@ -339,8 +340,8 @@ public class AggregateQuadTree {
     }
   }
   
-  /**Tree header size, resolution + fillValue + cardinality*/
-  private static final int TreeHeaderSize = 4 + 2 + 4;
+  /**Tree header size, resolution + fillValue + cardinality + timestamp*/
+  private static final int TreeHeaderSize = 4 + 2 + 4 + 8;
   /**Value size: short*/
   private static final int ValueSize = 2;
   /**Node size: min + max + sum + count*/
@@ -388,12 +389,17 @@ public class AggregateQuadTree {
           }
         }
       }
+      
+      // Retrieve meta data
+      String archiveMetadata = (String) hdfFile.findHeaderByName("ArchiveMetadata.0").getEntryAt(0);
+      String coreMetadata = (String) hdfFile.findHeaderByName("CoreMetadata.0").getEntryAt(0);
+      NASADataset nasaDataset = new NASADataset(coreMetadata, archiveMetadata);
 
       if (values instanceof short[]) {
         FileSystem outFs = outFile.getFileSystem(conf);
         DataOutputStream out = new DataOutputStream(
             new RandomCompressedOutputStream(outFs.create(outFile, false)));
-        build((short[])values, fillValue, out);
+        build(nasaDataset, (short[])values, fillValue, out);
         out.close();
       } else {
         throw new RuntimeException("Indexing of values of type "
@@ -413,7 +419,8 @@ public class AggregateQuadTree {
    *          - the output stream to write the constructed quad tree to
    * @throws IOException
    */
-  public static void build(short[] values, short fillValue, DataOutputStream out) throws IOException {
+  public static void build(NASADataset metadata, short[] values,
+      short fillValue, DataOutputStream out) throws IOException {
     int length = Array.getLength(values);
     int resolution = (int) Math.round(Math.sqrt(length));
 
@@ -421,6 +428,7 @@ public class AggregateQuadTree {
     out.writeInt(resolution); // resolution
     out.writeShort(fillValue);
     out.writeInt(1); // cardinality
+    out.writeLong(metadata.time); // Timestamp
 
     // Fetch the stock quad tree of the associated resolution
     StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
@@ -558,6 +566,11 @@ public class AggregateQuadTree {
       cardinality += (cardinalities[iTree] = inTrees[iTree].readInt());
     outTree.writeInt(cardinality);
     
+    // Write timestamps of all trees
+    for (int iTree = 0; iTree < inTrees.length; iTree++) {
+      outTree.writeLong(inTrees[iTree].readLong());
+    }
+    
     // Merge sorted values in all input trees
     byte[] buffer = new byte[1024*1024];
     int size = resolution * resolution;
@@ -587,8 +600,31 @@ public class AggregateQuadTree {
     }
   }
   
+  /**
+   * A class that holds the value of a point in the tree. Used to report the
+   * answer of selection queries with all information.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class PointValue extends java.awt.Point {
+    /**Value at this point*/
+    public int value;
+    
+    /**Timestamp of the point*/
+    public long timestamp;
+  }
+
+  /**
+   * Performs a range query on an aggregate
+   * @param fs
+   * @param p
+   * @param query_mbr
+   * @param output
+   * @return
+   * @throws IOException
+   */
   public static int selectionQuery(FileSystem fs, Path p, Rectangle query_mbr,
-      ResultCollector2<Point, Short> output) throws IOException {
+      ResultCollector<PointValue> output) throws IOException {
     FSDataInputStream inStream = null;
     try {
       inStream = new FSDataInputStream(new RandomCompressedInputStream(fs, p));
@@ -610,12 +646,15 @@ public class AggregateQuadTree {
    * @throws IOException 
    */
   public static int selectionQuery(FSDataInputStream in, Rectangle query_mbr,
-      ResultCollector2<Point, Short> output) throws IOException {
+      ResultCollector<PointValue> output) throws IOException {
     long treeStartPosition = in.getPos();
     int numOfResults = 0;
     int resolution = in.readInt();
     short fillValue = in.readShort();
     int cardinality = in.readInt();
+    long[] timestamps = new long[cardinality];
+    for (int i = 0; i < cardinality; i++)
+      timestamps[i] = in.readLong();
     Vector<Integer> selectedStarts = new Vector<Integer>();
     Vector<Integer> selectedEnds = new Vector<Integer>();
     StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
@@ -674,7 +713,7 @@ public class AggregateQuadTree {
       }
     }
     if (output != null) {
-      Point resultCoords = new Point();
+      PointValue returnValue = new PointValue();
       long dataStartPosition = treeStartPosition + getValuesStartOffset();
       // Return all values in the selected ranges
       for (int iRange = 0; iRange < selectedStarts.size(); iRange++) {
@@ -685,12 +724,14 @@ public class AggregateQuadTree {
         in.seek(startPosition);
         for (int treePos = treeStart; treePos < treeEnd; treePos++) {
           // Retrieve the coords for the point at treePos
-          stockQuadTree.getRecordCoords(treePos, resultCoords);
+          stockQuadTree.getRecordCoords(treePos, returnValue);
           // Read all entries at current position
           for (int iValue = 0; iValue < cardinality; iValue++) {
             short value = in.readShort();
             if (value != fillValue) {
-              output.collect(resultCoords, value);
+              returnValue.value = value;
+              returnValue.timestamp = timestamps[iValue];
+              output.collect(returnValue);
             }
           }
         }
