@@ -142,6 +142,9 @@ public class SpatioAggregateQueries {
       }
     }
     
+    if (allMatchingFiles.size() == 0)
+      return null;
+    
     // 3- Query all matching files in parallel
     Vector<Node> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<AggregateQuadTree.Node>() {
       @Override
