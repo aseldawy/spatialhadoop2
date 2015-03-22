@@ -918,30 +918,42 @@ public class AggregateQuadTree {
    */
   public static void directoryIndexer(final OperationsParams params)
       throws IOException, ParseException, InterruptedException {
-    Path sourceDir = params.getInputPath();
-    FileSystem sourceFs = sourceDir.getFileSystem(params);
-    sourceDir = sourceDir.makeQualified(sourceFs);
+    Path inputDir = params.getInputPath();
+    FileSystem sourceFs = inputDir.getFileSystem(params);
+    final Path sourceDir = inputDir.makeQualified(sourceFs);
     Path destDir = params.getOutputPath();
     final FileSystem destFs = destDir.getFileSystem(params);
     
     // Create daily indexes that do not exist
-    Path dailyIndexDir = new Path(destDir, "daily");
-    FileStatus[] sourceFiles = sourceFs.globStatus(new Path(sourceDir, "**/*"));
-    for (FileStatus sourceFile : sourceFiles) {
-      Path relativeSourceFile = makeRelative(sourceDir, sourceFile.getPath());
-      Path destFilePath = new Path(dailyIndexDir, relativeSourceFile);
-      if (!destFs.exists(destFilePath)) {
-        LOG.info("Indexing: "+sourceFile.getPath().getName());
-        Path tmpFile;
-        do {
-          tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
-        } while (destFs.exists(tmpFile));
-        tmpFile = tmpFile.makeQualified(destFs);
-        AggregateQuadTree.build(params, sourceFile.getPath(), "LST_Day_1km",
-            tmpFile);
-        destFs.rename(tmpFile, destFilePath);
+    final Path dailyIndexDir = new Path(destDir, "daily");
+    final FileStatus[] sourceFiles = sourceFs.globStatus(new Path(inputDir, "**/*"));
+    Parallel.forEach(sourceFiles.length, new RunnableRange<Object>() {
+      @Override
+      public Object run(int i1, int i2) {
+        for (int i = i1; i < i2; i++) {
+          FileStatus sourceFile = sourceFiles[i];
+          try {
+            Path relativeSourceFile = makeRelative(sourceDir, sourceFile.getPath());
+            Path destFilePath = new Path(dailyIndexDir, relativeSourceFile);
+            if (!destFs.exists(destFilePath)) {
+              LOG.info("Indexing: "+sourceFile.getPath().getName());
+              Path tmpFile;
+              do {
+                tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
+              } while (destFs.exists(tmpFile));
+              tmpFile = tmpFile.makeQualified(destFs);
+              AggregateQuadTree.build(params, sourceFile.getPath(), "LST_Day_1km",
+                  tmpFile);
+              destFs.rename(tmpFile, destFilePath);
+            }
+          } catch (IOException e) {
+            throw new RuntimeException("Error building an index for "+sourceFile, e);
+          }
+        }
+        return null;
       }
-    }
+      
+    });
     LOG.info("Done generating daily indexes");
     
     // Merge daily indexes into monthly indexes
