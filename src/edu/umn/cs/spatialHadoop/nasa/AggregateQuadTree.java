@@ -24,6 +24,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Random;
 import java.util.Stack;
 import java.util.Vector;
 import java.util.regex.Matcher;
@@ -927,16 +928,26 @@ public class AggregateQuadTree {
     // Create daily indexes that do not exist
     final Path dailyIndexDir = new Path(destDir, "daily");
     final FileStatus[] sourceFiles = sourceFs.globStatus(new Path(inputDir, "**/*"));
+    // Shuffle the array for better load balancing across threads
+    Random rand = new Random();
+    for (int i = 0; i < sourceFiles.length - 1; i++) {
+      // Swap the entry at i with any following entry
+      int i2 = i + rand.nextInt(sourceFiles.length - i - 1);
+      FileStatus temp = sourceFiles[i];
+      sourceFiles[i] = sourceFiles[i2];
+      sourceFiles[i2] = temp;
+    }
     Parallel.forEach(sourceFiles.length, new RunnableRange<Object>() {
       @Override
       public Object run(int i1, int i2) {
+        LOG.info("Worker ["+i1+","+i2+") started");
         for (int i = i1; i < i2; i++) {
           FileStatus sourceFile = sourceFiles[i];
           try {
             Path relativeSourceFile = makeRelative(sourceDir, sourceFile.getPath());
             Path destFilePath = new Path(dailyIndexDir, relativeSourceFile);
             if (!destFs.exists(destFilePath)) {
-              LOG.info("Indexing: "+sourceFile.getPath().getName());
+              LOG.info("Worker ["+i1+","+i2+") indexing: "+sourceFile.getPath().getName());
               Path tmpFile;
               do {
                 tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
@@ -944,12 +955,18 @@ public class AggregateQuadTree {
               tmpFile = tmpFile.makeQualified(destFs);
               AggregateQuadTree.build(params, sourceFile.getPath(), "LST_Day_1km",
                   tmpFile);
+              synchronized (destFs) {
+                Path destDir = destFilePath.getParent();
+                if (!destFs.exists(destDir))
+                  destFs.mkdirs(destDir);
+              }
               destFs.rename(tmpFile, destFilePath);
             }
           } catch (IOException e) {
             throw new RuntimeException("Error building an index for "+sourceFile, e);
           }
         }
+        LOG.info("Worker ["+i1+","+i2+") finished");
         return null;
       }
       

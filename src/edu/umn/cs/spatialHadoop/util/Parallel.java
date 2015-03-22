@@ -10,14 +10,19 @@ package edu.umn.cs.spatialHadoop.util;
 
 import java.util.Vector;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 /**
  * SOme primitives to provide parallel processing over arrays and lists
  * @author Ahmed Eldawy
  *
  */
 public class Parallel {
+  
+  static final Log LOG = LogFactory.getLog(Parallel.class);
 
-  private Parallel() { /* Static use only */ }
+  private Parallel() { /* Enforce static use only */ }
   
   public static interface RunnableRange<T> {
     public T run(int i1, int i2);
@@ -59,6 +64,7 @@ public class Parallel {
       }
     };
     int parallelism = Math.min(size, Runtime.getRuntime().availableProcessors());
+    LOG.info("Creating "+parallelism+" threads");
     final int[] partitions = new int[parallelism + 1];
     for (int i_thread = 0; i_thread <= parallelism; i_thread++)
       partitions[i_thread] = i_thread * size / parallelism;
