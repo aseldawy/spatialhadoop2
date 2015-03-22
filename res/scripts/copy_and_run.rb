@@ -1,5 +1,3 @@
-require 'rexml/document'
-
 # Set the local Hadoop directory (defaults to current directory)
 local_hadoop_home = File.expand_path(File.dirname(__FILE__))
 hadoop1 = File.exists?(File.join(local_hadoop_home, 'conf'))
@@ -11,15 +9,44 @@ remote_username = ENV['USER']
 
 conf_dir = File.expand_path((hadoop1 ? "conf" : File.join("etc", "hadoop")), local_hadoop_home)
 
+def generate_jar_file
+  # Create a custom class that extends Point and try to process using it
+  temp_dir = "test_custom_class"
+  Dir.mkdir(temp_dir) unless File.exists?(temp_dir)
+  source_filename = File.join(temp_dir, "ConfigReader.java")
+  File.open(source_filename, "w") do |f|
+    f.puts <<-JAVA
+public class ConfigReader {
+  public static void main(String[] args) {
+    for (String arg : args)
+      System.out.println(new org.apache.hadoop.conf.Configuration().get(arg));
+  }
+}
+    JAVA
+  end
+  
+  # Compile the class
+  required_jars = Dir.glob(File.join("**", "hadoop-core*jar"))
+  required_jars = Dir.glob(File.join("**", "hadoop-common*jar"))
+  puts "javac -cp #{required_jars.join(File::PATH_SEPARATOR)} #{source_filename}"
+  system "javac -cp #{required_jars.join(File::PATH_SEPARATOR)} #{source_filename}"
+  class_filename = source_filename.sub('.java', '.class')
+  
+  # Create the jar file
+  jar_file = File.join(temp_dir, "custom_point.jar")
+  system "jar cf #{jar_file} -C #{temp_dir} #{File.basename(class_filename)}"
+  
+  jar_file
+end
+
+config_reader_jar = generate_jar_file
+
 # Retrieve master and slave nodes from config files
 if hadoop1
   masters_file = File.expand_path("masters", conf_dir)
   master = File.readlines(masters_file).map{|x| x.strip}.first
 else
-  core_conf = File.expand_path("core-site.xml", conf_dir)
-  core_site = REXML::Document.new(File.read(core_conf))
-  # Retrieve master name from the configuration file
-  master_path = core_site.elements["//property[name='fs.default.name']/value"].text rescue nil
+  master_path = `bin/hadoop jar #{config_reader_jar} ConfigReader fs.default.name`
   if master_path && master_path =~ /hdfs:\/\/(.*):(\\d)*/
     master = $1
   end
@@ -30,19 +57,10 @@ slaves = File.readlines(slaves_file).map{|x| x.strip}
 puts "Master: '#{master}'"
 puts "Slaves: #{slaves.inspect}"
 
-# Retrieve HDFS and log paths from config files
-hdfs_conf = File.expand_path("hdfs-site.xml", conf_dir)
-hdfs_site = REXML::Document.new(File.read(hdfs_conf))
-hdfs_data_dir = hdfs_site.elements["//property[name='dfs.data.dir']/value"].text rescue nil
-hdfs_name_dir = hdfs_site.elements["//property[name='dfs.name.dir']/value"].text rescue nil
-
-mapred_conf = File.expand_path("mapred-site.xml", local_hadoop_home)
-if File.exists?(mapred_conf)
-  mapred_site = REXML::Document.new(File.read(mapred_conf))
-  mapred_dir = mapred_site.elements["//property[name='mapred.local.dir']/value"].text rescue nil
-end
-
-log_dir = File.expand_path("logs", remote_hadoop_home)
+# Retrieve Temporary dirs from config files
+temp_dirs = `bin/hadoop jar #{config_reader_jar} ConfigReader dfs.data.dir dfs.name.dir mapred.local.dir hadoop.tmp.dir`.split(/[\r\n]/)
+temp_dirs.delete_if {|dir| dir == "null" || dir.length == 0}
+puts "Temporary dirs #{temp_dirs.inspect}"
 
 # Add any additional machines you want to copy Hadoop to
 machines = ([master] + slaves).uniq
@@ -71,7 +89,7 @@ end
 
 # Copy local Hadoop directory to all remote machines
 if copy
-  rsync_pattern = "rsync -e 'ssh -o ConnectTimeout=600 #{ssh_opts}' -a --copy-dirlinks --copy-links --delete --chmod=a+rX --exclude #{hdfs_data_dir} --exclude #{hdfs_name_dir} --exclude #{mapred_dir} #{log_dir} \#{from}/ \#{to}/"
+  rsync_pattern = "rsync -e 'ssh -o ConnectTimeout=600 #{ssh_opts}' -a --copy-dirlinks --copy-links --delete --chmod=a+rX \#{from}/ \#{to}/"
 
   running_on_master = (master == `uname -n`.strip)
   puts(running_on_master ? "Running on master" : "Not running on master")
@@ -102,17 +120,11 @@ if copy
 end
 
 for machine in machines
-  if restart
-    puts "Delete old log files in '#{machine}'"
-    system("ssh #{ssh_opts} #{remote_username}@#{machine} rm -rf #{log_dir}")
-  end
-
-  # Remove HDFS directory from remote machines
+  # Remove temporary directories from remote machines
   if format
-    puts "Creating HDFS directory in '#{machine}'"
-    puts("ssh -o ConnectTimeout=60 #{ssh_opts} #{remote_username}@#{machine} mkdir -p #{hdfs_data_dir} #{hdfs_name_dir} #{mapred_dir}")
-    system("ssh -o ConnectTimeout=60 #{ssh_opts} #{remote_username}@#{machine} mkdir -p #{hdfs_data_dir} #{hdfs_name_dir} #{mapred_dir}")
-    system("ssh -o ConnectTimeout=300 #{ssh_opts} #{remote_username}@#{machine} rm -rf #{hdfs_data_dir} #{hdfs_name_dir} #{mapred_dir}")
+    puts "Removing temporary directories in '#{machine}'"
+    system("ssh -o ConnectTimeout=60 #{ssh_opts} #{remote_username}@#{machine} mkdir -p #{temp_dirs.join ' '}")
+    system("ssh -o ConnectTimeout=300 #{ssh_opts} #{remote_username}@#{machine} rm -rf #{temp_dirs.join ' '}")
   end
 end
 
