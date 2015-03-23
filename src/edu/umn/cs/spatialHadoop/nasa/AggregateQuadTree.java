@@ -935,8 +935,6 @@ public class AggregateQuadTree {
       sourceFiles[i2] = temp;
     }
     final String datasetName = params.get("dataset");
-    if (datasetName == null)
-      throw new RuntimeException("Please provide the name of dataset you would like to index");
     Parallel.forEach(sourceFiles.length, new RunnableRange<Object>() {
       @Override
       public Object run(int i1, int i2) {
@@ -953,6 +951,8 @@ public class AggregateQuadTree {
                 tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
               } while (destFs.exists(tmpFile));
               tmpFile = tmpFile.makeQualified(destFs);
+              if (datasetName == null)
+                throw new RuntimeException("Please provide the name of dataset you would like to index");
               AggregateQuadTree.build(params, sourceFile.getPath(), datasetName,
                   tmpFile);
               synchronized (destFs) {
@@ -985,7 +985,6 @@ public class AggregateQuadTree {
     final SimpleDateFormat yearFormat = new SimpleDateFormat("yyyy");
     mergeIndexes(destFs, monthlyIndexDir, yearlyIndexDir, monthFormat, yearFormat, params);
     LOG.info("Done generating yearly indexes");
- 
   }
   
   /**
