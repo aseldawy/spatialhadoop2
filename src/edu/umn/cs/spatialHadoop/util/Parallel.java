@@ -57,21 +57,28 @@ public class Parallel {
   }
   
   public static <T> Vector<T> forEach(int size, RunnableRange<T> r) throws InterruptedException {
+    return forEach(0, size, r);
+  }
+  
+  public static <T> Vector<T> forEach(int start, int end, RunnableRange<T> r) throws InterruptedException {
     final Vector<Throwable> exceptions = new Vector<Throwable>();
     Thread.UncaughtExceptionHandler h = new Thread.UncaughtExceptionHandler() {
       public void uncaughtException(Thread th, Throwable ex) {
         exceptions.add(ex);
       }
     };
-    int parallelism = Math.min(size, Runtime.getRuntime().availableProcessors());
+    int parallelism = Math.min(end - start, Runtime.getRuntime().availableProcessors());
     LOG.info("Creating "+parallelism+" threads");
     final int[] partitions = new int[parallelism + 1];
     for (int i_thread = 0; i_thread <= parallelism; i_thread++)
-      partitions[i_thread] = i_thread * size / parallelism;
+      partitions[i_thread] = i_thread * (end - start) / parallelism + start;
     final Vector<RunnableRangeThread<T>> threads = new Vector<RunnableRangeThread<T>>();
     Vector<T> results = new Vector<T>();
     for (int i_thread = 0; i_thread < parallelism; i_thread++) {
-      threads.add(new RunnableRangeThread<T>(r, partitions[i_thread], partitions[i_thread+1]));
+      RunnableRangeThread<T> thread = new RunnableRangeThread<T>(r,
+          partitions[i_thread], partitions[i_thread+1]);
+      thread.setUncaughtExceptionHandler(h);
+      threads.add(thread);
       threads.lastElement().start();
     }
     for (int i_thread = 0; i_thread < parallelism; i_thread++) {
