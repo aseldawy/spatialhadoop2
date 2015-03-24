@@ -20,10 +20,10 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Random;
 import java.util.Stack;
 import java.util.Vector;
 import java.util.regex.Matcher;
@@ -345,8 +345,6 @@ public class AggregateQuadTree {
   private static final int ValueSize = 2;
   /**Node size: min + max + sum + count*/
   private static final int NodeSize = 2 + 2 + 8 + 8;
-
-  private static final long FULL_DAY = 24 * 60 * 60 * 1000;
   
   /**
    * Constructs an aggregate quad tree for an input HDF file on a selected
@@ -918,90 +916,135 @@ public class AggregateQuadTree {
    */
   public static void directoryIndexer(final OperationsParams params)
       throws IOException, ParseException, InterruptedException {
-    Path sourceDir = params.getInputPath();
-    FileSystem sourceFs = sourceDir.getFileSystem(params);
-    sourceDir = sourceDir.makeQualified(sourceFs);
+    Path inputDir = params.getInputPath();
+    FileSystem sourceFs = inputDir.getFileSystem(params);
+    final Path sourceDir = inputDir.makeQualified(sourceFs);
     Path destDir = params.getOutputPath();
     final FileSystem destFs = destDir.getFileSystem(params);
     
     // Create daily indexes that do not exist
-    Path dailyIndexDir = new Path(destDir, "daily");
-    FileStatus[] sourceFiles = sourceFs.globStatus(new Path(sourceDir, "**/*"));
-    for (FileStatus sourceFile : sourceFiles) {
-      Path relativeSourceFile = makeRelative(sourceDir, sourceFile.getPath());
-      Path destFilePath = new Path(dailyIndexDir, relativeSourceFile);
-      if (!destFs.exists(destFilePath)) {
-        LOG.info("Indexing: "+sourceFile.getPath().getName());
-        Path tmpFile;
-        do {
-          tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
-        } while (destFs.exists(tmpFile));
-        tmpFile = tmpFile.makeQualified(destFs);
-        AggregateQuadTree.build(params, sourceFile.getPath(), "LST_Day_1km",
-            tmpFile);
-        destFs.rename(tmpFile, destFilePath);
-      }
+    final Path dailyIndexDir = new Path(destDir, "daily");
+    final FileStatus[] sourceFiles = sourceFs.globStatus(new Path(inputDir, "**/*"));
+    // Shuffle the array for better load balancing across threads
+    Random rand = new Random();
+    for (int i = 0; i < sourceFiles.length - 1; i++) {
+      // Swap the entry at i with any following entry
+      int i2 = i + rand.nextInt(sourceFiles.length - i - 1);
+      FileStatus temp = sourceFiles[i];
+      sourceFiles[i] = sourceFiles[i2];
+      sourceFiles[i2] = temp;
     }
+    final String datasetName = params.get("dataset");
+    Parallel.forEach(sourceFiles.length, new RunnableRange<Object>() {
+      @Override
+      public Object run(int i1, int i2) {
+        LOG.info("Worker ["+i1+","+i2+") started");
+        for (int i = i1; i < i2; i++) {
+          FileStatus sourceFile = sourceFiles[i];
+          try {
+            Path relativeSourceFile = makeRelative(sourceDir, sourceFile.getPath());
+            Path destFilePath = new Path(dailyIndexDir, relativeSourceFile);
+            if (!destFs.exists(destFilePath)) {
+              LOG.info("Worker ["+i1+","+i2+") indexing: "+sourceFile.getPath().getName());
+              Path tmpFile;
+              do {
+                tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
+              } while (destFs.exists(tmpFile));
+              tmpFile = tmpFile.makeQualified(destFs);
+              if (datasetName == null)
+                throw new RuntimeException("Please provide the name of dataset you would like to index");
+              AggregateQuadTree.build(params, sourceFile.getPath(), datasetName,
+                  tmpFile);
+              synchronized (destFs) {
+                Path destDir = destFilePath.getParent();
+                if (!destFs.exists(destDir))
+                  destFs.mkdirs(destDir);
+              }
+              destFs.rename(tmpFile, destFilePath);
+            }
+          } catch (IOException e) {
+            throw new RuntimeException("Error building an index for "+sourceFile, e);
+          }
+        }
+        LOG.info("Worker ["+i1+","+i2+") finished");
+        return null;
+      }
+      
+    });
     LOG.info("Done generating daily indexes");
     
     // Merge daily indexes into monthly indexes
     Path monthlyIndexDir = new Path(destDir, "monthly");
     final SimpleDateFormat dayFormat = new SimpleDateFormat("yyyy.MM.dd");
     final SimpleDateFormat monthFormat = new SimpleDateFormat("yyyy.MM");
-//    this.yearFormat = new SimpleDateFormat("yyyy");
-    final FileStatus[] dailyIndexes = destFs.listStatus(dailyIndexDir);
-    Arrays.sort(dailyIndexes); // Alphabetical sort works fine here
+    mergeIndexes(destFs, dailyIndexDir, monthlyIndexDir, dayFormat, monthFormat, params);
+    LOG.info("Done generating monthly indexes");
+    
+    // Merge daily indexes into monthly indexes
+    Path yearlyIndexDir = new Path(destDir, "yearly");
+    final SimpleDateFormat yearFormat = new SimpleDateFormat("yyyy");
+    mergeIndexes(destFs, monthlyIndexDir, yearlyIndexDir, monthFormat, yearFormat, params);
+    LOG.info("Done generating yearly indexes");
+  }
+  
+  /**
+   * Merges a set of indexes into larger indexes
+   * @param fs
+   * @param srcIndexDir
+   * @param dstIndexDir
+   * @param srcFormat
+   * @param dstFormat
+   * @param params
+   * @throws IOException
+   * @throws ParseException
+   * @throws InterruptedException
+   */
+  private static void mergeIndexes(final FileSystem fs, Path srcIndexDir,
+      Path dstIndexDir, SimpleDateFormat srcFormat, SimpleDateFormat dstFormat,
+      final OperationsParams params)
+      throws IOException, ParseException, InterruptedException {
+    final FileStatus[] sourceIndexes = fs.listStatus(srcIndexDir);
+    Arrays.sort(sourceIndexes); // Alphabetical sort acts as sort-by-date here
+    
+    // Scan the daily indexes and merge each consecutive run belonging to the
+    // same month
     int i1 = 0;
-    while (i1 < dailyIndexes.length) {
-      Date lastDate = null;
-      // Search for first day in month
-      while (i1 < dailyIndexes.length) {
-        lastDate = dayFormat.parse(dailyIndexes[i1].getPath().getName());
-        if (lastDate.getDate() == 1)
-          break;
-        i1++;
-      }
-      // Scan until the end of this month
-      int i2 = i1 + 1;
-      while (i2 < dailyIndexes.length) {
-        Date i2Date = dayFormat.parse(dailyIndexes[i2].getPath().getName());
-        if (i2Date.getTime() - lastDate.getTime() != FULL_DAY) {
-          i1 = i2; // Skip up to i2
-          break;
-        }
-        if (i2Date.getDate() == 1) {
-          // End of month reached
-          break;
-        }
+    while (i1 < sourceIndexes.length) {
+      final String indexToCreate =
+          dstFormat.format(srcFormat.parse(sourceIndexes[i1].getPath().getName()));
+      int i2 = i1+1;
+      // Keep scanning as long as the source index belongs to the same dest index
+      while (i2 < sourceIndexes.length &&
+          dstFormat.format(srcFormat.parse(sourceIndexes[i2].getPath().getName())).equals(indexToCreate))
         i2++;
-        lastDate = i2Date;
-      }
-      if (i2 == dailyIndexes.length) {
-        // Check if i2 is the last day in that month
-        Date oneDayAfterI2 = new Date(lastDate.getTime() + FULL_DAY);
-        if (oneDayAfterI2.getDate() != 1)
-          break; // Nothing to do more
-      }
-      if (i1 == i2)
-        continue; // Nothing in this run
 
-      // Copy i1, i2 to other variables as final to be accessible from threads
-      final int startDay = i1;
-      final int endDay = i2;
-      // Merge all daily indexes in the range [i1, i2) into one monthly index
-      String monthlyIndexName = monthFormat.format(lastDate);
-      final Path destIndex = new Path(monthlyIndexDir, monthlyIndexName);
+      // Merge all source indexes in the range [i1, i2) into one dest index
       
-      // For each tile, merge all values in all days
+      // Copy i1, i2 to other variables as final to be accessible from threads
+      final int firstIndex = i1;
+      final int lastIndex = i2;
+      
+      final Path destIndex = new Path(dstIndexDir, indexToCreate);
+      
+      // For each tile, merge all values in all source indexes
       /*A regular expression to catch the tile identifier of a MODIS grid cell*/
       final Pattern MODISTileID = Pattern.compile("^.*(h\\d\\dv\\d\\d).*$"); 
-      final FileStatus[] tilesInFirstDay = destFs.listStatus(dailyIndexes[i1].getPath());
-      Parallel.forEach(tilesInFirstDay.length, new RunnableRange<Byte>() {
+      final FileStatus[] tilesInFirstDay = fs.listStatus(sourceIndexes[i1].getPath());
+      // Shuffle the array for better load balancing across threads
+      Random rand = new Random();
+      for (int i = 0; i < tilesInFirstDay.length - 1; i++) {
+        // Swap the entry at i with any following entry
+        int j = i + rand.nextInt(tilesInFirstDay.length - i - 1);
+        FileStatus temp = tilesInFirstDay[i];
+        tilesInFirstDay[i] = tilesInFirstDay[j];
+        tilesInFirstDay[j] = temp;
+      }
+      Parallel.forEach(tilesInFirstDay.length, new RunnableRange<Object>() {
         @Override
-        public Byte run(int i_file1, int i_file2) {
-          for (int i = i_file1; i < i_file2; i++) {
+        public Object run(int i_file1, int i_file2) {
+          for (int i_file = i_file1; i_file < i_file2; i_file++) {
             try {
-              FileStatus tileInFirstDay = tilesInFirstDay[i];
+              FileStatus tileInFirstDay = tilesInFirstDay[i_file];
               
               // Extract tile ID
               Matcher matcher = MODISTileID.matcher(tileInFirstDay.getPath().getName());
@@ -1009,39 +1052,60 @@ public class AggregateQuadTree {
                 LOG.warn("Cannot extract tile id from file "+tileInFirstDay.getPath());
                 continue;
               }
+
+              final String tileID = matcher.group(1);
+              Path destIndexFile = new Path(destIndex, tileID);
               
-              if (matcher.matches()) {
-                final String tileID = matcher.group(1);
-                Path destIndexFile = new Path(destIndex, tileID);
-                if (destFs.exists(destIndexFile))
-                  continue; // Destination file already exists
-                PathFilter tileFilter = new PathFilter() {
-                  @Override
-                  public boolean accept(Path path) {
-                    return path.getName().contains(tileID);
-                  }
-                };
-                
-                // Find matching tiles in all daily indexes to merge
-                Path[] filesToMerge = new Path[endDay - startDay];
-                filesToMerge[0] = tileInFirstDay.getPath();
-                for (int iDailyIndex = startDay + 1; iDailyIndex < endDay; iDailyIndex++) {
-                  FileStatus[] matchedTileFile = destFs.listStatus(dailyIndexes[iDailyIndex].getPath(), tileFilter);
-                  if (matchedTileFile.length != 1)
-                    throw new RuntimeException("Matched "+matchedTileFile.length+" files instead of 1 for tile "+tileID+" in dir "+dailyIndexes[iDailyIndex].getPath());
-                  filesToMerge[iDailyIndex - startDay] = matchedTileFile[0].getPath();
+              PathFilter tileFilter = new PathFilter() {
+                @Override
+                public boolean accept(Path path) {
+                  return path.getName().contains(tileID);
                 }
-                
-                // Do the merge
-                Path tmpFile;
-                do {
-                  tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
-                } while (destFs.exists(tmpFile));
-                tmpFile = tmpFile.makeQualified(destFs);
-                LOG.info("Merging tile "+tileID+" into file "+destIndexFile);
-                AggregateQuadTree.merge(params, filesToMerge, tmpFile);
-                destFs.rename(tmpFile, destIndexFile);
+              };
+
+              // Find matching tiles in all daily indexes to merge
+              Path[] filesToMerge = new Path[lastIndex - firstIndex];
+              filesToMerge[0] = tileInFirstDay.getPath();
+              for (int iDailyIndex = firstIndex + 1; iDailyIndex < lastIndex; iDailyIndex++) {
+                FileStatus[] matchedTileFile = fs.listStatus(sourceIndexes[iDailyIndex].getPath(), tileFilter);
+                if (matchedTileFile.length != 1)
+                  throw new RuntimeException("Matched "+matchedTileFile.length+" files instead of 1 for tile "+tileID+" in dir "+sourceIndexes[iDailyIndex].getPath());
+                filesToMerge[iDailyIndex - firstIndex] = matchedTileFile[0].getPath();
               }
+              
+              if (fs.exists(destIndexFile)) {
+                // Destination file already exists
+                // Check the date of the destination and source files to see
+                // whether it needs to be updated or not
+                long destTimestamp = fs.getFileStatus(destIndexFile).getModificationTime();
+                boolean needsUpdate = false;
+                for (Path fileToMerge : filesToMerge) {
+                  long sourceTimestamp = fs.getFileStatus(fileToMerge).getModificationTime();
+                  if (sourceTimestamp > destTimestamp) {
+                    needsUpdate = true;
+                    break;
+                  }
+                }
+                if (!needsUpdate)
+                  continue;
+                else
+                  LOG.info("Updating file "+destIndexFile.getName());
+              }
+
+              // Do the merge
+              Path tmpFile;
+              do {
+                tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
+              } while (fs.exists(tmpFile));
+              tmpFile = tmpFile.makeQualified(fs);
+              LOG.info("Merging tile "+tileID+" into file "+destIndexFile);
+              AggregateQuadTree.merge(params, filesToMerge, tmpFile);
+              synchronized (fs) {
+                Path destDir = destIndexFile.getParent();
+                if (!fs.exists(destDir))
+                  fs.mkdirs(destDir);
+              }
+              fs.rename(tmpFile, destIndexFile);
             } catch (IOException e) {
               e.printStackTrace();
             }
@@ -1049,10 +1113,8 @@ public class AggregateQuadTree {
           return null;
         }
       });
-      //for (FileStatus tileInFirstDay : tilesInFirstDay) {}
       i1 = i2;
     }
-    LOG.info("Done generating monthly indexes");
   }
 
   /**

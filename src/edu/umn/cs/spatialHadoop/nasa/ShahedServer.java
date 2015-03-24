@@ -332,6 +332,8 @@ public class ShahedServer extends AbstractHandler {
     private Path outDir;
     /**Output format one of the values {"images", "kmz", "video"}*/
     private String output;
+    /**How to recover missing values (none|read|write)*/
+    private String recover;
 
     public ImageRequestHandler(HttpServletRequest request) throws IOException {
       FileSystem fs = FileSystem.get(commonParams);
@@ -347,6 +349,7 @@ public class ShahedServer extends AbstractHandler {
       this.south = request.getParameter("min_lat");
       this.north = request.getParameter("max_lat");
       this.output = request.getParameter("output");
+      this.recover = request.getParameter("recover");
 
       String[] startDateParts = request.getParameter("fromDate").split("/");
       this.startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
@@ -438,7 +441,8 @@ public class ShahedServer extends AbstractHandler {
       plotParams.setBoolean("vflip", true);
       plotParams.setClass("shape", NASARectangle.class, Shape.class);
       plotParams.set("rect", rect);
-      plotParams.setBoolean("recoverholes", true);
+      if (recover != null)
+        plotParams.set("recover", recover);
       plotParams.set("dataset", datasetName);
       plotParams.set("time", startDate+".."+endDate);
       plotParams.setBoolean("background", false);
