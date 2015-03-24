@@ -576,7 +576,7 @@ public class ShahedServer extends AbstractHandler {
     System.out.println("<index path> - (*) Path the indexed modis data");
     System.out.println("username:<u> - (*) Username to authenticate with the mail server");
     System.out.println("password:<pw> - (*) Password to authenticate with the mail server");
-    System.out.println("email:<pw> - (*) Email to send from");
+    System.out.println("from:<email> - (*) Email to send from");
     System.out.println("port:<p> - The port to start listening to. Default: 8889");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
