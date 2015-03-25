@@ -327,7 +327,7 @@ public class HDFRasterLayer extends RasterLayer {
           long recoverCount = x1 == 0? count[x2][y] : count[x1-1][y];
           long recoverSum = x1 == 0? sum[x2][y] : sum[x1-1][y];
           for (int x = x1; x < x2; x++) {
-            if (!waterMask.get(y * width + x)) {
+            if (waterMask.get(y * width + x)) {
               sum[x][y] = recoverSum;
               count[x][y] = recoverCount;
               valuesCopied.set(y * width + x, true);
@@ -338,7 +338,7 @@ public class HDFRasterLayer extends RasterLayer {
           long average2 = sum[x2][y] / count[x2][y];
           // Two end point. Interpolate between them
           for (int x = x1; x < x2; x++) {
-            if (!waterMask.get(y * width + x)) {
+            if (waterMask.get(y * width + x)) {
               // Adjust the sum and count so that the average is correct
               sum[x][y] = average1 * (x2 - x) + average2 * (x - x1);
               count[x][y] = x2 - x1;
@@ -368,7 +368,7 @@ public class HDFRasterLayer extends RasterLayer {
           long recoverCount = y1 == 0? count[x][y2] : count[x][y1-1];
           long recoverSum = y1 == 0? sum[x][y2] : sum[x][y1-1];
           for (int y = y1; y < y2; y++) {
-            if (!waterMask.get(y * width + x)) {
+            if (waterMask.get(y * width + x)) {
               sum[x][y] += recoverSum;
               count[x][y] += recoverCount;
               valuesCopied.set(y * width + x, true);
@@ -379,7 +379,7 @@ public class HDFRasterLayer extends RasterLayer {
           for (int y = y1; y < y2; y++) {
             long average1 = sum[x][y1-1] / count[x][y1-1];
             long average2 = sum[x][y2] / count[x][y2];
-            if (!waterMask.get(y * width + x)) {
+            if (waterMask.get(y * width + x)) {
               // Adjust the sum and count so that the average is correct
               if (valuesCopied.get(y * width + x)) {
                 // This value was copied in the first round. Overwrite

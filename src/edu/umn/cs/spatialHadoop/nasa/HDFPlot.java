@@ -21,6 +21,8 @@ import java.util.Iterator;
 
 import javax.imageio.ImageIO;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -44,6 +46,7 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
  *
  */
 public class HDFPlot {
+  static final Log LOG = LogFactory.getLog(HDFPlot.class);
 
   /**Configuration line for setting a file that contains water_mask*/
   public static final String PREPROCESSED_WATERMARK = "water_mask";
@@ -205,9 +208,11 @@ public class HDFPlot {
           long sum = hdfLayer.getSum(x, y);
           long count = hdfLayer.getCount(x, y);
           if (sum < count / 2) {
-            bits.set(y * hdfLayer.getWidth() + x, false);
-          } else {
+            // On land
             bits.set(y * hdfLayer.getWidth() + x, true);
+          } else {
+            // Not on land
+            bits.set(y * hdfLayer.getWidth() + x, false);
           }
         }
       }

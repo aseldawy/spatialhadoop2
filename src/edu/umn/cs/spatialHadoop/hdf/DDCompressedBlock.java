@@ -40,8 +40,10 @@ public class DDCompressedBlock extends DataDescriptor {
     // decompressor. Otherwise, the decompressor will not be able to determine
     // the end-of-file
     // TODO try to create a wrapper stream that reads only the correct amount
-    // of bytes without having to load everythin in memory
-    byte[] rawData = super.readRawData();
+    // of bytes without having to load everything in memory
+    byte[] rawData = new byte[getLength()];
+    hdfFile.inStream.seek(offset);
+    hdfFile.inStream.readFully(rawData);
     InputStream decompressedData =
         new InflaterInputStream(new ByteArrayInputStream(rawData));
     return decompressedData;
