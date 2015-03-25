@@ -302,11 +302,12 @@ public class HDFRasterLayer extends RasterLayer {
    * @param waterMask
    */
   public void recoverHoles(BitArray waterMask) {
-    // XXX Since all values are set in the first round (x-direction), the
-    // second round will be basically useless
-    // Sets a bit for values that were copied (not interpolated) in the
-    // first round
-    BitArray valuesCopied = new BitArray(getWidth() * getHeight());
+    // Store the status of each value
+    // 0 - the corresponding entry originally contained a value
+    // 1 - the entry did not contain a value and still does not contain one
+    // 2 - the entry did not contain a value and its current value is copied
+    // 3 - the entry did not contain a value and its current value is interpolated
+    byte[] valueStatus = new byte[getWidth() * getHeight()];
     // Recover in x-direction
     for (int y = 0; y < height; y++) {
       int x2 = 0;
@@ -322,6 +323,9 @@ public class HDFRasterLayer extends RasterLayer {
         // Recover all points in the range [x1, x2)
         if (x1 == 0 && x2 == getWidth()) {
           // All the line is empty. Nothing can be done
+          // Just mark it for the y-direction round
+          for (int x = x1; x < x2; x++)
+            valueStatus[y * width + x] = 1;
         } else if (x1 == 0 || x2 == getWidth()) {
           // One value at one end. Replicate it to all missing points
           long recoverCount = x1 == 0? count[x2][y] : count[x1-1][y];
@@ -330,8 +334,8 @@ public class HDFRasterLayer extends RasterLayer {
             if (waterMask.get(y * width + x)) {
               sum[x][y] = recoverSum;
               count[x][y] = recoverCount;
-              valuesCopied.set(y * width + x, true);
             }
+            valueStatus[y * width + x] = 2;
           }
         } else {
           long average1 = sum[x1-1][y] / count[x1-1][y];
@@ -343,6 +347,7 @@ public class HDFRasterLayer extends RasterLayer {
               sum[x][y] = average1 * (x2 - x) + average2 * (x - x1);
               count[x][y] = x2 - x1;
             }
+            valueStatus[y * width + x] = 3;
           }
         }
       }
@@ -354,24 +359,31 @@ public class HDFRasterLayer extends RasterLayer {
       while (y2 < height) {
         int y1 = y2;
         // x1 should point to the first missing point
-        while (y1 < height && count[x][y1] > 0)
+        while (y1 < height && valueStatus[y1 * width + x] == 0)
           y1++;
         y2 = y1;
         // y2 should point to the first non-missing point
-        while (y2 < height && count[x][y2] == 0)
+        while (y2 < height && valueStatus[y2 * width + x] != 0)
           y2++;
         // Recover all points in the range [y1, y2)
         if (y1 == 0 && y2 == height) {
           // All the line is empty. Nothing can be done
+          // No need to mark them as there is no thrid round
         } else if (y1 == 0 || y2 == height) {
           // One value at one end. Replicate it to all missing points
           long recoverCount = y1 == 0? count[x][y2] : count[x][y1-1];
           long recoverSum = y1 == 0? sum[x][y2] : sum[x][y1-1];
           for (int y = y1; y < y2; y++) {
             if (waterMask.get(y * width + x)) {
-              sum[x][y] += recoverSum;
-              count[x][y] += recoverCount;
-              valuesCopied.set(y * width + x, true);
+              if (valueStatus[y * width + x] == 1) {
+                // Value has never been recovered but needs to
+                sum[x][y] = recoverSum;
+                count[x][y] = recoverCount;
+              } else if (valueStatus[y * width + x] == 2) {
+                // Value has been previously copied. Take average
+                sum[x][y] += recoverSum;
+                count[x][y] += recoverCount;
+              }
             }
           }
         } else {
@@ -380,14 +392,15 @@ public class HDFRasterLayer extends RasterLayer {
             long average1 = sum[x][y1-1] / count[x][y1-1];
             long average2 = sum[x][y2] / count[x][y2];
             if (waterMask.get(y * width + x)) {
-              // Adjust the sum and count so that the average is correct
-              if (valuesCopied.get(y * width + x)) {
-                // This value was copied in the first round. Overwrite
-                sum[x][y] = 0;
-                count[x][y] = 0;
+              if (valueStatus[y * width + x] <= 2) {
+                // Value has never been recovered or has been copied
+                sum[x][y] = average1 * (y2 - y) + average2 * (y - y1);
+                count[x][y] = y2 - y1;
+              } else {
+                // Value has been previously interpolated, take average
+                sum[x][y] += average1 * (y2 - y) + average2 * (y - y1);
+                count[x][y] += y2 - y1;
               }
-              sum[x][y] += average1 * (y2 - y) + average2 * (y - y1);
-              count[x][y] += y2 - y1;
             }
           }
         }
