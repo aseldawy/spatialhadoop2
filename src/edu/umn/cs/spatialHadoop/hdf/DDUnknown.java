@@ -28,7 +28,6 @@ public class DDUnknown extends DataDescriptor {
   
   @Override
   protected void readFields(DataInput input) throws IOException {
-    rawData = super.readRawData();
   }
 
   @Override

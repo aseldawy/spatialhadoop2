@@ -68,7 +68,13 @@ public class NASADataset extends Rectangle {
       this.h = getIntByName(archiveMetadata, "HORIZONTALTILENUMBER");
       this.v = getIntByName(archiveMetadata, "VERTICALTILENUMBER");
     } catch (RuntimeException e) {
-      LOG.warn("Could not retrieve tile number. "+e.getMessage());
+      // For WaterMask (MOD44W), these values are found somewhere else
+      try {
+        this.h = getIntByName(coreMetadata, "HORIZONTALTILENUMBER");
+        this.v = getIntByName(coreMetadata, "VERTICALTILENUMBER");
+      } catch (RuntimeException e2) {
+        LOG.warn("Could not retrieve tile number. "+e2.getMessage());
+      }
     }
     
     // MBR
@@ -96,7 +102,7 @@ public class NASADataset extends Rectangle {
     int offset = metadata.indexOf(name);
     if (offset == -1)
       return null;
-    offset = metadata.indexOf("VALUE", offset);
+    offset = metadata.indexOf(" VALUE", offset);
     if (offset == -1)
       return null;
     offset = metadata.indexOf('=', offset);
