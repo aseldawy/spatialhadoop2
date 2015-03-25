@@ -136,7 +136,7 @@ public class MultiHDFPlot {
     boolean background = params.getBoolean("background", false);
     Rectangle mbr = new Rectangle(-180, -90, 180, 90);
     for (int i = 0; i < matchingPaths.length; i += combine) {
-      Path[] inputPaths = new Path[Math.max(combine, matchingPaths.length - i)];
+      Path[] inputPaths = new Path[Math.min(combine, matchingPaths.length - i)];
       System.arraycopy(matchingPaths, i, inputPaths, 0, inputPaths.length);
       Path outputPath = new Path(output,
           inputPaths[0].getParent().getName()+ (pyramid? "" : ".png"));
