@@ -315,7 +315,8 @@ public class SingleLevelPlot {
         // Fix width and change height
         height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth());
         // Make divisible by two for compatibility with ffmpeg
-        height &= 0xfffffffe;
+        if (height % 2 == 1)
+          height--;
         conf.setInt("height", height);
       } else {
         width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight());

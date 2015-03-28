@@ -371,16 +371,14 @@ public class HDFRecordReader<S extends NASAShape>
         // Recover all points in the range [x1, x2)
         if (x1 == 0 && x2 == inputRes) {
           // The whole line is empty. Nothing to do
-          for (int x = x1; x < x2; x++) {
+          for (int x = x1; x < x2; x++)
             valueStatus[y * inputRes + x] = 1;
-          }
         } else if (x1 == 0 || x2 == inputRes) {
           // We have only one value at one end of the missing run
           int copyVal = getValueAt(x1 == 0 ? x2 : (x1 - 1), y);
           for (int x = x1; x < x2; x++) {
-            if (onLand(water_mask, x, y, inputRes)) {
+            if (onLand(water_mask, x, y, inputRes))
               setValueAt(x, y, copyVal);
-            }
             valueStatus[y * inputRes + x] = 2;
           }
         } else {

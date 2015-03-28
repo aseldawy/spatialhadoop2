@@ -10,6 +10,7 @@
 require 'fileutils'
 
 FilePattern = /<a href="([^"]+)">(.+)<\/a>\s*(\d+-\w+-\d+)\s+(\d+:\d+)\s+([\d\.]+[KMG]|-)/
+$ParallelSize = 16
 
 def printUsage
   $stderr.puts "#{File.basename(__FILE__)} <base URL> [download path] [rect:west,south,east,north] [time:yyyy.mm.dd..yyyy.mm.dd]"
@@ -21,10 +22,41 @@ def rangeOverlap(r1, r2)
   r1.last > r2.first && r2.last > r1.first
 end
 
-
 def rectOverlap(rect1, rect2)
   rangeOverlap(rect1[0]...rect1[2], rect2[0]...rect2[2]) &&
     rangeOverlap(rect1[1]...rect1[3], rect2[1]...rect2[3])
+end
+
+def downloadFiles(files_to_download, downloadPath)
+  puts "Downloading #{files_to_download.size} files to '#{downloadPath}'"
+  partitions = []
+  $ParallelSize.times {|i| partitions << (files_to_download.size * i / $ParallelSize)}
+  partitions << files_to_download.size
+  download_threads = []
+  $ParallelSize.times do |thread_id|
+    first, last = partitions[thread_id, 2]
+    download_threads << Thread.new(first, last) { |_first, _last|
+      (_first..._last).each do |file_id|
+        url_to_download = files_to_download[file_id]
+        snapshot_date = File.basename(File.dirname(url_to_download))
+        output_dir = File.join(downloadPath, snapshot_date)
+        temp_download_file = File.join($TempDownloadPath, File.basename(url_to_download))
+  
+        system("curl -sf '#{url_to_download}' -o '#{temp_download_file}'")
+        if $?.success?
+          Dir.mkdir(output_dir) unless File.exists?(output_dir)
+          if system("mv #{temp_download_file} #{output_dir}")
+            puts "File #{url_to_download} downloaded successfully"
+          else
+            $stderr.puts "Error moving file #{downloadedFile}"
+          end
+        else
+          puts "Error downloading file #{url_to_download}"
+        end
+      end # each file_id
+    } # Thread
+  end # $ParallelSize.times
+  download_threads.each(&:join)
 end
 
 # Retrieve rectangle and delete from list of parameters
@@ -62,8 +94,10 @@ end
 
 baseUrl = ARGV.delete_at(0)
 downloadPath = ARGV.delete_at(0) || "."
-tempDownloadPath = File.join(downloadPath, 'tmp')
-FileUtils.mkdir_p(tempDownloadPath) unless File.exists?(tempDownloadPath)
+
+# Create temporary download path if not exists
+$TempDownloadPath = File.join(downloadPath, 'tmp')
+FileUtils.mkdir_p($TempDownloadPath) unless File.exists?($TempDownloadPath)
 
 index_file = `curl -s '#{baseUrl}'`
 
@@ -77,7 +111,6 @@ index_file.scan(FilePattern) do |href|
 end
 
 files_to_download = []
-parallel_size = 16
 
 for snapshot_dir in all_files
   puts "Checking #{snapshot_dir}"
@@ -118,36 +151,14 @@ for snapshot_dir in all_files
     end
   end
   
-  if files_to_download.size >= parallel_size
-    puts "Downloading #{files_to_download.size} files to '#{downloadPath}'"
-    partitions = []
-    parallel_size.times {|i| partitions << (files_to_download.size * i / parallel_size)}
-    partitions << files_to_download.size
-    download_threads = []
-    parallel_size.times do |thread_id|
-      first, last = partitions[thread_id, 2]
-      download_threads << Thread.new(first, last) { |_first, _last|
-        (_first..._last).each do |file_id|
-          url_to_download = files_to_download[file_id]
-          snapshot_date = File.basename(File.dirname(url_to_download))
-          output_dir = File.join(downloadPath, snapshot_date)
-          temp_download_file = File.join(tempDownloadPath, File.basename(url_to_download))
-
-          system("curl -sf '#{url_to_download}' -o '#{temp_download_file}'")
-          if $?.success?
-            Dir.mkdir(output_dir) unless File.exists?(output_dir)
-            if system("mv #{temp_download_file} #{output_dir}")
-              puts "File #{url_to_download} downloaded successfully"
-            else
-              $stderr.puts "Error moving file #{downloadedFile}"
-            end
-          else
-            puts "Error downloading file #{url_to_download}"
-          end
-        end # each file_id
-      } # Thread
-    end # parallel_size.times
-    download_threads.each(&:join)
+  if files_to_download.size >= $ParallelSize
+    downloadFiles(files_to_download, downloadPath)
     files_to_download.clear
   end
 end
+
+# Download any remaining files
+downloadFiles(files_to_download, downloadPath) unless files_to_download.empty?
+
+# Delete temporary download path
+FileUtils.rm_rf($TempDownloadPath)

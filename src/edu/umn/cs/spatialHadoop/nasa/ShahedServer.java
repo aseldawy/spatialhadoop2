@@ -200,10 +200,12 @@ public class ShahedServer extends AbstractHandler {
       PrintWriter writer = response.getWriter();
       writer.print("{");
       writer.print("\"results\":{");
-      writer.print("\"min\": "+result.min+',');
-      writer.print("\"max\": "+result.max+',');
-      writer.print("\"count\": "+result.count+',');
-      writer.print("\"sum\": "+result.sum);
+      if (result != null) {
+        writer.print("\"min\": "+result.min+',');
+        writer.print("\"max\": "+result.max+',');
+        writer.print("\"count\": "+result.count+',');
+        writer.print("\"sum\": "+result.sum);
+      }
       writer.print("},");
       writer.print("\"stats\":{");
       writer.print("\"totaltime\":"+(t2-t1)+',');
@@ -330,6 +332,8 @@ public class ShahedServer extends AbstractHandler {
     private Path outDir;
     /**Output format one of the values {"images", "kmz", "video"}*/
     private String output;
+    /**How to recover missing values (none|read|write)*/
+    private String recover;
 
     public ImageRequestHandler(HttpServletRequest request) throws IOException {
       FileSystem fs = FileSystem.get(commonParams);
@@ -345,6 +349,7 @@ public class ShahedServer extends AbstractHandler {
       this.south = request.getParameter("min_lat");
       this.north = request.getParameter("max_lat");
       this.output = request.getParameter("output");
+      this.recover = request.getParameter("recover");
 
       String[] startDateParts = request.getParameter("fromDate").split("/");
       this.startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
@@ -436,7 +441,8 @@ public class ShahedServer extends AbstractHandler {
       plotParams.setBoolean("vflip", true);
       plotParams.setClass("shape", NASARectangle.class, Shape.class);
       plotParams.set("rect", rect);
-      plotParams.setBoolean("recoverholes", true);
+      if (recover != null)
+        plotParams.set("recover", recover);
       plotParams.set("dataset", datasetName);
       plotParams.set("time", startDate+".."+endDate);
       plotParams.setBoolean("background", false);
@@ -574,7 +580,7 @@ public class ShahedServer extends AbstractHandler {
     System.out.println("<index path> - (*) Path the indexed modis data");
     System.out.println("username:<u> - (*) Username to authenticate with the mail server");
     System.out.println("password:<pw> - (*) Password to authenticate with the mail server");
-    System.out.println("email:<pw> - (*) Email to send from");
+    System.out.println("from:<email> - (*) Email to send from");
     System.out.println("port:<p> - The port to start listening to. Default: 8889");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }

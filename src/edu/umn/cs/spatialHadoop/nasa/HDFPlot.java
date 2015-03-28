@@ -21,6 +21,8 @@ import java.util.Iterator;
 
 import javax.imageio.ImageIO;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -44,6 +46,7 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
  *
  */
 public class HDFPlot {
+  static final Log LOG = LogFactory.getLog(HDFPlot.class);
 
   /**Configuration line for setting a file that contains water_mask*/
   public static final String PREPROCESSED_WATERMARK = "water_mask";
@@ -205,9 +208,11 @@ public class HDFPlot {
           long sum = hdfLayer.getSum(x, y);
           long count = hdfLayer.getCount(x, y);
           if (sum < count / 2) {
-            bits.set(y * hdfLayer.getWidth() + x, false);
-          } else {
+            // On land
             bits.set(y * hdfLayer.getWidth() + x, true);
+          } else {
+            // Not on land
+            bits.set(y * hdfLayer.getWidth() + x, false);
           }
         }
       }
@@ -261,32 +266,6 @@ public class HDFPlot {
     outStream.close();
   }
 
-  /**
-   * Plot a water mask for a region and store the result in a binary format.
-   * @param inFiles
-   * @param outFile
-   * @param params
-   * @return
-   * @throws IOException
-   * @throws InterruptedException 
-   * @throws ClassNotFoundException 
-   */
-  public static Job plotWaterMask(Path[] inFiles, Path outFile,
-      OperationsParams params) throws IOException, InterruptedException,
-      ClassNotFoundException {
-    // Restrict to HDF files if working on a directory
-    for (int i = 0; i < inFiles.length; i++) {
-      if (!inFiles[i].getName().toLowerCase().endsWith(".hdf"))
-        inFiles[i] = new Path(inFiles[i], "*.hdf");
-    }
-    params.setBoolean("recoverholes", false);
-    params.set("recover", "none");
-    if (params.getBoolean("pyramid", false))
-      return MultilevelPlot.plot(inFiles, outFile, HDFRasterizeWaterMask.class, params);
-    else
-      return SingleLevelPlot.plot(inFiles, outFile, HDFRasterizeWaterMask.class, params);
-  }
-  
   public static Job plotHeatMap(Path[] inFiles, Path outFile,
       OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {
@@ -338,6 +317,7 @@ public class HDFPlot {
     // need to put it first
     Path wmPath = new Path(params.get(HDFRecordReader.WATER_MASK_PATH,
         "http://e4ftl01.cr.usgs.gov/MOLT/MOD44W.005/2000.02.24/"));
+    wmPath = new Path(wmPath, "*.hdf");
     params.set("recover", "none");
     params.setBoolean("recoverholes", false);
     params.set("dataset", "water_mask");

@@ -27,7 +27,6 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
-import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree.Node;
 import edu.umn.cs.spatialHadoop.temporal.TemporalIndex;
 import edu.umn.cs.spatialHadoop.temporal.TemporalIndex.TemporalPartition;
@@ -142,6 +141,9 @@ public class SpatioAggregateQueries {
       }
     }
     
+    if (allMatchingFiles.size() == 0)
+      return null;
+    
     // 3- Query all matching files in parallel
     Vector<Node> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<AggregateQuadTree.Node>() {
       @Override
@@ -228,18 +230,22 @@ public class SpatioAggregateQueries {
     queryInMatchingTile.x = (int) Math.floor((queryPoint.x - h) * resolution);
     queryInMatchingTile.y = (int) Math.floor((queryPoint.y - v) * resolution);
     
-    final ResultCollector2<java.awt.Point, Short> internalOutput = output == null ? null :
-      new ResultCollector2<java.awt.Point, Short>() {
-        @Override
-        public void collect(java.awt.Point r, Short s) {
-          output.collect(new NASAPoint(userQueryLon, userQueryLat, s, 0));
-        }
-    };
-    
     // 3- Query all matching files in parallel
     Vector<Long> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<Long>() {
       @Override
       public Long run(int i1, int i2) {
+        ResultCollector<AggregateQuadTree.PointValue> internalOutput = output == null ? null :
+          new ResultCollector<AggregateQuadTree.PointValue>() {
+            NASAPoint middleValue = new NASAPoint(userQueryLon, userQueryLat, 0, 0);
+          
+            @Override
+            public void collect(AggregateQuadTree.PointValue value) {
+              middleValue.value = value.value;
+              middleValue.timestamp = value.timestamp;
+              output.collect(middleValue);
+            }
+        };
+
         long numOfResults = 0;
         for (int i_file = i1; i_file < i2; i_file++) {
           try {

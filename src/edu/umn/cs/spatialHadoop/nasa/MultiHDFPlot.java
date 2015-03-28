@@ -63,33 +63,9 @@ public class MultiHDFPlot {
     System.out.println("time:<from..to> - Time range each formatted as yyyy.mm.dd");
     System.out.println("rect:<x1,y1,x2,y2> - Limit drawing to the selected area");
     System.out.println("-adddate - Write the date on each generated image (false)");
-    System.out.println("dateformat<df>: The format of the date to write on each image (dd-MM-yyyy)");
+    System.out.println("dateformat:<df> - The format of the date to write on each image (dd-MM-yyyy)");
+    System.out.println("combine:<c> - Number of frames to combine in each image (1)");
     System.out.println("-overwrite: Overwrite output file without notice");
-  }
-
-  /**
-   * @param args
-   * @throws IOException 
-   * @throws InterruptedException 
-   * @throws ClassNotFoundException 
-   * @throws ParseException 
-   */
-  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException, ParseException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
-    if (!params.checkInputOutput()) {
-      System.err.println("Output directly already exists and overwrite flag is not set");
-      printUsage();
-      System.exit(1);
-    }
-    String timeRange = params.get("time");
-    if (timeRange == null) {
-      System.err.println("time range must be specified");
-      printUsage();
-      System.exit(1);
-    }
-    Path[] input = params.getInputPaths();
-    Path output = params.getOutputPath();
-    multiplot(input, output, params);
   }
 
   public static boolean multiplot(Path[] input, Path output,
@@ -109,6 +85,8 @@ public class MultiHDFPlot {
       System.err.println("Illegal date format in "+timeRange);
       return false;
     }
+    // Number of frames to combine in each image
+    int combine = params.getInt("combine", 1);
     // Retrieve all matching input directories based on date range
     Vector<Path> matchingPathsV = new Vector<Path>();
     for (Path inputFile : input) {
@@ -135,10 +113,11 @@ public class MultiHDFPlot {
     }
     
     Path[] matchingPaths = matchingPathsV.toArray(new Path[matchingPathsV.size()]);
+    Arrays.sort(matchingPaths);
     
     // Clear all paths to ensure we set our own paths for each job
     params.clearAllPaths();
-
+  
     // Create a water mask if we need to recover holes on write
     if (params.get("recover", "none").equals("write")) {
       // Recover images on write requires a water mask image to be generated first
@@ -156,12 +135,14 @@ public class MultiHDFPlot {
     Vector<Job> jobs = new Vector<Job>();
     boolean background = params.getBoolean("background", false);
     Rectangle mbr = new Rectangle(-180, -90, 180, 90);
-    for (Path inputPath : matchingPaths) {
+    for (int i = 0; i < matchingPaths.length; i += combine) {
+      Path[] inputPaths = new Path[Math.min(combine, matchingPaths.length - i)];
+      System.arraycopy(matchingPaths, i, inputPaths, 0, inputPaths.length);
       Path outputPath = new Path(output,
-          inputPath.getParent().getName()+ (pyramid? "" : ".png"));
+          inputPaths[0].getParent().getName()+ (pyramid? "" : ".png"));
       if (overwrite || !outFs.exists(outputPath)) {
         // Need to plot
-        Job rj = HDFPlot.plotHeatMap(new Path[] {inputPath}, outputPath, params);
+        Job rj = HDFPlot.plotHeatMap(inputPaths, outputPath, params);
         if (imageHeight == -1) {
           if (rj != null) {
             imageHeight = rj.getConfiguration().getInt("height", 1000);
@@ -283,5 +264,30 @@ public class MultiHDFPlot {
     }
     System.out.println("Run the following command to generate the video");
     System.out.println(videoCommand);
+  }
+
+  /**
+   * @param args
+   * @throws IOException 
+   * @throws InterruptedException 
+   * @throws ClassNotFoundException 
+   * @throws ParseException 
+   */
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException, ParseException {
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
+    if (!params.checkInputOutput()) {
+      System.err.println("Output directly already exists and overwrite flag is not set");
+      printUsage();
+      System.exit(1);
+    }
+    String timeRange = params.get("time");
+    if (timeRange == null) {
+      System.err.println("time range must be specified");
+      printUsage();
+      System.exit(1);
+    }
+    Path[] input = params.getInputPaths();
+    Path output = params.getOutputPath();
+    multiplot(input, output, params);
   }
 }

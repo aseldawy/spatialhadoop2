@@ -173,19 +173,6 @@ public abstract class DataDescriptor {
    * @param length - total number of data bytes
    */
   protected abstract void readFields(DataInput input) throws IOException;
-  
-  /**
-   * Reads the raw data into a byte array
-   * @param in
-   * @return
-   * @throws IOException
-   */
-  protected byte[] readRawData() throws IOException {
-    byte[] rawData = new byte[length];
-    hdfFile.inStream.seek(offset);
-    hdfFile.inStream.readFully(rawData);
-    return rawData;
-  }
 
   @Override
   public String toString() {
