@@ -7,8 +7,8 @@
 *
 *************************************************************************/
 
-REGISTER spatialhadoop-2.3-rc1.jar;
-REGISTER pigeon-0.1.0-rc1.jar;
+REGISTER spatialhadoop-2.3.jar;
+REGISTER pigeon-0.2.0.jar;
 REGISTER esri-geometry-api-1.2.jar;
 REGISTER jts-1.8.jar;
 REGISTER piggybank.jar;
@@ -30,12 +30,10 @@ filtered_nodes = parsed_nodes; /* No filter */
 flattened_nodes = FOREACH filtered_nodes
   GENERATE node.id, node.lon, node.lat, node.tags;
 
-/*STORE flattened_nodes into 'points';*/
+/* STORE flattened_nodes into '$output/all_nodes.bz2'; */
 
 flattened_nodes_wkt = FOREACH flattened_nodes
   GENERATE id, ST_AsText(ST_MakePoint(lon, lat)), tags;
-
-/*STORE flattened_nodes_wkt into '/all_points.tsv';*/
 
 /******************************************************/
 /* Read and parse ways */
@@ -65,9 +63,15 @@ ways_with_shapes = FOREACH ways_with_nodes {
   ordered = ORDER joined_ways BY pos;
   /* All tags are similar. Just grab the first one*/
   tags = FOREACH joined_ways GENERATE tags;
-  GENERATE group AS way_id, ST_MakeLinePolygon(ordered.node_id, ordered.location) AS geom,
+  GENERATE group AS way_id, ST_AsText(ST_MakeLinePolygon(ordered.node_id, ordered.location)) AS geom,
     FLATTEN(TOP(1, 0, tags)) AS tags;
 };
+
+road_network = FILTER ways_with_shapes BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
+  'highway,junction,ford,route,cutting,tunnel,amenity',
+  'yes,street,highway,service,parking_aisle,motorway,motorway_link,trunk,trunk_link,primary,primary_link,secondary,secondary_link,tertiary,tertiary_link,living_street,residential,unclassified,track,road,roundabout,escape,mini_roundabout,motorway_junction,passing_place,rest_area,turning_circle,detour,parking_entrance');
+
+/* STORE road_network INTO '$output/roads.bz2'; */
 
 /**** Generate road network ****/
 road_network = FILTER joined_ways BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
@@ -76,7 +80,7 @@ road_network = FILTER joined_ways BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
   
 roads_with_nodes = GROUP road_network BY way_id PARALLEL 70;
 
-raod_segments = FOREACH roads_with_nodes {
+road_segments = FOREACH roads_with_nodes {
   /* order points by position */
   ordered = ORDER road_network BY pos;
   /* All tags are similar. Just grab the first one*/
@@ -85,10 +89,10 @@ raod_segments = FOREACH roads_with_nodes {
     FLATTEN(TOP(1, 0, tags)) AS tags;
 };
 
-raod_segments = FOREACH raod_segments GENERATE way_id, FLATTEN(geom), tags;
-raod_segments = FOREACH raod_segments GENERATE CONCAT((CHARARRAY)way_id, (CHARARRAY)position), id1, x1, y1, id2, x2, y2, way_id, edu.umn.cs.spatialHadoop.osm.MapToJson(tags);
+road_segments = FOREACH road_segments GENERATE way_id, FLATTEN(geom), tags;
+road_segments = FOREACH road_segments GENERATE CONCAT((CHARARRAY)way_id, (CHARARRAY)position), id1, x1, y1, id2, x2, y2, way_id, edu.umn.cs.spatialHadoop.osm.MapToJson(tags);
 
-STORE raod_segments into '$output/road_network.bz2' USING PigStorage(',');
+/* STORE road_segments into '$output/road_network.bz2' USING PigStorage(','); */
 
 /******************************************************/
 /* Read and parse relations */
@@ -155,7 +159,9 @@ relation_objects = FOREACH good_relations
 way_objects = FOREACH dangled_ways
   GENERATE way_id AS id, ST_AsText(way_shape) AS shape,  way_tags AS tags;
 
+
 all_objects = UNION ONSCHEMA relation_objects, way_objects;
+/*STORE all_objects INTO '$output/all_objects.bz2';*/
 
 /*
 buildings = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
@@ -187,7 +193,4 @@ postal = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
   'admin_level',
   '8');
 STORE postal INTO '$output/postal_codes.bz2';
-
-STORE all_objects INTO '$output/all_objects.bz2';
-STORE bad_relations INTO '$output/bad_relations.bz2';
 */
