@@ -15,13 +15,14 @@ REGISTER piggybank.jar;
 
 IMPORT 'pigeon_import.pig';
 
-/* Read and parse nodes */
-xml_nodes = LOAD '$input'
-  USING org.apache.pig.piggybank.storage.XMLLoader('node')
-  AS (node:chararray);
+DEFINE XMLLoader org.apache.pig.piggybank.storage.XMLLoader;
+DEFINE OSMNode edu.umn.cs.spatialHadoop.osm.OSMNode;
+DEFINE OSMWay edu.umn.cs.spatialHadoop.osm.OSMWay;
+DEFINE OSMRelation edu.umn.cs.spatialHadoop.osm.OSMRelation;
 
-parsed_nodes = FOREACH xml_nodes
-  GENERATE edu.umn.cs.spatialHadoop.osm.OSMNode(node) AS node;
+/* Read and parse nodes */
+xml_nodes = LOAD '$input' USING XMLLoader('node') AS (node:chararray);
+parsed_nodes = FOREACH xml_nodes GENERATE OSMNode(node) AS node;
 
 /*Add any node filtering here */
 /*parsed_nodes = FILTER parsed_nodes BY node.tags#'highway' == 'traffic_signals';*/
@@ -35,11 +36,8 @@ STORE parsed_nodes into '$output/all_nodes.bz2' USING PigStorage(',');
 
 /******************************************************/
 /* Read and parse ways */
-xml_ways = LOAD '$input'
-  USING org.apache.pig.piggybank.storage.XMLLoader('way') AS (way:chararray);
-
-parsed_ways = FOREACH xml_ways
-  GENERATE edu.umn.cs.spatialHadoop.osm.OSMWay(way) AS way;
+xml_ways = LOAD '$input' USING XMLLoader('way') AS (way:chararray);
+parsed_ways = FOREACH xml_ways GENERATE OSMWay(way) AS way;
   
 /* Project columns of interest in ways and flatten nodes*/
 parsed_ways = FOREACH parsed_ways
@@ -108,11 +106,8 @@ STORE road_segments into '$output/road_network.bz2' USING PigStorage(',');
 
 /******************************************************/
 /* Read and parse relations */
-xml_relations = LOAD '$input'
-  USING org.apache.pig.piggybank.storage.XMLLoader('relation') AS (relation:chararray);
-
-parsed_relations = FOREACH xml_relations
-  GENERATE edu.umn.cs.spatialHadoop.osm.OSMRelation(relation) AS relation;
+xml_relations = LOAD '$input' USING XMLLoader('relation') AS (relation:chararray);
+parsed_relations = FOREACH xml_relations GENERATE OSMRelation(relation) AS relation;
 
 /* Flatten the members so that we have one member per line */
 flattened_relations = FOREACH parsed_relations
