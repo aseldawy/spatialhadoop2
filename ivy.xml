@@ -17,19 +17,15 @@
   <dependencies>
     <dependency org="org.apache.hadoop" name="hadoop-core" rev="1.2.1" conf="hadoop1->default"/>
     
-    <dependency org="org.apache.hadoop" name="hadoop-common" rev="2.4.0" conf="hadoop2->default"/>
-    <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="2.4.0" conf="hadoop2->default"/>
-    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-common" rev="2.4.0" conf="hadoop2->default"/>
-    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-core" rev="2.4.0" conf="hadoop2->default"/>
-    <!--dependency org="org.apache.hadoop" name="hadoop-streaming" rev="2.4.0" conf="hadoop2->default"/-->
+    <dependency org="org.apache.hadoop" name="hadoop-common" rev="2.6.0" conf="hadoop2->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="2.6.0" conf="hadoop2->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-common" rev="2.6.0" conf="hadoop2->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-core" rev="2.6.0" conf="hadoop2->default"/>
+    <!--dependency org="org.apache.hadoop" name="hadoop-streaming" rev="2.6.0" conf="hadoop2->default"/-->
         
     <!--dependency org="javax.mail" name="javax.mail-api" rev="1.5.0" conf="common->default"/-->
-    <dependency org="commons-logging" name="commons-logging" rev="1.1.1" conf="common->default"/>
     <dependency org="com.vividsolutions" name="jts" rev="1.8" conf="common->default"/>
     <dependency org="com.esri.geometry" name="esri-geometry-api" rev="1.2" conf="common->default"/>
     <dependency org="org.apache.pig" name="pig" rev="0.13.0" conf="common->default"/>
-    
-    <!-- canceled as we use our custom version which includes the patch of bug PIG 3373 -->
-    <!-- dependency org="org.apache.pig" name="piggybank" rev="0.13.0"/ -->
   </dependencies>
 </ivy-module>

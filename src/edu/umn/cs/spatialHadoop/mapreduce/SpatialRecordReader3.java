@@ -132,7 +132,7 @@ public class SpatialRecordReader3<V extends Shape> extends
         final SplitCompressionInputStream cIn =
             ((SplittableCompressionCodec)codec).createInputStream(
                 directIn, decompressor, start, end,
-                SplittableCompressionCodec.READ_MODE.CONTINUOUS);
+                SplittableCompressionCodec.READ_MODE.BYBLOCK);
         in = cIn;
         start = cIn.getAdjustedStart();
         end = cIn.getAdjustedEnd();

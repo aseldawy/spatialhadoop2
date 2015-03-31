@@ -286,5 +286,6 @@
     <!-- Delete the binary directory trees -->
     <delete dir="${bin1}"/>
     <delete dir="${bin2}"/>
+    <delete dir="lib/ivy"/>
   </target>
 </project>
