@@ -60,12 +60,12 @@ public final class FileUtil {
 	public static String copyFileSplit(Configuration conf, FileSplit split)
 			throws IOException {
 		FileSystem fs = split.getPath().getFileSystem(conf);
-		File destFile = File.createTempFile(split.getPath().getName(), "tmp");
 		
 		// Special case of a local file. Skip copying the file
 		if (fs instanceof LocalFileSystem && split.getStart() == 0)
 			return split.getPath().toUri().getPath();
 		
+		File destFile = File.createTempFile(split.getPath().getName(), "tmp");
 		// Special handling for HTTP files for more efficiency
 		/*if (fs instanceof HTTPFileSystem && split.getStart() == 0) {
 		  URL website = split.getPath().toUri().toURL();
@@ -92,7 +92,7 @@ public final class FileUtil {
 		
 		out.getChannel().transferFrom(rbc, 0, length);
 
-		rbc.close();
+		in.close();
 		out.close();
 		return destFile.getAbsolutePath();
 	}

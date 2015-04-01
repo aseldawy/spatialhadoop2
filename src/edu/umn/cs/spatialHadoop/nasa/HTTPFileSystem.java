@@ -11,9 +11,9 @@ package edu.umn.cs.spatialHadoop.nasa;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLConnection;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Vector;
@@ -186,6 +186,8 @@ public class HTTPFileSystem extends FileSystem {
           LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
         }
       }
+      if (inBuffer == null)
+        throw new RuntimeException("Could not access URL "+f);
       String line;
       while ((line = inBuffer.readLine()) != null) {
         Matcher matcher = httpEntryPattern.matcher(line);
@@ -242,30 +244,47 @@ public class HTTPFileSystem extends FileSystem {
     URL url = f.toUri().toURL();
     int retryCount = HTTPFileSystem.retries;
     
-    URLConnection connection = null;
-    while (connection == null && retryCount-- > 0) {
-      try {
-        connection = url.openConnection();
-      } catch (java.net.SocketException  e) {
-        if (retryCount == 0)
-          throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
-      } catch (java.net.UnknownHostException e) {
-        if (retryCount == 0)
-          throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
+    HttpURLConnection connection = null;
+    try {
+      while (connection == null && retryCount-- > 0) {
+        try {
+          connection = (HttpURLConnection) url.openConnection();
+        } catch (java.net.SocketException  e) {
+          if (retryCount == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
+          try {;
+            Thread.sleep(1000);
+          } catch (InterruptedException e1) {
+          }
+        } catch (java.net.UnknownHostException e) {
+          if (retryCount == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
+          try {
+            Thread.sleep(1000);
+          } catch (InterruptedException e1) {
+          }
+        }
       }
+      
+      if (connection == null)
+        throw new RuntimeException("Could not connect to "+f);
+      String lengthStr = connection.getHeaderField("content-Length");
+      long length = lengthStr == null? -1 : Long.parseLong(lengthStr);
+      if (length == -1)
+        LOG.info("Unknown HTTP file length "+length);
+      long modificationTime = connection.getLastModified();
+      if (modificationTime == 0)
+        modificationTime = connection.getDate();
+      // Hard coded to work with LP DAAC archives
+      boolean isdir = !f.getName().matches("(?i:([^*\\?])*\\.(hdf|xml|jpg|gz|bz2|zip|txt|csv|tsv)$)");
+      return new FileStatus(length, isdir, 1, BLOCK_SIZE, modificationTime, 0,
+          null, null, null, f);
+    } finally {
+      if (connection != null)
+        connection.disconnect();
     }
-    
-    String lengthStr = connection.getHeaderField("content-Length");
-    long length = lengthStr == null? -1 : Long.parseLong(lengthStr);
-    long modificationTime = connection.getLastModified();
-    if (modificationTime == 0)
-      modificationTime = connection.getDate();
-    // Hard coded to work with LP DAAC archives
-    boolean isdir = !f.getName().matches("(?i:([^*\\?])*\\.(hdf|xml|jpg|gz|bz2|zip|txt|csv|tsv)$)");
-    return new FileStatus(length, isdir, 1, BLOCK_SIZE, modificationTime, 0,
-        null, null, null, f);
   }
   
   public static void main(String[] args) throws IOException {

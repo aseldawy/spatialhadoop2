@@ -98,8 +98,7 @@ public class HDFRecordReader<S extends NASAShape>
       inFile = new Path(FileUtil.copyFile(conf, inFile));
       fs = FileSystem.getLocal(conf);
     }
-    FSDataInputStream input = fs.open(inFile);
-    hdfFile = new HDFFile(input);
+    hdfFile = new HDFFile(fs.open(inFile));
     
     // Retrieve meta data
     String archiveMetadata = (String) hdfFile.findHeaderByName("ArchiveMetadata.0").getEntryAt(0);
