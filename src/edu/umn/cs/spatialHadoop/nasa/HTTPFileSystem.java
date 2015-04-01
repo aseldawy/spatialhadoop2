@@ -70,7 +70,7 @@ public class HTTPFileSystem extends FileSystem {
   private Path workingDir;
 
   /**How many times to try access a file if failed downloading it*/
-  private int retries;
+  public static int retries;
   
   static {
     // Associate this class with http scheme in default configuration
@@ -95,7 +95,7 @@ public class HTTPFileSystem extends FileSystem {
 
     setConf(conf);
     this.uri = uri;
-    this.retries = conf.getInt(HTTP_RETRIES, 3);
+    retries = conf.getInt(HTTP_RETRIES, 3);
   }
   
   @Override
@@ -106,24 +106,7 @@ public class HTTPFileSystem extends FileSystem {
   @Override
   public FSDataInputStream open(Path f, int bufferSize) throws IOException {
     URL url = f.toUri().toURL();
-    
-    int retries = this.retries;
-    InputStream inStream = null;
-    while (inStream == null && retries-- > 0) {
-      try {
-        inStream = url.openStream();
-      } catch (java.net.SocketException e) {
-        if (retries == 0)
-          throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
-      } catch (java.net.UnknownHostException e) {
-        if (retries == 0)
-          throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
-      }
-    }
-    
-    return new FSDataInputStream(new HTTPInputStream(inStream));
+    return new FSDataInputStream(new HTTPInputStream(url));
   }
 
   @Override

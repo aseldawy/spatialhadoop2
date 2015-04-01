@@ -11,7 +11,10 @@ package edu.umn.cs.spatialHadoop.nasa;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.net.URLConnection;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.PositionedReadable;
 import org.apache.hadoop.fs.Seekable;
@@ -29,39 +32,107 @@ import org.apache.hadoop.fs.Seekable;
  *
  */
 public class HTTPInputStream extends InputStream implements Seekable, PositionedReadable {
+  public static final Log LOG = LogFactory.getLog(HTTPInputStream.class);
+  
   /**The underlying stream obtained from {@link URL#openStream()}*/
   private InputStream in;
   
+  /**Cached value of content length.*/
+  private long length;
+  
   /**Current position in the file*/
   private long pos;
+
+  /**The underlying URL. Used to reposition the stream on seeks*/
+  private URL url;
   
-  public HTTPInputStream(InputStream in) {
-    this.in = in;
+  public HTTPInputStream(URL url) {
+    this.url = url;
     this.pos = 0;
+    this.length = -1; // Initially invalidate content length.
+  }
+
+  /**
+   * Lazily opens a stream to the file if needed
+   * @throws IOException 
+   */
+  private void lazyConnect() throws IOException {
+    if (in == null) {
+      // Need to open the stream
+      URLConnection conn = null;
+      int retries = Math.max(1, HTTPFileSystem.retries);
+      while (conn == null && retries-- > 0) {
+        try {
+          conn = url.openConnection();
+        } catch (java.net.SocketException e) {
+          if (retries == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        } catch (java.net.UnknownHostException e) {
+          if (retries == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        }
+      }
+      
+      if (pos != 0) {
+        // Need to reposition the stream at the middle
+        long fileLength = getContentLength();
+        conn.setRequestProperty("Range", String.format("bytes %d-%d/%d", pos, fileLength, fileLength));
+      }
+      retries = Math.max(1, HTTPFileSystem.retries);
+      while (in == null && retries-- > 0) {
+        try {
+          this.in = conn.getInputStream();
+        } catch (java.net.SocketException e) {
+          if (retries == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+          System.out.println(conn.getPermission());
+          try {
+            Thread.sleep(1000);
+          } catch (InterruptedException e1) {
+            e1.printStackTrace();
+          }
+        } catch (java.net.UnknownHostException e) {
+          if (retries == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+          System.out.println(conn.getPermission());
+          try {
+            Thread.sleep(1000);
+          } catch (InterruptedException e1) {
+            e1.printStackTrace();
+          }
+        }
+      }
+      if (in == null)
+        throw new IOException("Could not open an HTTP connection");
+    }
   }
 
   public int read() throws IOException {
+    lazyConnect();
+    int value = in.read();
     pos++;
-    return in.read();
-  }
-
-  public int hashCode() {
-    return in.hashCode();
+    return value;
   }
 
   public int read(byte[] b) throws IOException {
+    lazyConnect();
     int diff = in.read(b);
     pos += diff;
     return diff;
   }
 
-  public boolean equals(Object obj) {
-    return in.equals(obj);
-  }
-
   public int read(byte[] b, int off, int len) throws IOException {
-    int diff = in.read(b, off, len);
-    pos += diff;
+    int retries = HTTPFileSystem.retries;
+    int diff;
+    do {
+      lazyConnect();
+      diff = in.read(b, off, len);
+      pos += diff;
+    } while (retries-- > 0 && diff < 0 && pos < getContentLength());
     return diff;
   }
 
@@ -80,7 +151,8 @@ public class HTTPInputStream extends InputStream implements Seekable, Positioned
   }
 
   public void close() throws IOException {
-    in.close();
+    if (in != null)
+      in.close();
   }
 
   public void mark(int readlimit) {
@@ -117,9 +189,16 @@ public class HTTPInputStream extends InputStream implements Seekable, Positioned
 
   @Override
   public void seek(long newPos) throws IOException {
-    if (newPos < pos)
-      throw new RuntimeException("Unsupported feature");
-    skip(newPos - pos);
+    if (newPos < pos || in == null) {
+      // Reposition the stream and invalidate the underlying stream
+      pos = newPos;
+      if (this.in != null)
+        this.in.close();
+      this.in = null;
+    } else {
+      // Skip the difference and the #skip function will increment 'pos'
+      skip(newPos - pos);
+    }
   }
 
   @Override
@@ -129,9 +208,31 @@ public class HTTPInputStream extends InputStream implements Seekable, Positioned
 
   @Override
   public boolean seekToNewSource(long targetPos) throws IOException {
+    // Currently, we support only one URL
+    // If we have mirrors, we can do a connection to a new mirror here
     return false;
   }
   
-  
+  private long getContentLength() throws IOException {
+    if (length < 0) {
+      int retries = Math.max(1, HTTPFileSystem.retries);
+      URLConnection localConn = null;
+      while (localConn == null && retries-- > 0) {
+        try {
+          localConn = url.openConnection();
+        } catch (java.net.SocketException e) {
+          if (retries == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        } catch (java.net.UnknownHostException e) {
+          if (retries == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        }
+      }
+      length = localConn.getContentLength();
+    }
+    return length;
+  }
 
 }
