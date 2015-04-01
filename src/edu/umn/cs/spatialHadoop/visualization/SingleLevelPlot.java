@@ -416,7 +416,7 @@ public class SingleLevelPlot {
         new SpatialInputFormat3<Rectangle, Shape>();
     for (Path inFile : inFiles) {
       FileSystem inFs = inFile.getFileSystem(params);
-      if (inFs.exists(inFile) && !OperationsParams.isWildcard(inFile) && !inFs.isDirectory(inFile)) {
+      if (!OperationsParams.isWildcard(inFile) && inFs.exists(inFile) && !inFs.isDirectory(inFile)) {
         // One file, retrieve it immediately.
         // This is useful if the input is a hidden file which is automatically
         // skipped by FileInputFormat. We need to plot a hidden file for the case
