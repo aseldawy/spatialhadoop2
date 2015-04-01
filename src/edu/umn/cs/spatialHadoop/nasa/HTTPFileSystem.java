@@ -10,7 +10,6 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URL;
@@ -70,7 +69,7 @@ public class HTTPFileSystem extends FileSystem {
   private Path workingDir;
 
   /**How many times to try access a file if failed downloading it*/
-  private int retries;
+  public static int retries;
   
   static {
     // Associate this class with http scheme in default configuration
@@ -95,7 +94,7 @@ public class HTTPFileSystem extends FileSystem {
 
     setConf(conf);
     this.uri = uri;
-    this.retries = conf.getInt(HTTP_RETRIES, 3);
+    retries = conf.getInt(HTTP_RETRIES, 3);
   }
   
   @Override
@@ -106,24 +105,7 @@ public class HTTPFileSystem extends FileSystem {
   @Override
   public FSDataInputStream open(Path f, int bufferSize) throws IOException {
     URL url = f.toUri().toURL();
-    
-    int retries = this.retries;
-    InputStream inStream = null;
-    while (inStream == null && retries-- > 0) {
-      try {
-        inStream = url.openStream();
-      } catch (java.net.SocketException e) {
-        if (retries == 0)
-          throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
-      } catch (java.net.UnknownHostException e) {
-        if (retries == 0)
-          throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
-      }
-    }
-    
-    return new FSDataInputStream(new HTTPInputStream(inStream));
+    return new FSDataInputStream(new HTTPInputStream(url));
   }
 
   @Override
@@ -188,21 +170,20 @@ public class HTTPFileSystem extends FileSystem {
     final Pattern httpEntryPattern = Pattern.compile("<a href=\"[^\"]+\">(.+)</a>\\s*(\\d+-\\w+-\\d+)\\s+(\\d+:\\d+)\\s+([\\d\\.]+[KMG]|-)");
     f = f.makeQualified(this);
     URL url = f.toUri().toURL();
-    int retries = this.retries;
+    int retryCount = HTTPFileSystem.retries;
     BufferedReader inBuffer = null;
     try {
-      
       while (inBuffer == null && retries-- > 0) {
         try {
           inBuffer = new BufferedReader(new InputStreamReader(url.openStream()));
         } catch (java.net.SocketException e) {
-          if (retries == 0)
+          if (retryCount == 0)
             throw e;
-          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
         } catch (java.net.UnknownHostException e) {
-          if (retries == 0)
+          if (retryCount == 0)
             throw e;
-          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
         }
       }
       String line;
@@ -211,15 +192,15 @@ public class HTTPFileSystem extends FileSystem {
         while (matcher.find()) {
           String entryName = matcher.group(1);
           Path entryPath = new Path(f, entryName);
-          
+
           String entryDate = matcher.group(2);
           String entryTime = matcher.group(3);
           long modificationTime = parseDateTime(entryDate, entryTime);
-          
+
           String size = matcher.group(4);
           boolean isDir = size.equals("-");
           long length = isDir? 0 : parseSize(size);
-          
+
           FileStatus fstatus = new FileStatus(length, isDir, 1, 4096,
               modificationTime, modificationTime, null, null, null, entryPath);
           statuses.add(fstatus);
@@ -259,25 +240,25 @@ public class HTTPFileSystem extends FileSystem {
   public FileStatus getFileStatus(Path f) throws IOException {
     f = f.makeQualified(this);
     URL url = f.toUri().toURL();
-    int retries = this.retries;
+    int retryCount = HTTPFileSystem.retries;
     
     URLConnection connection = null;
-    while (connection == null && retries-- > 0) {
+    while (connection == null && retryCount-- > 0) {
       try {
         connection = url.openConnection();
       } catch (java.net.SocketException  e) {
-        if (retries == 0)
+        if (retryCount == 0)
           throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
       } catch (java.net.UnknownHostException e) {
-        if (retries == 0)
+        if (retryCount == 0)
           throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
       }
     }
     
     String lengthStr = connection.getHeaderField("content-Length");
-    long length = lengthStr == null? 0 : Long.parseLong(lengthStr);
+    long length = lengthStr == null? -1 : Long.parseLong(lengthStr);
     long modificationTime = connection.getLastModified();
     if (modificationTime == 0)
       modificationTime = connection.getDate();
