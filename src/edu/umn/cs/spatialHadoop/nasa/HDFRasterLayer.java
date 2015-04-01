@@ -196,7 +196,7 @@ public class HDFRasterLayer extends RasterLayer {
     return image;
   }
 
-  public void addPoints(int x, int y, int weight) {
+  public void addPoint(int x, int y, int weight) {
     if (x >= 0 && x < getWidth() && y >= 0 && y < getHeight()) {
       sum[x][y] += weight;
       count[x][y]++;

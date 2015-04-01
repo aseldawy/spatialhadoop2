@@ -189,40 +189,45 @@ public class HTTPFileSystem extends FileSystem {
     f = f.makeQualified(this);
     URL url = f.toUri().toURL();
     int retries = this.retries;
-    InputStream inStream = null;
-    while (inStream == null && retries-- > 0) {
-      try {
-        inStream = url.openStream();
-      } catch (java.net.SocketException e) {
-        if (retries == 0)
-          throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
-      } catch (java.net.UnknownHostException e) {
-        if (retries == 0)
-          throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+    BufferedReader inBuffer = null;
+    try {
+      
+      while (inBuffer == null && retries-- > 0) {
+        try {
+          inBuffer = new BufferedReader(new InputStreamReader(url.openStream()));
+        } catch (java.net.SocketException e) {
+          if (retries == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        } catch (java.net.UnknownHostException e) {
+          if (retries == 0)
+            throw e;
+          LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        }
       }
-    }
-    BufferedReader inBuffer = new BufferedReader(new InputStreamReader(inStream));
-    String line;
-    while ((line = inBuffer.readLine()) != null) {
-      Matcher matcher = httpEntryPattern.matcher(line);
-      while (matcher.find()) {
-        String entryName = matcher.group(1);
-        Path entryPath = new Path(f, entryName);
-        
-        String entryDate = matcher.group(2);
-        String entryTime = matcher.group(3);
-        long modificationTime = parseDateTime(entryDate, entryTime);
-        
-        String size = matcher.group(4);
-        boolean isDir = size.equals("-");
-        long length = isDir? 0 : parseSize(size);
-        
-        FileStatus fstatus = new FileStatus(length, isDir, 1, 4096,
-            modificationTime, modificationTime, null, null, null, entryPath);
-        statuses.add(fstatus);
+      String line;
+      while ((line = inBuffer.readLine()) != null) {
+        Matcher matcher = httpEntryPattern.matcher(line);
+        while (matcher.find()) {
+          String entryName = matcher.group(1);
+          Path entryPath = new Path(f, entryName);
+          
+          String entryDate = matcher.group(2);
+          String entryTime = matcher.group(3);
+          long modificationTime = parseDateTime(entryDate, entryTime);
+          
+          String size = matcher.group(4);
+          boolean isDir = size.equals("-");
+          long length = isDir? 0 : parseSize(size);
+          
+          FileStatus fstatus = new FileStatus(length, isDir, 1, 4096,
+              modificationTime, modificationTime, null, null, null, entryPath);
+          statuses.add(fstatus);
+        }
       }
+    } finally {
+      if (inBuffer != null)
+        inBuffer.close();
     }
 
     return statuses.toArray(new FileStatus[statuses.size()]);
