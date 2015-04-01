@@ -171,19 +171,19 @@ public class HTTPFileSystem extends FileSystem {
     final Pattern httpEntryPattern = Pattern.compile("<a href=\"[^\"]+\">(.+)</a>\\s*(\\d+-\\w+-\\d+)\\s+(\\d+:\\d+)\\s+([\\d\\.]+[KMG]|-)");
     f = f.makeQualified(this);
     URL url = f.toUri().toURL();
-    int retries = this.retries;
+    int retryCount = retries;
     InputStream inStream = null;
-    while (inStream == null && retries-- > 0) {
+    while (inStream == null && retryCount-- > 0) {
       try {
         inStream = url.openStream();
       } catch (java.net.SocketException e) {
-        if (retries == 0)
+        if (retryCount == 0)
           throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
       } catch (java.net.UnknownHostException e) {
-        if (retries == 0)
+        if (retryCount == 0)
           throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
       }
     }
     BufferedReader inBuffer = new BufferedReader(new InputStreamReader(inStream));
@@ -237,25 +237,25 @@ public class HTTPFileSystem extends FileSystem {
   public FileStatus getFileStatus(Path f) throws IOException {
     f = f.makeQualified(this);
     URL url = f.toUri().toURL();
-    int retries = this.retries;
+    int retryCount = HTTPFileSystem.retries;
     
     URLConnection connection = null;
-    while (connection == null && retries-- > 0) {
+    while (connection == null && retryCount-- > 0) {
       try {
         connection = url.openConnection();
       } catch (java.net.SocketException  e) {
-        if (retries == 0)
+        if (retryCount == 0)
           throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
       } catch (java.net.UnknownHostException e) {
-        if (retries == 0)
+        if (retryCount == 0)
           throw e;
-        LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
+        LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
       }
     }
     
     String lengthStr = connection.getHeaderField("content-Length");
-    long length = lengthStr == null? 0 : Long.parseLong(lengthStr);
+    long length = lengthStr == null? -1 : Long.parseLong(lengthStr);
     long modificationTime = connection.getLastModified();
     if (modificationTime == 0)
       modificationTime = connection.getDate();

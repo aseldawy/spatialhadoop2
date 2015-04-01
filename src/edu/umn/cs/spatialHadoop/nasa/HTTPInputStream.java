@@ -88,7 +88,6 @@ public class HTTPInputStream extends InputStream implements Seekable, Positioned
           if (retries == 0)
             throw e;
           LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
-          System.out.println(conn.getPermission());
           try {
             Thread.sleep(1000);
           } catch (InterruptedException e1) {
@@ -98,7 +97,6 @@ public class HTTPInputStream extends InputStream implements Seekable, Positioned
           if (retries == 0)
             throw e;
           LOG.info("Error accessing file '"+url+"'. Trials left: "+retries);
-          System.out.println(conn.getPermission());
           try {
             Thread.sleep(1000);
           } catch (InterruptedException e1) {
