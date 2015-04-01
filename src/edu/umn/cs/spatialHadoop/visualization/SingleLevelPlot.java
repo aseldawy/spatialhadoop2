@@ -474,10 +474,9 @@ public class SingleLevelPlot {
             }
             reader.close();
           } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Error reading the file ", e);
           } catch (InterruptedException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            throw new RuntimeException("Interrupt error ", e);
           }
         }
         return partialRaster;
