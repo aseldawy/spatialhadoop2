@@ -171,7 +171,7 @@ public class HTTPFileSystem extends FileSystem {
     final Pattern httpEntryPattern = Pattern.compile("<a href=\"[^\"]+\">(.+)</a>\\s*(\\d+-\\w+-\\d+)\\s+(\\d+:\\d+)\\s+([\\d\\.]+[KMG]|-)");
     f = f.makeQualified(this);
     URL url = f.toUri().toURL();
-    int retryCount = retries;
+    int retryCount = HTTPFileSystem.retries;
     InputStream inStream = null;
     while (inStream == null && retryCount-- > 0) {
       try {
