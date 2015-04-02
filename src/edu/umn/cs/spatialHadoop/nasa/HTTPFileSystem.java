@@ -173,7 +173,7 @@ public class HTTPFileSystem extends FileSystem {
     int retryCount = HTTPFileSystem.retries;
     BufferedReader inBuffer = null;
     try {
-      while (inBuffer == null && retries-- > 0) {
+      while (inBuffer == null && retryCount-- > 0) {
         try {
           inBuffer = new BufferedReader(new InputStreamReader(url.openStream()));
         } catch (java.net.SocketException e) {
