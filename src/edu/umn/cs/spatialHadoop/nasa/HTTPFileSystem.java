@@ -180,10 +180,12 @@ public class HTTPFileSystem extends FileSystem {
           if (retryCount == 0)
             throw e;
           LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
+          try { Thread.sleep(1000); } catch (InterruptedException e1) { }
         } catch (java.net.UnknownHostException e) {
           if (retryCount == 0)
             throw e;
           LOG.info("Error accessing file '"+url+"'. Trials left: "+retryCount);
+          try { Thread.sleep(1000); } catch (InterruptedException e1) { }
         }
       }
       if (inBuffer == null)
