@@ -14,7 +14,6 @@ import java.util.Iterator;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -80,6 +79,15 @@ public class HDFRecordReader<S extends NASAShape>
   /**The underlying HDF file*/
   private HDFFile hdfFile;
 
+  /**Path to the input file*/
+  private Path inFile;
+
+  /**File system of the input file*/
+  private FileSystem fs;
+  /**A flag to delete the underlying HDF file on exit (if copied over HTTP)*/
+  private boolean deleteOnEnd;
+
+
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
@@ -91,12 +99,13 @@ public class HDFRecordReader<S extends NASAShape>
     String datasetName = conf.get("dataset");
     if (datasetName == null)
       throw new RuntimeException("Dataset name should be provided");
-    Path inFile = ((FileSplit) split).getPath();
-    FileSystem fs = inFile.getFileSystem(conf);
+    inFile = ((FileSplit) split).getPath();
+    fs = inFile.getFileSystem(conf);
     if (fs instanceof HTTPFileSystem) {
       // For performance reasons, we don't open HDF files from HTTP
       inFile = new Path(FileUtil.copyFile(conf, inFile));
       fs = FileSystem.getLocal(conf);
+      this.deleteOnEnd = true;
     }
     hdfFile = new HDFFile(fs.open(inFile));
     
@@ -179,6 +188,9 @@ public class HDFRecordReader<S extends NASAShape>
   @Override
   public void close() throws IOException {
     hdfFile.close();
+    if (deleteOnEnd) {
+      fs.delete(inFile, true);
+    }
   }
   
   /**
