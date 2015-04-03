@@ -445,7 +445,7 @@ public class ShahedServer extends AbstractHandler {
         plotParams.set("recover", recover);
       plotParams.set("dataset", datasetName);
       plotParams.set("time", startDate+".."+endDate);
-      plotParams.setBoolean("background", false);
+      plotParams.setBoolean("background", true);
       
       return MultiHDFPlot.multiplot(new Path[] {inputURL}, outDir, plotParams);
     }

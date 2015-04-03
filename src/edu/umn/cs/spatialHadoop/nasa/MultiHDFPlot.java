@@ -152,7 +152,7 @@ public class MultiHDFPlot {
             mbr = (Rectangle) OperationsParams.getShape(params, "mbr");
           }
         }
-        if (background)
+        if (background && rj != null)
           jobs.add(rj);
       }
     }
