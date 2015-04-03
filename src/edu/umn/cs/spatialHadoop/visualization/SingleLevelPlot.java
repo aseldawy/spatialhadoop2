@@ -349,10 +349,11 @@ public class SingleLevelPlot {
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(rasterizer.getRasterClass());
       if (merge) {
+        int numSplits = new SpatialInputFormat3().getSplits(job).size();
         job.setReducerClass(NoPartitionPlotReduce.class);
         // Set number of reduce tasks according to cluster status
-        job.setNumReduceTasks(Math.max(1, new JobClient(new JobConf())
-            .getClusterStatus().getMaxReduceTasks() * 7 / 8));
+        int maxReduce = new JobClient(new JobConf()).getClusterStatus().getMaxReduceTasks() * 7 / 8;
+        job.setNumReduceTasks(Math.max(1, Math.min(maxReduce, numSplits / maxReduce)));
       } else {
         job.setNumReduceTasks(0);
       }

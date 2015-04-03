@@ -173,11 +173,11 @@ public class MultiHDFPlot {
       Job firstJob = jobs.firstElement();
       firstJob.waitForCompletion(false);
       if (!firstJob.isSuccessful()) {
-        System.err.println("Error running job "+firstJob);
+        System.err.println("Error running job "+firstJob.getJobID());
         System.err.println("Killing all remaining jobs");
         for (int j = 1; j < jobs.size(); j++)
           jobs.get(j).killJob();
-        System.exit(1);
+        throw new RuntimeException("Error running job "+firstJob.getJobID());
       }
       jobs.remove(0);
     }
