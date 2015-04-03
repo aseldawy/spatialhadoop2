@@ -25,7 +25,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.Job;
@@ -221,51 +220,6 @@ public class HDFPlot {
     }
   }
   
-  /**
-   * Draws a scale used with the heat map
-   * @param output
-   * @param valueRange
-   * @param width
-   * @param height
-   * @throws IOException
-   */
-  public static void drawScale(Path output, double min, double max, int width, int height, OperationsParams params) throws IOException {
-    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-    Graphics2D g = image.createGraphics();
-    g.setBackground(Color.BLACK);
-    g.clearRect(0, 0, width, height);
-
-    // fix this part to work according to color1, color2 and gradient type
-    HDFRasterizer gradient = new HDFRasterizer();
-    gradient.configure(params);
-    HDFRasterLayer gradientLayer = (HDFRasterLayer) gradient.createRaster(0, 0, new Rectangle());
-    for (int y = 0; y < height; y++) {
-      Color color = gradientLayer.calculateColor(height - y, 0, height);
-      g.setColor(color);
-      g.drawRect(width * 3 / 4, y, width / 4, 1);
-    }
-
-    int fontSize = 24;
-    g.setFont(new Font("Arial", Font.BOLD, fontSize));
-    double step = (max - min) * fontSize * 5 / height;
-    step = (int)(Math.pow(10.0, Math.round(Math.log10(step))));
-    double min_value = Math.floor(min / step) * step;
-    double max_value = Math.floor(max / step) * step;
-
-    g.setColor(Color.WHITE);
-    for (double value = min_value; value <= max_value; value += step) {
-      double y = ((value - min) + (max - value) * (height - fontSize))/(max - min);
-      g.drawString(String.valueOf((int)value), 5, (int)y);
-    }
-
-    g.dispose();
-
-    FileSystem fs = output.getFileSystem(new Configuration());
-    FSDataOutputStream outStream = fs.create(output, true);
-    ImageIO.write(image, "png", outStream);
-    outStream.close();
-  }
-
   public static Job plotHeatMap(Path[] inFiles, Path outFile,
       OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {

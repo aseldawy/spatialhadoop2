@@ -8,6 +8,10 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.nasa;
 
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.text.ParseException;
@@ -17,8 +21,12 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.Vector;
 
+import javax.imageio.ImageIO;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -28,6 +36,7 @@ import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.nasa.HDFPlot.HDFRasterizer;
 
 /**
  * Plots all datasets from NASA satisfying the following criteria:
@@ -171,14 +180,14 @@ public class MultiHDFPlot {
     }
     
     // Draw the scale in the output path if needed
-    if (params.getBoolean("drawscale", true)) {
-      String scalerange = params.get("scalerange");
-      if (scalerange != null) {
-        String[] parts = scalerange.split("\\.\\.");
-        double min = Double.parseDouble(parts[0]);
-        double max = Double.parseDouble(parts[1]);
-        
-        HDFPlot.drawScale(new Path(output, "scale.png"), min, max, 64,
+    String scalerange = params.get("scalerange");
+    if (scalerange != null) {
+      String[] parts = scalerange.split("\\.\\.");
+      double min = Double.parseDouble(parts[0]);
+      double max = Double.parseDouble(parts[1]);
+      String scale = params.get("scale", "none").toLowerCase();
+      if (scale.equals("vertical")) {
+        MultiHDFPlot.drawVerticalScale(new Path(output, "scale.png"), min, max, 64,
             imageHeight, params);
       }
     }
@@ -289,5 +298,50 @@ public class MultiHDFPlot {
     Path[] input = params.getInputPaths();
     Path output = params.getOutputPath();
     multiplot(input, output, params);
+  }
+
+  /**
+   * Draws a scale used with the heat map
+   * @param output
+   * @param valueRange
+   * @param width
+   * @param height
+   * @throws IOException
+   */
+  private static void drawVerticalScale(Path output, double min, double max, int width, int height, OperationsParams params) throws IOException {
+    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D g = image.createGraphics();
+    g.setBackground(Color.BLACK);
+    g.clearRect(0, 0, width, height);
+  
+    // fix this part to work according to color1, color2 and gradient type
+    HDFPlot.HDFRasterizer gradient = new HDFPlot.HDFRasterizer();
+    gradient.configure(params);
+    HDFRasterLayer gradientLayer = (HDFRasterLayer) gradient.createRaster(0, 0, new Rectangle());
+    for (int y = 0; y < height; y++) {
+      Color color = gradientLayer.calculateColor(height - y, 0, height);
+      g.setColor(color);
+      g.drawRect(width * 3 / 4, y, width / 4, 1);
+    }
+  
+    int fontSize = 24;
+    g.setFont(new Font("Arial", Font.BOLD, fontSize));
+    double step = (max - min) * fontSize * 5 / height;
+    step = (int)(Math.pow(10.0, Math.round(Math.log10(step))));
+    double min_value = Math.floor(min / step) * step;
+    double max_value = Math.floor(max / step) * step;
+  
+    g.setColor(Color.WHITE);
+    for (double value = min_value; value <= max_value; value += step) {
+      double y = ((value - min) + (max - value) * (height - fontSize))/(max - min);
+      g.drawString(String.valueOf((int)value), 5, (int)y);
+    }
+  
+    g.dispose();
+  
+    FileSystem fs = output.getFileSystem(new Configuration());
+    FSDataOutputStream outStream = fs.create(output, true);
+    ImageIO.write(image, "png", outStream);
+    outStream.close();
   }
 }
