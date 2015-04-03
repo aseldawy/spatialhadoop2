@@ -37,8 +37,6 @@ import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -305,7 +303,7 @@ public class SingleLevelPlot {
       inputMBR = drawRect != null? drawRect : FileMBR.fileMBR(inFiles, params);
     OperationsParams.setShape(conf, InputMBR, inputMBR);
     if (drawRect != null)
-      conf.setClass(SpatialSite.FilterClass, RangeFilter.class, BlockFilter.class);
+      OperationsParams.setShape(conf, SpatialInputFormat3.InputQueryRange, drawRect);
     
     // Adjust width and height if aspect ratio is to be kept
     int width = conf.getInt("width", 1000);
