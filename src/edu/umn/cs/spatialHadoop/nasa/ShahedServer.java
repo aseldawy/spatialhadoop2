@@ -329,6 +329,8 @@ public class ShahedServer extends AbstractHandler {
     private String south;
     private String north;
     private Path inputURL;
+    /**File system for the output directory*/
+    private FileSystem outFS;
     private Path outDir;
     /**Output format one of the values {"images", "kmz", "video"}*/
     private String output;
@@ -336,10 +338,10 @@ public class ShahedServer extends AbstractHandler {
     private String recover;
 
     public ImageRequestHandler(HttpServletRequest request) throws IOException {
-      FileSystem fs = FileSystem.get(commonParams);
+      outFS = FileSystem.get(commonParams);
       do {
         this.outDir = new Path(String.format("%06d", (int)(Math.random() * 1000000)));
-      } while (fs.exists(outDir));
+      } while (outFS.exists(outDir));
       this.requesterName = request.getParameter("user_name");
       this.email = request.getParameter("email");
       this.datasetPath = request.getParameter("dataset_url");
@@ -380,6 +382,12 @@ public class ShahedServer extends AbstractHandler {
           e1.printStackTrace();
         } catch (MessagingException e1) {
           e1.printStackTrace();
+        }
+      } finally {
+        try {
+          outFS.delete(outDir, true);
+        } catch (IOException e) {
+          LOG.warn("Error cleaning up the intermediate data");
         }
       }
     }
