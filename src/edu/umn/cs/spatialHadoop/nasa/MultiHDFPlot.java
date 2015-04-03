@@ -137,6 +137,7 @@ public class MultiHDFPlot {
       params.set(HDFPlot.PREPROCESSED_WATERMARK, wmImage.toString());
     }
     // Start a job for each path
+    int imageWidth = -1;
     int imageHeight = -1;
     boolean overwrite = params.getBoolean("overwrite", false);
     boolean pyramid = params.getBoolean("pyramid", false);
@@ -152,12 +153,14 @@ public class MultiHDFPlot {
       if (overwrite || !outFs.exists(outputPath)) {
         // Need to plot
         Job rj = HDFPlot.plotHeatMap(inputPaths, outputPath, params);
-        if (imageHeight == -1) {
+        if (imageHeight == -1 || imageWidth == -1) {
           if (rj != null) {
             imageHeight = rj.getConfiguration().getInt("height", 1000);
+            imageWidth = rj.getConfiguration().getInt("width", 1000);
             mbr = (Rectangle) OperationsParams.getShape(rj.getConfiguration(), "mbr");
           } else {
             imageHeight = params.getInt("height", 1000);
+            imageWidth = params.getInt("width", 1000);
             mbr = (Rectangle) OperationsParams.getShape(params, "mbr");
           }
         }
@@ -189,14 +192,18 @@ public class MultiHDFPlot {
       if (scale.equals("vertical")) {
         MultiHDFPlot.drawVerticalScale(new Path(output, "scale.png"), min, max, 64,
             imageHeight, params);
+      } else if (scale.equals("horizontal")) {
+        MultiHDFPlot.drawHorizontalScale(new Path(output, "scale.png"), min, max, imageWidth,
+            64, params);
       }
     }
     // Add the KML file
-    createKML(outFs, output, mbr);
+    createKML(outFs, output, mbr, params);
     return true;
   }
 
-  private static void createKML(FileSystem outFs, Path output, Rectangle mbr) throws IOException, ParseException {
+  private static void createKML(FileSystem outFs, Path output, Rectangle mbr,
+      OperationsParams params) throws IOException, ParseException {
     FileStatus[] all_images = outFs.listStatus(output, new PathFilter() {
       @Override
       public boolean accept(Path path) {
@@ -224,6 +231,26 @@ public class MultiHDFPlot {
       ps.println("<Icon><href>"+image.getPath().getName()+"</href></Icon>");
       ps.println(mbrStr);
       ps.println("</GroundOverlay>");
+    }
+    String scale = params.get("scale", "none").toLowerCase();
+    if (scale.equals("vertical")) {
+      ps.println("<ScreenOverlay>");
+      ps.println("<name>Scale</name>");
+      ps.println("<Icon><href>scale.png</href></Icon>");
+      ps.println("<overlayXY x='1' y='0.5' xunits='fraction' yunits='fraction'/>");
+      ps.println("<screenXY x='1' y='0.5' xunits='fraction' yunits='fraction'/>");
+      ps.println("<rotationXY x='0' y='0' xunits='fraction' yunits='fraction'/>");
+      ps.println("<size x='0' y='0.7' xunits='fraction' yunits='fraction'/>");
+      ps.println("</ScreenOverlay>");
+    } else if (scale.equals("horizontal")) {
+      ps.println("<ScreenOverlay>");
+      ps.println("<name>Scale</name>");
+      ps.println("<Icon><href>scale.png</href></Icon>");
+      ps.println("<overlayXY x='0.5' y='0' xunits='fraction' yunits='fraction'/>");
+      ps.println("<screenXY x='0.5' y='0' xunits='fraction' yunits='fraction'/>");
+      ps.println("<rotationXY x='0' y='0' xunits='fraction' yunits='fraction'/>");
+      ps.println("<size x='0.7' y='0' xunits='fraction' yunits='fraction'/>");
+      ps.println("</ScreenOverlay>");
     }
     ps.println("</Folder>");
     ps.println("</kml>");
@@ -276,31 +303,6 @@ public class MultiHDFPlot {
   }
 
   /**
-   * @param args
-   * @throws IOException 
-   * @throws InterruptedException 
-   * @throws ClassNotFoundException 
-   * @throws ParseException 
-   */
-  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException, ParseException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
-    if (!params.checkInputOutput()) {
-      System.err.println("Output directly already exists and overwrite flag is not set");
-      printUsage();
-      System.exit(1);
-    }
-    String timeRange = params.get("time");
-    if (timeRange == null) {
-      System.err.println("time range must be specified");
-      printUsage();
-      System.exit(1);
-    }
-    Path[] input = params.getInputPaths();
-    Path output = params.getOutputPath();
-    multiplot(input, output, params);
-  }
-
-  /**
    * Draws a scale used with the heat map
    * @param output
    * @param valueRange
@@ -343,5 +345,76 @@ public class MultiHDFPlot {
     FSDataOutputStream outStream = fs.create(output, true);
     ImageIO.write(image, "png", outStream);
     outStream.close();
+  }
+
+  /**
+   * Draws a scale used with the heat map
+   * @param output
+   * @param valueRange
+   * @param width
+   * @param height
+   * @throws IOException
+   */
+  private static void drawHorizontalScale(Path output, double min, double max,
+      int width, int height, OperationsParams params) throws IOException {
+    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    Graphics2D g = image.createGraphics();
+    g.setBackground(Color.BLACK);
+    g.clearRect(0, 0, width, height);
+  
+    int fontSize = 24;
+    // fix this part to work according to color1, color2 and gradient type
+    HDFPlot.HDFRasterizer gradient = new HDFPlot.HDFRasterizer();
+    gradient.configure(params);
+    HDFRasterLayer gradientLayer = (HDFRasterLayer) gradient.createRaster(0, 0, new Rectangle());
+    for (int x = 0; x < width; x++) {
+      Color color = gradientLayer.calculateColor(x, 0, width);
+      g.setColor(color);
+      g.drawRect(x, height - (fontSize - 5), 1, fontSize - 5);
+    }
+  
+    g.setFont(new Font("Arial", Font.BOLD, fontSize));
+    double step = (max - min) * fontSize * 5 / width;
+    step = (int)(Math.pow(10.0, Math.round(Math.log10(step))));
+    double min_value = Math.floor(min / step) * step;
+    double max_value = Math.floor(max / step) * step;
+  
+    g.setColor(Color.WHITE);
+    for (double value = min_value; value <= max_value; value += step) {
+      double x = ((value - min) * (width - fontSize) + (max - value))/(max - min);
+      g.drawString(String.valueOf((int)value), (int)x, fontSize);
+    }
+  
+    g.dispose();
+  
+    FileSystem fs = output.getFileSystem(new Configuration());
+    FSDataOutputStream outStream = fs.create(output, true);
+    ImageIO.write(image, "png", outStream);
+    outStream.close();
+  }
+
+  /**
+   * @param args
+   * @throws IOException 
+   * @throws InterruptedException 
+   * @throws ClassNotFoundException 
+   * @throws ParseException 
+   */
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException, ParseException {
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
+    if (!params.checkInputOutput()) {
+      System.err.println("Output directly already exists and overwrite flag is not set");
+      printUsage();
+      System.exit(1);
+    }
+    String timeRange = params.get("time");
+    if (timeRange == null) {
+      System.err.println("time range must be specified");
+      printUsage();
+      System.exit(1);
+    }
+    Path[] input = params.getInputPaths();
+    Path output = params.getOutputPath();
+    multiplot(input, output, params);
   }
 }
