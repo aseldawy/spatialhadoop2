@@ -20,6 +20,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
@@ -339,11 +340,11 @@ public class AggregateQuadTree {
     }
   }
   
-  /**Tree header size, resolution + fillValue + cardinality + timestamp*/
-  private static final int TreeHeaderSize = 4 + 2 + 4 + 8;
-  /**Value size: short*/
+  /**Tree header size = resolution + fillValue + cardinality*/
+  private static final int TreeHeaderSize = 4 + 2 + 4;
+  /**Value size = short*/
   private static final int ValueSize = 2;
-  /**Node size: min + max + sum + count*/
+  /**Node size = min + max + sum + count*/
   private static final int NodeSize = 2 + 2 + 8 + 8;
   
   /**
@@ -487,8 +488,9 @@ public class AggregateQuadTree {
    * @param resolution
    * @return
    */
-  private static long getValuesStartOffset() {
-    return TreeHeaderSize;
+  private static long getValuesStartOffset(int cardinality) {
+    // Skip tree header and timestamps
+    return TreeHeaderSize + cardinality * 8;
   }
   
   /**
@@ -503,7 +505,7 @@ public class AggregateQuadTree {
    * @return
    */
   private static long getNodesStartOffset(int resolution, int cardinality) {
-    return TreeHeaderSize + resolution * resolution * cardinality * ValueSize;
+    return TreeHeaderSize + cardinality * 8 + resolution * resolution * cardinality * ValueSize;
   }
 
   /**
@@ -712,7 +714,7 @@ public class AggregateQuadTree {
     }
     if (output != null) {
       PointValue returnValue = new PointValue();
-      long dataStartPosition = treeStartPosition + getValuesStartOffset();
+      long dataStartPosition = treeStartPosition + getValuesStartOffset(cardinality);
       // Return all values in the selected ranges
       for (int iRange = 0; iRange < selectedStarts.size(); iRange++) {
         int treeStart = selectedStarts.get(iRange);
@@ -817,7 +819,7 @@ public class AggregateQuadTree {
     // Result 1: Accumulate all values
     // Sort disk offsets to eliminate backward seeks
     if (!selectedStarts.isEmpty()) {
-      LOG.info("Aggregate query selected "+selectedNodesPos.size()
+      LOG.debug("Aggregate query selected "+selectedNodesPos.size()
           +" nodes and "+numOfSelectedRecords+" records");
       
       final IndexedSortable sortable = new IndexedSortable() {
@@ -839,7 +841,7 @@ public class AggregateQuadTree {
       };
       new QuickSort().sort(sortable, 0, selectedStarts.size());
       
-      long dataStartPosition = getValuesStartOffset();
+      long dataStartPosition = getValuesStartOffset(cardinality);
       Point resultCoords = new Point();
       // Return all values in the selected ranges
       for (int iRange = 0; iRange < selectedStarts.size(); iRange++) {
@@ -922,30 +924,34 @@ public class AggregateQuadTree {
     Path destDir = params.getOutputPath();
     final FileSystem destFs = destDir.getFileSystem(params);
     
+    TimeRange timeRange = params.get("time") != null? new TimeRange(params.get("time")) : null;
+    
     // Create daily indexes that do not exist
     final Path dailyIndexDir = new Path(destDir, "daily");
-    final FileStatus[] sourceFiles = sourceFs.globStatus(new Path(inputDir, "**/*"));
-    // Shuffle the array for better load balancing across threads
-    Random rand = new Random();
-    for (int i = 0; i < sourceFiles.length - 1; i++) {
-      // Swap the entry at i with any following entry
-      int i2 = i + rand.nextInt(sourceFiles.length - i - 1);
-      FileStatus temp = sourceFiles[i];
-      sourceFiles[i] = sourceFiles[i2];
-      sourceFiles[i2] = temp;
+    FileStatus[] mathcingDays = timeRange == null?
+        sourceFs.listStatus(inputDir) :
+          sourceFs.listStatus(inputDir, timeRange);
+    final Vector<Path> sourceFiles = new Vector<Path>();
+    for (FileStatus matchingDay : mathcingDays) {
+      for (FileStatus matchingTile : sourceFs.listStatus(matchingDay.getPath())) {
+        sourceFiles.add(matchingTile.getPath());
+      }
+
     }
+    // Shuffle the array for better load balancing across threads
+    Collections.shuffle(sourceFiles);
     final String datasetName = params.get("dataset");
-    Parallel.forEach(sourceFiles.length, new RunnableRange<Object>() {
+    Parallel.forEach(sourceFiles.size(), new RunnableRange<Object>() {
       @Override
       public Object run(int i1, int i2) {
         LOG.info("Worker ["+i1+","+i2+") started");
         for (int i = i1; i < i2; i++) {
-          FileStatus sourceFile = sourceFiles[i];
+          Path sourceFile = sourceFiles.get(i);
           try {
-            Path relativeSourceFile = makeRelative(sourceDir, sourceFile.getPath());
+            Path relativeSourceFile = makeRelative(sourceDir, sourceFile);
             Path destFilePath = new Path(dailyIndexDir, relativeSourceFile);
             if (!destFs.exists(destFilePath)) {
-              LOG.info("Worker ["+i1+","+i2+") indexing: "+sourceFile.getPath().getName());
+              LOG.info("Worker ["+i1+","+i2+") indexing: "+sourceFile.getName());
               Path tmpFile;
               do {
                 tmpFile = new Path((int)(Math.random()* 1000000)+".tmp");
@@ -953,7 +959,7 @@ public class AggregateQuadTree {
               tmpFile = tmpFile.makeQualified(destFs);
               if (datasetName == null)
                 throw new RuntimeException("Please provide the name of dataset you would like to index");
-              AggregateQuadTree.build(params, sourceFile.getPath(), datasetName,
+              AggregateQuadTree.build(params, sourceFile, datasetName,
                   tmpFile);
               synchronized (destFs) {
                 Path destDir = destFilePath.getParent();
@@ -1003,11 +1009,13 @@ public class AggregateQuadTree {
       Path dstIndexDir, SimpleDateFormat srcFormat, SimpleDateFormat dstFormat,
       final OperationsParams params)
       throws IOException, ParseException, InterruptedException {
-    final FileStatus[] sourceIndexes = fs.listStatus(srcIndexDir);
+    TimeRange timeRange = params.get("time") != null? new TimeRange(params.get("time")) : null;
+    final FileStatus[] sourceIndexes = timeRange == null?
+        fs.listStatus(srcIndexDir) : fs.listStatus(srcIndexDir, timeRange);
     Arrays.sort(sourceIndexes); // Alphabetical sort acts as sort-by-date here
     
-    // Scan the daily indexes and merge each consecutive run belonging to the
-    // same month
+    // Scan the source indexes and merge each consecutive run belonging to the
+    // same unit
     int i1 = 0;
     while (i1 < sourceIndexes.length) {
       final String indexToCreate =
@@ -1063,14 +1071,15 @@ public class AggregateQuadTree {
                 }
               };
 
-              // Find matching tiles in all daily indexes to merge
-              Path[] filesToMerge = new Path[lastIndex - firstIndex];
-              filesToMerge[0] = tileInFirstDay.getPath();
+              // Find matching tiles in all source indexes to merge
+              Vector<Path> filesToMerge = new Vector<Path>(lastIndex - firstIndex);
+              filesToMerge.add(tileInFirstDay.getPath());
               for (int iDailyIndex = firstIndex + 1; iDailyIndex < lastIndex; iDailyIndex++) {
                 FileStatus[] matchedTileFile = fs.listStatus(sourceIndexes[iDailyIndex].getPath(), tileFilter);
-                if (matchedTileFile.length != 1)
-                  throw new RuntimeException("Matched "+matchedTileFile.length+" files instead of 1 for tile "+tileID+" in dir "+sourceIndexes[iDailyIndex].getPath());
-                filesToMerge[iDailyIndex - firstIndex] = matchedTileFile[0].getPath();
+                if (matchedTileFile.length == 0)
+                  LOG.warn("Could not find tile "+tileID+" in dir "+sourceIndexes[iDailyIndex].getPath());
+                else if (matchedTileFile.length == 1)
+                  filesToMerge.add(matchedTileFile[0].getPath());
               }
               
               if (fs.exists(destIndexFile)) {
@@ -1099,7 +1108,8 @@ public class AggregateQuadTree {
               } while (fs.exists(tmpFile));
               tmpFile = tmpFile.makeQualified(fs);
               LOG.info("Merging tile "+tileID+" into file "+destIndexFile);
-              AggregateQuadTree.merge(params, filesToMerge, tmpFile);
+              AggregateQuadTree.merge(params,
+                  filesToMerge.toArray(new Path[filesToMerge.size()]), tmpFile);
               synchronized (fs) {
                 Path destDir = destIndexFile.getParent();
                 if (!fs.exists(destDir))
@@ -1139,6 +1149,19 @@ public class AggregateQuadTree {
     return relative;
   }
   
+  public static int getResolution(FileSystem fs, Path p) throws IOException {
+    FSDataInputStream inStream = null;
+    try {
+      inStream = new FSDataInputStream(new RandomCompressedInputStream(fs, p));
+      //inStream = fs.open(p);
+      int resolution = inStream.readInt();
+      return resolution;
+    } finally {
+      if (inStream != null)
+        inStream.close();
+    }
+  }
+
   public static void main(String[] args) throws IOException, ParseException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     directoryIndexer(params);

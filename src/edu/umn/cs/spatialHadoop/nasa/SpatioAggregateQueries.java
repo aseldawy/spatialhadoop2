@@ -10,7 +10,6 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -41,37 +40,6 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 public class SpatioAggregateQueries {
   
   private static final Log LOG = LogFactory.getLog(SpatioAggregateQueries.class);
-  
-  public static class TimeRange {
-    /**Date format of time range*/
-    static final SimpleDateFormat DateFormat = new SimpleDateFormat("yyyy.MM.dd");
-    
-    /**Regular expression for a time range*/
-    static final Pattern TimeRange = Pattern.compile("^(\\d{4}\\.\\d{2}\\.\\d{2})\\.\\.(\\d{4}\\.\\d{2}\\.\\d{2})$");
-
-    /**Start time (inclusive)*/
-    public long start;
-    /**End time (exclusive)*/
-    public long end;
-    
-    public TimeRange(String str) throws ParseException {
-      Matcher matcher = TimeRange.matcher(str);
-      if (!matcher.matches())
-        throw new RuntimeException("Illegal time range '"+str+"'");
-      start = DateFormat.parse(matcher.group(1)).getTime();
-      end = DateFormat.parse(matcher.group(2)).getTime();
-    }
-    
-    public TimeRange(long start, long end) {
-      this.start = start;
-      this.end = end;
-    }
-    
-    @Override
-    public String toString() {
-      return DateFormat.format(this.start) + " -- "+DateFormat.format(this.end);
-    }
-  }
   
   /**A regular expression to catch the tile identifier of a MODIS grid cell*/
   private static final Pattern MODISTileID = Pattern.compile("^.*h(\\d\\d)v(\\d\\d).*$");
@@ -144,37 +112,41 @@ public class SpatioAggregateQueries {
     if (allMatchingFiles.size() == 0)
       return null;
     
+    final int resolution = AggregateQuadTree.getResolution(fs, allMatchingFiles.get(0));
+    
     // 3- Query all matching files in parallel
     Vector<Node> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<AggregateQuadTree.Node>() {
       @Override
       public Node run(int i1, int i2) {
         Node threadResult = new AggregateQuadTree.Node();
+        if (i1 == 0)
         for (int i_file = i1; i_file < i2; i_file++) {
+          Path matchingFile = allMatchingFiles.get(i_file);
           try {
-            Path matchingFile = allMatchingFiles.get(i_file);
             Matcher matcher = MODISTileID.matcher(matchingFile.getName());
             matcher.matches(); // It has to match
             int h = Integer.parseInt(matcher.group(1));
             int v = Integer.parseInt(matcher.group(2));
             // Clip the query region and normalize in this tile
             Rectangle translated = spatialRange.translate(-h, -v);
-            int x1 = (int) (Math.max(translated.x1, 0) * 1200);
-            int y1 = (int) (Math.max(translated.y1, 0) * 1200);
-            int x2 = (int) (Math.min(translated.x2, 1.0) * 1200);
-            int y2 = (int) (Math.min(translated.y2, 1.0) * 1200);
+            int x1 = (int) (Math.max(translated.x1, 0) * resolution);
+            int y1 = (int) (Math.max(translated.y1, 0) * resolution);
+            int x2 = (int) (Math.min(translated.x2, 1.0) * resolution);
+            int y2 = (int) (Math.min(translated.y2, 1.0) * resolution);
             AggregateQuadTree.Node fileResult = AggregateQuadTree.aggregateQuery(fs, matchingFile,
                 new java.awt.Rectangle(x1, y1, (x2 - x1), (y2 - y1)));
             threadResult.accumulate(fileResult);
           } catch (IOException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Error reading file "+matchingFile, e);
           }
         }
         return threadResult;
       }
     });
     AggregateQuadTree.Node finalResult = new AggregateQuadTree.Node();
-    for (Node threadResult : threadsResults)
+    for (Node threadResult : threadsResults) {
       finalResult.accumulate(threadResult);
+    }
     numOfTreesTouchesInLastRequest = allMatchingFiles.size();
     return finalResult;
   }
@@ -223,8 +195,8 @@ public class SpatioAggregateQueries {
       }
     }
     
-    
-    final int resolution = 1200;
+    // All matching files are supposed to have the same resolution
+    final int resolution = AggregateQuadTree.getResolution(fs, allMatchingFiles.get(0));
     
     final java.awt.Point queryInMatchingTile = new java.awt.Point();
     queryInMatchingTile.x = (int) Math.floor((queryPoint.x - h) * resolution);
@@ -301,7 +273,6 @@ public class SpatioAggregateQueries {
         if (matches != null) {
           LOG.info("Matched "+matches.length+" partitions in "+indexDir);
           for (TemporalPartition match : matches) {
-            LOG.info("Matched temporal partition: "+match.dirName);
             matchingPartitions.add(new Path(indexDir, match.dirName));
           }
           // Update range to remove matching part
