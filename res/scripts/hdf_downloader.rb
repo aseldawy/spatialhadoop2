@@ -27,7 +27,7 @@ def rectOverlap(rect1, rect2)
     rangeOverlap(rect1[1]...rect1[3], rect2[1]...rect2[3])
 end
 
-def downloadFiles(files_to_download, downloadPath)
+def downloadFiles(files_to_download, downloadPath, error_files)
   puts "Downloading #{files_to_download.size} files to '#{downloadPath}'"
   partitions = []
   $ParallelSize.times {|i| partitions << (files_to_download.size * i / $ParallelSize)}
@@ -49,9 +49,11 @@ def downloadFiles(files_to_download, downloadPath)
             puts "File #{url_to_download} downloaded successfully"
           else
             $stderr.puts "Error moving file #{downloadedFile}"
+            error_files << url_to_download
           end
         else
           puts "Error downloading file #{url_to_download}"
+          error_files << url_to_download
         end
       end # each file_id
     } # Thread
@@ -111,6 +113,7 @@ index_file.scan(FilePattern) do |href|
 end
 
 files_to_download = []
+error_files = []
 
 for snapshot_dir in all_files
   puts "Checking #{snapshot_dir}"
@@ -140,8 +143,6 @@ for snapshot_dir in all_files
           lon1 = x2 / Math::cos(y1 * Math::PI / 180)
           lon2 = x2 / Math::cos(y2 * Math::PI / 180)
           x2 = [lon1, lon2].max
-          if h == 21 && v == 6
-          end
           if rectOverlap(query_range, [x1, y1, x2, y2])
             # Download this file
             files_to_download << "#{snapshot_url}/#{cell_file_name}"
@@ -152,13 +153,20 @@ for snapshot_dir in all_files
   end
   
   if files_to_download.size >= $ParallelSize
-    downloadFiles(files_to_download, downloadPath)
+    downloadFiles(files_to_download, downloadPath, error_files)
     files_to_download.clear
   end
 end
 
 # Download any remaining files
-downloadFiles(files_to_download, downloadPath) unless files_to_download.empty?
+downloadFiles(files_to_download, downloadPath, error_files) unless files_to_download.empty?
+
+# Give one last chance to error files
+files_to_download = error_files
+error_files = []
+downloadFiles(files_to_download, downloadPath, error_files) unless files_to_download.empty?
+
+$stderr.puts "Error downloading #{error_files.length} files" unless error_files.empty?
 
 # Delete temporary download path
 FileUtils.rm_rf($TempDownloadPath)
