@@ -258,7 +258,7 @@ public class ShahedServer extends AbstractHandler {
         @Override
         public void collect(NASAPoint r) {
           synchronized (writer) {
-            writer.printf("{\"lat\":%f, \"lon\":%f, timestamp:\"%s\", value:\"%d\"},",
+            writer.printf("{\"lat\":%f, \"lon\":%f, \"timestamp\":\"%s\", \"value\":\"%d\"},",
                 r.y, r.x, dateFormat.format(r.timestamp), r.getValue());
           }
         }
