@@ -143,6 +143,7 @@ public class ShahedServer extends AbstractHandler {
     ((Request) request).setHandled(true);
     
     try {
+      LOG.info("Received request: '"+request.getRequestURI()+"'");
       if (target.endsWith("/generate_image.cgi")) {
         LOG.info("Generating image");
         // Start a background thread that handles the request
