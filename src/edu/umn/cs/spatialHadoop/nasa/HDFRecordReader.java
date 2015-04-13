@@ -348,7 +348,10 @@ public class HDFRecordReader<S extends NASAShape>
       byte[] valueStatus = new byte[unparsedDataArray.length / valueSize];
       
       recoverXDirection(waterMask, valueStatus);
-      recoverYDirection(waterMask, valueStatus);
+      int emptyColumns = recoverYDirection(waterMask, valueStatus);
+      // Do an additional round in x-direction to make sure there are no empty columns
+      if (emptyColumns > 10)
+        recoverXDirection(waterMask, valueStatus);
     } finally {
       if (waterMaskFile != null)
         waterMaskFile.close();
@@ -417,7 +420,8 @@ public class HDFRecordReader<S extends NASAShape>
    *  2 - the entry did not contain a value and its current value is copied<br/>
    *  3 - the entry did not contain a value and its current value is interpolated<br/>
    */
-  private void recoverYDirection(byte[] water_mask, byte[] valueStatus) {
+  private int recoverYDirection(byte[] water_mask, byte[] valueStatus) {
+    int emptyColumns = 0;
     // Resolution of the input dataset
     int inputRes = nasaDataset.resolution;
     // Recover in x-direction
@@ -435,6 +439,7 @@ public class HDFRecordReader<S extends NASAShape>
         // Recover all points in the range [y1, y2)
         if (y1 == 0 && y2 == inputRes) {
           // The whole column is empty. Nothing to do
+          emptyColumns++;
         } else if (y1 == 0 || y2 == inputRes) {
           // We have only one value at one end of the missing run
           int copyVal = getValueAt(x, y1 == 0 ? y2 : (y1 - 1));
@@ -469,6 +474,7 @@ public class HDFRecordReader<S extends NASAShape>
         }
       }
     }
+    return emptyColumns;
   }
   
   /***
