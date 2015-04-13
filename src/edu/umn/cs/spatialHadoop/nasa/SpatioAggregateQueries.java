@@ -136,7 +136,7 @@ public class SpatioAggregateQueries {
             AggregateQuadTree.Node fileResult = AggregateQuadTree.aggregateQuery(fs, matchingFile,
                 new java.awt.Rectangle(x1, y1, (x2 - x1), (y2 - y1)));
             threadResult.accumulate(fileResult);
-          } catch (IOException e) {
+          } catch (Exception e) {
             throw new RuntimeException("Error reading file "+matchingFile, e);
           }
         }

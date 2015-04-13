@@ -747,8 +747,6 @@ public class AggregateQuadTree {
       inStream = new FSDataInputStream(new RandomCompressedInputStream(fs, p));
       //inStream = fs.open(p);
       return aggregateQuery(inStream, query_mbr);
-    } catch (IOException e) {
-      throw new RuntimeException("Error reading file '"+p+"'", e);
     } finally {
       if (inStream != null)
         inStream.close();
