@@ -309,7 +309,13 @@ public class ShahedServer extends AbstractHandler {
     resource.close();
     outResponse.close();
     response.setStatus(HttpServletResponse.SC_OK);
-    response.setContentType(URLConnection.guessContentTypeFromName(target));
+    if (target.endsWith(".js")) {
+      response.setContentType("application/javascript");
+    } else if (target.endsWith(".css")) {
+      response.setContentType("text/css");
+    } else {
+      response.setContentType(URLConnection.guessContentTypeFromName(target));
+    }
   }
   
   private class ImageRequestHandler extends Thread {
