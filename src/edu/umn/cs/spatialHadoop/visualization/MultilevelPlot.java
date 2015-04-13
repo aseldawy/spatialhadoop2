@@ -363,12 +363,9 @@ public class MultilevelPlot {
       
       TileIndex key = new TileIndex();
       
-      LOG.info("Rasterizing tile "+tileID);
-      int count = 0;
       if (smooth)
         shapes = rasterizer.smooth(shapes);
       for (Shape shape : shapes) {
-        count++;
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
           continue;
@@ -408,12 +405,10 @@ public class MultilevelPlot {
           overlappingCells.height = updatedY2 - updatedY1 + 1;
         }
       }
-      LOG.info("Rasterized "+count+" records");
       // Write all created layers to the output as images
       for (Map.Entry<TileIndex, RasterLayer> entry : rasterLayers.entrySet()) {
         context.write(entry.getKey(), entry.getValue());
       }
-      LOG.info("Wrote "+rasterLayers.size()+ " images to output");
     }
   }
 
