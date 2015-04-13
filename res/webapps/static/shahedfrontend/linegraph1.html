@@ -48,7 +48,7 @@ text.shadow {
 </style>
 <body>
 <script type="text/javascript" src="d3/d3.v3.js"></script>
-<script src="brush.js"></script>
+<script src="js/brush.js"></script>
 <script>
 //alert(fileName);
 
@@ -393,7 +393,7 @@ rect.on('mouseout', function () {
 
  // Make the actual CORS request.
  function makeCorsRequest(mlat,mlng,min_lat,max_lat,startDate,endDate,k, callback) {
-	  var url = "/selection_query.cgi?lat="+mlat+"&long="+mlng+"&fromDate="+startDate"&toDate="+endDate;
+	  var url = "/selection_query.cgi?lat="+mlat+"&long="+mlng+"&fromDate="+startDate+"&toDate="+endDate;
 	  
  //alert("kk");
    var xhr = createCORSRequest('GET', url);
