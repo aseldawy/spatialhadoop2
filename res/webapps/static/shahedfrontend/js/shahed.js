@@ -195,7 +195,7 @@ $(function () {
   jQuery(document).ajaxStart( function() {
     jQuery("#modal").show();
     jQuery("#fade").show();
-  }). ajaxStop(function() {
+  }). ajaxComplete(function() {
     jQuery("#modal").hide();
     jQuery("#fade").hide();
   });
