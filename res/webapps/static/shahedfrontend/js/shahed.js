@@ -179,7 +179,7 @@ function formatDate(date) {
 
 var slider;  
 var MillisPerDay = 1000 * 60 * 60 * 24; // Milliseconds in one day
-var day0 = new Date(2013, 0, 1); // Minimum day supported
+var day0 = new Date(2011, 0, 1); // Minimum day supported
 
 var waitImageURL = 'images/wait.gif';
 var sessionoutRedirectURL = 'aggregate_query.html';
@@ -205,9 +205,9 @@ $(function () {
     dateFormat : 'mm/dd/yy',
     changeYear : true,
     changeMonth : true,
-    yearRange : "2013:2013",
+    yearRange : "2011:2014",
   }).change( function() {
-    var day0 = new Date(2013, 0, 1);
+    var day0 = new Date(2011, 0, 1);
     var value1 = (Date.parse($("#fromDatePicker").val()) - day0.getTime()) / MillisPerDay;
     var value2 = (Date.parse($("#toDatePicker").val()) - day0.getTime()) / MillisPerDay;
     slider.slider('values', [value1, value2]);
@@ -217,9 +217,9 @@ $(function () {
     dateFormat : 'mm/dd/yy',
     changeYear : true,
     changeMonth : true,
-    yearRange : "2013:2013",
+    yearRange : "2011:2014",
   }).change( function() {
-    var day0 = new Date(2013, 0, 1);
+    var day0 = new Date(2011, 0, 1);
     var value1 = (Date.parse($("#fromDatePicker").val()) - day0.getTime()) / MillisPerDay;
     var value2 = (Date.parse($("#toDatePicker").val()) - day0.getTime()) / MillisPerDay;
     slider.slider('values', [value1, value2]);
@@ -227,7 +227,7 @@ $(function () {
   slider = $("#date-range-selector").slider( {
     range: true,
     min: 0,
-    max: 365,
+    max: 365*4+1,
     values: [ 0, 15 ],
     slide: function( event, ui ) {
       var value1 = ui.values[0];
