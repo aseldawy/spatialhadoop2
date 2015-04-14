@@ -144,7 +144,6 @@ public class ShahedServer extends AbstractHandler {
     
     try {
       LOG.info("Received request: '"+request.getRequestURL()+"'");
-      LOG.info("With parameters: '"+request.getParameterMap()+"'");
       if (target.endsWith("/generate_image.cgi")) {
         LOG.info("Generating image");
         // Start a background thread that handles the request
@@ -236,6 +235,7 @@ public class ShahedServer extends AbstractHandler {
   private void handleSelectionQuery(HttpServletRequest request,
       HttpServletResponse response) throws ParseException, IOException {
     try {
+      LOG.info("fromDate: '"+request.getParameter("fromDate")+"', toDate: '"+request.getParameter("toDate")+"'");
       final String lat = request.getParameter("lat");
       final String lon = request.getParameter("long");
       
