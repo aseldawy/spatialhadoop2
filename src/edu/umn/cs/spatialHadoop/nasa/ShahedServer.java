@@ -363,7 +363,7 @@ public class ShahedServer extends AbstractHandler {
       startDate = inputDateFormat.parse(request.getParameter("fromDate")).getTime();
       endDate = inputDateFormat.parse(request.getParameter("toDate")).getTime();
       // Limit time to thirty days
-      endDate = Math.min(endDate, endDate + 30L * 24 * 60 * 60 * 1000);
+      endDate = Math.min(endDate, startDate + 30L * 24 * 60 * 60 * 1000);
 
       // Create the query parameters
       this.rect = west+','+south+','+east+','+north;
