@@ -240,9 +240,9 @@ public class ShahedServer extends AbstractHandler {
       final String lon = request.getParameter("long");
       
       String[] startDateParts = request.getParameter("fromDate").split("/");
-      String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
+      String startDate = startDateParts[2] + '.' + startDateParts[1] + '.' + startDateParts[0];
       String[] endDateParts = request.getParameter("toDate").split("/");
-      String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+      String endDate = endDateParts[2] + '.' + endDateParts[1] + '.' + endDateParts[0];
       
       // Create the query parameters
       OperationsParams params = new OperationsParams(commonParams);

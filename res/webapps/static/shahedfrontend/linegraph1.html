@@ -140,12 +140,15 @@ function make_y_axis() {		// function for the y grid lines
       .ticks(yticks)
 }
 
+
+
 var startDateSplit = startDate.split("-");
 var endDateSplit = endDate.split("-");
 
 startDate = startDateSplit[2] + "/" + startDateSplit[1] + "/" + startDateSplit[0];
 endDate = endDateSplit[2] + "/" + endDateSplit[1] + "/" + endDateSplit[0];
 
+console.log(startDate +"--"+ endDate);
 makeCorsRequest(lat,lng,0,0,startDate,endDate,10,function(result) {
 
 	result = result.replace(",]","]");
@@ -399,8 +402,12 @@ rect.on('mouseout', function () {
 
  // Make the actual CORS request.
  function makeCorsRequest(mlat,mlng,min_lat,max_lat,fromDate,toDate,k, callback) {
+   	var port = "";
+	  var hostname = "http://";
 	  console.log(mlat +" "+ mlng +" "+fromDate+" "+toDate);
-	  var url = "/selection_query.cgi?lat="+mlat+"&long="+mlng+"&fromDate="+startDate+"&toDate="+endDate;
+	  //var url = "http://localhost:8000/respe.html"
+	  var url ="/selection_query.cgi?lat="+mlat+"&long="+mlng+"&fromDate="+startDate+"&toDate="+endDate;
+	  console.log(url);
 	  
  //alert("kk");
    var xhr = createCORSRequest('GET', url);

@@ -155,6 +155,7 @@ google.maps.event.addListener(map, 'click', function( event ){
 	  lng=event.latLng.lng();
 	  startDate = document.getElementById("fromDatePicker").value;
 	  toDate = document.getElementById("toDatePicker").value;
+	  metadown = true;
 	   
 	   /*  alert( "Latitude: "+event.latLng.lat()+" "+", longitude: "+event.latLng.lng() + " World Coordinate  "+ Math.floor(worldCoordinate.x) + ' , ' +
 		      Math.floor(worldCoordinate.y) + " x "+ xcoord + " y "+ ycoord + " "+pixelCoordinate + " "+ tileCoordinate.x/Math.pow(2,map.getZoom()) + " "+ tileCoordinate.y/Math.pow(2,map.getZoom()));  
@@ -274,9 +275,9 @@ google.maps.event.addDomListener(window, 'load', initialize);
     </div>
 	<div id="panel2" style="background:#DEDEDE;height: 70px">
 	    <label for="fromDatePicker" style="display: inline;"> From Date: </label>
-	    <input type="date" value="01/01/2012" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;">
+	    <input type="date" value="2014-01-01" min="2014-01-01" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;">
 	    <label for="toDatePicker" style="display: inline;"> To Date: </label>
-	    <input type="date" value="01/15/2012" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;">
+	    <input type="date" value="2014-01-02" max="2014-12-31" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;">
 	    <br>
 	  </div>
     <div id="map-canvas"></div>
