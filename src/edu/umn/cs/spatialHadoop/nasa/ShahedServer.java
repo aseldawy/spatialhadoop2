@@ -327,10 +327,8 @@ public class ShahedServer extends AbstractHandler {
     private String requesterName;
     private String email;
     private String datasetName;
-    /**Start date in the format "yyyy.MM.dd" */
-    private String startDate;
-    /**End date in the format "yyyy.MM.dd" */
-    private String endDate;
+    /**Start and end dates*/
+    private long startDate, endDate;
     private String rect;
     private String west;
     private String east;
@@ -345,7 +343,7 @@ public class ShahedServer extends AbstractHandler {
     /**How to recover missing values (none|read|write)*/
     private String recover;
 
-    public ImageRequestHandler(HttpServletRequest request) throws IOException {
+    public ImageRequestHandler(HttpServletRequest request) throws IOException, ParseException {
       outFS = FileSystem.get(commonParams);
       do {
         this.outDir = new Path(String.format("%06d", (int)(Math.random() * 1000000)));
@@ -361,10 +359,11 @@ public class ShahedServer extends AbstractHandler {
       this.output = request.getParameter("output");
       this.recover = request.getParameter("recover");
 
-      String[] startDateParts = request.getParameter("fromDate").split("/");
-      this.startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
-      String[] endDateParts = request.getParameter("toDate").split("/");
-      this.endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+      final SimpleDateFormat inputDateFormat = new SimpleDateFormat("MM/dd/yyyy");
+      startDate = inputDateFormat.parse(request.getParameter("fromDate")).getTime();
+      endDate = inputDateFormat.parse(request.getParameter("toDate")).getTime();
+      // Limit time to thirty days
+      endDate = Math.min(endDate, endDate + 30L * 24 * 60 * 60 * 1000);
 
       // Create the query parameters
       this.rect = west+','+south+','+east+','+north;
@@ -460,7 +459,8 @@ public class ShahedServer extends AbstractHandler {
       if (recover != null)
         plotParams.set("recover", recover);
       plotParams.set("dataset", datasetName);
-      plotParams.set("time", startDate+".."+endDate);
+      final SimpleDateFormat outputDateFormat = new SimpleDateFormat("yyyy.MM.dd");
+      plotParams.set("time", outputDateFormat.format(startDate)+".."+outputDateFormat.format(endDate));
       plotParams.setBoolean("background", true);
       
       return MultiHDFPlot.multiplot(new Path[] {inputURL}, outDir, plotParams);
