@@ -429,7 +429,7 @@ public class ShahedServer extends AbstractHandler {
           "The server is currently processing your request and you will receive " +
           "an email with the generated files as soon as the request is complete.\n\n"+
           "Request parameters:\n"+
-          String.format(" region: {south: %f, west: %f, north: %f, east:%f}", south, west, north, east)+"\n"+
+          String.format(" region: {south: %s, west: %s, north: %s, east:%s}", south, west, north, east)+"\n"+
           " Start date: "+dateFormat.format(startDate)+"\n"+
           " end date: "+dateFormat.format(endDate)+"\n"+
           "Thank you for using Shahed. \n\n Shahed team");
