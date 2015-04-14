@@ -86,6 +86,8 @@ function aggregateQuery(){
     $("#avg").val(average);
     timeInMillis = parseInt(data.stats.totaltime);
     $("#time").val(timeInMillis);
+    $("#partitions").val(data.stats["num-of-temporal-partitions"]);
+    $("#files").val(data.stats["num-of-trees"]);
   }, complete: function() {
     processingRequest = false;
   }});
