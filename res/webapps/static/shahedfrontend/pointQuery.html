@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Simple Map</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+	
+	
+    <style>
+      html, body, #map-canvas {
+        height: 100%;
+        margin: 0px;
+        padding: 0px
+      }
+      #panel {
+        position: absolute;
+        top: 5px;
+        left: 50%;
+        margin-left: -180px;
+        z-index: 5;
+        background-color: #fff;
+        padding: 5px;
+        border: 1px solid #999;
+      }
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false"></script>
+    <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+    <script type="text/javascript" src="d3/d3.v3.js"></script>
+	<link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.3/themes/smoothness/jquery-ui.css">
+	<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.3/jquery-ui.min.js"></script>
+    <script>
+var map;
+var TILE_SIZE = 36;
+var tilex =1;
+var tiley=1;
+var tx=0;
+var ty=0;
+var lat,lng;
+var startDate,endDate;
+
+var metadown=false;
+
+var marker;
+var mywin;
+var infoWindow ;
+var noofmarkers=0, noofwindow=0;
+var markers = [];
+var windows = [];
+var hashmap={};
+
+
+var colors= ['darkseagreen', 'salmon', 'skyblue', 'lightslategray', 'lightgreen', 'crimson', 'sienna', 'plum', 'orange', 'tomato', 'thistle', 'orchid',
+             'silver', 'teal', 'yellow' , 'fuchsia', 'aquamarine', 'peru'];
+var counter=0;
+
+function bound(value, opt_min, opt_max) {
+	  if (opt_min != null) value = Math.max(value, opt_min);
+	  if (opt_max != null) value = Math.min(value, opt_max);
+	  return value;
+	}
+
+function degreesToRadians(deg) {
+  return deg * (Math.PI / 180);
+}
+
+function radiansToDegrees(rad) {
+  return rad / (Math.PI / 180);
+}
+
+/** @constructor */
+function MercatorProjection() {
+  this.pixelOrigin_ = new google.maps.Point(TILE_SIZE / 2,TILE_SIZE / 2);
+  this.pixelsPerLonDegree_ = TILE_SIZE / 360;
+  this.pixelsPerLonRadian_ = TILE_SIZE / (2 * Math.PI);
+}
+
+MercatorProjection.prototype.fromLatLngToPoint = function(latLng,
+    opt_point) {
+  var me = this;
+  var point = opt_point || new google.maps.Point(0, 0);
+  var origin = me.pixelOrigin_;
+  point.x = origin.x + latLng.lng() * me.pixelsPerLonDegree_;
+
+  // Truncating to 0.9999 effectively limits latitude to 89.189. This is
+  // about a third of a tile past the edge of the world tile.
+  var siny = bound(Math.sin(degreesToRadians(latLng.lat())), -0.9999, 0.9999);
+  point.y = origin.y + 0.5 * Math.log((1 + siny) / (1 - siny)) *-me.pixelsPerLonRadian_;
+  return point;
+};
+
+MercatorProjection.prototype.fromPointToLatLng = function(point) {
+  var me = this;
+  var origin = me.pixelOrigin_;
+  var lng = (point.x - origin.x) / me.pixelsPerLonDegree_;
+  var latRadians = (point.y - origin.y) / -me.pixelsPerLonRadian_;
+  var lat = radiansToDegrees(2 * Math.atan(Math.exp(latRadians)) - Math.PI / 2);
+  return new google.maps.LatLng(lat, lng);
+};	
+
+function fromLatLngToPixel (position) {
+	  var scale = Math.pow(2, map.getZoom());
+	  var proj = map.getProjection();
+	  var bounds = map.getBounds();
+
+	  var nw = proj.fromLatLngToPoint(
+	    new google.maps.LatLng(bounds.getNorthEast().lat(),bounds.getSouthWest().lng()
+	    ));
+	  var point = proj.fromLatLngToPoint(position);
+
+	  return new google.maps.Point(Math.floor((point.x - nw.x) * scale), Math.floor((point.y - nw.y) * scale));
+	};
+	
+function initialize() {
+	//infoWindow = new google.maps.InfoWindow;
+  var mapOptions = {
+    zoom:6,
+    center: new google.maps.LatLng(21.423349,39.826271)
+  };
+  map = new google.maps.Map(document.getElementById('map-canvas'), mapOptions);
+  var mapDiv = document.getElementById('map-canvas');
+  
+  $(window).keydown(function(evtobj) {
+	  //console.log(event.which);
+      //if(evtobj.ctrlKey) { 
+      if(event.keyCode == 16) { 
+        metadown = true;
+       // evtobj.preventDefault();
+        //console.log("keydown "+ metadown);
+      } 
+    $(window).keyup(function(evtobj) {
+		
+		metadown = false;
+       //alert("keyup");
+     });
+  });
+
+google.maps.event.addListener(map, 'click', function( event ){	
+	 var numTiles = 1 << map.getZoom();
+	  var projection = new MercatorProjection();
+	  /* alert( "Latitude: "+event.latLng.lat()+" "+", longitude: "+event.latLng.lng() + " "+ event.latLng); */
+	  var worldCoordinate = projection.fromLatLngToPoint(event.latLng);
+	  var pixelCoordinate = new google.maps.Point(worldCoordinate.x * numTiles,worldCoordinate.y * numTiles);
+	  var tileCoordinate = new google.maps.Point(Math.floor(pixelCoordinate.x / TILE_SIZE),Math.floor(pixelCoordinate.y / TILE_SIZE));
+	  var xcoord= Math.floor(worldCoordinate.x);
+	  if(xcoord>35) xcoord=35;
+	  var ycoord= Math.ceil(Math.floor(worldCoordinate.y)/2);
+	  if(ycoord<0 ) ycoord=0;
+	  else if(ycoord>17) ycoord=17;
+	  tilex=xcoord;
+	  tiley=ycoord;
+	  tx=tileCoordinate.x/Math.pow(2,map.getZoom());
+	  ty=tileCoordinate.y/Math.pow(2,map.getZoom());
+	  
+	  lat=event.latLng.lat();
+	  lng=event.latLng.lng();
+	  startDate = document.getElementById("fromDatePicker").value;
+	  toDate = document.getElementById("toDatePicker").value;
+	   
+	   /*  alert( "Latitude: "+event.latLng.lat()+" "+", longitude: "+event.latLng.lng() + " World Coordinate  "+ Math.floor(worldCoordinate.x) + ' , ' +
+		      Math.floor(worldCoordinate.y) + " x "+ xcoord + " y "+ ycoord + " "+pixelCoordinate + " "+ tileCoordinate.x/Math.pow(2,map.getZoom()) + " "+ tileCoordinate.y/Math.pow(2,map.getZoom()));  
+	     */
+     var d = fromLatLngToPixel(event.latLng);
+	    
+	 if(!(metadown&& windows.length==0)){		 
+		//console.log("*****mouse clicked  key pressed:*****" + metadown);
+		 
+		 var myLatlng = new google.maps.LatLng(event.latLng.lat(),event.latLng.lng());
+		 marker = addMarker(myLatlng, metadown);
+		 
+		 if (metadown) {
+			console.log("old window " + metadown);
+			 
+			 windows[windows.length-1].addgraph(lat,lng,startDate,endDate);
+			 windows[windows.length-1].focus();
+			 metadown=false;
+		 }
+		 else
+		{
+		 mywin= window.open("linegraph1.html" , "_blank", "toolbar=no, location=no, resizable=no, width=950, height=500");
+	     mywin.moveTo(d.x,d.y+90);
+	     mywin.focus();
+	     windows.push(mywin);
+	     //console.log("new window " + metadown);
+		}
+		 google.maps.event.addListener(marker, 'click', function(event) {
+			   //windows[this.customInfo].opener.blur();
+			   windows[this.customInfo].focus();
+			   var markerposition = fromLatLngToPixel(this.getPosition()); 
+			   windows[this.customInfo].moveTo(markerposition.x, markerposition.y+90);
+			   
+			   for( var i in markers ){
+				   markers[i].setAnimation(null);							   
+				   }
+			   if (this.getAnimation() != null) {
+				    this.setAnimation(null);
+				  } else {
+				    this.setAnimation(google.maps.Animation.BOUNCE);
+				  }
+		 });
+	      //alert(pixelCoordinate + " " + d.x + " "+d.y + " "+ d + " "+ xpos + " "+ ypos); 
+	 }
+    
+});
+
+}
+
+//Add a marker to the map and push to the array.
+function addMarker(location, metadown) {
+	
+	for( var i in markers ){
+		markers[i].setAnimation(null);							   
+    }
+ var col= d3.rgb(colors[noofmarkers]);	
+ var pinImage = new google.maps.MarkerImage("http://www.googlemapsmarkers.com/v1/*/" + col.toString().substring(1,7) + "/" + col.toString().substring(1,7) + "/" + col.toString().substring(1,7));
+ var wind;
+ if(!metadown) wind=noofwindow++
+ else wind=noofwindow-1;
+  var marker = new google.maps.Marker({
+    position: location,
+    map: map,
+    animation: google.maps.Animation.DROP,
+    icon: pinImage,
+    customInfo: wind
+  });
+  noofmarkers++;
+  markers.push(marker);
+  return marker;
+}
+
+//Sets the map on all markers in the array.
+function setAllMap(map) {
+  for (var i = 0; i < markers.length; i++) {
+    markers[i].setMap(map);
+  }
+}
+
+// Removes the markers from the map, but keeps them in the array.
+function clearMarkers() {
+  setAllMap(null);
+}
+
+// Shows any markers currently in the array.
+function showMarkers() {
+  setAllMap(map);
+}
+
+//close all open windows
+function closewindows() {
+  for (var i = 0; i < windows.length; i++) {
+    windows[i].close();
+  }
+}
+
+// Deletes all markers in the array by removing references to them.
+function deleteMarkers() {
+  clearMarkers();
+  markers = [];
+  noofmarkers=0;
+  noofwindow=0;
+  closewindows();
+  windows=[];
+}
+
+google.maps.event.addDomListener(window, 'load', initialize);
+ 
+
+    </script>
+  </head>
+  <body>
+      <div id="panel">
+      <input onclick="clearMarkers();" type=button value="Hide Markers">
+      <input onclick="showMarkers();" type=button value="Show All Markers">
+      <input onclick="deleteMarkers();" type=button value="Delete Markers">
+    </div>
+	<div id="panel2" style="background:#DEDEDE;height: 70px">
+	    <label for="fromDatePicker" style="display: inline;"> From Date: </label>
+	    <input type="date" value="01/01/2012" name="fromDatePicker" id="fromDatePicker" style="display: inline; width: 120px;">
+	    <label for="toDatePicker" style="display: inline;"> To Date: </label>
+	    <input type="date" value="01/15/2012" name="toDatePicker" id="toDatePicker" style="display: inline; width: 120px;">
+	    <br>
+	  </div>
+    <div id="map-canvas"></div>
+  </body>
+</html>
