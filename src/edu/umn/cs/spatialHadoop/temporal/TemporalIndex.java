@@ -224,20 +224,12 @@ public class TemporalIndex {
 		if (startIndex < this.partitions.length
 				&& this.partitions[startIndex].start < start)
 			startIndex++;
-		while (startIndex > 0 && this.partitions[startIndex].end > start)
-		  startIndex--;
-		while (startIndex < this.partitions.length && this.partitions[startIndex].start < end)
-		  startIndex++;
 		// If endIndex points to a partition that is totally contained, include
 		// it in the range by incrementing endIndex
 		int endIndex = binarySearch(end);
 		if (endIndex < this.partitions.length
 				&& this.partitions[endIndex].start > end)
 			endIndex++;
-		while (endIndex < this.partitions.length && this.partitions[endIndex].start < end)
-		  endIndex++;
-		while (endIndex > 0 && this.partitions[endIndex].end > start)
-		  endIndex--;
 		if (startIndex >= endIndex)
 			return null; // No matches
 		TemporalPartition[] matches = new TemporalPartition[endIndex
@@ -258,19 +250,24 @@ public class TemporalIndex {
 	 * @return
 	 */
 	private int binarySearch(long time) {
-		int s = 0;
-		int e = this.partitions.length;
-		while (s < e) {
-			int m = (s + e) / 2;
-			if (this.partitions[m].contains(time)) {
-				return m;
-			}
-			if (this.partitions[m].start > time) {
-				e = m;
-			} else {
-				s = m + 1;
-			}
-		}
-		return s;
+	  int i = 0;
+	  while (i < this.partitions.length && this.partitions[i].end < time)
+	    i++;
+	  return i;
+	  
+//		int s = 0;
+//		int e = this.partitions.length;
+//		while (s < e) {
+//			int m = (s + e) / 2;
+//			if (this.partitions[m].contains(time)) {
+//				return m;
+//			}
+//			if (this.partitions[m].start > time) {
+//				e = m;
+//			} else {
+//				s = m + 1;
+//			}
+//		}
+//		return s;
 	}
 }
