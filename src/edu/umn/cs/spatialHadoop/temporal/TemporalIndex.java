@@ -221,15 +221,23 @@ public class TemporalIndex {
 		// If startIndex points to a partially overlapping partition, skip it
 		// and
 		// match the next one (which has to be totally contained in given range)
-		while (startIndex < this.partitions.length
+		if (startIndex < this.partitions.length
 				&& this.partitions[startIndex].start < start)
 			startIndex++;
+		while (startIndex > 0 && this.partitions[startIndex].end > start)
+		  startIndex--;
+		while (startIndex < this.partitions.length && this.partitions[startIndex].start < end)
+		  startIndex++;
 		// If endIndex points to a partition that is totally contained, include
 		// it in the range by incrementing endIndex
 		int endIndex = binarySearch(end);
-		while (endIndex < this.partitions.length
+		if (endIndex < this.partitions.length
 				&& this.partitions[endIndex].start > end)
 			endIndex++;
+		while (endIndex < this.partitions.length && this.partitions[endIndex].start < end)
+		  endIndex++;
+		while (endIndex > 0 && this.partitions[endIndex].end > start)
+		  endIndex--;
 		if (startIndex >= endIndex)
 			return null; // No matches
 		TemporalPartition[] matches = new TemporalPartition[endIndex
