@@ -228,7 +228,7 @@ public class TemporalIndex {
 		// it in the range by incrementing endIndex
 		int endIndex = binarySearch(end);
 		if (endIndex < this.partitions.length
-				&& this.partitions[endIndex].end > end)
+				&& this.partitions[endIndex].end < end)
 			endIndex++;
 		if (startIndex >= endIndex)
 			return null; // No matches
