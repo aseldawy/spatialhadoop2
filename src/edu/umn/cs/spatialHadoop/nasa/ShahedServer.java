@@ -187,6 +187,7 @@ public class ShahedServer extends AbstractHandler {
       String startDate = startDateParts[2] + '.' + startDateParts[0] + '.' + startDateParts[1];
       String[] endDateParts = request.getParameter("toDate").split("/");
       String endDate = endDateParts[2] + '.' + endDateParts[0] + '.' + endDateParts[1];
+      LOG.info("Date range "+startDate+", "+endDate);
       
       // Create the query parameters
       OperationsParams params = new OperationsParams(commonParams);

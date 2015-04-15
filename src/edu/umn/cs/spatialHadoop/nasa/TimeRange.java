@@ -51,30 +51,32 @@ public class TimeRange implements PathFilter {
     try {
       String filename = pathname.getName();
       // Beginning and end times of this file
-      long begin, end;
+      long fileBegin, fileEnd;
       if (filename.matches(YearRegex)) {
         // Year
         Date filetime = YearFormat.parse(filename);
-        begin = filetime.getTime();
+        fileBegin = filetime.getTime();
         filetime.setYear(filetime.getYear() + 1);
-        end = filetime.getTime();
+        fileEnd = filetime.getTime();
       } else if (filename.matches(MonthRegex)) {
         // Month
         Date filetime = MonthFormat.parse(filename);
-        begin = filetime.getTime();
+        fileBegin = filetime.getTime();
         filetime.setMonth(filetime.getMonth() + 1);
-        end = filetime.getTime();
+        fileEnd = filetime.getTime();
       } else if (filename.matches(DayRegex)) {
         // Month
         Date filetime = DayFormat.parse(filename);
-        begin = filetime.getTime();
+        fileBegin = filetime.getTime();
         filetime.setDate(filetime.getDate() + 1);
-        end = filetime.getTime();
+        fileEnd = filetime.getTime();
       } else {
         return false;
       }
       // Return true if the file is totally contained in the range
-      return (begin >= this.start && end <= this.end);
+      if (fileBegin >= this.start && fileEnd <= this.end)
+        System.out.println("Accepting "+pathname+" with range "+this);
+      return (fileBegin >= this.start && fileEnd <= this.end);
     } catch (ParseException e) {
       return false;
     }
