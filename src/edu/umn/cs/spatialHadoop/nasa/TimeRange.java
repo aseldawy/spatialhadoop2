@@ -74,8 +74,6 @@ public class TimeRange implements PathFilter {
         return false;
       }
       // Return true if the file is totally contained in the range
-      if (fileBegin >= this.start && fileEnd <= this.end)
-        System.out.println("Accepting "+pathname+" with range "+this);
       return (fileBegin >= this.start && fileEnd <= this.end);
     } catch (ParseException e) {
       return false;

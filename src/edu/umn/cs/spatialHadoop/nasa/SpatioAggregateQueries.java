@@ -255,6 +255,7 @@ public class SpatioAggregateQueries {
     // specified by the user. Eventually, it can be split into at most two
     // partitions if partially matched by a partition.
     Vector<TimeRange> temporalRanges = new Vector<TimeRange>();
+    System.out.println(new TimeRange(params.get("time")));
     temporalRanges.add(new TimeRange(params.get("time")));
     Path[] temporalIndexes = new Path[] {
       new Path(inFile, "yearly"),
