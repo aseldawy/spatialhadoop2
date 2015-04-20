@@ -33,7 +33,7 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  */
 public class KdTreePartitioner extends Partitioner {
   /**MBR of the input file*/
-  private Rectangle mbr;
+  private final Rectangle mbr = new Rectangle();
   
   /**
    * Location of all splits stored in a complete binary tree which is encoded in
@@ -46,7 +46,6 @@ public class KdTreePartitioner extends Partitioner {
    * and deserialize it
    */
   public KdTreePartitioner() {
-    this.mbr = new Rectangle();
   }
   
   @Override
@@ -157,8 +156,6 @@ public class KdTreePartitioner extends Partitioner {
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    if (mbr == null)
-      mbr = new Rectangle();
     mbr.readFields(in);
     int partitions = in.readInt();
     splits = new double[partitions];

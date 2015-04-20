@@ -32,7 +32,7 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  */
 public class QuadTreePartitioner extends Partitioner {
   /**The minimal bounding rectangle of the underlying file*/
-  protected Rectangle mbr;
+  protected final Rectangle mbr = new Rectangle();
   /**ID of all leaf nodes in partition tree*/
   protected int[] leafNodeIDs;
 
@@ -41,7 +41,6 @@ public class QuadTreePartitioner extends Partitioner {
    * and deserialize it
    */
   public QuadTreePartitioner() {
-    mbr = new Rectangle();
   }
   
   @Override
@@ -140,8 +139,6 @@ public class QuadTreePartitioner extends Partitioner {
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    if (mbr == null)
-      mbr = new Rectangle();
     mbr.readFields(in);
     int numberOfLeafNodes = in.readInt();
     leafNodeIDs = new int[numberOfLeafNodes];

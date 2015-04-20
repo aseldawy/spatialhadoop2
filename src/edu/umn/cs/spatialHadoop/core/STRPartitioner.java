@@ -22,7 +22,7 @@ import java.util.Comparator;
  */
 public class STRPartitioner extends Partitioner {
   /**MBR of the input file*/
-  private Rectangle mbr;
+  private final Rectangle mbr = new Rectangle();
   /**Number of rows and columns*/
   private int columns, rows;
   /**Locations of vertical strips*/
@@ -35,7 +35,6 @@ public class STRPartitioner extends Partitioner {
    * and deserialize it
    */
   public STRPartitioner() {
-    this.mbr = new Rectangle();
   }
   
   @Override

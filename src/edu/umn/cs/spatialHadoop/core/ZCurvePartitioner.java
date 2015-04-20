@@ -26,7 +26,7 @@ public class ZCurvePartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(ZCurvePartitioner.class);
 
   /**MBR of the input file*/
-  protected Rectangle mbr;
+  protected final Rectangle mbr = new Rectangle();
   /**Upper bound of all partitions*/
   protected long[] zSplits;
 
@@ -37,7 +37,6 @@ public class ZCurvePartitioner extends Partitioner {
    * and deserialize it
    */
   public ZCurvePartitioner() {
-    this.mbr = new Rectangle();
   }
   
   @Override

@@ -32,12 +32,11 @@ public class HilbertCurvePartitioner extends Partitioner {
   protected int[] splits;
   
   /**The MBR of the original input file*/
-  protected Rectangle mbr;
+  protected final Rectangle mbr = new Rectangle();
 
   protected static final int Resolution = Short.MAX_VALUE;
   
   public HilbertCurvePartitioner() {
-    this.mbr = new Rectangle();
   }
   
   @Override
@@ -78,8 +77,6 @@ public class HilbertCurvePartitioner extends Partitioner {
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    if (mbr == null)
-      mbr = new Rectangle();
     mbr.readFields(in);
     splits = new int[in.readInt()];
     byte[] buffer = new byte[splits.length * 4];
