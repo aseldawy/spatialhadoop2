@@ -55,7 +55,7 @@ public class STRPartitioner extends Partitioner {
     this.xSplits = new double[columns];
     this.ySplits = new double[rows * columns];
     int prev_quantile = 0;
-    this.mbr = new Rectangle(mbr);
+    this.mbr.set(mbr);
     for (int column = 0; column < columns; column++) {
       int col_quantile = (column + 1) * points.length / columns;
       // Determine the x split for this column. Last column has a special handling
