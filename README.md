@@ -78,7 +78,7 @@ This will automatically retrieve all dependencies and compile the source code.
 
 To build a redistribution package, run the command:
 
-    ant package
+    ant package1
 
 This Ant task will package all classes of SpatialHadoop along with the dependent jars
 not included in Hadoop into an archive. This archive can be used to install SpatialHadoop
