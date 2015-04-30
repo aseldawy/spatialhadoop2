@@ -388,8 +388,10 @@ public class SingleLevelPlot {
 
     boolean vflip = params.getBoolean("vflip", true);
     
+    OperationsParams mbrParams = new OperationsParams(params);
+    mbrParams.setBoolean("background", false);
     final Rectangle inputMBR = params.get("mbr") != null ?
-        params.getShape("mbr").getMBR() : FileMBR.fileMBR(inFiles, params);
+        params.getShape("mbr").getMBR() : FileMBR.fileMBR(inFiles, mbrParams);
     OperationsParams.setShape(params, InputMBR, inputMBR);
 
     // Retrieve desired output image size and keep aspect ratio if needed

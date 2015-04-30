@@ -7,6 +7,7 @@
   import="java.awt.image.BufferedImage"
   import="edu.umn.cs.spatialHadoop.operations.*"
   import="edu.umn.cs.spatialHadoop.core.*"
+  import="edu.umn.cs.spatialHadoop.osm.*"
   import="java.io.BufferedReader"
   import="org.apache.hadoop.http.HtmlQuoting"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
@@ -15,7 +16,7 @@
   import="java.io.ByteArrayOutputStream"
   import="javax.imageio.ImageIO"
   import="org.apache.commons.codec.binary.Base64"
-  import="org.apache.hadoop.mapred.RunningJob"
+  import="org.apache.hadoop.mapreduce.Job"
   import="edu.umn.cs.spatialHadoop.util.JspSpatialHelper"
   import="edu.umn.cs.spatialHadoop.OperationsParams"
 %>
@@ -48,7 +49,7 @@
         plotConf.setBoolean("vflip", true);
         plotConf.setBoolean("local", true);
         
-        Plot.plot(master[0].getPath(), new Path(path, "_partitions.png"), plotConf);
+        GeometricPlot.plot(new Path[] {master[0].getPath()}, new Path(path, "_partitions.png"), plotConf);
       }
     }
     // Check if the plotted image is there
@@ -62,14 +63,14 @@
         plotConf.set("color", colorName);
       plotConf.setBoolean("background", true);
       plotConf.setBoolean("vflip", true);
-      plotConf.setBoolean("fast", true);
       
-      Plot.plot(path, new Path(path, "_data.png"), plotConf);
-      RunningJob job = Plot.lastSubmittedJob;
-      String jobUrl =
-        JspSpatialHelper.jobTrackUrl(request.getRequestURL().toString(), conf, job);
-      out.println("Plot job submitted<br/>");
-      out.println("<a href='"+jobUrl+"'>Track Job #"+job.getID()+" here</a><br/>");
+      Job job = GeometricPlot.plot(new Path[] {path}, new Path(path, "_data.png"), plotConf);
+        out.println("Plot job submitted<br/>");
+      if (job != null) {
+        String jobUrl =
+          JspSpatialHelper.jobTrackUrl(request.getRequestURL().toString(), plotConf, job);
+        out.println("<a href='"+jobUrl+"'>Track Job #"+job.getJobID()+" here</a><br/>");
+      }
     }
   }
 %>

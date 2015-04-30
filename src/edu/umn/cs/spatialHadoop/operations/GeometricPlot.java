@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.awt.Color;
+import java.awt.Graphics;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
@@ -18,7 +19,10 @@ import java.io.IOException;
 import javax.imageio.ImageIO;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -111,14 +115,92 @@ public class GeometricPlot {
    * @throws InterruptedException 
    * @throws ClassNotFoundException 
    */
-  public static void plot(Path[] inFiles, Path outFile, OperationsParams params)
+  public static Job plot(Path[] inFiles, Path outFile, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+      return MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
     } else {
-      SingleLevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+      return SingleLevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
     }
   }
+  
+  /**
+   * Combines images of different datasets into one image that is displayed
+   * to users.
+   * This method is called from the web interface to display one image for
+   * multiple selected datasets.
+   * @param fs The file system that contains the datasets and images
+   * @param files Paths to directories which contains the datasets
+   * @param includeBoundaries Also plot the indexing boundaries of datasets
+   * @return An image that is the combination of all datasets images
+   * @throws IOException
+   * @throws InterruptedException 
+   */
+  public static BufferedImage combineImages(Configuration conf, Path[] files,
+      boolean includeBoundaries, int width, int height) throws IOException, InterruptedException {
+    BufferedImage result = null;
+    // Retrieve the MBRs of all datasets
+    Rectangle allMbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
+    for (Path file : files) {
+      Rectangle mbr = FileMBR.fileMBR(file, new OperationsParams(conf));
+      allMbr.expand(mbr);
+    }
+
+    // Adjust width and height to maintain aspect ratio
+    if ((allMbr.x2 - allMbr.x1) / (allMbr.y2 - allMbr.y1) > (double) width / height) {
+      // Fix width and change height
+      height = (int) ((allMbr.y2 - allMbr.y1) * width / (allMbr.x2 - allMbr.x1));
+    } else {
+      width = (int) ((allMbr.x2 - allMbr.x1) * height / (allMbr.y2 - allMbr.y1));
+    }
+    result = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+
+
+    for (Path file : files) {
+      FileSystem fs = file.getFileSystem(conf);
+      if (fs.getFileStatus(file).isDir()) {
+        // Retrieve the MBR of this dataset
+        Rectangle mbr = FileMBR.fileMBR(file, new OperationsParams(conf));
+        // Compute the coordinates of this image in the whole picture
+        mbr.x1 = (mbr.x1 - allMbr.x1) * width / allMbr.getWidth();
+        mbr.x2 = (mbr.x2 - allMbr.x1) * width / allMbr.getWidth();
+        mbr.y1 = (mbr.y1 - allMbr.y1) * height / allMbr.getHeight();
+        mbr.y2 = (mbr.y2 - allMbr.y1) * height / allMbr.getHeight();
+        // Retrieve the image of this dataset
+        Path imagePath = new Path(file, "_data.png");
+        if (!fs.exists(imagePath))
+          throw new RuntimeException("Image "+imagePath+" not ready");
+        FSDataInputStream imageFile = fs.open(imagePath);
+        BufferedImage image = ImageIO.read(imageFile);
+        imageFile.close();
+        // Draw the image
+        Graphics graphics = result.getGraphics();
+        graphics.drawImage(image, (int) mbr.x1, (int) mbr.y1,
+            (int) mbr.getWidth(), (int) mbr.getHeight(), null);
+        graphics.dispose();
+
+        if (includeBoundaries) {
+          // Plot also the image of the boundaries
+          // Retrieve the image of the dataset boundaries
+          imagePath = new Path(file, "_partitions.png");
+          if (fs.exists(imagePath)) {
+            imageFile = fs.open(imagePath);
+            image = ImageIO.read(imageFile);
+            imageFile.close();
+            // Draw the image
+            graphics = result.getGraphics();
+            graphics.drawImage(image, (int) mbr.x1, (int) mbr.y1,
+                (int) mbr.getWidth(), (int) mbr.getHeight(), null);
+            graphics.dispose();
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
 
   /**
    * @param args

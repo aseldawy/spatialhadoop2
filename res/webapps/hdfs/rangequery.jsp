@@ -6,7 +6,8 @@
   import="org.apache.hadoop.fs.*"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
   import="edu.umn.cs.spatialHadoop.core.*"
-  import="org.apache.hadoop.mapred.RunningJob"
+  import="edu.umn.cs.spatialHadoop.osm.*"
+  import="org.apache.hadoop.mapreduce.Job"
   
   
   import="java.io.*"
@@ -50,8 +51,7 @@
       OperationsParams.setShape(params, "rect", query_mbr);
       params.setBoolean("background", true);
       params.setClass("shape", OSMPolygon.class, Shape.class);
-      RangeQuery.rangeQuery(input, output, query_mbr, params);
-      RunningJob running_job = RangeQuery.lastRunningJob;
+      Job running_job = RangeQuery.rangeQueryMapReduce(input, output, params);
       
       // Create a link to the status of the running job
       String trackerAddress = conf.get("mapred.job.tracker.http.address");
@@ -60,13 +60,17 @@
       int cutoff = requestUrl.indexOf('/', requestUrl.lastIndexOf(':'));
       requestUrl = requestUrl.substring(0, cutoff);
       InetSocketAddress requestSocAddr = NetUtils.createSocketAddr(requestUrl);
-      out.println("Job #"+running_job.getID()+" submitted successfully<br/>");
-      out.print("<a target='_blank' href='"+
-        "http://"+requestSocAddr.getHostName()+":"+infoSocAddr.getPort()+
-        "/jobdetails.jsp?jobid="+running_job.getID()+"&amp;refresh=30"+
-        "'>");
-      out.print("Click here to track the job");
-      out.println("</a>");
+      if (running_job != null) {
+        out.println("Job #"+running_job.getJobID()+" submitted successfully<br/>");
+        out.print("<a target='_blank' href='"+
+          "http://"+requestSocAddr.getHostName()+":"+infoSocAddr.getPort()+
+          "/jobdetails.jsp?jobid="+running_job.getJobID()+"&amp;refresh=30"+
+          "'>");
+        out.print("Click here to track the job");
+        out.println("</a>");
+      } else {
+        out.println("Job submitted successfully");
+      }
     } catch(Exception e) {
       out.println(e);
       for (StackTraceElement ste : e.getStackTrace()) {

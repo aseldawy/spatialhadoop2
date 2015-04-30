@@ -17,11 +17,11 @@ import java.net.InetSocketAddress;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.net.NetUtils;
 
 public class JspSpatialHelper {
-  public static String jobTrackUrl(String requestUrl, Configuration conf, RunningJob job) {
+  public static String jobTrackUrl(String requestUrl, Configuration conf, Job job) {
     // Create a link to the status of the running job
     String trackerAddress = conf.get("mapred.job.tracker.http.address");
     InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(trackerAddress);
@@ -29,7 +29,7 @@ public class JspSpatialHelper {
     requestUrl = requestUrl.substring(0, cutoff);
     InetSocketAddress requestSocAddr = NetUtils.createSocketAddr(requestUrl);
     String address = "http://"+requestSocAddr.getHostName()+":"+infoSocAddr.getPort()+
-      "/jobdetails.jsp?jobid="+job.getID()+"&amp;refresh=30";
+      "/jobdetails.jsp?jobid="+job.getJobID()+"&amp;refresh=30";
     return address;
   }
   

@@ -6,7 +6,8 @@
   import="org.apache.hadoop.fs.*"
   import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
   import="edu.umn.cs.spatialHadoop.core.*"
-  import="org.apache.hadoop.mapred.RunningJob"
+  import="edu.umn.cs.spatialHadoop.osm.*"
+  import="org.apache.hadoop.mapreduce.Job"
   
   
   import="java.io.*"
@@ -45,25 +46,33 @@
     
     try{
       OperationsParams params = new OperationsParams(conf);
+      FileSystem outFS = output.getFileSystem(params);
+      outFS.mkdirs(output);
+      
       params.setBoolean("background", true);
       params.setClass("shape", OSMPolygon.class, Shape.class);
-      KNN.knn(input, output, query_point, k, params);
-      RunningJob running_job = KNN.lastRunningJob;
+      OperationsParams.setShape(params, "point", query_point);
+      params.setInt("k", k);
+      Job running_job = KNN.knn(input, new Path(output, "knn-result"), params);
       
-      // Create a link to the status of the running job
-      String trackerAddress = conf.get("mapred.job.tracker.http.address");
-      InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(trackerAddress);
-      String requestUrl = request.getRequestURL().toString();
-      int cutoff = requestUrl.indexOf('/', requestUrl.lastIndexOf(':'));
-      requestUrl = requestUrl.substring(0, cutoff);
-      InetSocketAddress requestSocAddr = NetUtils.createSocketAddr(requestUrl);
-      out.println("Job #"+running_job.getID()+" submitted successfully<br/>");
-      out.print("<a target='_blank' href='"+
-        "http://"+requestSocAddr.getHostName()+":"+infoSocAddr.getPort()+
-        "/jobdetails.jsp?jobid="+running_job.getID()+"&amp;refresh=30"+
-        "'>");
-      out.print("Click here to track the job");
-      out.println("</a>");
+      if (running_job != null) {
+        // Create a link to the status of the running job
+        String trackerAddress = conf.get("mapred.job.tracker.http.address");
+        InetSocketAddress infoSocAddr = NetUtils.createSocketAddr(trackerAddress);
+        String requestUrl = request.getRequestURL().toString();
+        int cutoff = requestUrl.indexOf('/', requestUrl.lastIndexOf(':'));
+        requestUrl = requestUrl.substring(0, cutoff);
+        InetSocketAddress requestSocAddr = NetUtils.createSocketAddr(requestUrl);
+        out.println("Job #"+running_job.getJobID()+" submitted successfully<br/>");
+        out.print("<a target='_blank' href='"+
+          "http://"+requestSocAddr.getHostName()+":"+infoSocAddr.getPort()+
+          "/jobdetails.jsp?jobid="+running_job.getJobID()+"&amp;refresh=30"+
+          "'>");
+        out.print("Click here to track the job");
+        out.println("</a>");
+      } else {
+        out.println("KNN job submitted successfully");
+      }
     } catch(Exception e) {
       out.println(e);
       for (StackTraceElement ste : e.getStackTrace()) {

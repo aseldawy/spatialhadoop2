@@ -2,7 +2,7 @@
   contentType="text/html; charset=UTF-8"
   import="org.apache.hadoop.fs.*"
   import="java.awt.image.BufferedImage"
-  import="edu.umn.cs.spatialHadoop.operations.Plot"
+  import="edu.umn.cs.spatialHadoop.operations.GeometricPlot"
   import="edu.umn.cs.spatialHadoop.core.SpatialSite"
   import="java.io.BufferedReader"
   import="org.apache.hadoop.http.HtmlQuoting"
@@ -53,7 +53,7 @@
       try {
         boolean showPartitions = request.getParameter("partitions") != null &&
             request.getParameter("partitions").equals("true");
-        BufferedImage combinedImage = Plot.combineImages(conf, filepaths,
+        BufferedImage combinedImage = GeometricPlot.combineImages(conf, filepaths,
           showPartitions, 1000, 1000);
         
         // Encode the image in base64
