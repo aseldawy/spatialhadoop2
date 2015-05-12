@@ -218,9 +218,10 @@ public class Indexer {
     
     // Set input file MBR if not already set
     Rectangle inputMBR = (Rectangle) params.getShape("mbr");
-    if (inputMBR == null)
+    if (inputMBR == null) {
       inputMBR = FileMBR.fileMBR(inPath, params);
-    OperationsParams.setShape(job, "mbr", inputMBR);
+      OperationsParams.setShape(job, "mbr", inputMBR);
+    }
     
     // Set input and output
     job.setInputFormat(ShapeIterInputFormat.class);
@@ -308,8 +309,6 @@ public class Indexer {
       long estimatedOutSize = (long) (inSize * (1.0 + job.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f)));
       FileSystem outFS = out.getFileSystem(job);
       long outBlockSize = outFS.getDefaultBlockSize(out);
-      int numPartitions = Math.max(1, (int) Math.ceil((float)estimatedOutSize / outBlockSize));
-      LOG.info("Partitioning the space into "+numPartitions+" partitions");
 
       final Vector<Point> sample = new Vector<Point>();
       float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
@@ -331,7 +330,11 @@ public class Indexer {
       System.out.println("Total time for sampling in millis: "+(t2-t1));
       LOG.info("Finished reading a sample of "+sample.size()+" records");
       
-      partitioner.createFromPoints(inMBR, sample.toArray(new Point[sample.size()]), numPartitions);
+      int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.size() * outBlockSize / estimatedOutSize));
+      int numPartitions = Math.max(1, (int) Math.ceil((float)estimatedOutSize / outBlockSize));
+      LOG.info("Partitioning the space into "+numPartitions+" partitions with capacity of "+partitionCapacity);
+
+      partitioner.createFromPoints(inMBR, sample.toArray(new Point[sample.size()]), partitionCapacity);
       
       return partitioner;
     } catch (InstantiationException e) {
@@ -344,10 +347,9 @@ public class Indexer {
   }
 
   private static void indexLocal(Path inPath, Path outPath,
-      OperationsParams params) throws IOException {
+      OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params);
     String sindex = params.get("sindex");
-    Partitioner partitioner = createPartitioner(inPath, outPath, job, sindex);
     
     // Start reading input file
     Vector<InputSplit> splits = new Vector<InputSplit>();
@@ -370,6 +372,14 @@ public class Indexer {
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
     boolean replicate = job.getBoolean("replicate", false);
     
+    // Set input file MBR if not already set
+    Rectangle inputMBR = (Rectangle) params.getShape("mbr");
+    if (inputMBR == null) {
+      inputMBR = FileMBR.fileMBR(inPath, params);
+      OperationsParams.setShape(job, "mbr", inputMBR);
+    }
+    
+    Partitioner partitioner = createPartitioner(inPath, outPath, job, sindex);
     final IndexRecordWriter<Shape> recordWriter = new IndexRecordWriter<Shape>(
         partitioner, replicate, sindex, outPath, params);
     
@@ -399,8 +409,11 @@ public class Indexer {
           }
         } else {
           for (Shape s : shapes) {
-            partitionID.set(partitioner.overlapPartition(s));
-            recordWriter.write(partitionID, s);
+            int pid = partitioner.overlapPartition(s);
+            if (pid != -1) {
+              partitionID.set(pid);
+              recordWriter.write(partitionID, s);
+            }
           }
         }
       }

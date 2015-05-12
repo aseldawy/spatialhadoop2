@@ -40,28 +40,28 @@ public class ZCurvePartitioner extends Partitioner {
   }
   
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
     this.mbr.set(mbr);
     long[] zValues = new long[points.length];
     for (int i = 0; i < points.length; i++)
       zValues[i] = computeZ(mbr, points[i].x, points[i].y);
-    createFromZValues(zValues, numPartitions);
+    createFromZValues(zValues, capacity);
   }
 
   /**
    * Create a ZCurvePartitioner from a list of points
    * @param vsample
    * @param inMBR
-   * @param partitions
+   * @param capacity
    * @return
    */
-  protected void createFromZValues(final long[] zValues, int partitions) {
+  protected void createFromZValues(final long[] zValues, int capacity) {
     Arrays.sort(zValues);
-    
-    this.zSplits = new long[partitions];
+    int numSplits = (int) Math.ceil((double)zValues.length / capacity);
+    this.zSplits = new long[numSplits];
     long maxZ = computeZ(mbr, mbr.x2, mbr.y2);
-    for (int i = 0; i < partitions; i++) {
-      int quantile = (int) ((long)(i + 1) * zValues.length / partitions);
+    for (int i = 0; i < numSplits; i++) {
+      int quantile = (int) ((long)(i + 1) * zValues.length / numSplits);
       this.zSplits[i] = quantile == zValues.length ? maxZ : zValues[quantile];
     }
   }

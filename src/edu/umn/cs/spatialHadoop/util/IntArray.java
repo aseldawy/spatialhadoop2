@@ -72,6 +72,22 @@ public class IntArray implements Writable {
     }
   }
   
+  public static void writeIntArray(int[] array, DataOutput out) throws IOException {
+    out.writeInt(array.length);
+    ByteBuffer bb = ByteBuffer.allocate(1024*1024);
+    for (int i = 0; i < array.length; i++) {
+      bb.putInt(array[i]);
+      if (bb.position() == bb.capacity()) {
+        // Full. Write to output
+        out.write(bb.array(), 0, bb.position());
+        bb.clear();
+      }
+    }
+    // Write whatever remaining in the buffer
+    out.write(bb.array(), 0, bb.position());
+    bb.clear();
+  }
+  
   @Override
   public void write(DataOutput out) throws IOException {
     out.writeInt(size);
@@ -87,6 +103,22 @@ public class IntArray implements Writable {
     // Write whatever remaining in the buffer
     out.write(bb.array(), 0, bb.position());
     bb.clear();
+  }
+  
+  public static int[] readIntArray(int[] array, DataInput in) throws IOException {
+    int newSize = in.readInt();
+    // Check if we need to allocate a new array
+    if (array == null || newSize != array.length)
+      array = new int[newSize];
+    byte[] buffer = new byte[1024*1024];
+    int size = 0;
+    while (size < newSize) {
+      in.readFully(buffer, 0, Math.min(buffer.length, (newSize - size) * 4));
+      ByteBuffer bb = ByteBuffer.wrap(buffer);
+      while (size < newSize && bb.position() < bb.capacity())
+        array[size++] = bb.getInt();
+    }
+    return array;
   }
   
   @Override

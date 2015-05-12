@@ -40,27 +40,27 @@ public class HilbertCurvePartitioner extends Partitioner {
   }
   
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
     this.mbr.set(mbr);
     int[] hValues = new int[points.length];
     for (int i = 0; i < points.length; i++)
       hValues[i] = computeHValue(mbr, points[i].x, points[i].y);
-    createFromHValues(hValues, numPartitions);
+    createFromHValues(hValues, capacity);
   }
   
   /**
    * Create a ZCurvePartitioner from a list of points
    * @param vsample
-   * @param partitions
+   * @param capacity
    * @return
    */
-  protected void createFromHValues(final int[] hValues, int partitions) {
+  protected void createFromHValues(final int[] hValues, int capacity) {
     Arrays.sort(hValues);
-    
-    this.splits = new int[partitions];
+    int numSplits = (int) Math.ceil((double)hValues.length / capacity);
+    this.splits = new int[numSplits];
     int maxH = 0x7fffffff;
-    for (int i = 0; i < partitions; i++) {
-      int quantile = (int) ((long)(i + 1) * hValues.length / partitions);
+    for (int i = 0; i < splits.length; i++) {
+      int quantile = (int) ((long)(i + 1) * hValues.length / numSplits);
       this.splits[i] = quantile == hValues.length ? maxH : hValues[quantile];
     }
   }

@@ -12,10 +12,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.JobConf;
-
-import edu.umn.cs.spatialHadoop.OperationsParams;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 /**
  * A partitioner that partitioner data using a uniform grid.
@@ -25,56 +23,83 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
  *
  */
 public class GridPartitioner extends Partitioner {
-  /**The information of the underlying grid*/
-  private GridInfo gridInfo;
+  private static final Log LOG = LogFactory.getLog(GridPartitioner.class);
+  
+  /**Origin of the grid*/
+  protected double x, y;
+  
+  /**Number of tiles*/
+  protected int numTiles;
+  
+  /**Total number of columns and rows within the input range*/
+  protected int numColumns, numRows;
+  
+  /**With and height of a single tile*/
+  protected double tileWidth, tileHeight;
   
   /**
    * A default constructor to be able to dynamically instantiate it
    * and deserialize it
    */
   public GridPartitioner() {
-    // Initialize grid info so that readFields work correctly
-    this.gridInfo = new GridInfo();
   }
   
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
-    this.gridInfo.set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-    this.gridInfo.calculateCellDimensions(numPartitions);
-  }
-  
-  /**
-   * Initializes a grid partitioner for a given file
-   * @param inFile
-   * @param params
-   */
-  public GridPartitioner(Path[] inFiles, JobConf job) {
-    Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-    this.gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
-    int numOfPartitions = job.getInt("m", job.getNumReduceTasks() * job.getNumReduceTasks() * 1000);
-    this.gridInfo.calculateCellDimensions(numOfPartitions);
-  }
-
-  public GridPartitioner(Path[] inFiles, JobConf job, int width, int height) {
-    Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-    this.gridInfo = new GridInfo(inMBR.x1, inMBR.y1, inMBR.x2, inMBR.y2);
-    this.gridInfo.columns = width;
-    this.gridInfo.rows = height;
+  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
+    x = mbr.x1;
+    y = mbr.y1;
+    
+    // Start with a rough estimate for number of cells assuming uniformity
+    numTiles = (int) Math.ceil(points.length / capacity);
+    GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+    int maxCellSize;
+    int maxIterations = 1000;
+    
+    do {
+      this.numColumns = gridInfo.columns = (int) Math.round(Math.sqrt(numTiles));
+      this.numRows = gridInfo.rows = (int) Math.ceil(numTiles / gridInfo.columns);
+      
+      maxCellSize = 0;
+      // TODO uncomment the following part to further breakdown big tiles
+      int[] histogram = new int[gridInfo.columns * gridInfo.rows];
+      for (Point point : points) {
+        int cell = gridInfo.getOverlappingCell(point.x, point.y);
+        if (++histogram[cell] > maxCellSize)
+          maxCellSize = histogram[cell];
+      }
+      if (maxCellSize > capacity) {
+        // Further break the largest grid cell
+        numTiles = (int) (numTiles * Math.ceil((double)maxCellSize / capacity));
+      }
+    } while (maxCellSize > capacity && maxIterations-- > 0);
+    LOG.info("Partitioning the space into a "+gridInfo.columns+"x"+gridInfo.rows+" grid");
+    tileWidth = mbr.getWidth() / gridInfo.columns;
+    tileHeight = mbr.getHeight() / gridInfo.rows;
   }
 
   @Override
   public void write(DataOutput out) throws IOException {
-    this.gridInfo.write(out);
+    out.writeDouble(x);
+    out.writeDouble(y);
+    out.writeDouble(tileWidth);
+    out.writeDouble(tileHeight);
+    out.writeInt(numTiles);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    this.gridInfo.readFields(in);
+    this.x = in.readDouble();
+    this.y = in.readDouble();
+    this.tileWidth = in.readDouble();
+    this.tileHeight = in.readDouble();
+    this.numTiles = in.readInt();
+    this.numColumns = (int) Math.round(Math.sqrt(numTiles));
+    this.numRows = (int) Math.ceil(numTiles / numColumns);
   }
   
   @Override
   public int getPartitionCount() {
-    return gridInfo.rows * gridInfo.columns;
+    return numTiles;
   }
 
   @Override
@@ -84,12 +109,21 @@ public class GridPartitioner extends Partitioner {
     Rectangle shapeMBR = shape.getMBR();
     if (shapeMBR == null)
       return;
-    java.awt.Rectangle overlappingCells = this.gridInfo.getOverlappingCells(shapeMBR);
-    for (int x = overlappingCells.x; x < overlappingCells.x + overlappingCells.width; x++) {
-      for (int y = overlappingCells.y; y < overlappingCells.y + overlappingCells.height; y++) {
-        matcher.collect(this.gridInfo.getCellId(x, y));
-      }
-    }
+    int col1, col2, row1, row2;
+    col1 = (int)Math.floor((shapeMBR.x1 - x) / tileWidth);
+    col2 = (int)Math.ceil((shapeMBR.x2 - x) / tileWidth);
+    row1 = (int)Math.floor((shapeMBR.y1 - y) / tileHeight);
+    row2 = (int)Math.ceil((shapeMBR.y2 - y) / tileHeight);
+    
+    if (col1 < 0) col1 = 0;
+    if (row1 < 0) row1 = 0;
+    for (int col = col1; col < col2; col++)
+      for (int row = row1; row < row2; row++)
+        matcher.collect(getCellNumber(col, row));
+  }
+  
+  private int getCellNumber(int col, int row) {
+    return row * numColumns + col;
   }
   
   @Override
@@ -100,16 +134,22 @@ public class GridPartitioner extends Partitioner {
     if (shapeMBR == null)
       return -1;
     Point centerPoint = shapeMBR.getCenterPoint();
-    return this.gridInfo.getOverlappingCell(centerPoint.x, centerPoint.y);
+    int col = (int)Math.floor((centerPoint.x - x) / tileWidth);
+    int row = (int)Math.floor((centerPoint.y - y) / tileHeight);
+    return getCellNumber(col, row);
   }
 
   @Override
   public CellInfo getPartition(int partitionID) {
-    return gridInfo.getCell(partitionID);
+    // Retrieve column and row of the given partition
+    int col = partitionID % numColumns;
+    int row = partitionID / numColumns;
+    return new CellInfo(partitionID, x + col * tileWidth, y + row * tileHeight,
+        x + (col + 1) * tileWidth, y + (row + 1) * tileHeight);
   }
 
   @Override
   public CellInfo getPartitionAt(int index) {
-    return getPartition(index+1);
+    return getPartition(index);
   }
 }

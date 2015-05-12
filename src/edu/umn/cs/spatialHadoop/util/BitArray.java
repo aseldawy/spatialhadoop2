@@ -91,4 +91,8 @@ public class BitArray implements Writable {
     if (bbuffer.hasRemaining())
       throw new RuntimeException("Did not consume all entries");
   }
+
+  public int size() {
+    return entries.length * BitsPerEntry;
+  }
 }

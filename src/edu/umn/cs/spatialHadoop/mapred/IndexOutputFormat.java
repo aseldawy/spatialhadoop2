@@ -13,9 +13,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -32,6 +32,7 @@ import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Partitioner;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
 
@@ -43,6 +44,9 @@ public class IndexOutputFormat<S extends Shape>
   extends FileOutputFormat<IntWritable, S> {
   
   private static final Log LOG = LogFactory.getLog(IndexOutputFormat.class);
+  
+  /**Maximum number of active closing threads*/
+  private static final int MaxClosingThreads = Runtime.getRuntime().availableProcessors() * 2;
   
   
   /**New line marker to separate records*/
@@ -67,12 +71,12 @@ public class IndexOutputFormat<S extends Shape>
     private Path outPath;
     
     /**Information of partitions being written*/
-    private Map<Integer, Partition> partitionsInfo = new HashMap<Integer, Partition>();
+    private Map<Integer, Partition> partitionsInfo = new ConcurrentHashMap<Integer, Partition>();
     /**
      * DataOutputStream for all partitions being written. It needs to be an
      * instance of stream so that it can be closed later.
      */
-    private Map<Integer, DataOutputStream> partitionsOutput = new HashMap<Integer, DataOutputStream>();
+    private Map<Integer, DataOutputStream> partitionsOutput = new ConcurrentHashMap<Integer, DataOutputStream>();
     /**A temporary text to serialize objects to before writing to output file*/
     private Text tempText = new Text2();
     /**A list of all threads that are closing partitions in the background*/
@@ -147,6 +151,14 @@ public class IndexOutputFormat<S extends Shape>
      * @param partitionToClose
      */
     private void closePartition(final int id) {
+      while (closingThreads.size() >= MaxClosingThreads) {
+        // Wait if there are too many closing threads
+        try {
+          closingThreads.firstElement().join();
+        } catch (RuntimeException e) {
+        } catch (InterruptedException e) {
+        }
+      }
       final Partition partitionInfo = partitionsInfo.get(id);
       final DataOutputStream outStream = partitionsOutput.get(id);
       Thread closeThread = new Thread() {
@@ -264,7 +276,7 @@ public class IndexOutputFormat<S extends Shape>
         // All threads are now closed. Check if errors happened
         if (!listOfErrors.isEmpty()) {
           for (Throwable t : listOfErrors)
-            LOG.error(t);
+            LOG.error("Error in thread", t);
           throw new RuntimeException("Encountered "+listOfErrors.size()+" in background thread");
         }
       } finally {

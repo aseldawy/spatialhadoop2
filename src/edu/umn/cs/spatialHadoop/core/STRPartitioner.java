@@ -38,7 +38,7 @@ public class STRPartitioner extends Partitioner {
   }
   
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
     // Apply the STR algorithm in two rounds
     // 1- First round, sort points by X and split into the given columns
     Arrays.sort(points, new Comparator<Point>() {
@@ -47,8 +47,9 @@ public class STRPartitioner extends Partitioner {
         return a.x < b.x? -1 : (a.x > b.x? 1 : 0);
       }});
     // Calculate partitioning numbers based on a grid
+    int numSplits = (int) Math.ceil((double)points.length / capacity);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-    gridInfo.calculateCellDimensions(numPartitions);
+    gridInfo.calculateCellDimensions(numSplits);
     this.columns = gridInfo.columns;
     this.rows = gridInfo.rows;
     this.xSplits = new double[columns];

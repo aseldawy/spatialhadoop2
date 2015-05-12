@@ -51,6 +51,10 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   }
   
   public void set(Shape s) {
+    if (s == null) {
+      System.out.println("tozz");
+      return;
+    }
     Rectangle mbr = s.getMBR();
     set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
   }
