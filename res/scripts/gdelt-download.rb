@@ -21,17 +21,18 @@ def downloadFiles(files_to_download, downloadPath, error_files)
     download_threads << Thread.new(first, last) { |_first, _last|
       (_first..._last).each do |file_id|
         url_to_download = files_to_download[file_id]
-        snapshot_date = File.basename(File.dirname(url_to_download))
-        output_dir = File.join(downloadPath, snapshot_date)
+        out_filename = File.join(downloadPath, File.basename(url_to_download))
+        next if File.exists?(out_filename)
         temp_download_file = File.join($TempDownloadPath, File.basename(url_to_download))
   
         system("curl -sf #{url_to_download} -o #{temp_download_file}")
         if $?.success?
-          Dir.mkdir(output_dir) unless File.exists?(output_dir)
-          if system("mv #{temp_download_file} #{output_dir}")
+          Dir.mkdir(output_dir) unless File.exists?(downloadPath)
+          begin
+            FileUtils.mv(temp_download_file, downloadPath)
             puts "File #{url_to_download} downloaded successfully"
-          else
-            $stderr.puts "Error moving file #{downloadedFile}"
+          rescue => e
+            $stderr.puts "Error moving file #{temp_download_file}"
             error_files << url_to_download
           end
         else
