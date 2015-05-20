@@ -15,6 +15,7 @@
 	</configurations>
     
   <dependencies>
+<dependency org="javax.mail" name="mail" rev="1.4.7" conf="common->default" />
     <dependency org="org.apache.hadoop" name="hadoop-core" rev="1.2.1" conf="hadoop1->default"/>
     
     <dependency org="org.apache.hadoop" name="hadoop-common" rev="2.6.0" conf="hadoop2->default"/>
