@@ -6,7 +6,7 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.Closeable;
 import java.io.DataInput;
@@ -38,6 +38,13 @@ import org.apache.hadoop.util.QuickSort;
 
 import com.vividsolutions.jts.geom.TopologyException;
 
+import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.io.MemoryInputStream;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
@@ -124,11 +131,12 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
    *          additional 16 bytes per element. So, for each 1M elements, the
    *          method will require an additional 16 M bytes (approximately).
    */
-  public void bulkLoadWrite(final byte[] element_bytes, final int offset,
-      final int len, final int degree, DataOutput dataOut,
-      final boolean fast_sort) {
+  public static void bulkLoadWrite(final byte[] element_bytes,
+      final int offset, final int len, final int degree, DataOutput dataOut,
+      final Shape stockObject, final boolean fast_sort) {
     try {
-    
+
+      int elementCount = 0;
       // Count number of elements in the given text
       int i_start = offset;
       final Text line = new Text();

@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
 
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapred.GridRecordWriter2;
 import edu.umn.cs.spatialHadoop.mapred.GridRecordWriter3;
 

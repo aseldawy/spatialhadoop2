@@ -6,7 +6,7 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.operations;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -44,24 +44,17 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.GridPartitioner;
-import edu.umn.cs.spatialHadoop.core.HilbertCurvePartitioner;
-import edu.umn.cs.spatialHadoop.core.KdTreePartitioner;
-import edu.umn.cs.spatialHadoop.core.Partition;
-import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Point;
-import edu.umn.cs.spatialHadoop.core.QuadTreePartitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
-import edu.umn.cs.spatialHadoop.core.STRPartitioner;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.core.ZCurvePartitioner;
+import edu.umn.cs.spatialHadoop.indexing.IndexOutputFormat.IndexRecordWriter;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
-import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat;
-import edu.umn.cs.spatialHadoop.mapred.IndexOutputFormat.IndexRecordWriter;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
+import edu.umn.cs.spatialHadoop.operations.FileMBR;
+import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
@@ -72,6 +65,7 @@ public class Indexer {
   private static final Log LOG = LogFactory.getLog(Indexer.class);
   
   private static final Map<String, Class<? extends Partitioner>> PartitionerClasses;
+  private static final Map<String, Class<? extends LocalIndexer>> LocalIndexes;
   private static final Map<String, Boolean> PartitionerReplicate;
   
   static {
@@ -79,6 +73,8 @@ public class Indexer {
     PartitionerClasses.put("grid", GridPartitioner.class);
     PartitionerClasses.put("str", STRPartitioner.class);
     PartitionerClasses.put("str+", STRPartitioner.class);
+    PartitionerClasses.put("rtree", STRPartitioner.class);
+    PartitionerClasses.put("r+tree", STRPartitioner.class);
     PartitionerClasses.put("quadtree", QuadTreePartitioner.class);
     PartitionerClasses.put("zcurve", ZCurvePartitioner.class);
     PartitionerClasses.put("hilbert", HilbertCurvePartitioner.class);
@@ -88,10 +84,16 @@ public class Indexer {
     PartitionerReplicate.put("grid", true);
     PartitionerReplicate.put("str", false);
     PartitionerReplicate.put("str+", true);
+    PartitionerReplicate.put("rtree", false);
+    PartitionerReplicate.put("r+tree", true);
     PartitionerReplicate.put("quadtree", true);
     PartitionerReplicate.put("zcurve", false);
     PartitionerReplicate.put("hilbert", false);
     PartitionerReplicate.put("kdtree", true);
+    
+    LocalIndexes = new HashMap<String, Class<? extends LocalIndexer>>();
+    LocalIndexes.put("rtree", RTreeLocalIndexer.class);
+    LocalIndexes.put("r+tree", RTreeLocalIndexer.class);
   }
   
   /**
@@ -234,8 +236,10 @@ public class Indexer {
     if (index == null)
       throw new RuntimeException("Index type is not set");
     long t1 = System.currentTimeMillis();
+    setLocalIndexer(job, index);
     Partitioner partitioner = createPartitioner(inPath, outPath, job, index);
     Partitioner.setPartitioner(job, partitioner);
+    
     long t2 = System.currentTimeMillis();
     System.out.println("Total time for space subdivision in millis: "+(t2-t1));
     
@@ -262,6 +266,17 @@ public class Indexer {
       // Run and block until it is finished
       return JobClient.runJob(job);
     }
+  }
+
+  /**
+   * Set the local indexer for the given job configuration.
+   * @param job
+   * @param sindex
+   */
+  private static void setLocalIndexer(JobConf job, String sindex) {
+    Class<? extends LocalIndexer> localIndexerClass = LocalIndexes.get(sindex);
+    if (localIndexerClass != null)
+      job.setClass(LocalIndexer.LocalIndexerClass, localIndexerClass, LocalIndexer.class);
   }
 
   public static Partitioner createPartitioner(Path in, Path out,
@@ -379,9 +394,10 @@ public class Indexer {
       OperationsParams.setShape(job, "mbr", inputMBR);
     }
     
+    setLocalIndexer(job, sindex);
     Partitioner partitioner = createPartitioner(inPath, outPath, job, sindex);
     final IndexRecordWriter<Shape> recordWriter = new IndexRecordWriter<Shape>(
-        partitioner, replicate, sindex, outPath, params);
+        partitioner, replicate, sindex, outPath, job);
     
     for (FileSplit fsplit : fsplits) {
       RecordReader<Rectangle, Iterable<? extends Shape>> reader =

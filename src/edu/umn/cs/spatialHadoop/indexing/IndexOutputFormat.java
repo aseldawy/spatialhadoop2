@@ -6,10 +6,12 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.mapred;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -30,9 +32,6 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Progressable;
 
-import edu.umn.cs.spatialHadoop.core.Partition;
-import edu.umn.cs.spatialHadoop.core.Partitioner;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
 
@@ -72,6 +71,8 @@ public class IndexOutputFormat<S extends Shape>
     
     /**Information of partitions being written*/
     private Map<Integer, Partition> partitionsInfo = new ConcurrentHashMap<Integer, Partition>();
+    /**Temporary files written for each partition before it is locally indexed*/
+    private Map<Integer, File> tempFiles = new ConcurrentHashMap<Integer, File>();
     /**
      * DataOutputStream for all partitions being written. It needs to be an
      * instance of stream so that it can be closed later.
@@ -89,34 +90,61 @@ public class IndexOutputFormat<S extends Shape>
     private Vector<Throwable> listOfErrors = new Vector<Throwable>();
     /**Whether records are replicated in the index or distributed*/
     private boolean replicated;
+    /**Type of shapes written to the output. Needed to build local indexes*/
+    private S shape;
+    /**Local indexer used to index each partition (optional)*/
+    private LocalIndexer localIndexer;
 
-    public IndexRecordWriter(JobConf job, Path outPath) throws IOException {
+    public IndexRecordWriter(JobConf job, Path outPath) throws IOException, InterruptedException {
       this(job, null, outPath, null);
     }
     
     public IndexRecordWriter(JobConf job, String name, Path outPath,
         Progressable progress)
-        throws IOException {
+        throws IOException, InterruptedException {
       String sindex = job.get("sindex");
       this.replicated = job.getBoolean("replicate", false);
       this.progress = progress;
       this.outFS = outPath.getFileSystem(job);
       this.outPath = outPath;
       this.partitioner = Partitioner.getPartitioner(job);
+      Class<? extends LocalIndexer> localIndexerClass = job.getClass(LocalIndexer.LocalIndexerClass, null, LocalIndexer.class);
+      if (localIndexerClass != null) {
+        try {
+          this.localIndexer = localIndexerClass.newInstance();
+          localIndexer.setup(job);
+        } catch (InstantiationException e) {
+          e.printStackTrace();
+        } catch (IllegalAccessException e) {
+          e.printStackTrace();
+        }
+      }
       Path masterFilePath = name == null ?
-          new Path(outPath, String.format("_master_.%s", sindex)) :
-            new Path(outPath, String.format("_master_%s_.%s", name, sindex));
+          new Path(outPath, String.format("_master.%s", sindex)) :
+            new Path(outPath, String.format("_master_%s.%s", name, sindex));
       this.masterFile = outFS.create(masterFilePath);
     }
 
     public IndexRecordWriter(Partitioner partitioner, boolean replicate,
         String sindex, Path outPath, Configuration conf)
-            throws IOException {
+            throws IOException, InterruptedException {
       this.replicated = replicate;
       this.outFS = outPath.getFileSystem(conf);
       this.outPath = outPath;
       this.partitioner = partitioner;
-      Path masterFilePath =  new Path(outPath, "_master_."+ sindex);
+      Class<? extends LocalIndexer> localIndexerClass = conf.getClass(
+          LocalIndexer.LocalIndexerClass, null, LocalIndexer.class);
+      if (localIndexerClass != null) {
+        try {
+          this.localIndexer = localIndexerClass.newInstance();
+          localIndexer.setup(conf);
+        } catch (InstantiationException e) {
+          e.printStackTrace();
+        } catch (IllegalAccessException e) {
+          e.printStackTrace();
+        }
+      }
+      Path masterFilePath =  new Path(outPath, "_master."+ sindex);
       this.masterFile = outFS.create(masterFilePath);
     }
     
@@ -139,6 +167,8 @@ public class IndexOutputFormat<S extends Shape>
         partition.recordCount++;
         partition.size += tempText.getLength() + NEW_LINE.length;
         partition.expand(value);
+        if (shape == null)
+          shape = (S) value.clone();
       }
       if (progress != null)
         progress.progress();
@@ -161,13 +191,28 @@ public class IndexOutputFormat<S extends Shape>
       }
       final Partition partitionInfo = partitionsInfo.get(id);
       final DataOutputStream outStream = partitionsOutput.get(id);
+      final File tempFile = tempFiles.get(id);
       Thread closeThread = new Thread() {
         @Override
         public void run() {
           try {
             outStream.close();
+            
+            if (localIndexer != null) {
+              // Build a local index for that file
+              try {
+                Path indexedFilePath = getPartitionFile(id);
+                partitionInfo.filename = indexedFilePath.getName();
+                localIndexer.buildLocalIndex(tempFile, indexedFilePath, shape);
+                // Temporary file no longer needed
+                tempFile.delete();
+              } catch (InterruptedException e) {
+                throw new RuntimeException("Error building local index", e);
+              }
+            }
+            
             if (replicated) {
-              // If data is replicated, we can shrink down the size of the
+              // If data is replicated, we need to shrink down the size of the
               // partition to keep partitions disjoint
               partitionInfo.set(partitionInfo.getIntersection(partitioner.getPartition(id)));
             }
@@ -196,7 +241,8 @@ public class IndexOutputFormat<S extends Shape>
       
       // Clear partition information to indicate we can no longer write to it
       partitionsInfo.remove(id);
-      partitionsOutput.remove(id); 
+      partitionsOutput.remove(id);
+      tempFiles.remove(id);
 
       // Start the thread in the background and keep track of it
       closingThreads.add(closeThread);
@@ -216,15 +262,25 @@ public class IndexOutputFormat<S extends Shape>
     private DataOutput getOrCreateDataOutput(int id) throws IOException {
       DataOutputStream out = partitionsOutput.get(id);
       if (out == null) {
-        Path path = getPartitionFile(id);
-        out = outFS.create(path);
+        // First time to write in this partition. Store its information
         Partition partition = new Partition();
+
+        if (localIndexer == null) {
+          // No local index needed. Write to the final file directly
+          Path path = getPartitionFile(id);
+          out = outFS.create(path);
+          partition.filename = path.getName();
+        } else {
+          // Write to a temporary file that will later get indexed
+          File tempFile = File.createTempFile(String.format("part-%05d", id), "lindex");
+          out = new DataOutputStream(new FileOutputStream(tempFile));
+          tempFiles.put(id, tempFile);
+        }
         partition.cellId = id;
         // Set the rectangle to the opposite universe so that we can keep
         // expanding it to get the MBR of this partition
         partition.set(Double.MAX_VALUE, Double.MAX_VALUE,
             -Double.MAX_VALUE, -Double.MAX_VALUE);
-        partition.filename = path.getName();
         // Store in the hashtables for further user
         partitionsOutput.put(id,  out);
         partitionsInfo.put(id, partition);
@@ -239,11 +295,17 @@ public class IndexOutputFormat<S extends Shape>
      * @throws IOException 
      */
     private Path getPartitionFile(int id) throws IOException {
-      Path partitionPath = new Path(outPath, String.format("part-%05d", id));
+      String format = "part-%05d";
+      if (localIndexer != null)
+        format += "."+localIndexer.getExtension();
+      Path partitionPath = new Path(outPath, String.format(format, id));
       if (outFS.exists(partitionPath)) {
+        format = "part-%05d-%03d";
+        if (localIndexer != null)
+          format += "."+localIndexer.getExtension();
         int i = 0;
         do {
-          partitionPath = new Path(outPath, String.format("part-%05d-%03d", id, ++i));
+          partitionPath = new Path(outPath, String.format(format, id, ++i));
         } while (outFS.exists(partitionPath));
       }
       return partitionPath;
@@ -290,7 +352,11 @@ public class IndexOutputFormat<S extends Shape>
   public RecordWriter<IntWritable, S> getRecordWriter(FileSystem ignored,
       JobConf job, String name, Progressable progress) throws IOException {
     Path taskOutputPath = getTaskOutputPath(job, name).getParent();
-    return new IndexRecordWriter<S>(job, name, taskOutputPath, progress);
+    try {
+      return new IndexRecordWriter<S>(job, name, taskOutputPath, progress);
+    } catch (InterruptedException e) {
+      throw new RuntimeException("Error initializing record writer", e);
+    }
   }
 
   
