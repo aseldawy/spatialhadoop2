@@ -53,11 +53,8 @@ public class Main {
           "Computes the spatial join between two input files using the " +
           "SJMR algorithm");
       
-      pgd.addClass("index", Repartition.class,
-          "Builds an index on an input file");
-
-      pgd.addClass("partition", Indexer.class,
-          "Spatially partition a file using a specific partitioner");
+      pgd.addClass("index", Indexer.class,
+          "Spatially index a file using a specific indexer");
       
       pgd.addClass("mbr", FileMBR.class,
           "Finds the minimal bounding rectangle of an input file");
