@@ -154,7 +154,7 @@ public class IndexOutputFormat<S extends Shape>
       if (id < 0) {
         // An indicator to close a partition
         int partitionToClose = -(id + 1);
-        this.closePartition(partitionToClose);
+        this.closePartition(partitionToClose, progress);
       } else {
         // An actual object that we need to write
         DataOutput output = getOrCreateDataOutput(id);
@@ -177,14 +177,16 @@ public class IndexOutputFormat<S extends Shape>
     /**
      * Close a file that is currently open for a specific partition. Returns a
      * background thread that will continue all close-related logic.
+     * @param progress 
      * 
      * @param partitionToClose
      */
-    private void closePartition(final int id) {
+    private void closePartition(final int id, Progressable progress) {
       while (closingThreads.size() >= MaxClosingThreads) {
         // Wait if there are too many closing threads
         try {
-          closingThreads.firstElement().join();
+          closingThreads.firstElement().join(10000);
+          progress.progress();
         } catch (RuntimeException e) {
         } catch (InterruptedException e) {
         }
@@ -316,7 +318,7 @@ public class IndexOutputFormat<S extends Shape>
       try {
         // Close any open partitions
         for (Integer id : partitionsInfo.keySet()) {
-          closePartition(id);
+          closePartition(id, reporter);
           if (reporter != null)
             reporter.progress();
         }
