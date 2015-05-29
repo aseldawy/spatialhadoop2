@@ -13,53 +13,49 @@ import java.io.IOException;
 import org.apache.hadoop.io.Text;
 
 import edu.umn.cs.spatialHadoop.core.Point;
-import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 /**
  * @author Eldawy
  *
  */
 public class Tweet extends Point {
-  public long id;
+  public String details;
 
   public Tweet() {
   }
 
-  public Tweet(double x, double y) {
-    super(x, y);
-  }
-  
   public Tweet(Tweet tweet) {
-    this.id = tweet.id;
+    this.details = tweet.details;
     this.x = tweet.x;
     this.y = tweet.y;
   }
 
   @Override
   public void fromText(Text text) {
-    this.id = TextSerializerHelper.consumeLong(text, ',');
-    this.y = TextSerializerHelper.consumeDouble(text, ',');
-    this.x = TextSerializerHelper.consumeDouble(text, '\0');
+    this.details = text.toString();
+    int last_comma = this.details.lastIndexOf(',');
+    int next_to_last_comma = this.details.lastIndexOf(',', last_comma - 1);
+    this.x = Double.parseDouble(this.details.substring(last_comma + 1, this.details.length()));
+    this.y = Double.parseDouble(this.details.substring(next_to_last_comma + 1, last_comma));
   }
   
   @Override
   public Text toText(Text text) {
-    TextSerializerHelper.serializeLong(id, text, ',');
-    TextSerializerHelper.serializeDouble(y, text, ',');
-    TextSerializerHelper.serializeDouble(x, text, '\0');
+    byte[] bytes = this.details.getBytes();
+    text.append(bytes, 0, bytes.length);
     return text;
   }
   
   @Override
   public void write(DataOutput out) throws IOException {
-    out.writeLong(id);
     super.write(out);
+    out.writeUTF(this.details);
   }
   
   @Override
   public void readFields(DataInput in) throws IOException {
-    id = in.readLong();
     super.readFields(in);
+    this.details = in.readUTF();
   }
   
   @Override

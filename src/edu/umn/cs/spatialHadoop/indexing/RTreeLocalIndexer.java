@@ -14,6 +14,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -27,6 +29,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
  *
  */
 public class RTreeLocalIndexer implements LocalIndexer {
+  private static final Log LOG = LogFactory.getLog(RTreeLocalIndexer.class);
 
   /**Configuration of the running job*/
   protected Configuration conf;

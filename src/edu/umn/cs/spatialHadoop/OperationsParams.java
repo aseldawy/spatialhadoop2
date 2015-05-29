@@ -628,12 +628,16 @@ public class OperationsParams extends Configuration {
 			// the auto detected shape is consistent in many lines
 			final int sampleCount = 10;
 			OperationsParams sampleParams = new OperationsParams(this);
-			Sampler2.sampleLocalByCount(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
-        @Override
-        public void collect(Text line) {
-          sampleLines.add(line.toString());
-        }
-      }, sampleParams);
+			try {
+        Sampler2.sampleLocalByCount(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
+          @Override
+          public void collect(Text line) {
+            sampleLines.add(line.toString());
+          }
+        }, sampleParams);
+      } catch (InterruptedException e1) {
+        e1.printStackTrace();
+      }
 
 			if (sampleLines.isEmpty()) {
 				LOG.warn("No input to detect in '" + this.getInputPath() + "-");

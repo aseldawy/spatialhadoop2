@@ -14,6 +14,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.lang.Thread.State;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.Map;
 import java.util.Vector;
@@ -154,7 +155,7 @@ public class IndexOutputFormat<S extends Shape>
       if (id < 0) {
         // An indicator to close a partition
         int partitionToClose = -(id + 1);
-        this.closePartition(partitionToClose, progress);
+        this.closePartition(partitionToClose);
       } else {
         // An actual object that we need to write
         DataOutput output = getOrCreateDataOutput(id);
@@ -181,16 +182,7 @@ public class IndexOutputFormat<S extends Shape>
      * 
      * @param partitionToClose
      */
-    private void closePartition(final int id, Progressable progress) {
-      while (closingThreads.size() >= MaxClosingThreads) {
-        // Wait if there are too many closing threads
-        try {
-          closingThreads.firstElement().join(10000);
-          progress.progress();
-        } catch (RuntimeException e) {
-        } catch (InterruptedException e) {
-        }
-      }
+    private void closePartition(final int id) {
       final Partition partitionInfo = partitionsInfo.get(id);
       final DataOutputStream outStream = partitionsOutput.get(id);
       final File tempFile = tempFiles.get(id);
@@ -225,7 +217,32 @@ public class IndexOutputFormat<S extends Shape>
               masterFile.write(NEW_LINE);
             }
             if (!closingThreads.remove(Thread.currentThread())) {
-              throw new RuntimeException("Couldn't remove closing thread");
+              throw new RuntimeException("Could not remove closing thread");
+            }
+            // Start more background threads if needed
+            int numRunningThreads = 0;
+            try {
+              for (int i_thread = 0; i_thread < closingThreads.size() &&
+                  numRunningThreads < MaxClosingThreads; i_thread++) {
+                Thread thread = closingThreads.elementAt(i_thread);
+                switch (thread.getState()) {
+                case NEW:
+                  // Start the thread and fall through to increment the counter
+                  thread.start();
+                case RUNNABLE:
+                case BLOCKED:
+                case WAITING:
+                case TIMED_WAITING:
+                  // No need to start. Just increment number of threads
+                  numRunningThreads++;
+                  break;
+                case TERMINATED: // Do nothing.
+                  // Should never happen as each thread removes itself from
+                  // the list before completion 
+                }
+              }
+            } catch (ArrayIndexOutOfBoundsException e) {
+              // No problem. The array of threads might have gone empty
             }
           } catch (IOException e) {
             e.printStackTrace();
@@ -246,9 +263,17 @@ public class IndexOutputFormat<S extends Shape>
       partitionsOutput.remove(id);
       tempFiles.remove(id);
 
-      // Start the thread in the background and keep track of it
+      if (closingThreads.size() < MaxClosingThreads) {
+        // Start the thread in the background and make sure it started before
+        // adding it to the list of threads to avoid an exception when other
+        // thread tries to start it after it is in the queue
+        closeThread.start();
+        try {
+          while (closeThread.getState() == State.NEW)
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {}
+      }
       closingThreads.add(closeThread);
-      closeThread.start();
     }
 
     /**
@@ -318,30 +343,34 @@ public class IndexOutputFormat<S extends Shape>
       try {
         // Close any open partitions
         for (Integer id : partitionsInfo.keySet()) {
-          closePartition(id, reporter);
+          closePartition(id);
           if (reporter != null)
             reporter.progress();
         }
         // Wait until all background threads are close
         // NOTE: Have to use an integer iterator to avoid conflicts if threads
         // are removed in the background while iterating over them
-        for (int i = 0; i < closingThreads.size(); i++) {
-          Thread thread = closingThreads.elementAt(i);
-          while (thread.isAlive()) {
-            try {
-              thread.join(10000);
-              if (reporter != null)
-                reporter.progress();
-            } catch (InterruptedException e) {
-              e.printStackTrace();
+        try {
+          while (!closingThreads.isEmpty()) {
+            Thread thread = closingThreads.firstElement();
+            while (thread.isAlive()) {
+              try {
+                thread.join(10000);
+                if (reporter != null)
+                  reporter.progress();
+              } catch (InterruptedException e) {
+                e.printStackTrace();
+              }
             }
           }
+        } catch (ArrayIndexOutOfBoundsException e) {
+          // The array of threads has gone empty. Nothing to do
         }
         // All threads are now closed. Check if errors happened
         if (!listOfErrors.isEmpty()) {
           for (Throwable t : listOfErrors)
             LOG.error("Error in thread", t);
-          throw new RuntimeException("Encountered "+listOfErrors.size()+" in background thread");
+          throw new RuntimeException("Encountered "+listOfErrors.size()+" errors in background thread");
         }
       } finally {
         // Close the master file to ensure there are no open files

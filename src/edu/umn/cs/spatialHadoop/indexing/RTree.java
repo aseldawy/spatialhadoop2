@@ -155,7 +155,6 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       // process the tree while it's on disk, a higher degree should be selected
       // such that a node fits one file block (assumed to be 4K).
       //final int degree = findBestDegree(bytesAvailable, elementCount);
-      LOG.info("Writing an RTree with degree "+degree);
       
       int height = Math.max(1, 
           (int) Math.ceil(Math.log(elementCount)/Math.log(degree)));

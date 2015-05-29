@@ -156,6 +156,7 @@ public class Indexer {
         throws IOException {
       while (shapes.hasNext()) {
         output.collect(partitionID, shapes.next());
+        reporter.progress();
       }
       // Indicate end of partition to close the file
       partitionID.set(-(partitionID.get()+1));
@@ -208,6 +209,7 @@ public class Indexer {
           in.close();
           outFs.delete(f.getPath(), false); // Delete the copied file
         }
+        wktOut.close();
         destOut.close();
       }
     }
