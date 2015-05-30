@@ -154,7 +154,7 @@ public class IndexOutputFormat<S extends Shape>
       int id = partitionID.get();
       if (id < 0) {
         // An indicator to close a partition
-        int partitionToClose = -(id + 1);
+        int partitionToClose = -id - 1;
         this.closePartition(partitionToClose);
       } else {
         // An actual object that we need to write
@@ -171,8 +171,6 @@ public class IndexOutputFormat<S extends Shape>
         if (shape == null)
           shape = (S) value.clone();
       }
-      if (progress != null)
-        progress.progress();
     }
 
     /**
@@ -269,8 +267,10 @@ public class IndexOutputFormat<S extends Shape>
         // thread tries to start it after it is in the queue
         closeThread.start();
         try {
-          while (closeThread.getState() == State.NEW)
+          while (closeThread.getState() == State.NEW) {
             Thread.sleep(1000);
+            LOG.info("Waiting for thread #"+closeThread.getId()+" to start");
+          }
         } catch (InterruptedException e) {}
       }
       closingThreads.add(closeThread);
@@ -347,9 +347,7 @@ public class IndexOutputFormat<S extends Shape>
           if (reporter != null)
             reporter.progress();
         }
-        // Wait until all background threads are close
-        // NOTE: Have to use an integer iterator to avoid conflicts if threads
-        // are removed in the background while iterating over them
+        // Wait until all background threads are closed
         try {
           while (!closingThreads.isEmpty()) {
             Thread thread = closingThreads.firstElement();

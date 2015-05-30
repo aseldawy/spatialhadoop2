@@ -18,7 +18,7 @@
   <property name="dist1"  location="${bin1}/dist"/>
   <property name="build2" location="${bin2}/classes"/>
   <property name="dist2"  location="${bin2}/dist"/>
-  <property name="version" value="2.3"/>
+  <property name="version" value="2.4-rc1"/>
   
   <path id="other.path.ref">
   	<fileset dir="lib" includes="*.jar"/>

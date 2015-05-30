@@ -154,13 +154,15 @@ public class Indexer {
     public void reduce(IntWritable partitionID, Iterator<Shape> shapes,
         OutputCollector<IntWritable, Shape> output, Reporter reporter)
         throws IOException {
+      LOG.info("Working on partition #"+partitionID);
       while (shapes.hasNext()) {
         output.collect(partitionID, shapes.next());
         reporter.progress();
       }
+      LOG.info("Closing partition #"+partitionID);
       // Indicate end of partition to close the file
-      partitionID.set(-(partitionID.get()+1));
-      output.collect(partitionID, null);
+      output.collect(new IntWritable(-partitionID.get()-1), null);
+      LOG.info("Done with partition #"+partitionID);
     }
   }
   

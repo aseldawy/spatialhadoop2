@@ -44,7 +44,7 @@ public class Sampler2 {
    * @throws IOException
    * @throws InterruptedException 
    */
-  public static long sampleLocalByCount(Path[] files, int count,
+  public static long sampleLocal(Path[] files, float ratioOrCount,
       ResultCollector<Text> output, OperationsParams conf) throws IOException, InterruptedException {
     Vector<FileSplit> splits = new Vector<FileSplit>();
     for (Path file : files) {
@@ -62,7 +62,7 @@ public class Sampler2 {
       }
     }
     
-    return sampleLocalByCount(splits.toArray(new FileSplit[splits.size()]), count, output, conf);
+    return sampleLocal(splits.toArray(new FileSplit[splits.size()]), ratioOrCount, output, conf);
   }
   
   /**
@@ -75,7 +75,7 @@ public class Sampler2 {
    * @throws IOException
    * @throws InterruptedException 
    */
-  public static long sampleLocalByCount(final FileSplit[] files, int count,
+  public static long sampleLocal(final FileSplit[] files, final float ratioOrCount,
       final ResultCollector<Text> output, final OperationsParams conf) throws IOException, InterruptedException {
     // A prefix sum of all files sizes. Used to draw a different sample size
     // from each file according to its size
@@ -87,47 +87,35 @@ public class Sampler2 {
     // Decide number of samples to read from each file according to its size
     final int[] sampleSizePerFile = new int[files.length];
     Random rand = new Random(conf.getLong("seed", System.currentTimeMillis()));
-    for (int i = 0; i < count; i++) {
-      long sampleOffset = Math.abs(rand.nextLong()) % fileStartOffset[files.length];
-      int iFile = Arrays.binarySearch(fileStartOffset, sampleOffset);
-      // An offset in the middle of a file.
-      if (iFile < 0)
-        iFile = -iFile - 1 - 1;
-      sampleSizePerFile[iFile]++;
+    
+    if (ratioOrCount > 1) {
+      // This indicates a count
+      for (int i = 0; i < ratioOrCount; i++) {
+        long sampleOffset = Math.abs(rand.nextLong()) % fileStartOffset[files.length];
+        int iFile = Arrays.binarySearch(fileStartOffset, sampleOffset);
+        // An offset in the middle of a file.
+        if (iFile < 0)
+          iFile = -iFile - 1 - 1;
+        sampleSizePerFile[iFile]++;
+      }
     }
     
     Vector<Integer> actualSampleSizes = Parallel.forEach(files.length, new RunnableRange<Integer>() {
       @Override
       public Integer run(int i1, int i2) {
         int sampledLines;
-        Text line = new Text2();
+        
         sampledLines = 0;
         for (int iFile = i1; iFile < i2; iFile++) {
           try {
-            // Open the file and read the sample
             FileSystem fs = files[iFile].getPath().getFileSystem(conf);
-            InputStream in = fs.open(files[iFile].getPath());
-            long pos = 0; // Current position in file
-
-            Random rand = new Random(iFile + conf.getLong("seed", System.currentTimeMillis()));
-            for (int i = 0; i < sampleSizePerFile[iFile]; i++) {
-              long randomOffset = Math.abs(rand.nextLong()) % files[iFile].getLength() + files[iFile].getStart();
-
-              pos += in.skip(randomOffset - pos);
-              // Skip until end of line
-              line.clear();
-              pos += readUntilEOL(in, line);
-              // Read the next full line
-              line.clear();
-              if ((pos += readUntilEOL(in, line)) > 1) {
-                sampledLines++;
-                if (output != null)
-                  output.collect(line);
-              }
-
-            }
-
-            in.close();
+            long randomSeed = conf.getLong("seed", System.currentTimeMillis()) + iFile;
+            if (ratioOrCount > 1)
+              sampledLines += sampleFileSplitByCount(fs, files[iFile],
+                  sampleSizePerFile[iFile], randomSeed, output);
+            else
+              sampledLines += sampleFileSplitByRatio(fs, files[iFile],
+                  ratioOrCount, randomSeed, output);
           } catch (IOException e) {
             throw new RuntimeException("Error while sampling file "+files[iFile]);
           }
@@ -141,6 +129,114 @@ public class Sampler2 {
       totalSampledLines += actualSampleSize;
     return totalSampledLines;
   }
+  
+  /**
+   * Sample a specific number of lines from a given file
+   * @param fs
+   * @param file
+   * @param count
+   * @param seed
+   * @param output
+   * @return
+   * @throws IOException
+   */
+  private static int sampleFileSplitByCount(FileSystem fs, FileSplit file,
+      int count, long seed, ResultCollector<Text> output) throws IOException {
+    Text line = new Text2();
+    // Open the file and read the sample
+    InputStream in = fs.open(file.getPath());
+    long pos = 0; // Current position in file
+    int sampledLines = 0;
+
+    // Generate random offsets and keep them sorted for IO efficiency
+    Random rand = new Random(seed);
+    long[] sampleOffsets = new long[count];
+    for (int i = 0; i < count; i++)
+      sampleOffsets[i] = Math.abs(rand.nextLong()) % file.getLength() + file.getStart();
+    Arrays.sort(sampleOffsets);
+    
+    // Sample the generated numbers
+    for (int i = 0; i < count; i++) {
+      pos += in.skip(sampleOffsets[i] - pos);
+      // Skip until end of line
+      line.clear();
+      pos += readUntilEOL(in, line);
+      // Read the next full line
+      line.clear();
+      if ((pos += readUntilEOL(in, line)) > 1) {
+        sampledLines++;
+        if (output != null)
+          output.collect(line);
+      }
+    }
+
+    in.close();
+    return sampledLines;
+  }
+  
+  /**
+   * Sample text lines from the given split with the given sampling ratio
+   * @param fs
+   * @param file
+   * @param ratio
+   * @param seed
+   * @param output
+   * @return
+   * @throws IOException
+   */
+  private static int sampleFileSplitByRatio(FileSystem fs, FileSplit file,
+      float ratio, long seed, ResultCollector<Text> output) throws IOException {
+    Text line = new Text2();
+    // Open the file and read the sample
+    InputStream in = fs.open(file.getPath());
+    long pos = 0; // Current position in file
+    if (file.getStart() > 0) {
+      pos += in.skip(file.getStart());
+      pos += readUntilEOL(in, line);
+    }
+    
+    // Initialize the random variable which is used for sampling
+    Random rand = new Random(seed);
+
+    // Read the first 10 lines to estimate the average record size
+    int sampledLines = 0;
+    long end = file.getStart() + file.getLength();
+    for (int i = 0; i < 10 && pos < end; i++) {
+      line.clear();
+      pos += readUntilEOL(in, line);
+      if (rand.nextFloat() < ratio) {
+        sampledLines++;
+        if (output != null)
+          output.collect(line);
+      }
+    }
+    
+    int averageLineSize = (int) ((pos - file.getStart()) / 10);
+    int count = Math.round(ratio * file.getLength() / averageLineSize) - sampledLines;
+    long[] sampleOffsets = new long[count];
+    for (int i = 0; i < count; i++)
+      sampleOffsets[i] = Math.abs(rand.nextLong()) % (end - pos) + file.getStart();
+    Arrays.sort(sampleOffsets);
+
+    // Sample the generated numbers
+    for (int i = 0; i < count; i++) {
+      pos += in.skip(sampleOffsets[i] - pos);
+      // Skip until end of line
+      line.clear();
+      pos += readUntilEOL(in, line);
+      // Read the next full line
+      line.clear();
+      if ((pos += readUntilEOL(in, line)) > 1) {
+        sampledLines++;
+        if (output != null)
+          output.collect(line);
+      }
+    }
+
+    in.close();
+    return sampledLines;
+  }
+
 
   /**
    * Read from the given stream until end-of-line is reached.
@@ -188,7 +284,6 @@ public class Sampler2 {
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
-  
   /**
    * @param args
    * @throws IOException 
@@ -210,10 +305,10 @@ public class Sampler2 {
       }
     };
     
-    int count = params.getInt("count", 0);
+    float sampleRatioOrCount = params.getFloat("ratio", params.getInt("count", 0));
 
     long t1 = System.currentTimeMillis();
-    long lines = sampleLocalByCount(inputFiles, count, output, params);
+    long lines = sampleLocal(inputFiles, sampleRatioOrCount, output, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Sampled "+lines+" lines in "+(t2-t1)+" millis");
   }
