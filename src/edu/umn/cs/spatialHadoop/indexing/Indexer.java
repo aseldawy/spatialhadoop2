@@ -9,10 +9,7 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Vector;
 
@@ -22,26 +19,18 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileOutputCommitter;
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.LocalJobRunner;
-import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.Mapper;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.RecordReader;
-import org.apache.hadoop.mapred.Reducer;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -50,9 +39,10 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.IndexOutputFormat.IndexRecordWriter;
-import edu.umn.cs.spatialHadoop.io.Text2;
-import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
@@ -95,15 +85,15 @@ public class Indexer {
     LocalIndexes.put("rtree", RTreeLocalIndexer.class);
     LocalIndexes.put("r+tree", RTreeLocalIndexer.class);
   }
-  
+
+
   /**
-   * The map and reduce functions for the repartition
-   * @author Ahmed Eldawy
+   * The map function that partitions the data using the configured partitioner
+   * @author Eldawy
    *
    */
-  public static class IndexMethods extends MapReduceBase 
-    implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape>,
-    Reducer<IntWritable, Shape, IntWritable, Shape> {
+  public static class PartitionerMap extends
+    Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
 
     /**The partitioner used to partitioner the data across reducers*/
     private Partitioner partitioner;
@@ -112,20 +102,20 @@ public class Indexer {
      * it to only one partition
      */
     private boolean replicate;
-
+    
     @Override
-    public void configure(JobConf job) {
-      super.configure(job);
-      this.partitioner = Partitioner.getPartitioner(job);
-      this.replicate = job.getBoolean("replicate", false);
+    protected void setup(Context context)
+        throws IOException, InterruptedException {
+      super.setup(context);
+      this.partitioner = Partitioner.getPartitioner(context.getConfiguration());
+      this.replicate = context.getConfiguration().getBoolean("replicate", false);
     }
     
     @Override
-    public void map(Rectangle dummy, Iterable<? extends Shape> shapes,
-        final OutputCollector<IntWritable, Shape> output, Reporter reporter)
-        throws IOException {
+    protected void map(Rectangle key, Iterable<? extends Shape> shapes,
+        final Context context) throws IOException,
+        InterruptedException {
       final IntWritable partitionID = new IntWritable();
-      int i = 0;
       for (final Shape shape : shapes) {
         if (replicate) {
           partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
@@ -133,8 +123,10 @@ public class Indexer {
             public void collect(Integer r) {
               partitionID.set(r);
               try {
-                output.collect(partitionID, shape);
+                context.write(partitionID, shape);
               } catch (IOException e) {
+                LOG.warn("Error checking overlapping partitions", e);
+              } catch (InterruptedException e) {
                 LOG.warn("Error checking overlapping partitions", e);
               }
             }
@@ -142,135 +134,91 @@ public class Indexer {
         } else {
           partitionID.set(partitioner.overlapPartition(shape));
           if (partitionID.get() >= 0)
-            output.collect(partitionID, shape);
+            context.write(partitionID, shape);
         }
-        if (((++i) & 0xff) == 0) {
-          reporter.progress();
-        }
+        context.progress();
       }
     }
+  }
+
+  
+  public static class PartitionerReduce<S extends Shape>
+    extends Reducer<IntWritable, Shape, IntWritable, Shape> {
 
     @Override
-    public void reduce(IntWritable partitionID, Iterator<Shape> shapes,
-        OutputCollector<IntWritable, Shape> output, Reporter reporter)
-        throws IOException {
+    protected void reduce(IntWritable partitionID, Iterable<Shape> shapes,
+        Context context) throws IOException, InterruptedException {
       LOG.info("Working on partition #"+partitionID);
-      while (shapes.hasNext()) {
-        output.collect(partitionID, shapes.next());
-        reporter.progress();
+      for (Shape shape : shapes) {
+        context.write(partitionID, shape);
+        context.progress();
       }
       LOG.info("Closing partition #"+partitionID);
       // Indicate end of partition to close the file
-      output.collect(new IntWritable(-partitionID.get()-1), null);
+      context.write(new IntWritable(-partitionID.get()-1), null);
       LOG.info("Done with partition #"+partitionID);
     }
   }
-  
-  /**
-   * Output committer that concatenates all master files into one master file.
-   * @author Ahmed Eldawy
-   *
-   */
-  public static class IndexerOutputCommitter extends FileOutputCommitter {
-    @Override
-    public void commitJob(JobContext context) throws IOException {
-      super.commitJob(context);
-      
-      JobConf job = context.getJobConf();
-      Path outPath = GridOutputFormat.getOutputPath(job);
-      FileSystem outFs = outPath.getFileSystem(job);
-
-      // Concatenate all master files into one file
-      FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
-        @Override
-        public boolean accept(Path path) {
-          return path.getName().contains("_master");
-        }
-      });
-      
-      if (resultFiles.length == 0) {
-        LOG.warn("No _master files were written by reducers");
-      } else {
-        String sindex = job.get("sindex");
-        Path masterPath = new Path(outPath, "_master." + sindex);
-        OutputStream destOut = outFs.create(masterPath);
-        Path wktPath = new Path(outPath, "_"+sindex+".wkt");
-        PrintStream wktOut = new PrintStream(outFs.create(wktPath));
-        wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
-        Text tempLine = new Text2();
-        Partition tempPartition = new Partition();
-        final byte[] NewLine = new byte[] {'\n'};
-        for (FileStatus f : resultFiles) {
-          LineReader in = new LineReader(outFs.open(f.getPath()));
-          while (in.readLine(tempLine) > 0) {
-            destOut.write(tempLine.getBytes(), 0, tempLine.getLength());
-            destOut.write(NewLine);
-            tempPartition.fromText(tempLine);
-            wktOut.println(tempPartition.toWKT());
-          }
-          in.close();
-          outFs.delete(f.getPath(), false); // Delete the copied file
-        }
-        wktOut.close();
-        destOut.close();
-      }
-    }
-  }
-  
-  private static RunningJob indexMapReduce(Path inPath, Path outPath,
-      OperationsParams params) throws IOException, InterruptedException {
-    JobConf job = new JobConf(params, Indexer.class);
-    job.setJobName("Indexer");
+    
+  private static Job indexMapReduce(Path inPath, Path outPath,
+      OperationsParams paramss) throws IOException, InterruptedException,
+      ClassNotFoundException {
+    Job job = new Job(paramss, "Indexer");
+    Configuration conf = job.getConfiguration();
+    job.setJarByClass(Indexer.class);
     
     // Set input file MBR if not already set
-    Rectangle inputMBR = (Rectangle) params.getShape("mbr");
+    Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
     if (inputMBR == null) {
-      inputMBR = FileMBR.fileMBR(inPath, params);
-      OperationsParams.setShape(job, "mbr", inputMBR);
+      inputMBR = FileMBR.fileMBR(inPath, new OperationsParams(conf));
+      OperationsParams.setShape(conf, "mbr", inputMBR);
     }
     
     // Set input and output
-    job.setInputFormat(ShapeIterInputFormat.class);
-    ShapeIterInputFormat.setInputPaths(job, inPath);
-    job.setOutputFormat(IndexOutputFormat.class);
-    GridOutputFormat.setOutputPath(job, outPath);
+    job.setInputFormatClass(SpatialInputFormat3.class);
+    SpatialInputFormat3.setInputPaths(job, inPath);
+    job.setOutputFormatClass(IndexOutputFormat.class);
+    IndexOutputFormat.setOutputPath(job, outPath);
 
     // Set the correct partitioner according to index type
-    String index = job.get("sindex");
+    String index = conf.get("sindex");
     if (index == null)
       throw new RuntimeException("Index type is not set");
     long t1 = System.currentTimeMillis();
-    setLocalIndexer(job, index);
-    Partitioner partitioner = createPartitioner(inPath, outPath, job, index);
-    Partitioner.setPartitioner(job, partitioner);
+    setLocalIndexer(conf, index);
+    Partitioner partitioner = createPartitioner(inPath, outPath, conf, index);
+    Partitioner.setPartitioner(conf, partitioner);
     
     long t2 = System.currentTimeMillis();
     System.out.println("Total time for space subdivision in millis: "+(t2-t1));
     
     // Set mapper and reducer
-    Shape shape = params.getShape("shape");
-    job.setMapperClass(IndexMethods.class);
+    Shape shape = OperationsParams.getShape(conf, "shape");
+    job.setMapperClass(PartitionerMap.class);
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(shape.getClass());
-    job.setReducerClass(IndexMethods.class);
-    job.setOutputCommitter(IndexerOutputCommitter.class);
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
+    job.setReducerClass(PartitionerReduce.class);
+    // Set the output committer using the old key explicitly for backward
+    // compatibility when using the local runner
+    conf.setClass("mapred.output.committer.class",
+        IndexOutputFormat.IndexerOutputCommitter.class,
+        org.apache.hadoop.mapred.OutputCommitter.class);
+    // Set number of reduce tasks according to cluster status
+    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
     job.setNumReduceTasks(Math.max(1, Math.min(partitioner.getPartitionCount(),
-        (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
+        (clusterStatus.getMaxReduceTasks() * 9) / 10)));
 
     // Use multithreading in case the job is running locally
-    job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+    conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
     
     // Start the job
-    if (params.getBoolean("background", false)) {
+    if (conf.getBoolean("background", false)) {
       // Run in background
-      JobClient jc = new JobClient(job);
-      return jc.submitJob(job);
+      job.submit();
     } else {
-      // Run and block until it is finished
-      return JobClient.runJob(job);
+      job.waitForCompletion(conf.getBoolean("verbose", false));
     }
+    return job;
   }
 
   /**
@@ -278,10 +226,10 @@ public class Indexer {
    * @param job
    * @param sindex
    */
-  private static void setLocalIndexer(JobConf job, String sindex) {
+  private static void setLocalIndexer(Configuration conf, String sindex) {
     Class<? extends LocalIndexer> localIndexerClass = LocalIndexes.get(sindex);
     if (localIndexerClass != null)
-      job.setClass(LocalIndexer.LocalIndexerClass, localIndexerClass, LocalIndexer.class);
+      conf.setClass(LocalIndexer.LocalIndexerClass, localIndexerClass, LocalIndexer.class);
   }
 
   public static Partitioner createPartitioner(Path in, Path out,
@@ -366,15 +314,17 @@ public class Indexer {
     }
   }
 
-  private static void indexLocal(Path inPath, Path outPath,
+  private static void indexLocal(Path inPath, final Path outPath,
       OperationsParams params) throws IOException, InterruptedException {
-    JobConf job = new JobConf(params);
-    String sindex = params.get("sindex");
+    Job job = Job.getInstance(params);
+    final Configuration conf = job.getConfiguration();
+    
+    final String sindex = conf.get("sindex");
     
     // Start reading input file
     Vector<InputSplit> splits = new Vector<InputSplit>();
-    final ShapeIterInputFormat inputFormat = new ShapeIterInputFormat();
-    FileSystem inFs = inPath.getFileSystem(params);
+    final SpatialInputFormat3<Rectangle, Shape> inputFormat = new SpatialInputFormat3<Rectangle, Shape>();
+    FileSystem inFs = inPath.getFileSystem(conf);
     FileStatus inFStatus = inFs.getFileStatus(inPath);
     if (inFStatus != null && !inFStatus.isDir()) {
       // One file, retrieve it immediately.
@@ -383,38 +333,44 @@ public class Indexer {
       // of plotting partition boundaries of a spatial index
       splits.add(new FileSplit(inPath, 0, inFStatus.getLen(), new String[0]));
     } else {
-      ShapeIterInputFormat.addInputPath(job, inPath);
-      for (InputSplit s : inputFormat.getSplits(job, 1))
+      SpatialInputFormat3.setInputPaths(job, inPath);
+      for (InputSplit s : inputFormat.getSplits(job))
         splits.add(s);
     }
     
     // Copy splits to a final array to be used in parallel
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
-    boolean replicate = job.getBoolean("replicate", false);
+    final boolean replicate = conf.getBoolean("replicate", false);
     
     // Set input file MBR if not already set
-    Rectangle inputMBR = (Rectangle) params.getShape("mbr");
+    Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
     if (inputMBR == null) {
-      inputMBR = FileMBR.fileMBR(inPath, params);
-      OperationsParams.setShape(job, "mbr", inputMBR);
+      inputMBR = FileMBR.fileMBR(inPath, new OperationsParams(conf));
+      OperationsParams.setShape(conf, "mbr", inputMBR);
     }
     
-    setLocalIndexer(job, sindex);
-    Partitioner partitioner = createPartitioner(inPath, outPath, job, sindex);
+    setLocalIndexer(conf, sindex);
+    final Partitioner partitioner = createPartitioner(inPath, outPath, conf, sindex);
+
     final IndexRecordWriter<Shape> recordWriter = new IndexRecordWriter<Shape>(
-        partitioner, replicate, sindex, outPath, job);
-    
+        partitioner, replicate, sindex, outPath, conf);
     for (FileSplit fsplit : fsplits) {
-      RecordReader<Rectangle, Iterable<? extends Shape>> reader =
-          inputFormat.getRecordReader(fsplit, job, null);
-      Rectangle partitionMBR = reader.createKey();
-      Iterable<? extends Shape> shapes = reader.createValue();
-      
+      RecordReader<Rectangle, Iterable<Shape>> reader = inputFormat.createRecordReader(fsplit, null);
+      if (reader instanceof SpatialRecordReader3) {
+        ((SpatialRecordReader3)reader).initialize(fsplit, conf);
+      } else if (reader instanceof RTreeRecordReader3) {
+        ((RTreeRecordReader3)reader).initialize(fsplit, conf);
+      } else if (reader instanceof HDFRecordReader) {
+        ((HDFRecordReader)reader).initialize(fsplit, conf);
+      } else {
+        throw new RuntimeException("Unknown record reader");
+      }
+
       final IntWritable partitionID = new IntWritable();
-      
-      while (reader.next(partitionMBR, shapes)) {
+
+      while (reader.nextKeyValue()) {
+        Iterable<Shape> shapes = reader.getCurrentValue();
         if (replicate) {
-          // Replicate each shape to all overlapping partitions
           for (final Shape s : shapes) {
             partitioner.overlapPartitions(s, new ResultCollector<Integer>() {
               @Override
@@ -429,7 +385,7 @@ public class Indexer {
             });
           }
         } else {
-          for (Shape s : shapes) {
+          for (final Shape s : shapes) {
             int pid = partitioner.overlapPartition(s);
             if (pid != -1) {
               partitionID.set(pid);
@@ -440,12 +396,11 @@ public class Indexer {
       }
       reader.close();
     }
-    
     recordWriter.close(null);
   }
   
-  public static RunningJob index(Path inPath, Path outPath,
-      OperationsParams params) throws IOException, InterruptedException {
+  public static Job index(Path inPath, Path outPath, OperationsParams params)
+      throws IOException, InterruptedException, ClassNotFoundException {
     if (OperationsParams.isLocal(new JobConf(params), inPath)) {
       indexLocal(inPath, outPath, params);
       return null;

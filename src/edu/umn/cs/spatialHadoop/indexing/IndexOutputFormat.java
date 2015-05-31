@@ -14,6 +14,8 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.Thread.State;
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -24,14 +26,19 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.FileOutputFormat;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.RecordWriter;
-import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapreduce.JobContext;
+import org.apache.hadoop.mapreduce.OutputCommitter;
+import org.apache.hadoop.mapreduce.RecordWriter;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.LineReader;
 import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -62,7 +69,7 @@ public class IndexOutputFormat<S extends Shape>
     }
   }
   
-  public static class IndexRecordWriter<S extends Shape> implements RecordWriter<IntWritable, S> {
+  public static class IndexRecordWriter<S extends Shape> extends RecordWriter<IntWritable, S> {
 
     /**The partitioner used by the current job*/
     private Partitioner partitioner;
@@ -97,24 +104,25 @@ public class IndexOutputFormat<S extends Shape>
     /**Local indexer used to index each partition (optional)*/
     private LocalIndexer localIndexer;
 
-    public IndexRecordWriter(JobConf job, Path outPath) throws IOException, InterruptedException {
-      this(job, null, outPath, null);
+    public IndexRecordWriter(TaskAttemptContext task, Path outPath) throws IOException, InterruptedException {
+      this(task, null, outPath, null);
     }
     
-    public IndexRecordWriter(JobConf job, String name, Path outPath,
+    public IndexRecordWriter(TaskAttemptContext task, String name, Path outPath,
         Progressable progress)
         throws IOException, InterruptedException {
-      String sindex = job.get("sindex");
-      this.replicated = job.getBoolean("replicate", false);
+      Configuration conf = task.getConfiguration();
+      String sindex = conf.get("sindex");
+      this.replicated = conf.getBoolean("replicate", false);
       this.progress = progress;
-      this.outFS = outPath.getFileSystem(job);
+      this.outFS = outPath.getFileSystem(conf);
       this.outPath = outPath;
-      this.partitioner = Partitioner.getPartitioner(job);
-      Class<? extends LocalIndexer> localIndexerClass = job.getClass(LocalIndexer.LocalIndexerClass, null, LocalIndexer.class);
+      this.partitioner = Partitioner.getPartitioner(conf);
+      Class<? extends LocalIndexer> localIndexerClass = conf.getClass(LocalIndexer.LocalIndexerClass, null, LocalIndexer.class);
       if (localIndexerClass != null) {
         try {
           this.localIndexer = localIndexerClass.newInstance();
-          localIndexer.setup(job);
+          localIndexer.setup(conf);
         } catch (InstantiationException e) {
           e.printStackTrace();
         } catch (IllegalAccessException e) {
@@ -224,20 +232,22 @@ public class IndexOutputFormat<S extends Shape>
               for (int i_thread = 0; i_thread < closingThreads.size() &&
                   numRunningThreads < MaxClosingThreads; i_thread++) {
                 Thread thread = closingThreads.elementAt(i_thread);
-                switch (thread.getState()) {
-                case NEW:
-                  // Start the thread and fall through to increment the counter
-                  thread.start();
-                case RUNNABLE:
-                case BLOCKED:
-                case WAITING:
-                case TIMED_WAITING:
-                  // No need to start. Just increment number of threads
-                  numRunningThreads++;
-                  break;
-                case TERMINATED: // Do nothing.
-                  // Should never happen as each thread removes itself from
-                  // the list before completion 
+                synchronized(thread) {
+                  switch (thread.getState()) {
+                  case NEW:
+                    // Start the thread and fall through to increment the counter
+                    thread.start();
+                  case RUNNABLE:
+                  case BLOCKED:
+                  case WAITING:
+                  case TIMED_WAITING:
+                    // No need to start. Just increment number of threads
+                    numRunningThreads++;
+                    break;
+                  case TERMINATED: // Do nothing.
+                    // Should never happen as each thread removes itself from
+                    // the list before completion 
+                  }
                 }
               }
             } catch (ArrayIndexOutOfBoundsException e) {
@@ -340,13 +350,13 @@ public class IndexOutputFormat<S extends Shape>
     }
 
     @Override
-    public void close(Reporter reporter) throws IOException {
+    public void close(TaskAttemptContext task) throws IOException {
       try {
         // Close any open partitions
         for (Integer id : partitionsInfo.keySet()) {
           closePartition(id);
-          if (reporter != null)
-            reporter.progress();
+          if (task != null)
+            task.progress();
         }
         // Wait until all background threads are closed
         try {
@@ -355,8 +365,8 @@ public class IndexOutputFormat<S extends Shape>
             while (thread.isAlive()) {
               try {
                 thread.join(10000);
-                if (reporter != null)
-                  reporter.progress();
+                if (task != null)
+                  task.progress();
               } catch (InterruptedException e) {
                 e.printStackTrace();
               }
@@ -377,17 +387,81 @@ public class IndexOutputFormat<S extends Shape>
       }
     }
   }
+  
+  
+  /**
+   * Output committer that concatenates all master files into one master file.
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class IndexerOutputCommitter extends FileOutputCommitter {
+    
+    /**Job output path*/
+    private Path outPath;
 
-  @Override
-  public RecordWriter<IntWritable, S> getRecordWriter(FileSystem ignored,
-      JobConf job, String name, Progressable progress) throws IOException {
-    Path taskOutputPath = getTaskOutputPath(job, name).getParent();
-    try {
-      return new IndexRecordWriter<S>(job, name, taskOutputPath, progress);
-    } catch (InterruptedException e) {
-      throw new RuntimeException("Error initializing record writer", e);
+    public IndexerOutputCommitter(Path outputPath, TaskAttemptContext context)
+        throws IOException {
+      super(outputPath, context);
+      this.outPath = outputPath;
+    }
+
+    @Override
+    public void commitJob(JobContext context) throws IOException {
+      super.commitJob(context);
+      
+      Configuration conf = context.getConfiguration();
+      
+      FileSystem outFs = outPath.getFileSystem(conf);
+
+      // Concatenate all master files into one file
+      FileStatus[] resultFiles = outFs.listStatus(outPath, new PathFilter() {
+        @Override
+        public boolean accept(Path path) {
+          return path.getName().contains("_master");
+        }
+      });
+      
+      if (resultFiles.length == 0) {
+        LOG.warn("No _master files were written by reducers");
+      } else {
+        String sindex = conf.get("sindex");
+        Path masterPath = new Path(outPath, "_master." + sindex);
+        OutputStream destOut = outFs.create(masterPath);
+        Path wktPath = new Path(outPath, "_"+sindex+".wkt");
+        PrintStream wktOut = new PrintStream(outFs.create(wktPath));
+        wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+        Text tempLine = new Text2();
+        Partition tempPartition = new Partition();
+        final byte[] NewLine = new byte[] {'\n'};
+        for (FileStatus f : resultFiles) {
+          LineReader in = new LineReader(outFs.open(f.getPath()));
+          while (in.readLine(tempLine) > 0) {
+            destOut.write(tempLine.getBytes(), 0, tempLine.getLength());
+            destOut.write(NewLine);
+            tempPartition.fromText(tempLine);
+            wktOut.println(tempPartition.toWKT());
+          }
+          in.close();
+          outFs.delete(f.getPath(), false); // Delete the copied file
+        }
+        wktOut.close();
+        destOut.close();
+      }
     }
   }
 
   
+  @Override
+  public RecordWriter<IntWritable, S> getRecordWriter(TaskAttemptContext task)
+      throws IOException, InterruptedException {
+    Path file = getDefaultWorkFile(task, "");
+    return new IndexRecordWriter<S>(task, file);
+  }
+  
+  @Override
+  public synchronized OutputCommitter getOutputCommitter(TaskAttemptContext task)
+      throws IOException {
+    Path jobOutputPath = getOutputPath(task);
+    return new IndexerOutputCommitter(jobOutputPath, task);
+  }
 }

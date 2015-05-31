@@ -151,12 +151,12 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     this.start = s;
     this.end = s + l;
     this.path = p;
+    LOG.info("Open a SpatialRecordReader to file: "+p+"["+s+","+(s+l)+")");
     this.fs = this.path.getFileSystem(job);
     this.directIn = fs.open(this.path);
     this.blockSize = fs.getFileStatus(this.path).getBlockSize();
     this.cellMbr = new Rectangle();
     
-    LOG.info("Open a SpatialRecordReader to file: "+this.path);
 
     codec = new CompressionCodecFactory(job).getCodec(this.path);
 
