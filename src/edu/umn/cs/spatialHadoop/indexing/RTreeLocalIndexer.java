@@ -8,6 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.indexing;
 
+import java.io.BufferedInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -50,7 +51,7 @@ public class RTreeLocalIndexer implements LocalIndexer {
       Shape shape) throws IOException, InterruptedException {
     // Read all data of the written file in memory
     byte[] cellData = new byte[(int) nonIndexedFile.length()];
-    InputStream cellIn = new FileInputStream(nonIndexedFile);
+    InputStream cellIn = new BufferedInputStream(new FileInputStream(nonIndexedFile));
     cellIn.read(cellData);
     cellIn.close();
 

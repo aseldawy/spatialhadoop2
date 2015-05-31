@@ -56,6 +56,9 @@ public class Main {
       pgd.addClass("index", Indexer.class,
           "Spatially index a file using a specific indexer");
       
+      pgd.addClass("oldindex", Repartition.class,
+          "Spatially index a file using a specific indexer");
+      
       pgd.addClass("mbr", FileMBR.class,
           "Finds the minimal bounding rectangle of an input file");
       

@@ -8,6 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.indexing;
 
+import java.io.BufferedOutputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -300,7 +301,7 @@ public class IndexOutputFormat<S extends Shape>
         } else {
           // Write to a temporary file that will later get indexed
           File tempFile = File.createTempFile(String.format("part-%05d", id), "lindex");
-          out = new DataOutputStream(new FileOutputStream(tempFile));
+          out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(tempFile)));
           tempFiles.put(id, tempFile);
         }
         partition.cellId = id;

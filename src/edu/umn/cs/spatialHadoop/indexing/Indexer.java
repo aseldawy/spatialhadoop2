@@ -256,7 +256,8 @@ public class Indexer {
     job.setOutputCommitter(IndexerOutputCommitter.class);
     ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
     job.setNumMapTasks(5 * Math.max(1, clusterStatus.getMaxMapTasks()));
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
+    job.setNumReduceTasks(Math.max(1, Math.min(partitioner.getPartitionCount(),
+        (clusterStatus.getMaxReduceTasks() * 9 + 5) / 10)));
 
     // Use multithreading in case the job is running locally
     job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
