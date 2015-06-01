@@ -62,7 +62,7 @@ public class RTreeLocalIndexer implements LocalIndexer {
     cellStream.writeLong(SpatialSite.RTreeFileMarker);
     int degree = 4096 / RTree.NodeSize;
     RTree.bulkLoadWrite(cellData, 0, cellData.length, degree, cellStream,
-        shape.clone(), false);
+        shape.clone(), true);
     cellStream.close();
   }
 
