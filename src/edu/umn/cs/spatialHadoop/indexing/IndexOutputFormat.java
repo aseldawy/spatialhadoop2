@@ -353,6 +353,7 @@ public class IndexOutputFormat<S extends Shape>
           if (task != null)
             task.progress();
         }
+        LOG.info("Closing IndexRecordWriter with "+closingThreads.size()+" remaining threads");
         // Wait until all background threads are closed
         try {
           while (!closingThreads.isEmpty()) {

@@ -198,11 +198,6 @@ public class Indexer {
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(shape.getClass());
     job.setReducerClass(PartitionerReduce.class);
-    // Set the output committer using the old key explicitly for backward
-    // compatibility when using the local runner
-    conf.setClass("mapred.output.committer.class",
-        IndexOutputFormat.IndexerOutputCommitter.class,
-        org.apache.hadoop.mapred.OutputCommitter.class);
     // Set number of reduce tasks according to cluster status
     ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
     job.setNumReduceTasks(Math.max(1, Math.min(partitioner.getPartitionCount(),
@@ -289,9 +284,13 @@ public class Indexer {
           sample.add(p.clone());
         }
       };
-      OperationsParams params2 = new OperationsParams(job);
+      OperationsParams params2 = new OperationsParams();
       params2.setFloat("ratio", sample_ratio);
       params2.setLong("size", sample_size);
+      if (job.get("shape") != null)
+      params2.set("shape", job.get("shape"));
+      if (job.get("local") != null)
+      params2.set("local", job.get("local"));
       params2.setClass("outshape", Point.class, Shape.class);
       Sampler.sample(ins, resultCollector, params2);
       long t2 = System.currentTimeMillis();

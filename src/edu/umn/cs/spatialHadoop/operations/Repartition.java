@@ -189,12 +189,15 @@ public class Repartition {
         OutputCollector<IntWritable, T> output, Reporter reporter)
         throws IOException {
       T shape = null;
+      LOG.info("Closing partition #"+cellIndex);
       while (shapes.hasNext()) {
         shape = shapes.next();
         output.collect(cellIndex, shape);
       }
+      LOG.info("Done with all records in #"+cellIndex);
       // Close cell
       output.collect(new IntWritable(-cellIndex.get()), shape);
+      LOG.info("Done with cell #"+cellIndex);
     }
     
   }

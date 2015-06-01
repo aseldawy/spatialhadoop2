@@ -508,6 +508,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       if (progressable != null)
         progressable.progress();
     }
+    LOG.info("Closing record writer with "+closingThreads.size()+" remaining threads");
 
     while (!closingThreads.isEmpty()) {
       try {
