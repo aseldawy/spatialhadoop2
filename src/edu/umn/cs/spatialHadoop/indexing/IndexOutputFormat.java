@@ -101,7 +101,7 @@ public class IndexOutputFormat<S extends Shape>
     private LocalIndexer localIndexer;
 
     public IndexRecordWriter(TaskAttemptContext task, Path outPath) throws IOException, InterruptedException {
-      this(task, null, outPath, null);
+      this(task, Integer.toString(task.getTaskAttemptID().getTaskID().getId()), outPath, null);
     }
     
     public IndexRecordWriter(TaskAttemptContext task, String name, Path outPath,
@@ -450,7 +450,7 @@ public class IndexOutputFormat<S extends Shape>
   @Override
   public RecordWriter<IntWritable, S> getRecordWriter(TaskAttemptContext task)
       throws IOException, InterruptedException {
-    Path file = getDefaultWorkFile(task, "");
+    Path file = getDefaultWorkFile(task, "").getParent();
     return new IndexRecordWriter<S>(task, file);
   }
   
