@@ -61,8 +61,9 @@ public class RTreeLocalIndexer implements LocalIndexer {
     DataOutputStream cellStream = outFS.create(outputIndexedFile);
     cellStream.writeLong(SpatialSite.RTreeFileMarker);
     int degree = 4096 / RTree.NodeSize;
+    boolean fastAlgorithm = conf.get(SpatialSite.RTREE_BUILD_MODE, "fast").equals("fast");
     RTree.bulkLoadWrite(cellData, 0, cellData.length, degree, cellStream,
-        shape.clone(), true);
+        shape.clone(), fastAlgorithm);
     cellStream.close();
   }
 
