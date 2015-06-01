@@ -9,8 +9,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.BufferedOutputStream;
-import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -86,15 +84,13 @@ public class IndexOutputFormat<S extends Shape>
      * DataOutputStream for all partitions being written. It needs to be an
      * instance of stream so that it can be closed later.
      */
-    private Map<Integer, DataOutputStream> partitionsOutput = new ConcurrentHashMap<Integer, DataOutputStream>();
+    private Map<Integer, OutputStream> partitionsOutput = new ConcurrentHashMap<Integer, OutputStream>();
     /**A temporary text to serialize objects to before writing to output file*/
     private Text tempText = new Text2();
     /**A list of all threads that are closing partitions in the background*/
     private Vector<Thread> closingThreads = new Vector<Thread>();
-    /**To indicate progress*/
-    private Progressable progress;
     /**The master file contains information about all written partitions*/
-    private DataOutputStream masterFile;
+    private OutputStream masterFile;
     /**List of errors that happened by a background thread*/
     private Vector<Throwable> listOfErrors = new Vector<Throwable>();
     /**Whether records are replicated in the index or distributed*/
@@ -114,7 +110,6 @@ public class IndexOutputFormat<S extends Shape>
       Configuration conf = task.getConfiguration();
       String sindex = conf.get("sindex");
       this.replicated = conf.getBoolean("replicate", false);
-      this.progress = progress;
       this.outFS = outPath.getFileSystem(conf);
       this.outPath = outPath;
       this.partitioner = Partitioner.getPartitioner(conf);
@@ -167,7 +162,7 @@ public class IndexOutputFormat<S extends Shape>
         this.closePartition(partitionToClose);
       } else {
         // An actual object that we need to write
-        DataOutput output = getOrCreateDataOutput(id);
+        OutputStream output = getOrCreateDataOutput(id);
         tempText.clear();
         value.toText(tempText);
         byte[] bytes = tempText.getBytes();
@@ -191,7 +186,7 @@ public class IndexOutputFormat<S extends Shape>
      */
     private void closePartition(final int id) {
       final Partition partitionInfo = partitionsInfo.get(id);
-      final DataOutputStream outStream = partitionsOutput.get(id);
+      final OutputStream outStream = partitionsOutput.get(id);
       final File tempFile = tempFiles.get(id);
       Thread closeThread = new Thread() {
         @Override
@@ -297,8 +292,8 @@ public class IndexOutputFormat<S extends Shape>
      * @return
      * @throws IOException 
      */
-    private DataOutput getOrCreateDataOutput(int id) throws IOException {
-      DataOutputStream out = partitionsOutput.get(id);
+    private OutputStream getOrCreateDataOutput(int id) throws IOException {
+      OutputStream out = partitionsOutput.get(id);
       if (out == null) {
         // First time to write in this partition. Store its information
         Partition partition = new Partition();
@@ -311,7 +306,7 @@ public class IndexOutputFormat<S extends Shape>
         } else {
           // Write to a temporary file that will later get indexed
           File tempFile = File.createTempFile(String.format("part-%05d", id), "lindex");
-          out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(tempFile)));
+          out = new BufferedOutputStream(new FileOutputStream(tempFile));
           tempFiles.put(id, tempFile);
         }
         partition.cellId = id;
