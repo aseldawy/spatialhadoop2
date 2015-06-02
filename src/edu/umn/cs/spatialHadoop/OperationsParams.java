@@ -39,7 +39,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
-import edu.umn.cs.spatialHadoop.operations.Sampler2;
+import edu.umn.cs.spatialHadoop.operations.LocalSampler;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -629,7 +629,7 @@ public class OperationsParams extends Configuration {
 			final int sampleCount = 10;
 			OperationsParams sampleParams = new OperationsParams(this);
 			try {
-        Sampler2.sampleLocal(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
+        LocalSampler.sampleLocal(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
           @Override
           public void collect(Text line) {
             sampleLines.add(line.toString());
