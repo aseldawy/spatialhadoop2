@@ -13,6 +13,7 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
@@ -35,7 +36,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
  */
 public class HDFToText {
   public static class HDFToTextMap extends
-      Mapper<NASADataset, Iterable<? extends NASAShape>, Rectangle, NASAShape> {
+      Mapper<NASADataset, Iterable<? extends NASAShape>, NullWritable, NASAShape> {
     
     @Override
     protected void map(
@@ -43,8 +44,9 @@ public class HDFToText {
         Iterable<? extends NASAShape> values,
         Context context)
         throws IOException, InterruptedException {
+      NullWritable dummyKey = NullWritable.get();
       for (NASAShape s : values)
-        context.write(dataset, s);
+        context.write(dummyKey, s);
     }
   }
   
@@ -87,7 +89,8 @@ public class HDFToText {
     TextOutputFormat3.setOutputPath(job, outPath);
     
     // Run the job
-    job.waitForCompletion(false);
+    boolean verbose = conf.getBoolean("verbose", false);
+    job.waitForCompletion(verbose);
     Counters counters = job.getCounters();
     Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
     final long resultCount = outputRecordCounter.getValue();
@@ -145,6 +148,9 @@ public class HDFToText {
     }
     boolean skipFillValue = params.getBoolean("skipfillvalue", true);
     
-    HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
+    long t1 = System.currentTimeMillis();
+    long records = HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Wrote "+records+" records in "+(t2-t1)+" millis");
   }
 }
