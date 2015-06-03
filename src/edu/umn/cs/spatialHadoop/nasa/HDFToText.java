@@ -77,7 +77,8 @@ public class HDFToText {
     // Set input information
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.setInputPaths(job, inPath);
-    conf.setClass("shape", NASAPoint.class, Shape.class);
+    if (conf.get("shape") == null)
+      conf.setClass("shape", NASAPoint.class, Shape.class);
     conf.set("dataset", datasetName);
     conf.setBoolean("skipfillvalue", skipFillValue);
     
@@ -97,9 +98,10 @@ public class HDFToText {
   private static void printUsage() {
     System.out.println("Converts a set of HDF files to text format");
     System.out.println("Parameters: (* marks required parameters)");
-    System.out.println("<input file>: (*) Path to input file");
-    System.out.println("<output file>: (*) Path to output file");
-    System.out.println("dataset:<dataset>: (*) Name of the dataset to read from HDF");
+    System.out.println("<input file> - (*) Path to input file");
+    System.out.println("<output file> - (*) Path to output file");
+    System.out.println("dataset:<dataset> - (*) Name of the dataset to read from HDF");
+    System.out.println("shape:<NASAPoint|(NASARectangle)> - Type of shape in the output");
     System.out.println("-skipfillvalue: Skip fill value");
   }
   /**
@@ -109,7 +111,7 @@ public class HDFToText {
    * @throws InterruptedException 
    */
   public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     Path[] paths = params.getPaths();
     if (paths.length < 2) {
       printUsage();

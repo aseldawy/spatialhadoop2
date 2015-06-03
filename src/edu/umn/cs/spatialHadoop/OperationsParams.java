@@ -39,6 +39,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
+import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.LocalSampler;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
@@ -381,8 +382,10 @@ public class OperationsParams extends Configuration {
 			shape = new OGCESRIShape();
 		} else if (shapeTypeI.startsWith("wkt")) {
 			shape = new OGCJTSShape();
-		} else if (shapeTypeI.startsWith("nasa")) {
+		} else if (shapeTypeI.startsWith("nasapoint")) {
 			shape = new NASAPoint();
+		} else if (shapeTypeI.startsWith("nasarect")) {
+		  shape = new NASARectangle();
 		} else if (shapeTypeI.startsWith("text")) {
 			shape = new Text2();
 		} else {
