@@ -22,7 +22,6 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
@@ -63,17 +62,15 @@ public class HDFToText {
    * @throws InterruptedException 
    */
   public static long HDFToTextMapReduce(Path inPath, Path outPath,
-      String datasetName, boolean skipFillValue) throws IOException,
+      String datasetName, boolean skipFillValue, OperationsParams params) throws IOException,
       InterruptedException, ClassNotFoundException {
-    Job job = Job.getInstance();
+    Job job = new Job(params, "HDFToText");
     Configuration conf = job.getConfiguration();
     job.setJarByClass(HDFToText.class);
     job.setJobName("HDFToText");
 
     // Set Map function details
     job.setMapperClass(HDFToTextMap.class);
-    job.setMapOutputKeyClass(Rectangle.class);
-    job.setMapOutputValueClass(NASAPoint.class);
     job.setNumReduceTasks(0);
     
     // Set input information
@@ -149,7 +146,7 @@ public class HDFToText {
     boolean skipFillValue = params.getBoolean("skipfillvalue", true);
     
     long t1 = System.currentTimeMillis();
-    long records = HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
+    long records = HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Wrote "+records+" records in "+(t2-t1)+" millis");
   }
