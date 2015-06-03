@@ -203,9 +203,8 @@ public class RandomSpatialGenerator {
     System.out.println("Parameters (* marks required parameters):");
     System.out.println("<output file> - Path to the file to generate. If omitted, file is generated to stdout.");
     System.out.println("mbr:<x1,y1,x2,y2> - (*) The MBR of the generated data. Originated at (x,y) with dimensions (w,h)");
-    System.out.println("shape:<point|(rectangle)|polygon> - Type of shapes in generated file");
-    System.out.println("blocksize:<size> - Block size in the generated file");
-    System.out.println("sindex:<grid> - Type of global index in generated file");
+    System.out.println("shape:<point|(rectangle)> - Type of shapes in generated file");
+    System.out.println("sindex:<grid> - Type of global index in generated file. The only supported index is 'grid'");
     System.out.println("seed:<s> - Use a specific seed to generate the file");
     System.out.println("rectsize:<rs> - Maximum edge size for generated rectangles");
     System.out.println("-overwrite - Overwrite output file without notice");
