@@ -153,7 +153,6 @@ public class Indexer {
         context.write(partitionID, shape);
         context.progress();
       }
-      LOG.info("Closing partition #"+partitionID);
       // Indicate end of partition to close the file
       context.write(new IntWritable(-partitionID.get()-1), null);
       LOG.info("Done with partition #"+partitionID);

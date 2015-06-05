@@ -353,7 +353,7 @@ public class IndexOutputFormat<S extends Shape>
           if (task != null)
             task.progress();
         }
-        LOG.info("Closing IndexRecordWriter with "+closingThreads.size()+" remaining threads");
+        task.setStatus("Closing! "+closingThreads.size()+" remaining");
         // Wait until all background threads are closed
         try {
           while (!closingThreads.isEmpty()) {
@@ -367,10 +367,12 @@ public class IndexOutputFormat<S extends Shape>
                 e.printStackTrace();
               }
             }
+            task.setStatus("Closing! "+closingThreads.size()+" remaining");
           }
         } catch (ArrayIndexOutOfBoundsException e) {
           // The array of threads has gone empty. Nothing to do
         }
+        task.setStatus("All closed");
         // All threads are now closed. Check if errors happened
         if (!listOfErrors.isEmpty()) {
           for (Throwable t : listOfErrors)

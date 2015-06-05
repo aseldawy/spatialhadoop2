@@ -227,6 +227,7 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
   @Override
   public synchronized OutputCommitter getOutputCommitter(
       TaskAttemptContext context) throws IOException {
+    context.setStatus("Merging images");
     Path jobOutputPath = getOutputPath(context);
     return new ImageWriter(jobOutputPath, context);
   }
