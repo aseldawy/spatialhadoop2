@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.mapreduce;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -8,6 +9,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -38,4 +40,10 @@ public class SampleInputFormat extends FileInputFormat<NullWritable, Text> {
     return new SampleRecordReaderGeneral(split, task);
   }
   
+  @Override
+  public List<InputSplit> getSplits(JobContext job) throws IOException {
+    List<InputSplit> splits = super.getSplits(job);
+    // TODO combine splits that reside on the same machine
+    return splits;
+  }
 }
