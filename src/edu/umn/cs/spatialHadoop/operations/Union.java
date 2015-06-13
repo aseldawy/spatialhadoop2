@@ -67,6 +67,13 @@ public class Union {
       final int threshold = 500000;
       Geometry[] shapes_list = new Geometry[threshold];
       int size = 0;
+      OGCJTSShape outValue = null;
+      if (shapes.hasNext()) {
+        OGCJTSShape shape = shapes.next();
+        outValue = (OGCJTSShape) shape.clone();
+        shapes_list[size++] = shape.geom;
+      }
+      
       while (shapes.hasNext()) {
         OGCJTSShape shape = shapes.next();
         shapes_list[size++] = shape.geom;
@@ -94,10 +101,12 @@ public class Union {
         GeometryCollection union_shapes = (GeometryCollection) union;
         for (int i_geom = 0; i_geom < union_shapes.getNumGeometries(); i_geom++) {
           Geometry geom_n = union_shapes.getGeometryN(i_geom);
-          output.collect(dummy, new OGCJTSShape(geom_n));
+          outValue.geom = geom_n;
+          output.collect(dummy, outValue);
         }
       } else {
-        output.collect(dummy, new OGCJTSShape(union));
+        outValue.geom = union;
+        output.collect(dummy, outValue);
       }
       LOG.info("Done writing geoms to output");
     }
