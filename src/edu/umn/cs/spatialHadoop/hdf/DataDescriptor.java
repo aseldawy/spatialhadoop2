@@ -68,13 +68,16 @@ public abstract class DataDescriptor {
       } else {
         // Extended block. Need to retrieve extended data first
         int extensionType = hdfFile.inStream.readUnsignedShort();
-        if (extensionType == HDFConstants.SPECIAL_COMP) {
-          readCompressedData();
-        } else if (extensionType == HDFConstants.SPECIAL_CHUNKED) {
+        switch (extensionType) {
+        case HDFConstants.SPECIAL_COMP:
+          // Compressed data
+          readCompressedData(); break;
+        case HDFConstants.SPECIAL_CHUNKED:
           // Chunked data
-          readChunkedData();
-        } else {
-          System.err.println("Unsupported extension type "+extensionType);
+          readChunkedData(); break;
+        default:
+          // Not supported
+          throw new RuntimeException("Unsupported extension type "+extensionType);
         }
       }
       loaded = true;

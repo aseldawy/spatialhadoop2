@@ -70,7 +70,7 @@ public class HDFFile implements Closeable {
       DataDescriptor dd;
       int tagID = inStream.readUnsignedShort();
       boolean extended = (tagID & HDFConstants.DFTAG_EXTENDED) != 0;
-      tagID &= 0x3FFF;
+      tagID &= HDFConstants.DFTAG_EXTENDED - 1;
       int refNo = inStream.readUnsignedShort();
       int offset = inStream.readInt();
       int length = inStream.readInt();
@@ -107,8 +107,11 @@ public class HDFFile implements Closeable {
       } else if (tagID == HDFConstants.DFTAG_CHUNK) {
         // Data chunk
         dd = new DDChunkData(this, tagID, refNo, offset, length, extended);
+      } else if (tagID == HDFConstants.DFTAG_LINKED) {
+        // A linked block table
+        dd = new DDLinkedBlock(this, tagID, refNo, offset, length, extended);
       } else {
-        System.err.printf("Found an unknown block <%d,%d> @%d\n", tagID, refNo, inStream.getPos());
+        System.err.printf("Found an unknown %sblock <%d,%d> @%d\n", extended? "extended " : "", tagID, refNo, inStream.getPos());
         dd = new DDUnknown(this, tagID, refNo, offset, length, extended);
       }
       
