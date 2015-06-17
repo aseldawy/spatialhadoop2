@@ -365,60 +365,56 @@ public class OperationsParams extends Configuration {
 			shapeType = shapeType.substring(0, separatorIndex);
 		}
 
-		String shapeTypeI = shapeType.toLowerCase();
-		TextSerializable shape = null;
-
-		if (shapeTypeI.startsWith("rect")) {
-			shape = new Rectangle();
-		} else if (shapeTypeI.startsWith("point")) {
-			shape = new Point();
-		} else if (shapeTypeI.startsWith("tiger")) {
-			shape = new TigerShape();
-		} else if (shapeTypeI.startsWith("osm")) {
-			shape = new OSMPolygon();
-		} else if (shapeTypeI.startsWith("poly")) {
-			shape = new Polygon();
-		} else if (shapeTypeI.startsWith("ogc")) {
-			shape = new OGCESRIShape();
-		} else if (shapeTypeI.startsWith("wkt")) {
-			shape = new OGCJTSShape();
-		} else if (shapeTypeI.startsWith("nasapoint")) {
-			shape = new NASAPoint();
-		} else if (shapeTypeI.startsWith("nasarect")) {
-		  shape = new NASARectangle();
-		} else if (shapeTypeI.startsWith("text")) {
-			shape = new Text2();
-		} else {
-			// Use the shapeType as a class name and try to instantiate it
-			// dynamically
-			try {
-				Class<? extends TextSerializable> shapeClass = conf
-						.getClassByName(shapeType).asSubclass(
-								TextSerializable.class);
-				shape = shapeClass.newInstance();
-			} catch (ClassNotFoundException e) {
-			} catch (InstantiationException e) {
-			} catch (IllegalAccessException e) {
-			}
-			if (shape == null) {
-				// Couldn't detect shape from short name or full class name
-				// May be it's an actual value that we can parse
-				if (shapeType.split(",").length == 2) {
-					// A point
-					shape = new Point();
-					shape.fromText(new Text((String) conf.get(key)));
-				} else if (shapeType.split(",").length == 4) {
-					// A rectangle
-					shape = new Rectangle();
-					shape.fromText(new Text((String) conf.get(key)));
-				}
-				// TODO parse from WKT
-			}
+		TextSerializable shape;
+		
+		try {
+		  Class<? extends TextSerializable> shapeClass = conf
+          .getClassByName(shapeType).asSubclass(
+              TextSerializable.class);
+      shape = shapeClass.newInstance();
+		} catch (Exception e) {
+		  // shapeClass is not an explicit class name
+		  String shapeTypeI = shapeType.toLowerCase();
+		  if (shapeTypeI.startsWith("rect")) {
+		    shape = new Rectangle();
+		  } else if (shapeTypeI.startsWith("point")) {
+		    shape = new Point();
+		  } else if (shapeTypeI.startsWith("tiger")) {
+		    shape = new TigerShape();
+		  } else if (shapeTypeI.startsWith("osm")) {
+		    shape = new OSMPolygon();
+		  } else if (shapeTypeI.startsWith("poly")) {
+		    shape = new Polygon();
+		  } else if (shapeTypeI.startsWith("ogc")) {
+		    shape = new OGCESRIShape();
+		  } else if (shapeTypeI.startsWith("wkt")) {
+		    shape = new OGCJTSShape();
+		  } else if (shapeTypeI.startsWith("nasapoint")) {
+		    shape = new NASAPoint();
+		  } else if (shapeTypeI.startsWith("nasarect")) {
+		    shape = new NASARectangle();
+		  } else if (shapeTypeI.startsWith("text")) {
+		    shape = new Text2();
+		  } else {
+		    // Couldn't detect shape from short name or full class name
+		    // May be it's an actual value that we can parse
+		    if (shapeType.split(",").length == 2) {
+		      // A point
+		      shape = new Point();
+		      shape.fromText(new Text((String) conf.get(key)));
+		    } else if (shapeType.split(",").length == 4) {
+		      // A rectangle
+		      shape = new Rectangle();
+		      shape.fromText(new Text((String) conf.get(key)));
+		    } else {
+		      LOG.warn("unknown shape type: '" + conf.get(key) + "'");
+		      return null;
+		    }
+		  }
 		}
-		if (shape == null)
-			LOG.warn("unknown shape type: '" + conf.get(key) + "'");
-		else if (shapeValue != null)
-			shape.fromText(shapeValue);
+
+		if (shapeValue != null)
+		  shape.fromText(shapeValue);
 		// Special case for CSVOGC shape, specify the column if possible
 		if (shape instanceof CSVOGC) {
 			CSVOGC csvShape = (CSVOGC) shape;
