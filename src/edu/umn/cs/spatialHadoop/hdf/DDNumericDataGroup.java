@@ -20,7 +20,7 @@ import java.util.Arrays;
  */
 public class DDNumericDataGroup extends DataDescriptor {
 
-  /**Mumbers of the group*/
+  /**Members of the group*/
   protected DDID[] members;
 
   DDNumericDataGroup(HDFFile hdfFile, int tagID, int refNo, int offset,
