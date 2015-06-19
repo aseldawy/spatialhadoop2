@@ -8,7 +8,9 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.IOException;
 
 /**
@@ -17,7 +19,16 @@ import java.io.IOException;
  *
  */
 public class DDLinkedBlock extends DataDescriptor {
-
+  
+  /**Raw data*/
+  public byte[] data;
+  
+  /**Reference number for next table. Zero if no more linked block tables*/
+  protected int nextRef;
+  
+  /**A list of all block references stored in this table*/
+  protected int[] blockReferences;
+  
   /**
    * @param hdfFile
    * @param tagID
@@ -33,7 +44,33 @@ public class DDLinkedBlock extends DataDescriptor {
 
   @Override
   protected void readFields(DataInput input) throws IOException {
-    throw new RuntimeException("Non-implemented method");
+    // Note. We cannot parse the data at this point because a linked block
+    // might refer to either a linked block table or data block according
+    // to the context in which it appears
+    data = new byte[getLength()];
+    input.readFully(data);
+  }
+
+  /**
+   * Retrieve the references of all contained block if this linked block is
+   * a linked block table.
+   * @return 
+   * @throws IOException 
+   */
+  public int[] getBlockReferences() throws IOException {
+    lazyLoad();
+    
+    if (blockReferences == null) {
+      // Lazy parse
+      DataInputStream in = new DataInputStream(new ByteArrayInputStream(data));
+      nextRef = in.readUnsignedShort();
+      blockReferences = new int[(data.length - 2) / 2];
+      for (int i_blk = 0; i_blk < blockReferences.length; i_blk++)
+        blockReferences[i_blk] = in.readUnsignedShort();
+      in.close();
+    }
+    
+    return blockReferences;
   }
 
 }
