@@ -20,6 +20,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
@@ -343,6 +344,7 @@ public class SingleLevelPlot {
     
     // Set mapper and reducer based on the partitioning scheme
     String partition = conf.get("partition", "none");
+    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
     if (partition.equalsIgnoreCase("none")) {
       LOG.info("Using no-partition plot");
       job.setMapperClass(NoPartitionPlotMap.class);
@@ -352,7 +354,7 @@ public class SingleLevelPlot {
         int numSplits = new SpatialInputFormat3().getSplits(job).size();
         job.setReducerClass(NoPartitionPlotReduce.class);
         // Set number of reduce tasks according to cluster status
-        int maxReduce = new JobClient(new JobConf()).getClusterStatus().getMaxReduceTasks() * 7 / 8;
+        int maxReduce = clusterStatus.getMaxReduceTasks() * 7 / 8;
         job.setNumReduceTasks(Math.max(1, Math.min(maxReduce, numSplits / maxReduce)));
       } else {
         job.setNumReduceTasks(0);
@@ -365,8 +367,8 @@ public class SingleLevelPlot {
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(shape.getClass());
       job.setReducerClass(RepartitionPlotReduce.class);
-      // TODO set number of reducers according to cluster size
-      //job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));        
+      // Set number of reducers according to cluster size
+      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));        
       Partitioner.setPartitioner(conf, partitioner);
     }
     
