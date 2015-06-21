@@ -642,6 +642,8 @@ public class MultilevelPlot {
       final FileSystem outFS = outPath.getFileSystem(params);
       final Entry<TileIndex, RasterLayer>[] entries =
           rasterLayers.entrySet().toArray(new Map.Entry[rasterLayers.size()]);
+      // Clear the hash map to save memory as it is no longer needed
+      rasterLayers.clear();
       Parallel.forEach(entries.length, new RunnableRange<Object>() {
         @Override
         public Object run(int i1, int i2) {
@@ -659,6 +661,9 @@ public class MultilevelPlot {
               FSDataOutputStream outFile = outFS.create(imagePath);
               rasterizer.writeImage(entry.getValue(), outFile, vflip);
               outFile.close();
+              
+              // Remove entry to allows GC to collect it
+              entries[i] = null;
             }
             return null;
           } catch (InstantiationException e) {
