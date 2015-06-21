@@ -8,12 +8,18 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Vector;
+
+import javax.imageio.ImageIO;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -636,10 +642,46 @@ public class MultilevelPlot {
         reader.close();
       }
       
-      LOG.info("Done with rasterization. Now writing the tiles");
-      
       // Done with all splits. Write output to disk
+      LOG.info("Done with rasterization. Now writing the output");
       final FileSystem outFS = outPath.getFileSystem(params);
+      
+      LOG.info("Writing default empty image");
+      // Write a default empty image to be displayed for non-generated tiles
+      BufferedImage emptyImg = new BufferedImage(tileWidth, tileHeight,
+          BufferedImage.TYPE_INT_ARGB);
+      Graphics2D g = new SimpleGraphics(emptyImg);
+      g.setBackground(new Color(0, 0, 0, 0));
+      g.clearRect(0, 0, tileWidth, tileHeight);
+      g.dispose();
+
+      // Write HTML file to browse the mutlielvel image
+      OutputStream out = outFS.create(new Path(outPath, "default.png"));
+      ImageIO.write(emptyImg, "png", out);
+      out.close();
+
+      // Add an HTML file that visualizes the result using Google Maps
+      LOG.info("Writing the HTML viewer file");
+      LineReader templateFileReader = new LineReader(MultilevelPlot.class
+          .getResourceAsStream("/zoom_view.html"));
+      PrintStream htmlOut = new PrintStream(outFS.create(new Path(outPath,
+          "index.html")));
+      Text line = new Text();
+      while (templateFileReader.readLine(line) > 0) {
+        String lineStr = line.toString();
+        lineStr = lineStr.replace("#{TILE_WIDTH}", Integer.toString(tileWidth));
+        lineStr = lineStr.replace("#{TILE_HEIGHT}",
+            Integer.toString(tileHeight));
+        lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(maxLevel));
+        lineStr = lineStr.replace("#{MIN_ZOOM}", Integer.toString(minLevel));
+        lineStr = lineStr.replace("#{TILE_URL}", "'tile_' + zoom + '_' + coord.x + '-' + coord.y + '.png'");
+
+        htmlOut.println(lineStr);
+      }
+      templateFileReader.close();
+      htmlOut.close();
+
+      // Write the tiles
       final Entry<TileIndex, RasterLayer>[] entries =
           rasterLayers.entrySet().toArray(new Map.Entry[rasterLayers.size()]);
       // Clear the hash map to save memory as it is no longer needed
