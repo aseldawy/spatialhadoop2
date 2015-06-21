@@ -66,7 +66,7 @@ public class SJMR {
   /**Class logger*/
   private static final Log LOG = LogFactory.getLog(SJMR.class);
   private static final String PartitionGrid = "SJMR.PartitionGrid";
-  public static final String PartitioiningGridParam = "partition-grid-factor";
+  public static final String PartitioiningFactor = "partition-grid-factor";
   private static final String InactiveMode = "SJMR.InactiveMode";
   private static final String isFilterOnlyMode = "DJ.FilterOnlyMode";
   private static final String JoiningThresholdPerOnce = "DJ.JoiningThresholdPerOnce";
@@ -334,7 +334,7 @@ public class SJMR {
         }
 
         long t2 = System.currentTimeMillis();
-        System.out.println("Reducer finished in: "+(t2-t1)+" millis");
+        LOG.info("Reducer finished in: "+(t2-t1)+" millis");
 
       }else{
         LOG.info("Nothing to do !!!");	
@@ -389,14 +389,10 @@ public class SJMR {
       total_size += FileMBR.sizeOfLastProcessedFile;
     }
     // If the largest file is globally indexed, use its partitions
-    int sjmrPartitioningGridFactor = 20;
-    if(params.getSJMRGridPartitioiningFactor(PartitioiningGridParam) > 0){
-    	sjmrPartitioningGridFactor = (int)(params.getSJMRGridPartitioiningFactor(PartitioiningGridParam));
-        LOG.info("SJMRPartitioningGrid is configured");
-    }
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath)
-        * sjmrPartitioningGridFactor);
+    int sjmrPartitioningGridFactor = params.getInt(PartitioiningFactor, 20);
+    int num_cells = (int) Math.max(1, total_size * sjmrPartitioningGridFactor /
+        outFs.getDefaultBlockSize(outputPath));
     LOG.info("Number of cells is configured to be " + num_cells);
 
     OperationsParams.setInactiveModeFlag(job, InactiveMode, isReduceInactive);
@@ -462,7 +458,6 @@ public class SJMR {
     Path outputPath = allFiles.length == 2 ? null : params.getOutputPath();
 
     if (params.get("repartition-only", "no").equals("yes")) {
-      System.out.println("Repartition-only is true");
       isReduceInactive = true;
     }
 

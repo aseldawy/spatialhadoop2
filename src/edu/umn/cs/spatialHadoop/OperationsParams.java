@@ -449,10 +449,6 @@ public class OperationsParams extends Configuration {
 		return getSize(this, key);
 	}
 
-	public long getSJMRGridPartitioiningFactor(String key) {
-		return getSJMRPartitioningGrid(this, key);
-	}
-
 	/**
 	 * Sets the specified configuration parameter to the current value of the
 	 * shape. Both class name and shape values are encoded in one string and set
@@ -488,17 +484,6 @@ public class OperationsParams extends Configuration {
 			size *= 1024 * 1024 * 1024 * 1024;
 		return size;
 	}
-
-	public static long getSJMRPartitioningGrid(Configuration conf, String key) {
-		String sjmrPartitioningGrid_str = conf.get(key);
-		if (sjmrPartitioningGrid_str == null)
-			return 0;
-		long sjmrPartitioningGrid = Long.parseLong(sjmrPartitioningGrid_str);
-		if (sjmrPartitioningGrid < 1)
-			return 1;
-		return sjmrPartitioningGrid;
-	}
-
 	
 	public static int getJoiningThresholdPerOnce(Configuration conf,
 			String key) {
