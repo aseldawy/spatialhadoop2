@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -42,6 +43,8 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 /**
  * Generates a multilevel image
@@ -501,10 +504,10 @@ public class MultilevelPlot {
     return job;
   }
   
-  private static void plotLocal(Path[] inFiles, Path outPath,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params)
+  private static void plotLocal(Path[] inFiles, final Path outPath,
+      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
-    boolean vflip = params.getBoolean("vflip", true);
+    final boolean vflip = params.getBoolean("vflip", true);
     
     OperationsParams mbrParams = new OperationsParams(params);
     mbrParams.setBoolean("background", false);
@@ -633,19 +636,41 @@ public class MultilevelPlot {
         reader.close();
       }
       
+      LOG.info("Done with rasterization. Now writing the tiles");
+      
       // Done with all splits. Write output to disk
-      FileSystem outFS = outPath.getFileSystem(params);
-      for (Map.Entry<TileIndex, RasterLayer> entry : rasterLayers.entrySet()) {
-        key = entry.getKey();
-        if (vflip)
-          key.y = ((1 << key.level) - 1) - key.y;
-        
-        Path imagePath = new Path(outPath, key.getImageFileName());
-        // Write this tile to an image
-        FSDataOutputStream outFile = outFS.create(imagePath);
-        rasterizer.writeImage(entry.getValue(), outFile, vflip);
-        outFile.close();
-      }
+      final FileSystem outFS = outPath.getFileSystem(params);
+      final Entry<TileIndex, RasterLayer>[] entries =
+          rasterLayers.entrySet().toArray(new Map.Entry[rasterLayers.size()]);
+      Parallel.forEach(entries.length, new RunnableRange<Object>() {
+        @Override
+        public Object run(int i1, int i2) {
+          try {
+            Rasterizer rasterizer = rasterizerClass.newInstance();
+            rasterizer.configure(params);
+            for (int i = i1; i < i2; i++) {
+              Map.Entry<TileIndex, RasterLayer> entry = entries[i];
+              TileIndex key = entry.getKey();
+              if (vflip)
+                key.y = ((1 << key.level) - 1) - key.y;
+              
+              Path imagePath = new Path(outPath, key.getImageFileName());
+              // Write this tile to an image
+              FSDataOutputStream outFile = outFS.create(imagePath);
+              rasterizer.writeImage(entry.getValue(), outFile, vflip);
+              outFile.close();
+            }
+            return null;
+          } catch (InstantiationException e) {
+            e.printStackTrace();
+          } catch (IllegalAccessException e) {
+            e.printStackTrace();
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+          return null;
+        }
+      });
     } catch (InstantiationException e) {
       throw new RuntimeException("Error creating rastierizer", e);
     } catch (IllegalAccessException e) {
