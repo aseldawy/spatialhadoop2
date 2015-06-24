@@ -44,6 +44,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -544,12 +545,19 @@ public class MultilevelPlot {
     for (Path inFile : inFiles) {
       FileSystem inFs = inFile.getFileSystem(params);
       if (!OperationsParams.isWildcard(inFile) && inFs.exists(inFile) && !inFs.isDirectory(inFile)) {
-        // One file, retrieve it immediately.
-        // This is useful if the input is a hidden file which is automatically
-        // skipped by FileInputFormat. We need to plot a hidden file for the case
-        // of plotting partition boundaries of a spatial index
-        splits.add(new FileSplit(inFile, 0,
-            inFs.getFileStatus(inFile).getLen(), new String[0]));
+        if (SpatialSite.NonHiddenFileFilter.accept(inFile)) {
+          // Use the normal input format splitter to add this non-hidden file
+          Job job = Job.getInstance(params);
+          SpatialInputFormat3.addInputPath(job, inFile);
+          splits.addAll(inputFormat.getSplits(job));
+        } else {
+          // A hidden file, add it immediately as one split
+          // This is useful if the input is a hidden file which is automatically
+          // skipped by FileInputFormat. We need to plot a hidden file for the case
+          // of plotting partition boundaries of a spatial index
+          splits.add(new FileSplit(inFile, 0,
+              inFs.getFileStatus(inFile).getLen(), new String[0]));
+        }
       } else {
         Job job = Job.getInstance(params);
         SpatialInputFormat3.addInputPath(job, inFile);
