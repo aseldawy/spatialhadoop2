@@ -44,7 +44,6 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
-import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
@@ -496,6 +495,7 @@ public class SingleLevelPlot {
       throw new RuntimeException("Error creating rastierizer", e);
     }
     if (merge) {
+      LOG.info("Merging "+partialRasters.size()+" partial rasters");
       // Create the final raster layer that will contain the final image
       RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
       for (RasterLayer partialRaster : partialRasters)
