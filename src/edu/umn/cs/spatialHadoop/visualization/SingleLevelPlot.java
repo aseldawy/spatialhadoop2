@@ -121,9 +121,16 @@ public class SingleLevelPlot {
       int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partitionMBR);
-      if (smooth)
+      if (smooth) {
         shapes = rasterizer.smooth(shapes);
-      rasterizer.rasterize(rasterLayer, shapes);
+        context.progress();
+      }
+      int i = 0;
+      for (Shape shape : shapes) {
+        rasterizer.rasterize(rasterLayer, shape);
+        if (((++i) & 0xff) == 0)
+          context.progress();
+      }
       // If we set the output value to one constant, all intermediate layers
       // will be merged in one machine. Alternatively, We can set it to several values
       // to allow multiple reducers to collaborate in merging intermediate
@@ -209,9 +216,8 @@ public class SingleLevelPlot {
             }
           }
         });
-        if (((++i) & 0xff) == 0) {
+        if (((++i) & 0xff) == 0)
           context.progress();
-        }
       }
     
     }
@@ -261,9 +267,16 @@ public class SingleLevelPlot {
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
       if (smooth) {
         shapes = rasterizer.smooth(shapes);
+        context.progress();
       }
 
-      rasterizer.rasterize(rasterLayer, shapes);
+      int i = 0;
+      for (Shape shape : shapes) {
+        rasterizer.rasterize(rasterLayer, shape);
+        if (((++i) & 0xff) == 0)
+          context.progress();
+      }
+      
       context.write(NullWritable.get(), rasterLayer);
     }
   }

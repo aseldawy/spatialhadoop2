@@ -129,6 +129,7 @@ public class MultilevelPlot {
         shapes = rasterizer.smooth(shapes);
       TileIndex key = new TileIndex();
       Map<TileIndex, RasterLayer> rasterLayers = new HashMap<TileIndex, RasterLayer>();
+      int i = 0; // Counter to report progress often
       for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
@@ -163,6 +164,8 @@ public class MultilevelPlot {
           overlappingCells.width = updatedX2 - updatedX1 + 1;
           overlappingCells.height = updatedY2 - updatedY1 + 1;
         }
+        if (((++i) & 0xff) == 0)
+          context.progress();
       }
       // Write all created layers to the output
       for (Map.Entry<TileIndex, RasterLayer> entry : rasterLayers.entrySet()) {
@@ -223,8 +226,10 @@ public class MultilevelPlot {
       tileMBR.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y+1)) / gridSize;
 
       RasterLayer finalLayer = rasterizer.createRaster(tileWidth, tileHeight, tileMBR);
-      for (RasterLayer interLayer : interLayers)
+      for (RasterLayer interLayer : interLayers) {
         rasterizer.merge(finalLayer, interLayer);
+        context.progress();
+      }
       
       context.write(tileID, finalLayer);
     }
@@ -279,6 +284,7 @@ public class MultilevelPlot {
     protected void map(Rectangle partition, Iterable<? extends Shape> shapes,
         Context context) throws IOException, InterruptedException {
       TileIndex outKey = new TileIndex();
+      int i = 0;
       for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
@@ -302,6 +308,8 @@ public class MultilevelPlot {
           overlappingCells.width = updatedX2 - updatedX1 + 1;
           overlappingCells.height = updatedY2 - updatedY1 + 1;
         }
+        if (((++i) & 0xff) == 0)
+          context.progress();
       }
     }
   }
@@ -382,8 +390,11 @@ public class MultilevelPlot {
       TileIndex key = new TileIndex();
       
       context.setStatus("Rasterizing");
-      if (smooth)
+      if (smooth) {
         shapes = rasterizer.smooth(shapes);
+        context.progress();
+      }
+      int i = 0;
       for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
@@ -423,6 +434,9 @@ public class MultilevelPlot {
           overlappingCells.width = updatedX2 - updatedX1 + 1;
           overlappingCells.height = updatedY2 - updatedY1 + 1;
         }
+        
+        if (((++i) & 0xff) == 0)
+          context.progress();
       }
       context.setStatus("Writing "+rasterLayers.size()+" tiles");
       // Write all created layers to the output as images
