@@ -50,6 +50,16 @@ public class DDLinkedBlock extends DataDescriptor {
     data = new byte[getLength()];
     input.readFully(data);
   }
+  
+  /**
+   * Reads all the data contained in this object
+   * @return
+   * @throws IOException
+   */
+  protected byte[] readContainedData() throws IOException {
+    lazyLoad();
+    return data;
+  }
 
   /**
    * Retrieve the references of all contained block if this linked block is

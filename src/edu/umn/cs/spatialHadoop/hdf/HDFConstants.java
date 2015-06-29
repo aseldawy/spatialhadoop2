@@ -171,6 +171,8 @@ public final class HDFConstants {
   public static final int DFNT_CHAR = 4;
   /** Unsigned 8-bit integer */
   public static final int DFNT_UINT8 = 21;
+  /** short */
+  public static final int DFNT_INT16 = 22;
   /** Unsigned integer */
   public static final int DFNT_UINT16 = 23;
   /** Signed integer */

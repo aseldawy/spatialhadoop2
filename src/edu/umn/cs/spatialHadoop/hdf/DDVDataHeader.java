@@ -115,9 +115,10 @@ public class DDVDataHeader extends DataDescriptor {
         fields[iField] = new String(data, offset, sizes[iField]);
         break;
       case HDFConstants.DFNT_UINT8: fields[iField] = data[offset] < 0 ? (int) data[offset] + 256 : (int)data[offset]; break;
+      case HDFConstants.DFNT_INT16: fields[iField] = HDFConstants.readSignedShort(data, offset); break;
       case HDFConstants.DFNT_UINT16: fields[iField] = HDFConstants.readUnsignedShort(data, offset); break;
       case HDFConstants.DFNT_INT32: fields[iField] = HDFConstants.readInt32(data, offset); break;
-      default: return null;
+      default: throw new RuntimeException("Unsupported type "+types[iField]);
       }
       offset += sizes[iField];
     }

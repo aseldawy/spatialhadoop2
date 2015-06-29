@@ -101,9 +101,9 @@ public abstract class DataDescriptor {
       int deflateLevel = hdfFile.inStream.readUnsignedShort();
       // Retrieve the associated compressed block
       DDID linkedBlockID = new DDID(HDFConstants.DFTAG_COMPRESSED, linkedRefNo);
-      DDCompressedBlock linkedBlock =
+      DDCompressedBlock dataBlock =
           (DDCompressedBlock) hdfFile.retrieveElementByID(linkedBlockID);
-      InputStream decompressedData = linkedBlock.decompressDeflate(deflateLevel);
+      InputStream decompressedData = dataBlock.decompressDeflate(deflateLevel);
       readFields(new DataInputStream(decompressedData));
     } else {
       throw new RuntimeException("Unsupported compression "+compressionType);
@@ -134,7 +134,7 @@ public abstract class DataDescriptor {
     DDID chunkTableID = new DDID(tag, ref);
     tag = hdfFile.inStream.readUnsignedShort();
     ref = hdfFile.inStream.readUnsignedShort();
-    // For future use. Speical table for 'ghost' chunks.
+    // For future use. Special table for 'ghost' chunks.
     DDID specialTableID = new DDID(tag, ref);
     // Number of dimensions of the chunked element
     int nDims = hdfFile.inStream.readUnsignedShort();
@@ -167,7 +167,7 @@ public abstract class DataDescriptor {
       this.extendedLength = 0;
       for (int i_chunk = 0; i_chunk < numChunks; i_chunk++) {
         // Read data in this chunk
-        Object[] chunkInformation = (Object[]) chunkTable.getEntryAt(0);
+        Object[] chunkInformation = (Object[]) chunkTable.getEntryAt(i_chunk);
         DDID chunkedID = new DDID((Integer)chunkInformation[1], (Integer)chunkInformation[2]);
         DDChunkData chunkObject = (DDChunkData) hdfFile.retrieveElementByID(chunkedID);
         byte[] dataInChunk = chunkObject.getData();
@@ -184,18 +184,38 @@ public abstract class DataDescriptor {
   private void readLinkedData() throws IOException {
     // Length of the entire element
     int length = hdfFile.inStream.readInt();
-    // Length of the first data block
-    int first_len = hdfFile.inStream.readInt();
     // Length of successive data blocks
     int blk_len = hdfFile.inStream.readInt();
     // Number of blocks per block table
     int num_blk = hdfFile.inStream.readInt();
     // Reference number of first block table
     int link_ref = hdfFile.inStream.readUnsignedShort();
+    // Length of the first data block (not correct)
+    int first_len = length - blk_len * (num_blk - 1);
     
     DDLinkedBlock linkedBlockTable = (DDLinkedBlock) hdfFile.retrieveElementByID(new DDID(HDFConstants.DFTAG_LINKED, link_ref));
     int[] blockReferences = linkedBlockTable.getBlockReferences();
-    throw new RuntimeException("Cannot read linked data");
+    
+    int total_length = 0;
+    for (int i = 0; i < blockReferences.length; i++) {
+      DDID id = new DDID(HDFConstants.DFTAG_LINKED, blockReferences[i]);
+      DataDescriptor dataBlock = hdfFile.retrieveElementByID(id);
+      total_length += dataBlock.getLength();
+    }
+    
+    this.extendedLength = 0;
+    byte[] allData = new byte[total_length];
+    for (int i = 0; i < blockReferences.length; i++) {
+      DDID id = new DDID(HDFConstants.DFTAG_LINKED, blockReferences[i]);
+      DDLinkedBlock dataBlock = (DDLinkedBlock) hdfFile.retrieveElementByID(id);
+      byte[] data = dataBlock.readContainedData();
+      System.arraycopy(data, 0, allData, extendedLength, data.length);
+      extendedLength += data.length;
+    }
+    
+    DataInputStream dis = new DataInputStream(new ByteArrayInputStream(allData));
+    this.readFields(dis);
+    dis.close();
   }
   
   /**

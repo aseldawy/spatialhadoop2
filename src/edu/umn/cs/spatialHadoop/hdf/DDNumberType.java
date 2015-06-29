@@ -58,9 +58,10 @@ public class DDNumberType extends DataDescriptor {
     lazyLoad();
     switch (type) {
     case HDFConstants.DFNT_UINT8: return 1;
+    case HDFConstants.DFNT_INT16:
     case HDFConstants.DFNT_UINT16: return 2;
     case HDFConstants.DFNT_INT32: return 4;
-    default: return 0;
+    default: throw new RuntimeException("Unsupported type "+type);
     }
   }
 
