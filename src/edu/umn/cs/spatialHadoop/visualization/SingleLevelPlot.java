@@ -37,6 +37,7 @@ import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.indexing.Partitioner;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
@@ -120,9 +121,16 @@ public class SingleLevelPlot {
       int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partitionMBR);
-      if (smooth)
+      if (smooth) {
         shapes = rasterizer.smooth(shapes);
-      rasterizer.rasterize(rasterLayer, shapes);
+        context.progress();
+      }
+      int i = 0;
+      for (Shape shape : shapes) {
+        rasterizer.rasterize(rasterLayer, shape);
+        if (((++i) & 0xff) == 0)
+          context.progress();
+      }
       // If we set the output value to one constant, all intermediate layers
       // will be merged in one machine. Alternatively, We can set it to several values
       // to allow multiple reducers to collaborate in merging intermediate
@@ -208,9 +216,8 @@ public class SingleLevelPlot {
             }
           }
         });
-        if (((++i) & 0xff) == 0) {
+        if (((++i) & 0xff) == 0)
           context.progress();
-        }
       }
     
     }
@@ -260,9 +267,16 @@ public class SingleLevelPlot {
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
       if (smooth) {
         shapes = rasterizer.smooth(shapes);
+        context.progress();
       }
 
-      rasterizer.rasterize(rasterLayer, shapes);
+      int i = 0;
+      for (Shape shape : shapes) {
+        rasterizer.rasterize(rasterLayer, shape);
+        if (((++i) & 0xff) == 0)
+          context.progress();
+      }
+      
       context.write(NullWritable.get(), rasterLayer);
     }
   }
@@ -419,13 +433,21 @@ public class SingleLevelPlot {
     for (Path inFile : inFiles) {
       FileSystem inFs = inFile.getFileSystem(params);
       if (!OperationsParams.isWildcard(inFile) && inFs.exists(inFile) && !inFs.isDirectory(inFile)) {
-        // One file, retrieve it immediately.
-        // This is useful if the input is a hidden file which is automatically
-        // skipped by FileInputFormat. We need to plot a hidden file for the case
-        // of plotting partition boundaries of a spatial index
-        splits.add(new FileSplit(inFile, 0,
-            inFs.getFileStatus(inFile).getLen(), new String[0]));
+        if (SpatialSite.NonHiddenFileFilter.accept(inFile)) {
+          // Use the normal input format splitter to add this non-hidden file
+          Job job = Job.getInstance(params);
+          SpatialInputFormat3.addInputPath(job, inFile);
+          splits.addAll(inputFormat.getSplits(job));
+        } else {
+          // A hidden file, add it immediately as one split
+          // This is useful if the input is a hidden file which is automatically
+          // skipped by FileInputFormat. We need to plot a hidden file for the case
+          // of plotting partition boundaries of a spatial index
+          splits.add(new FileSplit(inFile, 0,
+              inFs.getFileStatus(inFile).getLen(), new String[0]));
+        }
       } else {
+        // Use the normal input format splitter to add this non-hidden file
         Job job = Job.getInstance(params);
         SpatialInputFormat3.addInputPath(job, inFile);
         splits.addAll(inputFormat.getSplits(job));
