@@ -50,6 +50,16 @@ public class GridPartitioner extends Partitioner {
    */
   public GridPartitioner() {
   }
+
+  public GridPartitioner(Rectangle mbr, int columns, int rows) {
+    this.x = mbr.x1;
+    this.y = mbr.y1;
+    this.numTiles = rows * columns;
+    this.numColumns = columns;
+    this.numRows = rows;
+    this.tileWidth = mbr.getWidth() / columns;
+    this.tileHeight = mbr.getHeight() / rows;
+  }
   
   @Override
   public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {

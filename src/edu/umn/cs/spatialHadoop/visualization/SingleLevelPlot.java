@@ -38,6 +38,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.GridPartitioner;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.indexing.Partitioner;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
@@ -320,20 +321,20 @@ public class SingleLevelPlot {
       OperationsParams.setShape(conf, SpatialInputFormat3.InputQueryRange, drawRect);
     
     // Adjust width and height if aspect ratio is to be kept
-    int width = conf.getInt("width", 1000);
-    int height = conf.getInt("height", 1000);
+    int imageWidth = conf.getInt("width", 1000);
+    int imageHeight = conf.getInt("height", 1000);
     if (params.getBoolean("keepratio", true)) {
       // Adjust width and height to maintain aspect ratio
-      if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height) {
+      if (inputMBR.getWidth() / inputMBR.getHeight() > (double) imageWidth / imageHeight) {
         // Fix width and change height
-        height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth());
+        imageHeight = (int) (inputMBR.getHeight() * imageWidth / inputMBR.getWidth());
         // Make divisible by two for compatibility with ffmpeg
-        if (height % 2 == 1)
-          height--;
-        conf.setInt("height", height);
+        if (imageHeight % 2 == 1)
+          imageHeight--;
+        conf.setInt("height", imageHeight);
       } else {
-        width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight());
-        conf.setInt("width", width);
+        imageWidth = (int) (inputMBR.getWidth() * imageHeight / inputMBR.getHeight());
+        conf.setInt("width", imageWidth);
       }
     }
     
@@ -374,7 +375,15 @@ public class SingleLevelPlot {
       }
     } else {
       LOG.info("Using repartition plot");
-      Partitioner partitioner = Indexer.createPartitioner(inFiles, outFile, conf, partition);
+      Partitioner partitioner;
+      if (partition.equals("pixel")) {
+        // Special case for pixel level partitioning as it depends on the
+        // visualization parameters
+        partitioner = new GridPartitioner(inputMBR, imageWidth, imageHeight);
+      } else {
+        // Use a standard partitioner as created by the indexer
+        partitioner = Indexer.createPartitioner(inFiles, outFile, conf, partition);
+      }
       Shape shape = params.getShape("shape");
       job.setMapperClass(RepartitionPlotMap.class);
       job.setMapOutputKeyClass(IntWritable.class);
