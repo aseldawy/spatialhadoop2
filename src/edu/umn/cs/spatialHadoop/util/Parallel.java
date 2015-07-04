@@ -57,10 +57,14 @@ public class Parallel {
   }
   
   public static <T> Vector<T> forEach(int size, RunnableRange<T> r) throws InterruptedException {
-    return forEach(0, size, r);
+    return forEach(0, size, r, Runtime.getRuntime().availableProcessors());
   }
   
-  public static <T> Vector<T> forEach(int start, int end, RunnableRange<T> r) throws InterruptedException {
+  public static <T> Vector<T> forEach(int size, RunnableRange<T> r, int parallelism) throws InterruptedException {
+      return forEach(0, size, r, parallelism);
+    }
+  
+  public static <T> Vector<T> forEach(int start, int end, RunnableRange<T> r, int parallelism) throws InterruptedException {
     Vector<T> results = new Vector<T>();
     if (end <= start)
       return results;
@@ -70,7 +74,10 @@ public class Parallel {
         exceptions.add(ex);
       }
     };
-    int parallelism = Math.min(end - start, Runtime.getRuntime().availableProcessors());
+    
+    // Put an upper bound on parallelism to avoid empty ranges
+    if (parallelism > (end - start))
+      parallelism = end - start;
     if (parallelism == 1) {
       // Avoid creating threads
       results.add(r.run(start, end));

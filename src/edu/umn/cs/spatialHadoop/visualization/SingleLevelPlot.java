@@ -465,7 +465,8 @@ public class SingleLevelPlot {
     
     // Copy splits to a final array to be used in parallel
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
-    
+    int parallelism = params.getInt("parallel",
+        Runtime.getRuntime().availableProcessors());
     Vector<RasterLayer> partialRasters = Parallel.forEach(fsplits.length, new RunnableRange<RasterLayer>() {
       @Override
       public RasterLayer run(int i1, int i2) {
@@ -514,7 +515,7 @@ public class SingleLevelPlot {
         }
         return partialRaster;
       }
-    });
+    }, parallelism);
     boolean merge = params.getBoolean("merge", true);
     Rasterizer rasterizer;
     try {

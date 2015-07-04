@@ -708,6 +708,8 @@ public class MultilevelPlot {
           rasterLayers.entrySet().toArray(new Map.Entry[rasterLayers.size()]);
       // Clear the hash map to save memory as it is no longer needed
       rasterLayers.clear();
+      int parallelism = params.getInt("parallel",
+          Runtime.getRuntime().availableProcessors());
       Parallel.forEach(entries.length, new RunnableRange<Object>() {
         @Override
         public Object run(int i1, int i2) {
@@ -739,7 +741,7 @@ public class MultilevelPlot {
           }
           return null;
         }
-      });
+      }, parallelism);
     } catch (InstantiationException e) {
       throw new RuntimeException("Error creating rastierizer", e);
     } catch (IllegalAccessException e) {
@@ -750,6 +752,28 @@ public class MultilevelPlot {
   public static Job plot(Path[] inPaths, Path outPath,
       Class<? extends Rasterizer> rasterizerClass, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
+    if (params.getBoolean("showmem", false)) {
+      // Run a thread that keeps track of used memory
+      Thread memThread = new Thread(new Thread() {
+        @Override
+        public void run() {
+          Runtime runtime = Runtime.getRuntime();  
+          while(true) {
+            try {
+              Thread.sleep(60000);
+            } catch (InterruptedException e) {
+              e.printStackTrace();
+            }
+            runtime.gc();
+            LOG.info("Memory usage: " + ((runtime.totalMemory() 
+                - runtime.freeMemory()) / (1024*1024*1024)) + "GB.");
+          }
+        }
+      });
+      memThread.setDaemon(true);
+      memThread.start();
+    }
+      
     // Decide how to run it based on range of levels to generate
     String[] strLevels = params.get("levels", "7").split("\\.\\.");
     int minLevel, maxLevel;
