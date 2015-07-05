@@ -74,7 +74,6 @@ public class HDFFile implements Closeable {
       int refNo = inStream.readUnsignedShort();
       int offset = inStream.readInt();
       int length = inStream.readInt();
-      System.out.println("Found ("+tagID+","+refNo+")");
       if (tagID == HDFConstants.DFTAG_VERSION) {
         // Version
         dd = new DDVersion(this, tagID, refNo, offset, length, extended);
