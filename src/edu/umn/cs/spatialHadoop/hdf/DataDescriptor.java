@@ -170,10 +170,15 @@ public abstract class DataDescriptor {
         Object[] chunkInformation = (Object[]) chunkTable.getEntryAt(i_chunk);
         DDID chunkedID = new DDID((Integer)chunkInformation[1], (Integer)chunkInformation[2]);
         DDChunkData chunkObject = (DDChunkData) hdfFile.retrieveElementByID(chunkedID);
-        byte[] dataInChunk = chunkObject.getData();
-        // Append to the allData
-        System.arraycopy(dataInChunk, 0, allData, extendedLength, dataInChunk.length);
-        extendedLength += dataInChunk.length;
+        if (chunkObject == null) {
+          // TODO fill in the array with fillValue
+          extendedLength += chunk_size * nt_size; // Skip this part in the array
+        } else {
+          byte[] dataInChunk = chunkObject.getData();
+          // Append to the allData
+          System.arraycopy(dataInChunk, 0, allData, extendedLength, dataInChunk.length);
+          extendedLength += dataInChunk.length;
+        }
       }
       DataInputStream dis = new DataInputStream(new ByteArrayInputStream(allData));
       this.readFields(dis);
