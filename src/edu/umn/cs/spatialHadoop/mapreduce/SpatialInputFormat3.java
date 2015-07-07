@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop.mapreduce;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -25,6 +26,7 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
@@ -37,6 +39,7 @@ import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.CombineBlockFilter;
+import edu.umn.cs.spatialHadoop.mapred.FileSplitUtil;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.nasa.HTTPFileSystem;
 import edu.umn.cs.spatialHadoop.operations.RangeFilter;
@@ -54,6 +57,9 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
   /**Query range to apply upon reading the input*/
   public static final String InputQueryRange = "rect";
   
+  /**Allows multiple splits to be combined to reduce number of mappers*/
+  public static final String CombineSplits = "SpatialInputFormat.CombineSplits";
+  
   /**
    * Used to check whether files are compressed or not. Some compressed files
    * (e.g., gz) are not splittable.
@@ -63,8 +69,17 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
   @Override
   public RecordReader<K, Iterable<V>> createRecordReader(InputSplit split,
       TaskAttemptContext context) throws IOException, InterruptedException {
-      FileSplit fsplit = (FileSplit) split;
-      String extension = FileUtil.getExtensionWithoutCompression(fsplit.getPath());
+      Path path;
+      String extension;
+      if (split instanceof FileSplit) {
+        FileSplit fsplit = (FileSplit) split;
+        extension = FileUtil.getExtensionWithoutCompression(path = fsplit.getPath());
+      } else if (split instanceof CombineFileSplit) {
+        CombineFileSplit csplit = (CombineFileSplit) split;
+        extension = FileUtil.getExtensionWithoutCompression(path = csplit.getPath(0));
+      } else {
+        throw new RuntimeException("Cannot process plits of type "+split.getClass());
+      }
       // If this extension is for a compression, skip it and take the previous
       // extension
       if (extension.equals("hdf")) {
@@ -78,7 +93,7 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       // For backward compatibility, check if the file is RTree indexed from
       // its signature
       Configuration conf = context != null? context.getConfiguration() : new Configuration();
-      if (SpatialSite.isRTree(fsplit.getPath().getFileSystem(conf), fsplit.getPath())) {
+      if (SpatialSite.isRTree(path.getFileSystem(conf), path)) {
         return (RecordReader)new RTreeRecordReader3<V>();
       }
       // Check if a custom record reader is configured with this extension
@@ -208,5 +223,86 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       LOG.warn("Error while determining whether a file is splittable", e);
       return false; // Safer to not split it
     }
+  }
+  
+  @Override
+  public List<InputSplit> getSplits(JobContext job) throws IOException {
+    List<InputSplit> splits = super.getSplits(job);
+    Configuration jobConf = job.getConfiguration();
+    if (jobConf.getInt(CombineSplits, 1) > 1) {
+      long t1 = System.currentTimeMillis();
+      int combine = jobConf.getInt(CombineSplits, 1);
+      /*
+       * Combine splits to reduce number of map tasks. Currently, this is done
+       * using a greedy algorithm that combines splits based on how many hosts
+       * they share.
+       * TODO: Use a graph clustering algorithm where each vertex represents a
+       * split, and each edge is weighted with number of shared hosts between
+       * the two splits
+       */
+      Vector<Vector<FileSplit>> openSplits = new Vector<Vector<FileSplit>>();
+      int maxNumberOfSplits = (int) Math.ceil((float)splits.size() / combine);
+      List<InputSplit> combinedSplits = new Vector<InputSplit>();
+      for (InputSplit split : splits) {
+        FileSplit fsplit = (FileSplit) split;
+        int maxSimilarity = -1; // Best similarity found so far
+        int bestFit = -1; // Index of a random open split with max similarity
+        int numMatches = 0; // Number of splits with max similarity
+        for (int i = 0; i < openSplits.size(); i++) {
+          Vector<FileSplit> splitList = openSplits.elementAt(i);
+          int similarity = 0;
+          for (FileSplit otherSplit : splitList) {
+            for (String host1 : fsplit.getLocations())
+              for (String host2 : otherSplit.getLocations())
+                if (host1.equals(host2))
+                  similarity++;
+          }
+          if (similarity > maxSimilarity) {
+            maxSimilarity = similarity;
+            bestFit = i;
+            numMatches = 1;
+          } else if (similarity == maxSimilarity) {
+            numMatches++;
+            // Replace with a probability () for a reservoir sample
+            double random = Math.random();
+            if (random < (double) 1 / numMatches) {
+              // Replace the element in the reservoir
+              bestFit = i;
+            }
+          }
+        }
+        if (maxSimilarity > 0 || (openSplits.size() + combinedSplits.size()) >= maxNumberOfSplits) {
+          // Good fit || cannot create more open splits,
+          // add it to an existing open split.
+          Vector<FileSplit> bestList = openSplits.elementAt(bestFit);
+          bestList.add(fsplit);
+          if (bestList.size() > combine) {
+            // Reached threshold for this list. Add it to combined splits
+            combinedSplits.add(FileSplitUtil.combineFileSplits(bestList, 0, bestList.size()));
+            // Remove it from open splits
+            openSplits.remove(bestFit);
+          }
+        } else {
+          // Bad fit && can add a new split
+          // Create a new open split just for this one
+          Vector<FileSplit> newOpenSplit = new Vector<FileSplit>();
+          newOpenSplit.add(fsplit);
+          openSplits.addElement(newOpenSplit);
+        }
+      }
+      
+      // Add all remaining open splits to the list of combined splits
+      for (Vector<FileSplit> openSplit : openSplits) {
+        combinedSplits.add(FileSplitUtil.combineFileSplits(openSplit, 0, openSplit.size()));
+      }
+      
+      String msg = String.format("Combined %d splits into %d combined splits",
+          splits.size(), combinedSplits.size());
+      splits.clear();
+      splits.addAll(combinedSplits);
+      long t2 = System.currentTimeMillis();
+      LOG.info(msg+" in "+((t2-t1)/1000.0)+" seconds");
+    }
+    return splits;
   }
 }

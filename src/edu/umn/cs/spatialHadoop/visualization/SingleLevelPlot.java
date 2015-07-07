@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.Random;
 import java.util.Vector;
 
@@ -138,7 +139,63 @@ public class SingleLevelPlot {
       // layers. We will need to run a follow up merge process that runs
       // on a single machine in the OutputCommitter function.
       outputValue.set(random.nextInt(numReducers));
+      outputValue.set(0);
       context.write(outputValue, rasterLayer);
+    }
+  }
+  
+  public static class NoPartitionPlotCombine<S extends Shape>
+  extends Reducer<IntWritable, RasterLayer, IntWritable, RasterLayer> {
+    
+    /**The MBR of the input file*/
+    private Rectangle inputMBR;
+    /**Generated image width in pixels*/
+    private int imageWidth;
+    /**Generated image height in pixels*/
+    private int imageHeight;
+    /**The component that rasterizes the shapes*/
+    private Rasterizer rasterizer;
+    /**Number of reduce jobs*/
+    private int numReducers;
+    /**Random number generator to send the raster layer to a random reducer*/
+    private Random random;
+    
+    @Override
+    protected void setup(Context context)
+        throws IOException, InterruptedException {
+      // TODO Auto-generated method stub
+      super.setup(context);
+      Configuration conf = context.getConfiguration();
+      this.imageWidth = conf.getInt("width", 1000);
+      this.imageHeight = conf.getInt("height", 1000);
+      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
+      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.numReducers = Math.max(1, context.getNumReduceTasks());
+      this.random = new Random();
+    }
+    
+    @Override
+    protected void reduce(IntWritable key,
+        Iterable<RasterLayer> intermediateLayers, Context context)
+            throws IOException, InterruptedException {
+      Iterator<RasterLayer> iLayers = intermediateLayers.iterator();
+      if (iLayers.hasNext()) {
+        RasterLayer layer = iLayers.next();
+        if (!iLayers.hasNext()) {
+          // Only one layer in the input. Output it as-is
+          key.set(random.nextInt(numReducers));
+          context.write(key, layer);
+        } else {
+          RasterLayer finalLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
+          rasterizer.merge(finalLayer, layer);
+          while (iLayers.hasNext()) {
+            layer = iLayers.next();
+            rasterizer.merge(finalLayer, layer);
+          }
+          key.set(random.nextInt(numReducers));
+          context.write(key, finalLayer);
+        }
+      }
     }
   }
   
@@ -362,6 +419,7 @@ public class SingleLevelPlot {
     if (partition.equalsIgnoreCase("none")) {
       LOG.info("Using no-partition plot");
       job.setMapperClass(NoPartitionPlotMap.class);
+      job.setCombinerClass(NoPartitionPlotCombine.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(rasterizer.getRasterClass());
       if (merge) {
