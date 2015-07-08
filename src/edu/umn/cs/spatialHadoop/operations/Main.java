@@ -24,7 +24,7 @@ import edu.umn.cs.spatialHadoop.nasa.SpatioAggregateQueries;
 /**
  * The main entry point to all queries.
  * 
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class Main {
@@ -73,6 +73,9 @@ public class Main {
 
       pgd.addClass("union", Union.class,
           "Computes the union of input shapes");
+
+      pgd.addClass("uunion", UltimateUnion.class,
+          "Computes the union of input shapes using the UltimateUnion algorithm");
 
       pgd.addClass("multihdfplot", MultiHDFPlot.class,
           "Plots NASA datasets in the spatiotemporal range provided by user");

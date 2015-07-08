@@ -20,6 +20,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.Progressable;
 
 
 /**
@@ -411,7 +412,7 @@ public class SpatialAlgorithms {
    * @throws IOException
    */
   public static <S extends Rectangle> int SelfJoin_rectangles(final S[] rs,
-      OutputCollector<S, S> output, Reporter reporter) throws IOException {
+      OutputCollector<S, S> output, Progressable reporter) throws IOException {
     int count = 0;
 
     final Comparator<Rectangle> comparator = new Comparator<Rectangle>() {

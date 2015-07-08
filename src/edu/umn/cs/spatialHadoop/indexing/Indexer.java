@@ -9,6 +9,9 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
@@ -20,6 +23,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -31,6 +35,7 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -39,6 +44,7 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.IndexOutputFormat.IndexRecordWriter;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -338,7 +344,7 @@ public class Indexer {
     
     // Copy splits to a final array to be used in parallel
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
-    final boolean replicate = conf.getBoolean("replicate", false);
+    boolean replicate = PartitionerReplicate.get(sindex);
     
     // Set input file MBR if not already set
     Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
@@ -395,6 +401,22 @@ public class Indexer {
       reader.close();
     }
     recordWriter.close(null);
+    
+    // Write the WKT formatted master file
+    Path masterPath = new Path(outPath, "_master." + sindex);
+    FileSystem outFs = outPath.getFileSystem(params);
+    Path wktPath = new Path(outPath, "_"+sindex+".wkt");
+    PrintStream wktOut = new PrintStream(outFs.create(wktPath));
+    wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+    Text tempLine = new Text2();
+    Partition tempPartition = new Partition();
+    LineReader in = new LineReader(outFs.open(masterPath));
+    while (in.readLine(tempLine) > 0) {
+      tempPartition.fromText(tempLine);
+      wktOut.println(tempPartition.toWKT());
+    }
+    in.close();
+    wktOut.close();
   }
   
   public static Job index(Path inPath, Path outPath, OperationsParams params)

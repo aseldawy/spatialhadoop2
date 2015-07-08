@@ -9,41 +9,35 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.Reducer;
-import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
-import com.vividsolutions.jts.geom.TopologyException;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms.RectangleID;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 
 /**
  * Computes the union of a set of shapes using a distributed MapReduce program.
@@ -59,103 +53,29 @@ public class UltimateUnion {
   private static final Log LOG = LogFactory.getLog(UltimateUnion.class);
 
   /**
-   * Computes the union of all given shapes and return one shape with all
-   * segments on the boundaries of the union. This method computes the union
-   * using the buffer(0) method which should be faster but is not stable.
-   * Sometimes, it breaks with input polygons of very high precision.
-   * @param collections
-   * @return
-   */
-  private static Geometry combineIntoOneGeometryBroken(Collection<Geometry> collections) {
-    GeometryFactory factory = new GeometryFactory();
-    GeometryCollection geometryCollection = (GeometryCollection)factory.buildGeometry(collections);
-    return geometryCollection.buffer(0);
-  }
-  
-  /**
-   * Computes the union of the given set of shapes. This method starts with
-   * one polygon and adds other polygons one by one computing the union at
-   * each step. This method is safer than using the buffer(0) method but it
-   * might be slower.
-   * @param collections
-   * @return
-   */
-  private static Geometry combineIntoOneGeometrySafe(Collection<Geometry> collections) {
-    Geometry res = null;
-    for (Geometry g : collections)
-      if (res == null) res = g;
-      else res = res.union(g);
-    return res;
-  }
-  
-  /**
-   * Similar to the {@link #combineIntoOneGeometrySafe(Collection)}, it computes
-   * the union of a set of shapes. However, it keeps doing pair-wise union
-   * between every pair of consecutive shapes (in the given list order) until
-   * we end up with one polygon. This method could be faster if we can perform
-   * independent pair-wise unions in parallel.
-   * @param collections
-   * @return
-   */
-  private static Geometry combineIntoOneGeometryFast(Collection<Geometry> collections) {
-    Geometry[] input = collections.toArray(new Geometry[collections.size()]);
-    int n = input.length; 
-    while(n > 1) {
-      int cnt = 0;
-      for (int i=0; i<n; i+=2) 
-        if (i + 1 < n) input[cnt++] = input[i].union(input[i + 1]);
-        else input[cnt++] = input[i];
-      n = cnt;
-    }
-    return input[0];
-  }
-
-  /**
-   * Computes the union between the given shape with all overlapping shapes
-   * and return only the segments in the result that overlap with the shape.
-   * 
-   * @param shape
-   * @param overlappingShapes
-   * @return
-   */
-  public static Geometry partialUnion(Geometry shape, Collection<Geometry> overlappingShapes) {
-    Geometry partialResult;
-    try {
-      partialResult = shape.union(combineIntoOneGeometryBroken(overlappingShapes));
-    } catch (TopologyException e) {
-      LOG.warn("Error computing union");
-      partialResult = shape.union(combineIntoOneGeometrySafe(overlappingShapes));
-    }
-    return shape.getBoundary().intersection(partialResult.getBoundary());
-  }
-  
-  /**
-   * A second version of partial union that takes a partition boundary along
-   * with all shapes overlapping this partition and returns the part of the
-   * answer that falls within the boundaries of the given partition.
-   * 
-   * @param partition
+   * Union a set of geometries by combining them into one GeometryCollection
+   * and taking its buffer
    * @param shapes
    * @return
    */
-  public static Geometry partialUnion(Rectangle partition, Collection<Geometry> shapes) {
-    Geometry shapesUnion;
-    try {
-      shapesUnion = combineIntoOneGeometryFast(shapes);
-      Coordinate[] coords = new Coordinate[5];
-      coords[0] = new Coordinate(partition.x1, partition.y1);
-      coords[1] = new Coordinate(partition.x2, partition.y1);
-      coords[2] = new Coordinate(partition.x2, partition.y2);
-      coords[3] = new Coordinate(partition.x1, partition.y2);
-      coords[4] = coords[0];
-      Geometry grid = FACTORY.createPolygon(FACTORY.createLinearRing(coords), null);
-
-      Geometry croppedUnion = shapesUnion.getBoundary().intersection(grid);
-      return croppedUnion;
-    } catch (TopologyException e) {
-      LOG.warn("Error computing parial union", e);
-      return null;
+  public static Geometry unionUsingBuffer(List<Geometry> shapes) {
+    List<Geometry> basicShapes = new Vector<Geometry>();
+    for (int i = 0; i < shapes.size(); i++) {
+      Geometry geom = shapes.get(i);
+      if (geom instanceof GeometryCollection) {
+        GeometryCollection coll = (GeometryCollection) geom;
+        for (int n = 0; n < coll.getNumGeometries(); n++)
+          shapes.add(coll.getGeometryN(n));
+      } else {
+        basicShapes.add(geom);
+      }
+      shapes.set(i, null);
     }
+    
+    GeometryCollection allInOne = FACTORY.createGeometryCollection(
+        basicShapes.toArray(new Geometry[basicShapes.size()]));
+    
+    return allInOne.buffer(0);
   }
 
   /**
@@ -168,123 +88,134 @@ public class UltimateUnion {
    *
    * @param <S>
    */
-  static class UltimateUnionMapInCell<S extends OGCJTSShape> extends MapReduceBase implements
-      Mapper<Rectangle, ArrayWritable, NullWritable, Shape>{
-
-    @Override
-    public void map(Rectangle key, ArrayWritable value,
-        final OutputCollector<NullWritable, Shape> output, Reporter reporter) throws IOException {
-      ArrayList<Geometry> geoms = new ArrayList<Geometry>();
-      Shape[] objects = (Shape[])value.get();
-      for (Shape s : objects) {
-        geoms.add(((OGCJTSShape)s).geom);
-      }
-      Geometry result = partialUnion(key, geoms);
-      if (result != null)
-        output.collect(NullWritable.get(), new OGCJTSShape(result));
-    }
-  }
-  
-  /**
-   * The map function of the UltimateUnion algorithm which works on a shape
-   * level. It takes a set of shapes, and performs a self join on these shapes
-   * to relate each shape to all overlapping shapes. Later in the reduce
-   * function, the union of each shape with all overlapping shapes is computed
-   * and the parts that contribute to final answer is computed.
-   * @author Ahmed Eldawy
-   *
-   */
-  static class UltimateUnionMapPerShape extends MapReduceBase
-      implements Mapper<Rectangle, ArrayWritable, Shape, Shape> {
+  static class UltimateUnionMap<S extends OGCJTSShape> extends 
+      Mapper<Rectangle, Iterable<Shape>, NullWritable, Shape> {
     
     @Override
-    public void configure(JobConf job) {
-      super.configure(job);
-    }
-
-    @Override
-    public void map(Rectangle key, ArrayWritable values,
-        OutputCollector<Shape, Shape> output, Reporter reporter)
-        throws IOException {
-      // Perform a self spatial join to relate each shape with all overlapping
-      // shapes. Notice that we run a filter-only join for efficiency which
-      // might relate a shape to another disjoint shape. These extra shapes
-      // will be handled and avoided in the reduce step.
-      Shape[] shapes = (Shape[]) values.get();
-      SpatialAlgorithms.SelfJoin_planeSweep(shapes, false, output, reporter);
-    }
-    
-  }
-  
-  /**
-   * The reduce function of the UltimateUnion algorithm which runs on a shape
-   * level. It takes a shape with all overlapping shapes and performs a polygon
-   * union algorithm over all these polygons. However, instead of returning the
-   * union, it returns only the parts that overlap the shape.
-   * @author Ahmed Eldawy
-   *
-   */
-  static class UltimateUnionReducer extends MapReduceBase implements
-      Reducer<OGCJTSShape, OGCJTSShape, NullWritable, OGCJTSShape> {
-
-    @Override
-    public void reduce(OGCJTSShape shape, Iterator<OGCJTSShape> overlaps,
-        OutputCollector<NullWritable, OGCJTSShape> output, Reporter reporter)
-        throws IOException {
-      Vector<Geometry> overlappingShapes = new Vector<Geometry>();
-      while (overlaps.hasNext()) {
-        OGCJTSShape overlap = overlaps.next();
-        overlappingShapes.add(overlap.geom);
+    protected void map(Rectangle key, Iterable<Shape> shapes, Context context)
+        throws IOException, InterruptedException {
+      long t1 = System.currentTimeMillis();
+      OGCJTSShape templateShape = null;
+      Vector<Geometry> vgeoms = new Vector<Geometry>();
+      Vector<RectangleID> rects = new Vector<RectangleID>();
+      for (Shape s : shapes) {
+        if (templateShape == null)
+          templateShape = (OGCJTSShape) s;
+        vgeoms.add(((OGCJTSShape)s).geom);
+        rects.add(new RectangleID(rects.size(), s.getMBR()));
       }
-      Geometry result = partialUnion(shape.geom, overlappingShapes);
-      if (result != null)
-        output.collect(NullWritable.get(), new OGCJTSShape(result));
+      
+      RectangleID[] mbrs = rects.toArray(new RectangleID[rects.size()]);
+      rects = null;
+      // Parent link of the Set Union Find data structure
+      final int[] parent = new int[mbrs.length];
+      Arrays.fill(parent, -1);
+      
+      // Group records in clusters by overlapping
+      SpatialAlgorithms.SelfJoin_rectangles(mbrs, new OutputCollector<RectangleID, RectangleID>(){
+        @Override
+        public void collect(RectangleID r, RectangleID s)
+            throws IOException {
+          int rid = r.id;
+          while (parent[rid] != -1) {
+            int pid = parent[rid];
+            if (parent[pid] != -1)
+              parent[rid] = parent[pid];
+            rid = pid;
+          }
+          int sid = s.id;
+          while (parent[sid] != -1) {
+            int pid = parent[sid];
+            if (parent[pid] != -1)
+              parent[sid] = parent[pid];
+            sid = pid;
+          }
+          if (rid != sid)
+            parent[rid] = sid;
+        }}, context);
+      mbrs = null;
+      // Put all records in one cluster as a list
+      Map<Integer, List<Geometry>> groups = new HashMap<Integer, List<Geometry>>();
+      for (int i = 0; i < parent.length; i++) {
+        int root = parent[i];
+        if (root == -1)
+          root = i;
+        while (parent[root] != -1) {
+          root = parent[root];
+        }
+        List<Geometry> group = groups.get(root);
+        if (group == null) {
+          group = new Vector<Geometry>();
+          groups.put(root, group);
+        }
+        group.add(vgeoms.get(i));
+      }
+      // Early clean some memory
+      vgeoms = null;
+      long t2 = System.currentTimeMillis();
+      LOG.info("Grouped "+parent.length+" shapes into "+groups.size()+" clusters in "+(t2-t1)/1000.0+" seconds");
+      
+      // Compute a separate union for each cluster
+      t1 = System.currentTimeMillis();
+      NullWritable nullKey = NullWritable.get();
+      Coordinate[] coords = new Coordinate[5];
+      coords[0] = new Coordinate(key.x1, key.y1);
+      coords[1] = new Coordinate(key.x2, key.y1);
+      coords[2] = new Coordinate(key.x2, key.y2);
+      coords[3] = new Coordinate(key.x1, key.y2);
+      coords[4] = coords[0];
+      Geometry partitionMBR = FACTORY.createPolygon(FACTORY.createLinearRing(coords), null);
+
+      for (List<Geometry> group : groups.values()) {
+        Geometry theUnion = unionUsingBuffer(group);
+        context.progress();
+        if (theUnion != null) {
+          Geometry croppedUnion = theUnion.getBoundary().intersection(partitionMBR);
+          if (croppedUnion != null) {
+            templateShape.geom = croppedUnion;
+            context.write(nullKey, templateShape);
+          }
+        }
+      }
+      t2 = System.currentTimeMillis();
+      LOG.info("Computed the union in "+(t2-t1)/1000.0+" seconds");
     }
   }
   
-  private static void ultimateUnionMapReduce(Path input, Path output,
-      OperationsParams params) throws IOException {
-    JobConf job = new JobConf(params, UltimateUnion.class);
-    job.setJobName("UltimateUnion");
+  private static Job ultimateUnionMapReduce(Path input, Path output,
+      OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException {
+    Job job = new Job(params, "UltimateUnion");
+    Configuration jobConf = job.getConfiguration();
+    job.setJarByClass(UltimateUnion.class);
 
-    String method = params.get("method", "cell").toLowerCase();
     Shape shape = params.getShape("shape");
-    if (method.equals("cell")) {
-      // Set map and reduce
-      job.setNumReduceTasks(0);
-      
-      job.setMapperClass(UltimateUnionMapInCell.class);
-      job.setMapOutputKeyClass(NullWritable.class);
-      job.setMapOutputValueClass(shape.getClass());
-    } else if (method.equals("shape")) {
-      // Set map and reduce
-      ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
-      
-      job.setMapperClass(UltimateUnionMapPerShape.class);
-      job.setReducerClass(UltimateUnionReducer.class);
-      job.setMapOutputKeyClass(shape.getClass());
-      job.setMapOutputValueClass(shape.getClass());
-    } else {
-      throw new RuntimeException("Unknown partition method: '"+method+"'");
-    }
+    // Set map and reduce
+    job.setMapperClass(UltimateUnionMap.class);
+    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputValueClass(shape.getClass());
+    job.setNumReduceTasks(0);
 
     // Set input and output
-    job.setInputFormat(ShapeArrayInputFormat.class);
-    FileInputFormat.addInputPath(job, input);
-    // Ensure each partition is fully read in one shot for correctness
-    job.setInt(SpatialSite.MaxBytesInOneRead, -1);
-    job.setInt(SpatialSite.MaxShapesInOneRead, -1);
+    job.setInputFormatClass(SpatialInputFormat3.class);
+    SpatialInputFormat3.addInputPath(job, input);
 
-    job.setOutputFormat(TextOutputFormat.class);
+    job.setOutputFormatClass(TextOutputFormat.class);
     TextOutputFormat.setOutputPath(job, output);
 
-    // Start job
-    JobClient.runJob(job);
+    // Submit the job
+    if (!params.getBoolean("background", false)) {
+      job.waitForCompletion(false);
+    } else {
+      job.submit();
+    }
+    return job;
   }
 
-  public static void ultimateUnion(Path input, Path output, OperationsParams params) throws IOException {
-    ultimateUnionMapReduce(input, output, params);
+  public static Job ultimateUnion(Path input, Path output,
+      OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException {
+    return ultimateUnionMapReduce(input, output, params);
   }
 
   private static void printUsage() {
@@ -296,7 +227,8 @@ public class UltimateUnion {
     System.out.println("<output file>: (*) Path to output file.");
   }
 
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException,
+      InterruptedException, ClassNotFoundException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     
     if (!params.checkInputOutput()) {
