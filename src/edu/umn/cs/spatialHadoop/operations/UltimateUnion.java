@@ -78,6 +78,11 @@ public class UltimateUnion {
         context.progress();
     }
     
+    if (basicShapes.size() == 1) {
+      // No need to union.
+      return basicShapes.get(0);
+    }
+    
     LOG.info("Flattened the geoms ino "+basicShapes.size()+" geoms");
     
     // Sort objects by x to increase the chance of merging overlapping objects
@@ -220,10 +225,24 @@ public class UltimateUnion {
         Geometry theUnion = unionUsingBuffer(group, context);
         context.progress();
         if (theUnion != null) {
-          Geometry croppedUnion = theUnion.getBoundary().intersection(partitionMBR);
-          if (croppedUnion != null) {
-            templateShape.geom = croppedUnion;
-            context.write(nullKey, templateShape);
+          if (theUnion instanceof GeometryCollection) {
+            // Result is a geometry collection. Write each one to the output
+            GeometryCollection theUnionColl = (GeometryCollection) theUnion;
+            for (int n = 0; n < theUnionColl.getNumGeometries(); n++) {
+              Geometry part = theUnionColl.getGeometryN(n);
+              Geometry croppedUnion = part.getBoundary().intersection(partitionMBR);
+              if (croppedUnion != null) {
+                templateShape.geom = croppedUnion;
+                context.write(nullKey, templateShape);
+              }
+            }
+          } else {
+            // Result is one geometry. Write it to the output
+            Geometry croppedUnion = theUnion.getBoundary().intersection(partitionMBR);
+            if (croppedUnion != null) {
+              templateShape.geom = croppedUnion;
+              context.write(nullKey, templateShape);
+            }
           }
         }
       }
