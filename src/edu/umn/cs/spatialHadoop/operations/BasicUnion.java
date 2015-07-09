@@ -46,11 +46,9 @@ public class BasicUnion {
   private static final Log LOG = LogFactory.getLog(BasicUnion.class);
 
   /**
-   * The map function for the UltimateUnion algorithm which works on a cell
-   * level. It takes all shapes in a rectangular cell, and returns the portion
-   * of the union that is contained in this cell. The output is of type
-   * MultiLineString and contains the lines that is part of the final result
-   * and contained in the given cell.
+   * The map function for the BasicUnion algorithm which works on a set of
+   * shapes. It computes the union of all these shapes and writes the result
+   * to the output.
    * @author Ahmed Eldawy
    *
    * @param <S>
@@ -66,11 +64,12 @@ public class BasicUnion {
       Iterator<S> i = shapes.iterator();
       while (i.hasNext()) {
         templateShape = i.next();
-        vgeoms.add(templateShape.geom);
+        if (templateShape.geom != null)
+          vgeoms.add(templateShape.geom);
       }
 
       LOG.info("Computing the union of "+vgeoms.size()+" geoms");
-      Geometry theUnion = UltimateUnion.unionUsingBuffer(vgeoms);
+      Geometry theUnion = UltimateUnion.unionUsingBuffer(vgeoms, context);
       templateShape.geom = theUnion;
       context.write(NullWritable.get(), templateShape);
       LOG.info("Union computed");
@@ -92,7 +91,7 @@ public class BasicUnion {
       }
 
       LOG.info("Computing the union of "+vgeoms.size()+" geoms");
-      Geometry theUnion = UltimateUnion.unionUsingBuffer(vgeoms);
+      Geometry theUnion = UltimateUnion.unionUsingBuffer(vgeoms, context);
       templateShape.geom = theUnion;
       context.write(dummy, templateShape);
       LOG.info("Union computed");
@@ -102,8 +101,7 @@ public class BasicUnion {
   private static Job ultimateUnionMapReduce(Path input, Path output,
       OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {
-    Job job = new Job(params, "UltimateUnion");
-    Configuration jobConf = job.getConfiguration();
+    Job job = new Job(params, "BasicUnion");
     job.setJarByClass(BasicUnion.class);
 
     Shape shape = params.getShape("shape");

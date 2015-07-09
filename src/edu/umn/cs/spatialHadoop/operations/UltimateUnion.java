@@ -10,6 +10,8 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +25,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
@@ -57,8 +60,10 @@ public class UltimateUnion {
    * and taking its buffer
    * @param shapes
    * @return
+   * @throws IOException 
    */
-  public static Geometry unionUsingBuffer(List<Geometry> shapes) {
+  public static Geometry unionUsingBuffer(List<Geometry> shapes, TaskAttemptContext context) throws IOException {
+    final int batchSize = 10000;
     List<Geometry> basicShapes = new Vector<Geometry>();
     for (int i = 0; i < shapes.size(); i++) {
       Geometry geom = shapes.get(i);
@@ -70,12 +75,56 @@ public class UltimateUnion {
         basicShapes.add(geom);
       }
       shapes.set(i, null);
+      if (i % 0xff == 0)
+        context.progress();
     }
     
-    GeometryCollection allInOne = FACTORY.createGeometryCollection(
-        basicShapes.toArray(new Geometry[basicShapes.size()]));
+    LOG.info("Flattened the geoms ino "+basicShapes.size()+" geoms");
     
-    return allInOne.buffer(0);
+    // Sort objects by x to increase the chance of merging overlapping objects
+    for (Geometry geom : basicShapes)
+      geom.setUserData(geom.getCentroid().getX());
+    
+    Collections.sort(basicShapes, new Comparator<Geometry>() {
+      @Override
+      public int compare(Geometry o1, Geometry o2) {
+        Double d1 = (Double) o1.getUserData();
+        Double d2 = (Double) o2.getUserData();
+        if (d1 < d2) return -1;
+        if (d1 > d2) return +1;
+        return 0;
+      }
+    });
+    
+    LOG.info("Sorted the geometries by x");
+    
+    Geometry result = null;
+    
+    int i = 0;
+    while (i < basicShapes.size()) {
+      Geometry[] argeoms = new Geometry[Math.min(batchSize, basicShapes.size() - i)];
+      for (int j = 0; j < argeoms.length; j++) {
+        argeoms[j] = basicShapes.get(i);
+        basicShapes.set(i++, null);
+      }
+      LOG.info("Computing the union of a batch of "+argeoms.length+" geoms");
+      GeometryCollection batchInOne = FACTORY.createGeometryCollection(argeoms);
+      Geometry batchUnion = batchInOne.buffer(0);
+      if (batchUnion instanceof GeometryCollection)
+        LOG.info("The union contains "+((GeometryCollection)batchUnion).getNumGeometries()+" geometries");
+      context.progress();
+      if (result == null) {
+        result = batchUnion;
+      } else {
+        LOG.info("Merging two geometries together");
+        result = result.union(batchUnion);
+        if (result instanceof GeometryCollection)
+          LOG.info("The union of the two contains "+((GeometryCollection)result).getNumGeometries()+" geometries");
+        context.progress();
+      }
+    }
+    
+    return result;
   }
 
   /**
@@ -94,6 +143,7 @@ public class UltimateUnion {
     @Override
     protected void map(Rectangle key, Iterable<Shape> shapes, Context context)
         throws IOException, InterruptedException {
+      context.setStatus("Clustering");
       long t1 = System.currentTimeMillis();
       OGCJTSShape templateShape = null;
       Vector<Geometry> vgeoms = new Vector<Geometry>();
@@ -156,6 +206,7 @@ public class UltimateUnion {
       LOG.info("Grouped "+parent.length+" shapes into "+groups.size()+" clusters in "+(t2-t1)/1000.0+" seconds");
       
       // Compute a separate union for each cluster
+      context.setStatus("Unioning");
       t1 = System.currentTimeMillis();
       NullWritable nullKey = NullWritable.get();
       Coordinate[] coords = new Coordinate[5];
@@ -167,7 +218,7 @@ public class UltimateUnion {
       Geometry partitionMBR = FACTORY.createPolygon(FACTORY.createLinearRing(coords), null);
 
       for (List<Geometry> group : groups.values()) {
-        Geometry theUnion = unionUsingBuffer(group);
+        Geometry theUnion = unionUsingBuffer(group, context);
         context.progress();
         if (theUnion != null) {
           Geometry croppedUnion = theUnion.getBoundary().intersection(partitionMBR);
