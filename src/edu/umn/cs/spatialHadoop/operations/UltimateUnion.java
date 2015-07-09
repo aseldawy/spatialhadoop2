@@ -19,7 +19,6 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -237,7 +236,6 @@ public class UltimateUnion {
       OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {
     Job job = new Job(params, "UltimateUnion");
-    Configuration jobConf = job.getConfiguration();
     job.setJarByClass(UltimateUnion.class);
 
     Shape shape = params.getShape("shape");
