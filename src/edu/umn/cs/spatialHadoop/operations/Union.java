@@ -9,312 +9,162 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Iterator;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.LocalJobRunner;
-import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.Reducer;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.TextInputFormat;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryCollection;
+import com.vividsolutions.jts.geom.GeometryFactory;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
-import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 
 /**
- * Computes the union of all shapes in a given input file.
- * 
+ * Computes the union of a set of shapes using a distributed MapReduce program.
+ * The file is split into n partitions, the union of each partition is computed
+ * separately, and finally the results are merged into one reducer. 
  * @author Ahmed Eldawy
  *
  */
 public class Union {
-  private static final Log LOG = LogFactory.getLog(Union.class);
+  public static final GeometryFactory FACTORY = new GeometryFactory();
   
+  /**Logger for this class*/
+  private static final Log LOG = LogFactory.getLog(Union.class);
+
   /**
-   * Reduce function takes a category and union all shapes in that category
+   * The map function for the BasicUnion algorithm which works on a set of
+   * shapes. It computes the union of all these shapes and writes the result
+   * to the output.
    * @author Ahmed Eldawy
    *
+   * @param <S>
    */
-  static class UnionReducer<S extends OGCJTSShape> extends MapReduceBase
-      implements Reducer<IntWritable, S, IntWritable, OGCJTSShape> {
+  static class UnionMap<S extends OGCJTSShape> extends 
+      Mapper<Rectangle, Iterable<S>, NullWritable, Shape> {
     
     @Override
-    public void reduce(IntWritable dummy, Iterator<S> shapes,
-        OutputCollector<IntWritable, OGCJTSShape> output, Reporter reporter)
-        throws IOException {
-      final int threshold = 500000;
-      Geometry[] shapes_list = new Geometry[threshold];
-      int size = 0;
-      OGCJTSShape outValue = null;
-      if (shapes.hasNext()) {
-        OGCJTSShape shape = shapes.next();
-        outValue = (OGCJTSShape) shape.clone();
-        shapes_list[size++] = shape.geom;
-      }
-      
-      while (shapes.hasNext()) {
-        OGCJTSShape shape = shapes.next();
-        shapes_list[size++] = shape.geom;
-        if (size == threshold) {
-          LOG.info("Computing union of "+size+" shapes");
-          reporter.progress();
-          GeometryCollection geo_collection = new GeometryCollection(shapes_list, shapes_list[0].getFactory());
-          Geometry union = geo_collection.buffer(0);
-          geo_collection = null;
-          size = 0;
-          shapes_list[size++] = union;
-        }
+    protected void map(Rectangle dummy, Iterable<S> shapes, Context context)
+        throws IOException, InterruptedException {
+      S templateShape = null;
+      Vector<Geometry> vgeoms = new Vector<Geometry>();
+      Iterator<S> i = shapes.iterator();
+      while (i.hasNext()) {
+        templateShape = i.next();
+        if (templateShape.geom != null)
+          vgeoms.add(templateShape.geom);
       }
 
-      LOG.info("Final union computation of "+size+" shapes");
-      Geometry[] good_shapes = new Geometry[size];
-      System.arraycopy(shapes_list, 0, good_shapes, 0, size);
-      GeometryCollection geo_collection = new GeometryCollection(good_shapes, good_shapes[0].getFactory());
-      Geometry union = geo_collection.buffer(0);
-      geo_collection = null;
-      shapes = null;
-      reporter.progress();
-      LOG.info("Writing geoms to output");
-      if (union instanceof GeometryCollection) {
-        GeometryCollection union_shapes = (GeometryCollection) union;
-        for (int i_geom = 0; i_geom < union_shapes.getNumGeometries(); i_geom++) {
-          Geometry geom_n = union_shapes.getGeometryN(i_geom);
-          outValue.geom = geom_n;
-          output.collect(dummy, outValue);
-        }
-      } else {
-        outValue.geom = union;
-        output.collect(dummy, outValue);
-      }
-      LOG.info("Done writing geoms to output");
+      LOG.info("Computing the union of "+vgeoms.size()+" geoms");
+      Geometry theUnion = UltimateUnion.unionUsingBuffer(vgeoms, context);
+      templateShape.geom = theUnion;
+      context.write(NullWritable.get(), templateShape);
+      LOG.info("Union computed");
     }
   }
   
-  /**
-   * Calculates the union of a set of shapes.
-   * @param inFile - Input file that contains shapes
-   * @param output - An output file that contains each category and the union
-   *  of all shapes in it. Each line contains the category, then a comma,
-   *   then the union represented as text.
-   * @throws IOException
-   * @throws InterruptedException 
-   */
-  public static void unionMapReduce(Path inFile, Path output,
-      OperationsParams params) throws IOException, InterruptedException {
-    JobConf job = new JobConf(params, Union.class);
-    job.setJobName("Union");
-    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(inFile.getFileSystem(job), inFile);
-    int reduceBuckets = 1;
-    if (gindex != null) {
-      int groups = Math.max(1, (int) Math.sqrt(gindex.size() / 4));
-      // Ensure that the final number of buckets is less than current
-      while (groups * groups >= gindex.size() && groups > 1) {
-        groups--;
-      }
-      
-      // Get the list of all partitions ordered by x
-      CellInfo[] unionGroups = new CellInfo[groups * groups];
-      Partition[] all = new Partition[gindex.size()];
-      int i = 0;
-      for (Partition p : gindex)
-        all[i++] = p;
-      Arrays.sort(all, new Comparator<Partition>() {
-        @Override
-        public int compare(Partition o1, Partition o2) {
-          if (o1.x1 == o2.x1)
-        	  return 0;
-          return o1.x1 < o2.x1 ? -1 : 1;
-        }
-      });
-      
-      int i1 = 0;
-      i = 0;
-      while (i1 < all.length) {
-        int i2 = Math.min(all.length, (i + 1) * all.length / groups);
-        Arrays.sort(all, i1, i2, new Comparator<Partition>() {
-          @Override
-          public int compare(Partition o1, Partition o2) {
-        	if(o1.y1 == o2.y1)
-        		return 0;
-            return o1.y1 < o2.y1 ? -1 : 1;
-          }
-        });
-        
-        int j = 0;
-        int j1 = i1;
-        while (j1 < i2) {
-          int j2 = Math.min(i2, (j + 1) * i2 / groups);
-          
-          CellInfo r = new CellInfo(j * groups + i + 1, all[j1]);
-          while (j1 < j2) {
-            j1++;
-            if (j1 < j2)
-              r.expand(all[j1]);
-          }
-          unionGroups[j * groups + i] = r;
-          
-          j++;
-        }
-        
-        i++;
-        i1 = i2;
-      }
-      
-      SpatialSite.setCells(job, unionGroups);
-      reduceBuckets = unionGroups.length;
-    } else {
-      Rectangle mbr = FileMBR.fileMBR(inFile, params);
-      CellInfo[] unionGroups = new CellInfo[1];
-      unionGroups[0] = new CellInfo(1, mbr);
-      SpatialSite.setCells(job, unionGroups);
-      reduceBuckets = unionGroups.length;
-    }
-    LOG.info("Number of reduce buckets: "+reduceBuckets);
-
-    // Set map and reduce
-    ClusterStatus clusterStatus = new JobClient(job).getClusterStatus();
-    job.setNumReduceTasks(Math.max(1, Math.min(reduceBuckets, clusterStatus.getMaxReduceTasks() * 9 / 10)));
-
-    job.setMapperClass(Repartition.RepartitionMap.class);
-    job.setCombinerClass(UnionReducer.class);
-    job.setReducerClass(UnionReducer.class);
+  static class UnionReduce<S extends OGCJTSShape> extends
+    Reducer<NullWritable, S, NullWritable, S> {
     
-    job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(params.getShape("shape").getClass());
+    @Override
+    protected void reduce(NullWritable dummy, Iterable<S> shapes,
+        Context context) throws IOException, InterruptedException {
+      S templateShape = null;
+      Vector<Geometry> vgeoms = new Vector<Geometry>();
+      Iterator<S> i = shapes.iterator();
+      while (i.hasNext()) {
+        templateShape = i.next();
+        vgeoms.add(templateShape.geom);
+      }
+
+      LOG.info("Computing the union of "+vgeoms.size()+" geoms");
+      Geometry theUnion = UltimateUnion.unionUsingBuffer(vgeoms, context);
+      templateShape.geom = theUnion;
+      context.write(dummy, templateShape);
+      LOG.info("Union computed");
+    }
+  }
+  
+  private static Job ultimateUnionMapReduce(Path input, Path output,
+      OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException {
+    Job job = new Job(params, "BasicUnion");
+    job.setJarByClass(Union.class);
+
+    Shape shape = params.getShape("shape");
+    // Set map and reduce
+    job.setMapperClass(UnionMap.class);
+    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputValueClass(shape.getClass());
+    job.setCombinerClass(UnionReduce.class);
+    job.setReducerClass(UnionReduce.class);
+    job.setNumReduceTasks(1);
 
     // Set input and output
-    job.setInputFormat(ShapeInputFormat.class);
-    TextInputFormat.addInputPath(job, inFile);
-    
-    job.setOutputFormat(GridOutputFormat.class);
-    GridOutputFormat.setOutputPath(job, output);
+    job.setInputFormatClass(SpatialInputFormat3.class);
+    SpatialInputFormat3.addInputPath(job, input);
 
-    if (OperationsParams.isLocal(job, inFile)) {
-      // Enforce local execution if explicitly set by user or for small files
-      job.set("mapred.job.tracker", "local");
-      // Use multithreading too
-      job.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
-    }
+    job.setOutputFormatClass(TextOutputFormat.class);
+    TextOutputFormat.setOutputPath(job, output);
 
-    // Start job
-    JobClient.runJob(job);
-  }
-  
-  
-  /**
-   * Convert a string containing a hex string to a byte array of binary.
-   * For example, the string "AABB" is converted to the byte array {0xAA, 0XBB}
-   * @param hex
-   * @return
-   */
-  public static byte[] hexToBytes(String hex) {
-    byte[] bytes = new byte[(hex.length() + 1) / 2];
-    for (int i = 0; i < hex.length(); i++) {
-      byte x = (byte) hex.charAt(i);
-      if (x >= '0' && x <= '9')
-        x -= '0';
-      else if (x >= 'a' && x <= 'f')
-        x = (byte) ((x - 'a') + 0xa);
-      else if (x >= 'A' && x <= 'F')
-        x = (byte) ((x - 'A') + 0xA);
-      else
-        throw new RuntimeException("Invalid hex char "+x);
-      if (i % 2 == 0)
-        x <<= 4;
-      bytes[i / 2] |= x;
+    // Submit the job
+    if (!params.getBoolean("background", false)) {
+      job.waitForCompletion(false);
+    } else {
+      job.submit();
     }
-    return bytes;
+    return job;
   }
 
-  
-  public static <S extends OGCJTSShape> Geometry unionStream(S shape) throws IOException {
-    ShapeRecordReader<S> reader =
-        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
-    final int threshold = 5000000;
-    ArrayList<Geometry> polygons = new ArrayList<Geometry>();
-    
-    Rectangle key = new Rectangle();
-
-    while (reader.next(key, shape)) {
-      polygons.add(shape.geom);
-      if (polygons.size() >= threshold) {
-        GeometryCollection collection = new GeometryCollection(polygons.toArray(new Geometry[polygons.size()]), polygons.get(0).getFactory());
-        Geometry union = collection.buffer(0);
-        polygons.clear();
-        polygons.add(union);
-        System.err.println("Size: "+polygons.size());
-      }
-    }
-    GeometryCollection collection = new GeometryCollection(polygons.toArray(new Geometry[polygons.size()]), polygons.get(0).getFactory());
-    Geometry union = collection.buffer(0);
-    polygons.clear();
-    return union;
+  public static Job ultimateUnion(Path input, Path output,
+      OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException {
+    return ultimateUnionMapReduce(input, output, params);
   }
 
   private static void printUsage() {
+    System.out.println("Union");
     System.out.println("Finds the union of all shapes in the input file.");
     System.out.println("The output is one shape that represents the union of all shapes in input file.");
     System.out.println("Parameters: (* marks required parameters)");
-    System.out.println("<shape file>: (*) Path to file that contains all shapes");
+    System.out.println("<input file>: (*) Path to file that contains all shapes");
     System.out.println("<output file>: (*) Path to output file.");
   }
 
-  public static void union(Path inFile, Path outFile,
-      OperationsParams params) throws IOException, InterruptedException {
-    unionMapReduce(inFile, outFile, params);
-  }
-
-
-  /**
-   * @param args
-   * @throws IOException 
-   * @throws InterruptedException 
-   */
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args) throws IOException,
+      InterruptedException, ClassNotFoundException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    if (params.getPaths().length == 0 && params.getBoolean("local", false)) {
-      // Special handling for union on an input stream
-      long t1 = System.currentTimeMillis();
-      unionStream((OGCJTSShape)params.getShape("shape"));
-      long t2 = System.currentTimeMillis();
-      System.err.println("Total time for union: "+(t2-t1)+" millis");
+    
+    if (!params.checkInputOutput()) {
+      printUsage();
       return;
     }
     
-    if (!params.checkInputOutput(true)) {
-      printUsage();
-      System.exit(1);
+    Path input = params.getPath();
+    Path output = params.getPaths()[1];
+    Shape shape = params.getShape("shape");
+    
+    if (shape == null || !(shape instanceof OGCJTSShape)) {
+      LOG.error("Given shape must be a subclass of "+OGCJTSShape.class);
+      return;
     }
 
-    Path inputPath = params.getInputPath();
-    Path outputPath = params.getOutputPath();
-    
     long t1 = System.currentTimeMillis();
-    union(inputPath, outputPath, params);
+    ultimateUnion(input, output, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }
-
 }
