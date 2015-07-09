@@ -9,28 +9,42 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.io.PrintStream;
+import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 /**
  * Computes the union of a set of shapes using a distributed MapReduce program.
@@ -98,7 +112,7 @@ public class Union {
     }
   }
   
-  private static Job ultimateUnionMapReduce(Path input, Path output,
+  private static Job unionMapReduce(Path input, Path output,
       OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {
     Job job = new Job(params, "BasicUnion");
@@ -128,11 +142,95 @@ public class Union {
     }
     return job;
   }
+  
+  public static <S extends OGCJTSShape> void unionLocal(Path inPath, Path outPath,
+      final OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException {
+    // 1- Split the input path/file to get splits that can be processed independently
+    final SpatialInputFormat3<Rectangle, S> inputFormat =
+        new SpatialInputFormat3<Rectangle, S>();
+    Job job = Job.getInstance(params);
+    SpatialInputFormat3.setInputPaths(job, inPath);
+    final List<InputSplit> splits = inputFormat.getSplits(job);
+    int parallelism = params.getInt("parallel", Runtime.getRuntime().availableProcessors());
+    
+    // 2- Process splits in parallel
+    Vector<Geometry> results = Parallel.forEach(splits.size(), new RunnableRange<Geometry>() {
+      @Override
+      public Geometry run(int i1, int i2) {
+        final int batchSize = 10000;
+        int numGeoms = 0;
+        Geometry[] geoms = new Geometry[batchSize];
+        Geometry unionResult = null;
+        for (int i = i1; i < i2; i++) {
+          try {
+            FileSplit fsplit = (FileSplit) splits.get(i);
+            final RecordReader<Rectangle, Iterable<S>> reader =
+                inputFormat.createRecordReader(fsplit, null);
+            if (reader instanceof SpatialRecordReader3) {
+              ((SpatialRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof RTreeRecordReader3) {
+              ((RTreeRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplit, params);
+            } else {
+              throw new RuntimeException("Unknown record reader");
+            }
+            while (reader.nextKeyValue()) {
+              Iterable<S> shapes = reader.getCurrentValue();
+              for (S s : shapes) {
+                geoms[numGeoms++] = s.geom;
+                if (numGeoms >= batchSize) {
+                  Geometry batchUnion = UltimateUnion.unionUsingBuffer(Arrays.asList(geoms), null);
+                  if (unionResult == null)
+                    unionResult = batchUnion;
+                  else
+                    unionResult = batchUnion.union(unionResult);
+                }
+              }
+            }
+            reader.close();
+          } catch (IOException e) {
+            LOG.error("Error processing split "+splits.get(i), e);
+          } catch (InterruptedException e) {
+            LOG.error("Error processing split "+splits.get(i), e);
+          }
+        }
+        return unionResult;
+      }
+    }, parallelism);
+    
+    // Write result to output
+    S outShape = (S) params.getShape("shape");
+    Geometry finalResult = UltimateUnion.unionUsingBuffer(results, null);
+    FileSystem outFS = outPath.getFileSystem(params);
+    PrintStream out = new PrintStream(outFS.create(outPath));
+    Text line = new Text2();
+    if (finalResult instanceof GeometryCollection) {
+      GeometryCollection coll = (GeometryCollection) finalResult;
+      for (int i = 0; i < coll.getNumGeometries(); i++) {
+        outShape.geom = coll.getGeometryN(i);
+        line.clear();
+        outShape.toText(line);
+        out.println(line);
+      }
+    } else {
+      outShape.geom = finalResult;
+      outShape.toText(line);
+      out.println(line);
+    }
+    out.close();
+  }
 
-  public static Job ultimateUnion(Path input, Path output,
+  public static Job union(Path inPath, Path outPath,
       OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {
-    return ultimateUnionMapReduce(input, output, params);
+    if (OperationsParams.isLocal(params, inPath)) {
+      unionLocal(inPath, outPath, params);
+      return null;
+    } else {
+      return unionMapReduce(inPath, outPath, params);
+    }
   }
 
   private static void printUsage() {
@@ -163,7 +261,7 @@ public class Union {
     }
 
     long t1 = System.currentTimeMillis();
-    ultimateUnion(input, output, params);
+    union(input, output, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }

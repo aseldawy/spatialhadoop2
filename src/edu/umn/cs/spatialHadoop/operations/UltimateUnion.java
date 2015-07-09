@@ -61,7 +61,8 @@ public class UltimateUnion {
    * @return
    * @throws IOException 
    */
-  public static Geometry unionUsingBuffer(List<Geometry> shapes, TaskAttemptContext context) throws IOException {
+  public static Geometry unionUsingBuffer(List<Geometry> shapes,
+      TaskAttemptContext context) throws IOException {
     final int batchSize = 10000;
     List<Geometry> basicShapes = new Vector<Geometry>();
     for (int i = 0; i < shapes.size(); i++) {
@@ -74,7 +75,7 @@ public class UltimateUnion {
         basicShapes.add(geom);
       }
       shapes.set(i, null);
-      if (i % 0xff == 0)
+      if (i % 0xff == 0 && context != null)
         context.progress();
     }
     
@@ -116,7 +117,8 @@ public class UltimateUnion {
       Geometry batchUnion = batchInOne.buffer(0);
       if (batchUnion instanceof GeometryCollection)
         LOG.info("The union contains "+((GeometryCollection)batchUnion).getNumGeometries()+" geometries");
-      context.progress();
+      if (context != null)
+        context.progress();
       if (result == null) {
         result = batchUnion;
       } else {
@@ -124,7 +126,8 @@ public class UltimateUnion {
         result = result.union(batchUnion);
         if (result instanceof GeometryCollection)
           LOG.info("The union of the two contains "+((GeometryCollection)result).getNumGeometries()+" geometries");
-        context.progress();
+        if (context != null)
+          context.progress();
       }
     }
     
