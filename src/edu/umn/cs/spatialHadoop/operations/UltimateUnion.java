@@ -29,6 +29,7 @@ import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.TopologyException;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
@@ -158,9 +159,17 @@ public class UltimateUnion {
             }
           } else {
             // Result is one geometry. Write it to the output
-            Geometry croppedUnion = theUnion.getBoundary().intersection(partitionMBR);
-            if (croppedUnion != null) {
-              templateShape.geom = croppedUnion;
+            try {
+              Geometry croppedUnion = theUnion.getBoundary().intersection(partitionMBR);
+              if (croppedUnion != null) {
+                templateShape.geom = croppedUnion;
+                context.write(nullKey, templateShape);
+              }
+            } catch (TopologyException e) {
+              LOG.warn("Error in cropping", e);
+              // Unavoidable TopologyException. Skip the clipping just to ensure
+              // we write something to the output
+              templateShape.geom = theUnion;
               context.write(nullKey, templateShape);
             }
           }
@@ -194,6 +203,8 @@ public class UltimateUnion {
     // Submit the job
     if (!params.getBoolean("background", false)) {
       job.waitForCompletion(false);
+      if (!job.isSuccessful())
+        throw new RuntimeException("Job failed!");
     } else {
       job.submit();
     }

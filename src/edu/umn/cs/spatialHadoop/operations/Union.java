@@ -189,11 +189,11 @@ public class Union {
     protected void map(Rectangle dummy, Iterable<S> shapes, Context context)
         throws IOException, InterruptedException {
       S templateShape = null;
-      Vector<Geometry> vgeoms = new Vector<Geometry>();
+      List<Geometry> vgeoms = new Vector<Geometry>();
       Iterator<S> i = shapes.iterator();
       while (i.hasNext()) {
         templateShape = i.next();
-        if (templateShape.geom != null)
+        if (templateShape.geom != null && !templateShape.geom.isEmpty())
           vgeoms.add(templateShape.geom);
       }
 
@@ -251,6 +251,8 @@ public class Union {
     // Submit the job
     if (!params.getBoolean("background", false)) {
       job.waitForCompletion(false);
+      if (!job.isSuccessful())
+        throw new RuntimeException("Job failed!");
     } else {
       job.submit();
     }
@@ -272,7 +274,7 @@ public class Union {
     Vector<Geometry> results = Parallel.forEach(splits.size(), new RunnableRange<Geometry>() {
       @Override
       public Geometry run(int i1, int i2) {
-        final int MaxBatchSize = 10000;
+        final int MaxBatchSize = 100000;
         Geometry[] batch = new Geometry[MaxBatchSize];
         int batchSize = 0;
         for (int i = i1; i < i2; i++) {
