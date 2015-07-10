@@ -10,8 +10,6 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,7 +22,6 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
@@ -52,87 +49,7 @@ public class UltimateUnion {
   public static final GeometryFactory FACTORY = new GeometryFactory();
   
   /**Logger for this class*/
-  private static final Log LOG = LogFactory.getLog(UltimateUnion.class);
-
-  /**
-   * Union a set of geometries by combining them into one GeometryCollection
-   * and taking its buffer
-   * @param shapes
-   * @return
-   * @throws IOException 
-   */
-  public static Geometry unionUsingBuffer(List<Geometry> shapes,
-      TaskAttemptContext context) throws IOException {
-    final int batchSize = 10000;
-    List<Geometry> basicShapes = new Vector<Geometry>();
-    for (int i = 0; i < shapes.size(); i++) {
-      Geometry geom = shapes.get(i);
-      if (geom instanceof GeometryCollection) {
-        GeometryCollection coll = (GeometryCollection) geom;
-        for (int n = 0; n < coll.getNumGeometries(); n++)
-          shapes.add(coll.getGeometryN(n));
-      } else {
-        basicShapes.add(geom);
-      }
-      shapes.set(i, null);
-      if (i % 0xff == 0 && context != null)
-        context.progress();
-    }
-    
-    if (basicShapes.size() == 1) {
-      // No need to union.
-      return basicShapes.get(0);
-    }
-    
-    LOG.info("Flattened the geoms ino "+basicShapes.size()+" geoms");
-    
-    // Sort objects by x to increase the chance of merging overlapping objects
-    for (Geometry geom : basicShapes)
-      geom.setUserData(geom.getCentroid().getX());
-    
-    Collections.sort(basicShapes, new Comparator<Geometry>() {
-      @Override
-      public int compare(Geometry o1, Geometry o2) {
-        Double d1 = (Double) o1.getUserData();
-        Double d2 = (Double) o2.getUserData();
-        if (d1 < d2) return -1;
-        if (d1 > d2) return +1;
-        return 0;
-      }
-    });
-    
-    LOG.info("Sorted the geometries by x");
-    
-    Geometry result = null;
-    
-    int i = 0;
-    while (i < basicShapes.size()) {
-      Geometry[] argeoms = new Geometry[Math.min(batchSize, basicShapes.size() - i)];
-      for (int j = 0; j < argeoms.length; j++) {
-        argeoms[j] = basicShapes.get(i);
-        basicShapes.set(i++, null);
-      }
-      LOG.info("Computing the union of a batch of "+argeoms.length+" geoms");
-      GeometryCollection batchInOne = FACTORY.createGeometryCollection(argeoms);
-      Geometry batchUnion = batchInOne.buffer(0);
-      if (batchUnion instanceof GeometryCollection)
-        LOG.info("The union contains "+((GeometryCollection)batchUnion).getNumGeometries()+" geometries");
-      if (context != null)
-        context.progress();
-      if (result == null) {
-        result = batchUnion;
-      } else {
-        LOG.info("Merging two geometries together");
-        result = result.union(batchUnion);
-        if (result instanceof GeometryCollection)
-          LOG.info("The union of the two contains "+((GeometryCollection)result).getNumGeometries()+" geometries");
-        if (context != null)
-          context.progress();
-      }
-    }
-    
-    return result;
-  }
+  static final Log LOG = LogFactory.getLog(UltimateUnion.class);
 
   /**
    * The map function for the UltimateUnion algorithm which works on a cell
@@ -225,7 +142,7 @@ public class UltimateUnion {
       Geometry partitionMBR = FACTORY.createPolygon(FACTORY.createLinearRing(coords), null);
 
       for (List<Geometry> group : groups.values()) {
-        Geometry theUnion = unionUsingBuffer(group, context);
+        Geometry theUnion = Union.unionInMemory(group, context);
         context.progress();
         if (theUnion != null) {
           if (theUnion instanceof GeometryCollection) {

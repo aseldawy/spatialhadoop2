@@ -11,6 +11,8 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
@@ -26,10 +28,12 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
+import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
@@ -83,7 +87,7 @@ public class Union {
       }
 
       LOG.info("Computing the union of "+vgeoms.size()+" geoms");
-      Geometry theUnion = UltimateUnion.unionUsingBuffer(vgeoms, context);
+      Geometry theUnion = Union.unionInMemory(vgeoms, context);
       templateShape.geom = theUnion;
       context.write(NullWritable.get(), templateShape);
       LOG.info("Union computed");
@@ -105,7 +109,7 @@ public class Union {
       }
 
       LOG.info("Computing the union of "+vgeoms.size()+" geoms");
-      Geometry theUnion = UltimateUnion.unionUsingBuffer(vgeoms, context);
+      Geometry theUnion = Union.unionInMemory(vgeoms, context);
       templateShape.geom = theUnion;
       context.write(dummy, templateShape);
       LOG.info("Union computed");
@@ -123,7 +127,6 @@ public class Union {
     job.setMapperClass(UnionMap.class);
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(shape.getClass());
-    job.setCombinerClass(UnionReduce.class);
     job.setReducerClass(UnionReduce.class);
     job.setNumReduceTasks(1);
 
@@ -158,10 +161,9 @@ public class Union {
     Vector<Geometry> results = Parallel.forEach(splits.size(), new RunnableRange<Geometry>() {
       @Override
       public Geometry run(int i1, int i2) {
-        final int batchSize = 10000;
-        int numGeoms = 0;
-        Geometry[] geoms = new Geometry[batchSize];
-        Geometry unionResult = null;
+        final int MaxBatchSize = 10000;
+        Geometry[] batch = new Geometry[MaxBatchSize];
+        int batchSize = 0;
         for (int i = i1; i < i2; i++) {
           try {
             FileSplit fsplit = (FileSplit) splits.get(i);
@@ -179,13 +181,13 @@ public class Union {
             while (reader.nextKeyValue()) {
               Iterable<S> shapes = reader.getCurrentValue();
               for (S s : shapes) {
-                geoms[numGeoms++] = s.geom;
-                if (numGeoms >= batchSize) {
-                  Geometry batchUnion = UltimateUnion.unionUsingBuffer(Arrays.asList(geoms), null);
-                  if (unionResult == null)
-                    unionResult = batchUnion;
-                  else
-                    unionResult = batchUnion.union(unionResult);
+                if (s.geom == null)
+                  continue;
+                batch[batchSize++] = s.geom;
+                if (batchSize >= MaxBatchSize) {
+                  Geometry batchUnion = Union.unionInMemory(Arrays.asList(batch), null);
+                  batch[0] = batchUnion;
+                  batchSize = 1;
                 }
               }
             }
@@ -196,13 +198,22 @@ public class Union {
             LOG.error("Error processing split "+splits.get(i), e);
           }
         }
-        return unionResult;
+        // Union all remaining geometries
+        try {
+          List<Geometry> finalBatch = new Vector<Geometry>(batchSize);
+          for (int i = 0; i < batchSize; i++)
+            finalBatch.add(batch[i]);
+          return Union.unionInMemory(finalBatch, null);
+        } catch (IOException e) {
+          // Should never happen as the context is passed as null
+          throw new RuntimeException("Error in local union", e);
+        }
       }
     }, parallelism);
     
     // Write result to output
     S outShape = (S) params.getShape("shape");
-    Geometry finalResult = UltimateUnion.unionUsingBuffer(results, null);
+    Geometry finalResult = Union.unionInMemory(results, null);
     FileSystem outFS = outPath.getFileSystem(params);
     PrintStream out = new PrintStream(outFS.create(outPath));
     Text line = new Text2();
@@ -264,5 +275,113 @@ public class Union {
     union(input, output, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
+  }
+
+  /**
+   * Union a set of geometries by combining them into one GeometryCollection
+   * and taking its buffer. This function is optimized to run with a large
+   * collection of polygons. It runs as follows.
+   * <ol>
+   *  <li>The given polygons are flattened by extracting all geometries from
+   *    GeometryCollections</li>
+   *  <li>All polygons are sorted by the x-dimension of their left most point</li>
+   *  <li>We run a plane-sweep algorithm that keeps merging polygons in batches of 10,000 objects</li>
+   *  <li>As soon as part of the answer is to the left of the sweep-line, it
+   *   is finalized and no-longer processed</li>
+   *  <li>Finally, all finalized polygons are put together in a GeometryCollection
+   *   to be returned as one object</li>
+   * </ol>
+   * @param geoms
+   * @return
+   * @throws IOException 
+   */
+  public static Geometry unionInMemory(final List<Geometry> geoms,
+      TaskAttemptContext context) throws IOException {
+    List<Geometry> basicShapes = new Vector<Geometry>();
+    for (int i = 0; i < geoms.size(); i++) {
+      Geometry geom = geoms.get(i);
+      if (geom instanceof GeometryCollection) {
+        GeometryCollection coll = (GeometryCollection) geom;
+        for (int n = 0; n < coll.getNumGeometries(); n++)
+          basicShapes.add(coll.getGeometryN(n));
+      } else {
+        basicShapes.add(geom);
+      }
+      if (i % 0xff == 0 && context != null)
+        context.progress();
+    }
+    
+    if (basicShapes.size() == 1) {
+      // No need to union.
+      return basicShapes.get(0);
+    }
+    
+    LOG.info("Flattened the geoms ino "+basicShapes.size()+" geoms");
+    
+    // Sort objects by x to increase the chance of merging overlapping objects
+    for (Geometry geom : basicShapes) {
+      Coordinate[] coords = geom.getEnvelope().getCoordinates();
+      double minx = Math.min(coords[0].x, coords[2].x);
+      geom.setUserData(minx);
+    }
+    
+    Collections.sort(basicShapes, new Comparator<Geometry>() {
+      @Override
+      public int compare(Geometry o1, Geometry o2) {
+        Double d1 = (Double) o1.getUserData();
+        Double d2 = (Double) o2.getUserData();
+        if (d1 < d2) return -1;
+        if (d1 > d2) return +1;
+        return 0;
+      }
+    });
+
+    final int MaxBatchSize = 10000;
+    // All polygons that are to the left of the sweep line
+    List<Geometry> finalPolygons = new Vector<Geometry>();
+    // All polygons that are to the right of the sweep line
+    List<Geometry> nonFinalPolygons = new Vector<Geometry>();
+    
+    LOG.info("Sorted the geometries by x");
+    
+    int i = 0;
+    while (i < basicShapes.size()) {
+      int batchSize = Math.min(MaxBatchSize, basicShapes.size() - i);
+      for (int j = 0; j < batchSize; j++) {
+        nonFinalPolygons.add(basicShapes.get(i));
+        basicShapes.set(i++, null); // Remove from list to release memory
+      }
+      double sweepLinePosition = (Double)nonFinalPolygons.get(nonFinalPolygons.size() - 1).getUserData();
+      LOG.info("Computing the union of a batch of "+nonFinalPolygons.size()+" geoms");
+      GeometryCollection batchInOne = (GeometryCollection) FACTORY.buildGeometry(nonFinalPolygons);
+      Geometry batchUnion = batchInOne.buffer(0);
+      if (context != null)
+        context.progress();
+
+      nonFinalPolygons.clear();
+      if (batchUnion instanceof GeometryCollection) {
+        GeometryCollection coll = (GeometryCollection) batchUnion;
+        for (int n = 0; n < coll.getNumGeometries(); n++) {
+          Geometry geom = coll.getGeometryN(n);
+          Coordinate[] coords = geom.getEnvelope().getCoordinates();
+          double maxx = Math.max(coords[0].x, coords[2].x);
+          if (maxx < sweepLinePosition) {
+            // This part is finalized
+            finalPolygons.add(geom);
+          } else {
+            nonFinalPolygons.add(geom);
+          }
+        }
+      } else {
+        nonFinalPolygons.add(batchUnion);
+      }
+      LOG.info("Final/Non-Final polygons = "+finalPolygons.size()+"/"+nonFinalPolygons.size());
+      if (context != null)
+        context.progress();
+    }
+    
+    // Combine all polygons together to produce the answer
+    finalPolygons.addAll(nonFinalPolygons);
+    return FACTORY.buildGeometry(finalPolygons);
   }
 }
