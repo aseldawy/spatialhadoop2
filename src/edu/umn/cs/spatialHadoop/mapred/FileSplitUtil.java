@@ -67,6 +67,11 @@ public class FileSplitUtil {
         startIndex++;
       }
       String[] locations = prioritizeLocations(vlocations);
+      if (locations.length > 3) {
+        String[] topLocations = new String[3];
+        System.arraycopy(locations, 0, topLocations, 0, topLocations.length);
+        locations = topLocations;
+      }
       return new CombineFileSplit(conf, paths, starts, lengths, locations);
     }
   }
@@ -100,6 +105,11 @@ public class FileSplitUtil {
         startIndex++;
       }
       String[] locations = prioritizeLocations(vlocations);
+      if (locations.length > 3) {
+        String[] topLocations = new String[3];
+        System.arraycopy(locations, 0, topLocations, 0, topLocations.length);
+        locations = topLocations;
+      }
       return new org.apache.hadoop.mapreduce.lib.input.CombineFileSplit(paths, starts, lengths, locations);
     }
   }
