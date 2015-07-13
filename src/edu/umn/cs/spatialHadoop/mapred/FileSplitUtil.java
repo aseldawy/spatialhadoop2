@@ -25,6 +25,7 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
+import org.apache.hadoop.mapreduce.JobContext;
 
 /**
  * A set of method and algorithms used to support management of file splits.
@@ -66,7 +67,50 @@ public class FileSplitUtil {
         startIndex++;
       }
       String[] locations = prioritizeLocations(vlocations);
+      if (locations.length > 3) {
+        String[] topLocations = new String[3];
+        System.arraycopy(locations, 0, topLocations, 0, topLocations.length);
+        locations = topLocations;
+      }
       return new CombineFileSplit(conf, paths, starts, lengths, locations);
+    }
+  }
+
+  /**
+   * Combines a number of file splits into one CombineFileSplit (mapreduce). If
+   * number of splits to be combined is one, it returns this split as is without
+   * creating a CombineFileSplit.
+   * 
+   * @param splits
+   * @param startIndex
+   * @param count
+   * @return
+   * @throws IOException
+   */
+  public static org.apache.hadoop.mapreduce.InputSplit combineFileSplits(
+      List<org.apache.hadoop.mapreduce.lib.input.FileSplit> splits, int startIndex, int count) throws IOException {
+    if (count == 1) {
+      return splits.get(startIndex);
+    } else {
+      Path[] paths = new Path[count];
+      long[] starts = new long[count];
+      long[] lengths = new long[count];
+      Vector<String> vlocations = new Vector<String>();
+      while (count > 0) {
+        paths[count - 1] = splits.get(startIndex).getPath();
+        starts[count - 1] = splits.get(startIndex).getStart();
+        lengths[count - 1] = splits.get(startIndex).getLength();
+        vlocations.addAll(Arrays.asList(splits.get(startIndex).getLocations()));
+        count--;
+        startIndex++;
+      }
+      String[] locations = prioritizeLocations(vlocations);
+      if (locations.length > 3) {
+        String[] topLocations = new String[3];
+        System.arraycopy(locations, 0, topLocations, 0, topLocations.length);
+        locations = topLocations;
+      }
+      return new org.apache.hadoop.mapreduce.lib.input.CombineFileSplit(paths, starts, lengths, locations);
     }
   }
   

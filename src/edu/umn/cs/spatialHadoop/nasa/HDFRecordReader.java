@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -21,6 +22,7 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -87,6 +89,11 @@ public class HDFRecordReader<S extends NASAShape>
   /**A flag to delete the underlying HDF file on exit (if copied over HTTP)*/
   private boolean deleteOnEnd;
 
+  /**A list of file splits to read*/
+  private Vector<FileSplit> splits;
+
+  /**The configuration of the underlying task. Used to initialize more splits*/
+  private Configuration conf;
 
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
@@ -96,9 +103,21 @@ public class HDFRecordReader<S extends NASAShape>
   }
 
   public void initialize(InputSplit split, Configuration conf) throws IOException {
+    this.conf = conf;
     String datasetName = conf.get("dataset");
     if (datasetName == null)
       throw new RuntimeException("Dataset name should be provided");
+    if (split instanceof CombineFileSplit) {
+      CombineFileSplit csplits = (CombineFileSplit) split;
+      splits = new Vector<FileSplit>(csplits.getNumPaths());
+      for (int i = 0; i < csplits.getNumPaths(); i++) {
+        FileSplit fsplit = new FileSplit(csplits.getPath(i),
+            csplits.getOffset(i), csplits.getLength(i), csplits.getLocations());
+        splits.add(fsplit);
+      }
+      this.initialize(splits.remove(splits.size() - 1), conf);
+      return;
+    }
     inFile = ((FileSplit) split).getPath();
     fs = inFile.getFileSystem(conf);
     if (fs instanceof HTTPFileSystem) {
@@ -182,7 +201,14 @@ public class HDFRecordReader<S extends NASAShape>
 
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
-    return value.hasNext();
+    boolean moreRecordsInCurrentFile = value.hasNext();
+    while (!moreRecordsInCurrentFile && splits != null && !splits.isEmpty()) {
+      // End of current file. Open next file and check if it has any records
+      this.close(); // Close current HDF file
+      this.initialize(splits.remove(splits.size() - 1), conf);
+      moreRecordsInCurrentFile = value.hasNext();
+    }
+    return moreRecordsInCurrentFile;
   }
   
   @Override
