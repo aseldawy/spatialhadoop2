@@ -56,9 +56,6 @@ public class HDFRecordReader<S extends NASAShape>
   /**Value used to read from input*/
   private S nasaShape;
 
-  /**Special value used to mark non-set entries*/
-  private int fillValue;
-
   /**Set to true to skip non-set (fill) values in the input*/
   private boolean skipFillValue;
   
@@ -94,6 +91,8 @@ public class HDFRecordReader<S extends NASAShape>
 
   /**The configuration of the underlying task. Used to initialize more splits*/
   private Configuration conf;
+
+  private byte[] fillValueBytes;
 
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
@@ -137,22 +136,21 @@ public class HDFRecordReader<S extends NASAShape>
     DDVGroup dataGroup = hdfFile.findGroupByName(datasetName);
     boolean fillValueFound = false;
     int resolution = 0;
+    // Retrieve metadata
+    int fillValuee=0;
     for (DataDescriptor dd : dataGroup.getContents()) {
-      if (dd instanceof DDNumericDataGroup) {
-        DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
-        unparsedDataArray = numericDataGroup.getAsByteArray();
-        valueSize = numericDataGroup.getDataSize();
-        resolution = numericDataGroup.getDimensions()[0];
-        if (valueSize * resolution * resolution != unparsedDataArray.length)
-          throw new RuntimeException("Error parsing metadata");
-      } else if (dd instanceof DDVDataHeader) {
+      if (dd instanceof DDVDataHeader) {
         DDVDataHeader vheader = (DDVDataHeader) dd;
         if (vheader.getName().equals("_FillValue")) {
           Object fillValue = vheader.getEntryAt(0);
           if (fillValue instanceof Integer)
-            this.fillValue = (Integer) fillValue;
+            fillValuee = (Integer) fillValue;
+          else if (fillValue instanceof Short)
+            fillValuee = (Short) fillValue;
           else if (fillValue instanceof Byte)
-            this.fillValue = (Byte) fillValue;
+            fillValuee = (Byte) fillValue;
+          else
+            throw new RuntimeException("Unsupported type: "+fillValue.getClass());
           fillValueFound = true;
         } else if (vheader.getName().equals("valid_range")) {
           Object minValue = vheader.getEntryAt(0);
@@ -168,6 +166,23 @@ public class HDFRecordReader<S extends NASAShape>
         }
       }
     }
+    // Retrieve data
+    for (DataDescriptor dd : dataGroup.getContents()) {
+      if (dd instanceof DDNumericDataGroup) {
+        DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
+        valueSize = numericDataGroup.getDataSize();
+        resolution = numericDataGroup.getDimensions()[0];
+        unparsedDataArray = new byte[valueSize * resolution * resolution];
+        if (fillValueFound) {
+          fillValueBytes = new byte[valueSize];
+          HDFConstants.writeAt(fillValueBytes, 0, fillValuee, valueSize);
+          for (int i = 0; i < unparsedDataArray.length; i++)
+            unparsedDataArray[i] = fillValueBytes[i % valueSize];
+        }
+        numericDataGroup.getAsByteArray(unparsedDataArray, 0, unparsedDataArray.length);
+      }
+    }
+    
     nasaDataset.resolution = resolution;
     if (!fillValueFound) {
       skipFillValue = false;
@@ -280,11 +295,9 @@ public class HDFRecordReader<S extends NASAShape>
     
     private void skipFillValue() {
       while (position < unparsedDataArray.length
-          && (!skipFillValue || HDFConstants.readAsAinteger(unparsedDataArray,
-              position, valueSize) == fillValue))
+          && (!skipFillValue || isFillValue(position)))
         position += valueSize;
     }
-
 
     @Override
     public Iterator<S> iterator() {
@@ -298,7 +311,7 @@ public class HDFRecordReader<S extends NASAShape>
     
     @Override
     public S next() {
-      shape.setValue(HDFConstants.readAsAinteger(unparsedDataArray, position, valueSize));
+      shape.setValue(HDFConstants.readAsInteger(unparsedDataArray, position, valueSize));
       setShapeGeometry(shape, position);
       position += valueSize;
       skipFillValue();
@@ -319,7 +332,20 @@ public class HDFRecordReader<S extends NASAShape>
    */
   private int getValueAt(int x, int y) {
     int position = (y * nasaDataset.resolution + x) * valueSize;
-    return HDFConstants.readAsAinteger(unparsedDataArray, position, valueSize);
+    return HDFConstants.readAsInteger(unparsedDataArray, position, valueSize);
+  }
+  
+  private boolean isFillValue(int x, int y) {
+    int position = (y * nasaDataset.resolution + x) * valueSize;
+    return isFillValue(position);
+  }
+  
+  private boolean isFillValue(int position) {
+    int sizeToCheck = valueSize;
+    int b = 0;
+    while (sizeToCheck > 0 && unparsedDataArray[position++] == fillValueBytes[b++])
+      sizeToCheck--;
+    return sizeToCheck == 0;
   }
 
   private void setValueAt(int x, int y, int value) {
@@ -402,11 +428,11 @@ public class HDFRecordReader<S extends NASAShape>
       while (x2 < inputRes) {
         int x1 = x2;
         // x1 should point to the first missing point
-        while (x1 < inputRes && getValueAt(x1, y) != fillValue)
+        while (x1 < inputRes && !isFillValue(x1, y))
           x1++;
         // Now advance x2 until it reaches the first non-missing value
         x2 = x1;
-        while (x2 < inputRes && getValueAt(x2, y) == fillValue)
+        while (x2 < inputRes && isFillValue(x2, y))
           x2++;
         // Recover all points in the range [x1, x2)
         if (x1 == 0 && x2 == inputRes) {

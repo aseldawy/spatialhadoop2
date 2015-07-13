@@ -219,7 +219,7 @@ public final class HDFConstants {
     return (short)((ch1 << 8) + (ch2 << 0));
   }
   
-  public static int readAsAinteger(byte[] bytes, int offset, int length) {
+  public static int readAsInteger(byte[] bytes, int offset, int length) {
     if (length > 4)
       throw new RuntimeException("Value too long");
     int value = 0;
