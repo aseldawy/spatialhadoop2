@@ -99,6 +99,11 @@ public class NASARectangle extends Rectangle implements NASAShape {
     g.setColor(calculateColor(this.value));
     super.draw(g, fileMBR, imageWidth, imageHeight, scale);
   }
+  
+  public void draw(Graphics g, double xscale, double yscale) {
+    g.setColor(calculateColor(this.value));
+    super.draw(g, xscale, yscale);
+  }
 
   public static Color calculateColor(int value) {
     Color color;

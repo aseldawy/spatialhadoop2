@@ -368,7 +368,7 @@ public class SingleLevelPlot {
         int numSplits = new SpatialInputFormat3().getSplits(job).size();
         job.setReducerClass(NoPartitionPlotReduce.class);
         // Set number of reduce tasks according to cluster status
-        int maxReduce = clusterStatus.getMaxReduceTasks() * 7 / 8;
+        int maxReduce = Math.max(1, clusterStatus.getMaxReduceTasks() * 7 / 8);
         job.setNumReduceTasks(Math.max(1, Math.min(maxReduce, numSplits / maxReduce)));
       } else {
         job.setNumReduceTasks(0);
