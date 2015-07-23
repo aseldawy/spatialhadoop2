@@ -112,20 +112,24 @@ public class DelaunayTriangulation {
         }
         Point rCandidate = null;
         if (anglePotential < Math.PI) {
-          // Check if the circumcircle of the base edge with the potential
-          // candidate contains the next potential candidate
-          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-          double dx = circleCenter.x - nextPotentialCandidate.x;
-          double dy = circleCenter.y - nextPotentialCandidate.y;
-          double d1 = dx * dx + dy * dy;
-          dx = circleCenter.x - potentialCandidate.x;
-          dy = circleCenter.y - potentialCandidate.y;
-          double d2 = dx * dx + dy * dy;
-          if (d1 < d2) {
-            // Delete the RR edge between baseR and rPotentialCandidate and restart
-            R.edges.get(baseR).remove(potentialCandidate);
-            R.edges.get(potentialCandidate).remove(baseR);
-            continue;
+          if (nextPotentialCandidate != null) {
+            // Check if the circumcircle of the base edge with the potential
+            // candidate contains the next potential candidate
+            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+            double dx = circleCenter.x - nextPotentialCandidate.x;
+            double dy = circleCenter.y - nextPotentialCandidate.y;
+            double d1 = dx * dx + dy * dy;
+            dx = circleCenter.x - potentialCandidate.x;
+            dy = circleCenter.y - potentialCandidate.y;
+            double d2 = dx * dx + dy * dy;
+            if (d1 < d2) {
+              // Delete the RR edge between baseR and rPotentialCandidate and restart
+              R.edges.get(baseR).remove(potentialCandidate);
+              R.edges.get(potentialCandidate).remove(baseR);
+              continue;
+            } else {
+              rCandidate = potentialCandidate;
+            }
           } else {
             rCandidate = potentialCandidate;
           }
@@ -152,20 +156,24 @@ public class DelaunayTriangulation {
         }
         Point lCandidate = null;
         if (anglePotential < Math.PI) {
-          // Check if the circumcircle of the base edge with the potential
-          // candidate contains the next potential candidate
-          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-          double dx = circleCenter.x - nextPotentialCandidate.x;
-          double dy = circleCenter.y - nextPotentialCandidate.y;
-          double d1 = dx * dx + dy * dy;
-          dx = circleCenter.x - potentialCandidate.x;
-          dy = circleCenter.y - potentialCandidate.y;
-          double d2 = dx * dx + dy * dy;
-          if (d1 < d2) {
-            // Delete the LL edge between baseR and rPotentialCandidate and restart
-            L.edges.get(baseL).remove(potentialCandidate);
-            L.edges.get(potentialCandidate).remove(baseL);
-            continue;
+          if (nextPotentialCandidate != null) {
+            // Check if the circumcircle of the base edge with the potential
+            // candidate contains the next potential candidate
+            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+            double dx = circleCenter.x - nextPotentialCandidate.x;
+            double dy = circleCenter.y - nextPotentialCandidate.y;
+            double d1 = dx * dx + dy * dy;
+            dx = circleCenter.x - potentialCandidate.x;
+            dy = circleCenter.y - potentialCandidate.y;
+            double d2 = dx * dx + dy * dy;
+            if (d1 < d2) {
+              // Delete the LL edge between baseR and rPotentialCandidate and restart
+              L.edges.get(baseL).remove(potentialCandidate);
+              L.edges.get(potentialCandidate).remove(baseL);
+              continue;
+            } else {
+              lCandidate = potentialCandidate;
+            }
           } else {
             lCandidate = potentialCandidate;
           }
