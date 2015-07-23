@@ -108,12 +108,25 @@ public class DelaunayTriangulation {
         } else {
           // Check if the circumcircle of the base edge with the potential
           // candidate contains the next potential candidate
-          // TODO stopped here
+          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, rPotentialCandidate);
         }
       } while (!finished);
       
     }
     
+    private static Point calculateCircumCircleCenter(Point pt1, Point pt2, Point pt3) {
+      // Calculate the perpendicular bisector of the first two points 
+      Point p1 = new Point((pt1.x + pt2.x) / 2, (pt1.y + pt2.y) /2);
+      Point v1 = new Point(pt2.y - pt1.y, pt2.x - pt1.x);
+      // Calculate the perpendicular bisector of the second two points 
+      Point p2 = new Point((pt3.x + pt2.x) / 2, (pt3.y + pt2.y) /2);
+      Point v2 = new Point(pt2.y - pt3.y, pt2.x - pt3.x);
+      
+      // Calculate the intersection of the two new lines
+      double a = ((p2.x - p1.x) * v2.y - (p2.y - p1.y) * v2.x) / (v1.x * v2.y - v1.y * v2.x);
+      return new Point(p1.x + a * v1.x, p1.y + a * v1.y);
+    }
+
     public Triangulation(Point p1, Point p2) {
       List<Point> neighbors = new Vector<Point>();
       neighbors.add(p2);
@@ -284,6 +297,14 @@ public class DelaunayTriangulation {
    * @throws InterruptedException 
    */
   public static void main(String[] args) throws IOException, InterruptedException {
+    Point p1 = new Point(0,0);
+    Point p2 = new Point(5,0);
+    Point p3 = new Point(8,5);
+    Point center = Triangulation.calculateCircumCircleCenter(p1, p2, p3);
+    System.out.println(center);
+    System.exit(0);
+    
+    
     GenericOptionsParser parser = new GenericOptionsParser(args);
     OperationsParams params = new OperationsParams(parser);
     
