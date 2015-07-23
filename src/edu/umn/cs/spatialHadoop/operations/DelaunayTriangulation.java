@@ -378,14 +378,14 @@ public class DelaunayTriangulation {
         @Override
         public int compare(P p1, P p2) {
           double dx = p1.x - p2.x;
-          if (dx < -threshold)
+          if (dx < 0)
             return -1;
-          if (dx > +threshold)
+          if (dx > 0)
             return 1;
           double dy = p1.y - p2.y;
-          if (dy < -threshold)
+          if (dy < 0)
             return -1;
-          if (dy > +threshold)
+          if (dy > 0)
             return 1;
           return 0;
         }
