@@ -71,12 +71,14 @@ public class DelaunayTriangulation {
         Point p1 = this.convexHull[i];
         Point p2 = i == this.convexHull.length - 1 ? this.convexHull[0] : this.convexHull[i+1];
         if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
-          if (baseL == null || p1.y < baseL.y) {
+          if (baseL == null || (p1.y <= baseL.y && p2.y <= baseR.y) /*||
+              (p1.x <= baseL.x && p2.x <= baseR.x)*/) {
             baseL = p1;
             baseR = p2;
           }
         } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
-          if (baseL == null || p2.y < baseL.y) {
+          if (baseL == null || (p2.y <= baseL.y && p1.y <= baseR.y) /*||
+              (p2.x <= baseL.x && p1.x <= baseR.x)*/) {
             baseL = p2;
             baseR = p1;
           }
@@ -240,15 +242,13 @@ public class DelaunayTriangulation {
       convexHull = new Point[] {p1, p2, p3};
     }
     
-    public String draw() {
-      String str = "";
+    public void draw() {
       for (Map.Entry<Point, List<Point>> list : edges.entrySet()) {
         Point p1 = list.getKey();
         for (Point p2 : list.getValue()) {
-          str += String.format("line %f, %f, %f, %f\n", p1.x, p1.y, p2.x, p2.y);
+          System.out.printf("line %f, %f, %f, %f\n", p1.x, p1.y, p2.x, p2.y);
         }
       }
-      return str;
     }
     
     private static boolean inArray(Object[] array, Object objectToFind) {
