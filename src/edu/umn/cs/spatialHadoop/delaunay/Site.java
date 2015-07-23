@@ -24,9 +24,6 @@ public class Site {
    * Delaunay triangulation*/
   List<Site> neighbors = new Vector<Site>();
   
-  /**All triangles where this site is involved*/
-  List<Triangle> triangles = new Vector<Triangle>();
-  
   Site(double x, double y) {
     this.x = x;
     this.y = y;

@@ -72,13 +72,12 @@ public class Triangulation {
       }
     }
     
-    // Add the first base edge to the Delaunay triangulation
-    baseL.neighbors.add(baseR);
-    baseR.neighbors.add(baseL);
-    
     // Trace the base LR edge up to the top
     boolean finished = false;
     do {
+      // Add the base edge to the Delaunay triangulation
+      baseL.neighbors.add(baseR);
+      baseR.neighbors.add(baseL);
       // Search for the potential candidate on the right
       double anglePotential = -1, angleNextPotential = -1;
       Site potentialCandidate = null, nextPotentialCandidate = null;
@@ -188,30 +187,10 @@ public class Triangulation {
       
       if (lCandidate != null) {
         // Left candidate has been chosen
-
-        // Add the new edge (lCandidate, baseR)
-        lCandidate.neighbors.add(baseR);
-        baseR.neighbors.add(lCandidate);
-        // Add the new triangle (baseL, baseR, lCandidate)
-        Triangle triangle = new Triangle(baseL, baseR, lCandidate);
-        baseL.triangles.add(triangle);
-        baseR.triangles.add(triangle);
-        lCandidate.triangles.add(triangle);
-        
         // Make lPotentialCandidate and baseR the new base line
         baseL = lCandidate;
       } else if (rCandidate != null) {
         // Right candidate has been chosen
-        
-        // Add the new edge (baseL, rCandidate)
-        baseL.neighbors.add(rCandidate);
-        rCandidate.neighbors.add(baseL);
-        // Add the new triangle (baseL, baseR, rCandidate)
-        Triangle triangle = new Triangle(baseL, baseR, rCandidate);
-        baseL.triangles.add(triangle);
-        baseR.triangles.add(triangle);
-        rCandidate.triangles.add(triangle);
-        
         // Make baseL and rPotentialCandidate the new base line
         baseR = rCandidate;
       } else {
