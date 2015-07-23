@@ -8,8 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.delaunay;
 
-import java.util.List;
-import java.util.Vector;
+import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
  * A site in Delaunay triangulation
@@ -18,16 +17,12 @@ import java.util.Vector;
  */
 public class Site {
   int id;
-  /**Coordinates of the point*/
-  private double x, y;
   
   /**All neighboring sites. A neighbor site has a common edge in the 
    * Delaunay triangulation*/
-  List<Site> neighbors = new Vector<Site>();
+  IntArray neighbors = new IntArray();
   
-  Site(int id, double x, double y) {
+  Site(int id) {
     this.id = id;
-    this.x = x;
-    this.y = y;
   }
 }
