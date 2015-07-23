@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -42,7 +43,67 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 public class DelaunayTriangulation {
   
   static final Log LOG = LogFactory.getLog(DelaunayTriangulation.class);
-
+  
+  public static <P extends Point> Triangulation delaunayInMemory(P[] points) {
+    Site[] sites = new Site[points.length];
+    for (int i = 0; i < points.length; i++)
+      sites[i] = new Site(points[i].x, points[i].y);
+    Triangulation[] triangulations = new Triangulation[sites.length / 3 + (sites.length % 3 == 0 ? 0 : 1)];
+    // Sort all points by X
+    Arrays.sort(sites, new Comparator<Site>() {
+      @Override
+      public int compare(Site s1, Site s2) {
+        if (s1.x < s2.x)
+          return -1;
+        if (s1.x > s2.x)
+          return 1;
+        if (s1.y < s2.y)
+          return -1;
+        if (s1.y > s2.y)
+          return 1;
+        return 0;
+      }
+    });
+    
+    // Compute the trivial Delaunay triangles of every three consecutive points
+    int i, t=0;
+    for (i = 0; i < sites.length - 4; i += 3) {
+      // Compute Delaunay triangulation for three points
+      triangulations[t++] =  new Triangulation(sites[i], sites[i+1], sites[i+2]);
+    }
+    if (points.length - i == 4) {
+      // Compute Delaunay triangulation for every two points
+       triangulations[t++] = new Triangulation(sites[i], sites[i+1]);
+       triangulations[t++] = new Triangulation(sites[i+2], sites[i+3]);
+    } else if (points.length - i == 3) {
+      // Compute for three points
+      triangulations[t++] = new Triangulation(sites[i], sites[i+1], sites[i+2]);
+    } else if (points.length - i == 2) {
+      // Two points, connect with a line
+      triangulations[t++] = new Triangulation(sites[i], sites[i+1]);
+    } else {
+      throw new RuntimeException("Cannot happen");
+    }
+    
+    // Start the merge process
+    while (triangulations.length > 1) {
+      // Merge every pair of Deluanay triangulations
+      Triangulation[] newTriangulations = new Triangulation[triangulations.length / 2 + (triangulations.length & 1)];
+      int t2 = 0;
+      int t1;
+      for (t1 = 0; t1 < triangulations.length - 1; t1 += 2) {
+        Triangulation dt1 = triangulations[t1];
+        Triangulation dt2 = triangulations[t1+1];
+        newTriangulations[t2++] = new Triangulation(dt1, dt2);
+      }
+      if (t1 < triangulations.length)
+        newTriangulations[t2++] = triangulations[t1];
+      triangulations = newTriangulations;
+    }
+    return triangulations[0];
+  }
+  
+  
   /**
    * Compute the Deluanay triangulation in the local machine
    * @param inPath
@@ -119,9 +180,8 @@ public class DelaunayTriangulation {
     }
     
     LOG.info("Read "+points.size()+" points and computing DT");
-    GuibasStolfiDelaunayAlgorithm delaunay = new GuibasStolfiDelaunayAlgorithm(points.toArray(
+    Triangulation dt = delaunayInMemory(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())));
-    GuibasStolfiDelaunayAlgorithm.Triangulation dt = delaunay.compute();
     dt.draw();
   }
 

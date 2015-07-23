@@ -12,7 +12,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
 
 import org.apache.hadoop.io.Writable;
 
@@ -21,7 +20,7 @@ import org.apache.hadoop.io.Writable;
  * @author Ahmed Eldawy
  *
  */
-public class IntArray implements Writable, Iterable<Integer> {
+public class IntArray implements Writable {
   /**Stores all elements*/
   protected int[] array;
   /**Number of entries occupied in array*/
@@ -58,16 +57,6 @@ public class IntArray implements Writable, Iterable<Integer> {
   
   public void append(IntArray another, int delta) {
     append(another.array, 0, another.size, delta);
-  }
-  
-  public boolean contains(int value) {
-    for (int i = 0; i < size; i++) {
-      if (array[i] == value) {
-        return true;
-      }
-    }
-    return false;
-  
   }
   
   /**
@@ -156,40 +145,5 @@ public class IntArray implements Writable, Iterable<Integer> {
   
   public int get(int index) {
     return array[index];
-  }
-  
-  public boolean remove(int value) {
-    for (int i = 0; i < size; i++) {
-      if (array[i] == value) {
-        System.arraycopy(array, i + 1, array, i, size - (i + 1));
-        return true;
-      }
-    }
-    return false;
-  }
-
-  @Override
-  public Iterator<Integer> iterator() {
-    return new IntIterator();
-  }
-  
-  class IntIterator implements Iterator<Integer> {
-    int i = -1;
-
-    @Override
-    public boolean hasNext() {
-      return i < size() - 1;
-    }
-
-    @Override
-    public Integer next() {
-      return array[++i];
-    }
-
-    @Override
-    public void remove() {
-      throw new RuntimeException("Not yet supported");
-    }
-    
   }
 }
