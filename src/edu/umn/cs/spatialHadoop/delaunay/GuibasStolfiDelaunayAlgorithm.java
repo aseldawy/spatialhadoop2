@@ -2,6 +2,8 @@ package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Vector;
 
 import edu.umn.cs.spatialHadoop.core.Point;
 
@@ -19,24 +21,28 @@ public class GuibasStolfiDelaunayAlgorithm {
   
   private Site[] sites;
   private Point[] points;
+  private double[] xs, ys;
 
   public <P extends Point> GuibasStolfiDelaunayAlgorithm(P[] points) {
     this.points = new Point[points.length];
     System.arraycopy(points, 0, this.points, 0, points.length);
     sites = new Site[this.points.length];
-    for (int i = 0; i < this.points.length; i++)
-      sites[i] = new Site(this.points[i].x, this.points[i].y);
+    this.xs = new double[this.points.length];
+    this.ys = new double[this.points.length];
+    for (int i = 0; i < this.points.length; i++) {
+      sites[i] = new Site(i, xs[i] = this.points[i].x, ys[i] = this.points[i].y);
+    }
     // Sort all points by X
     Arrays.sort(sites, new Comparator<Site>() {
       @Override
       public int compare(Site s1, Site s2) {
-        if (s1.x < s2.x)
+        if (xs[s1.id] < xs[s2.id])
           return -1;
-        if (s1.x > s2.x)
+        if (xs[s1.id] > xs[s2.id])
           return 1;
-        if (s1.y < s2.y)
+        if (ys[s1.id] < ys[s2.id])
           return -1;
-        if (s1.y > s2.y)
+        if (ys[s1.id] > ys[s2.id])
           return 1;
         return 0;
       }
@@ -290,6 +296,38 @@ public class GuibasStolfiDelaunayAlgorithm {
           System.out.printf("line %f, %f, %f, %f\n", s1.x, s1.y, s2.x, s2.y);
         }
       }
+    }
+    
+    public boolean test() {
+      List<Point> starts = new Vector<Point>();
+      List<Point> ends = new Vector<Point>();
+      for (Site s1 : allSites) {
+        for (Site s2 : s1.neighbors) {
+          starts.add(new Point(s1.x, s1.y));
+          ends.add(new Point(s1.x, s1.y));
+        }
+      }
+      
+      for (int i = 0; i < starts.size(); i++) {
+        double x1 = starts.get(i).x;
+        double y1 = starts.get(i).y;
+        double x2 = ends.get(i).x;
+        double y2 = ends.get(i).x;
+        for (int j = i + 1; j < starts.size(); j++) {
+          double x3 = starts.get(j).x;
+          double y3 = starts.get(j).y;
+          double x4 = ends.get(j).x;
+          double y4 = ends.get(j).y;
+          
+          double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+          double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
+          double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
+          if ((ix > x1 && ix < x2) && (iy > y1 && iy < y2) &&
+              (ix > x3 && ix < x4) && (iy > y3 && iy < y4))
+            throw new RuntimeException("error");
+        }
+      }
+      return true;
     }
     
   }

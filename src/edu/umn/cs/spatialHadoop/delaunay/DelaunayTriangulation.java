@@ -123,6 +123,7 @@ public class DelaunayTriangulation {
     GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())));
     GuibasStolfiDelaunayAlgorithm.Triangulation dt = dtAlgorithm.compute();
+    dt.test();
     dt.draw();
   }
 

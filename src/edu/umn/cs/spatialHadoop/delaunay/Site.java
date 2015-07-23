@@ -17,6 +17,7 @@ import java.util.Vector;
  *
  */
 public class Site {
+  int id;
   /**Coordinates of the point*/
   double x, y;
   
@@ -24,7 +25,7 @@ public class Site {
    * Delaunay triangulation*/
   List<Site> neighbors = new Vector<Site>();
   
-  Site(double x, double y) {
+  Site(int id, double x, double y) {
     this.x = x;
     this.y = y;
   }

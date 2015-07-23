@@ -48,7 +48,7 @@ public final class Utils {
     double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
     double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
     double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
-    return new Site(ix, iy);
+    return new Site(-1, ix, iy);
   }
   
   static Site[] convexHull(Site[] points) {
