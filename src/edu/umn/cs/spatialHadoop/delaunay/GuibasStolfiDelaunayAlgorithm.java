@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.delaunay;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Stack;
 import java.util.Vector;
 
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -135,21 +136,21 @@ public class GuibasStolfiDelaunayAlgorithm {
       Site[] bothHulls = new Site[L.convexHull.length + R.convexHull.length];
       System.arraycopy(L.convexHull, 0, bothHulls, 0, L.convexHull.length);
       System.arraycopy(R.convexHull, 0, bothHulls, L.convexHull.length, R.convexHull.length);
-      this.convexHull = Utils.convexHull(bothHulls);
+      this.convexHull = convexHull(bothHulls);
       
       // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
       Site baseL = null, baseR = null;
       for (int i = 0; i < this.convexHull.length; i++) {
         Site p1 = this.convexHull[i];
         Site p2 = i == this.convexHull.length - 1 ? this.convexHull[0] : this.convexHull[i+1];
-        if (Utils.inArray(L.convexHull, p1) && Utils.inArray(R.convexHull, p2)) {
-          if (baseL == null || (p1.y <= baseL.y && p2.y <= baseR.y) /*||
+        if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
+          if (baseL == null || (ys[p1.id] <= ys[baseL.id] && ys[p2.id] <= ys[baseR.id]) /*||
               (p1.x <= baseL.x && p2.x <= baseR.x)*/) {
             baseL = p1;
             baseR = p2;
           }
-        } else if (Utils.inArray(L.convexHull, p2) && Utils.inArray(R.convexHull, p1)) {
-          if (baseL == null || (p2.y <= baseL.y && p1.y <= baseR.y) /*||
+        } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
+          if (baseL == null || (ys[p2.id] <= ys[baseL.id] && ys[p1.id] <= ys[baseR.id]) /*||
               (p2.x <= baseL.x && p1.x <= baseR.x)*/) {
             baseL = p2;
             baseR = p1;
@@ -167,9 +168,9 @@ public class GuibasStolfiDelaunayAlgorithm {
         double anglePotential = -1, angleNextPotential = -1;
         Site potentialCandidate = null, nextPotentialCandidate = null;
         for (Site rNeighbor : baseR.neighbors) {
-          if (Utils.inArray(R.allSites, rNeighbor)) {
+          if (inArray(R.allSites, rNeighbor)) {
             // Check this RR edge
-            double cwAngle = Utils.calculateCWAngle(baseL, baseR, rNeighbor);
+            double cwAngle = calculateCWAngle(baseL, baseR, rNeighbor);
             if (potentialCandidate == null || cwAngle < anglePotential) {
               // Found a new potential candidate
               angleNextPotential = anglePotential;
@@ -187,12 +188,12 @@ public class GuibasStolfiDelaunayAlgorithm {
           if (nextPotentialCandidate != null) {
             // Check if the circumcircle of the base edge with the potential
             // candidate contains the next potential candidate
-            Site circleCenter = Utils.calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-            double dx = circleCenter.x - nextPotentialCandidate.x;
-            double dy = circleCenter.y - nextPotentialCandidate.y;
+            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+            double dx = circleCenter.x - xs[nextPotentialCandidate.id];
+            double dy = circleCenter.y - ys[nextPotentialCandidate.id];
             double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - potentialCandidate.x;
-            dy = circleCenter.y - potentialCandidate.y;
+            dx = circleCenter.x - xs[potentialCandidate.id];
+            dy = circleCenter.y - ys[potentialCandidate.id];
             double d2 = dx * dx + dy * dy;
             if (d1 < d2) {
               // Delete the RR edge between baseR and rPotentialCandidate and restart
@@ -211,9 +212,9 @@ public class GuibasStolfiDelaunayAlgorithm {
         anglePotential = -1; angleNextPotential = -1;
         potentialCandidate = null; nextPotentialCandidate = null;
         for (Site lNeighbor : baseL.neighbors) {
-          if (Utils.inArray(L.allSites, lNeighbor)) {
+          if (inArray(L.allSites, lNeighbor)) {
             // Check this LL edge
-            double ccwAngle = Math.PI * 2 - Utils.calculateCWAngle(baseR, baseL, lNeighbor);
+            double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, lNeighbor);
             if (potentialCandidate == null || ccwAngle < anglePotential) {
               // Found a new potential candidate
               angleNextPotential = anglePotential;
@@ -231,12 +232,12 @@ public class GuibasStolfiDelaunayAlgorithm {
           if (nextPotentialCandidate != null) {
             // Check if the circumcircle of the base edge with the potential
             // candidate contains the next potential candidate
-            Site circleCenter = Utils.calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-            double dx = circleCenter.x - nextPotentialCandidate.x;
-            double dy = circleCenter.y - nextPotentialCandidate.y;
+            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+            double dx = circleCenter.x - xs[nextPotentialCandidate.id];
+            double dy = circleCenter.y - ys[nextPotentialCandidate.id];
             double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - potentialCandidate.x;
-            dy = circleCenter.y - potentialCandidate.y;
+            dx = circleCenter.x - xs[potentialCandidate.id];
+            dy = circleCenter.y - ys[potentialCandidate.id];
             double d2 = dx * dx + dy * dy;
             if (d1 < d2) {
               // Delete the LL edge between baseR and rPotentialCandidate and restart
@@ -254,12 +255,12 @@ public class GuibasStolfiDelaunayAlgorithm {
         // Choose the right candidate
         if (lCandidate != null && rCandidate != null) {
           // Two candidates, choose the correct one
-          Site circumCircleL = Utils.calculateCircumCircleCenter(lCandidate, baseL, baseR);
-          double dx = circumCircleL.x - lCandidate.x;
-          double dy = circumCircleL.y - lCandidate.y;
+          Point circumCircleL = calculateCircumCircleCenter(lCandidate, baseL, baseR);
+          double dx = circumCircleL.x - xs[lCandidate.id];
+          double dy = circumCircleL.y - ys[lCandidate.id];
           double lCandidateDistance = dx * dx + dy * dy;
-          dx = circumCircleL.x - rCandidate.x;
-          dy = circumCircleL.y - rCandidate.y;
+          dx = circumCircleL.x - xs[rCandidate.id];
+          dy = circumCircleL.y - ys[rCandidate.id];
           double rCandidateDistance = dx * dx + dy * dy;
           if (lCandidateDistance < rCandidateDistance) {
             // rCandidate is outside the circumcircle, lCandidate is correct
@@ -293,18 +294,19 @@ public class GuibasStolfiDelaunayAlgorithm {
     public void draw() {
       for (Site s1 : allSites) {
         for (Site s2 : s1.neighbors) {
-          System.out.printf("line %f, %f, %f, %f\n", s1.x, s1.y, s2.x, s2.y);
+          System.out.printf("line %f, %f, %f, %f\n", xs[s1.id], ys[s1.id], xs[s2.id], ys[s2.id]);
         }
       }
     }
     
     public boolean test() {
+      final double threshold = 1E-5;
       List<Point> starts = new Vector<Point>();
       List<Point> ends = new Vector<Point>();
       for (Site s1 : allSites) {
         for (Site s2 : s1.neighbors) {
-          starts.add(new Point(s1.x, s1.y));
-          ends.add(new Point(s1.x, s1.y));
+          starts.add(new Point(xs[s1.id], ys[s1.id]));
+          ends.add(new Point(xs[s2.id], ys[s2.id]));
         }
       }
       
@@ -312,7 +314,7 @@ public class GuibasStolfiDelaunayAlgorithm {
         double x1 = starts.get(i).x;
         double y1 = starts.get(i).y;
         double x2 = ends.get(i).x;
-        double y2 = ends.get(i).x;
+        double y2 = ends.get(i).y;
         for (int j = i + 1; j < starts.size(); j++) {
           double x3 = starts.get(j).x;
           double y3 = starts.get(j).y;
@@ -322,13 +324,101 @@ public class GuibasStolfiDelaunayAlgorithm {
           double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
           double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
           double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
-          if ((ix > x1 && ix < x2) && (iy > y1 && iy < y2) &&
-              (ix > x3 && ix < x4) && (iy > y3 && iy < y4))
+          if ((ix - x1 > threshold && ix - x2 < -threshold) && (iy - y1 > threshold && iy - y2 < -threshold) &&
+              (ix - x3 > threshold && ix - x4 < -threshold) && (iy - y3 > threshold && iy - y4 < -threshold)) {
+            System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
+            System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
+            System.out.printf("point %f, %f\n", ix, iy);
             throw new RuntimeException("error");
+          }
         }
       }
       return true;
     }
+  }
+  
+  boolean inArray(Object[] array, Object objectToFind) {
+    for (Object objectToCompare : array)
+      if (objectToFind == objectToCompare)
+        return true;
+    return false;
+  }
+  
+  double calculateCWAngle(Site s1, Site s2, Site s3) {
+    double angle1 = Math.atan2(ys[s1.id] - ys[s2.id], xs[s1.id] - xs[s2.id]);
+    double angle2 = Math.atan2(ys[s3.id] - ys[s2.id], xs[s3.id] - xs[s2.id]);
+    return angle1 > angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
+  }
+
+  Point calculateCircumCircleCenter(Site s1, Site s2, Site s3) {
+    // Calculate the perpendicular bisector of the first two points
+    double x1 = (xs[s1.id] + xs[s2.id]) / 2;
+    double y1 = (ys[s1.id] + ys[s2.id]) /2;
+    double x2 = x1 + ys[s2.id] - ys[s1.id];
+    double y2 = y1 + xs[s1.id] - xs[s2.id];
+    // Calculate the perpendicular bisector of the second two points 
+    double x3 = (xs[s3.id] + xs[s2.id]) / 2;
+    double y3 = (ys[s3.id] + ys[s2.id]) / 2;
+    double x4 = x3 + ys[s2.id] - ys[s3.id];
+    double y4 = y3 + xs[s3.id] - xs[s2.id];
     
+    // Calculate the intersection of the two new lines
+    // See https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+    double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
+    double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
+    return new Point(ix, iy);
+  }
+  
+  Site[] convexHull(Site[] points) {
+    Stack<Site> lowerChain = new Stack<Site>();
+    Stack<Site> upperChain = new Stack<Site>();
+
+    // Sort sites by increasing x-axis
+    Arrays.sort(points, new Comparator<Site>() {
+      @Override
+      public int compare(Site s1, Site s2) {
+        if (xs[s1.id] < xs[s2.id])
+          return -1;
+        if (xs[s1.id] > xs[s2.id])
+          return +1;
+        if (ys[s1.id] < ys[s2.id])
+          return -1;
+        if (ys[s1.id] > ys[s2.id])
+          return +1;
+        return 0;
+      }
+    });
+    
+    // Lower chain
+    for (int i=0; i<points.length; i++) {
+      while(lowerChain.size() > 1) {
+        Site s1 = lowerChain.get(lowerChain.size() - 2);
+        Site s2 = lowerChain.get(lowerChain.size() - 1);
+        Site s3 = points[i];
+        double crossProduct = (xs[s2.id] - xs[s1.id]) * (ys[s3.id] - ys[s1.id]) - (ys[s2.id] - ys[s1.id]) * (xs[s3.id] - xs[s1.id]);
+        if (crossProduct <= 0) lowerChain.pop();
+        else break;
+      }
+      lowerChain.push(points[i]);
+    }
+    
+    // Upper chain
+    for (int i=points.length - 1; i>=0; i--) {
+      while(upperChain.size() > 1) {
+        Site s1 = upperChain.get(upperChain.size() - 2);
+        Site s2 = upperChain.get(upperChain.size() - 1);
+        Site s3 = points[i];
+        double crossProduct = (xs[s2.id] - xs[s1.id]) * (ys[s3.id] - ys[s1.id]) - (ys[s2.id] - ys[s1.id]) * (xs[s3.id] - xs[s1.id]);
+        if (crossProduct <= 0) upperChain.pop();
+        else break;
+      }
+      upperChain.push(points[i]);
+    }
+    
+    lowerChain.pop();
+    upperChain.pop();
+    lowerChain.addAll(upperChain);
+    return lowerChain.toArray(new Site[lowerChain.size()]);    
   }
 }

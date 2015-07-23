@@ -19,13 +19,14 @@ import java.util.Vector;
 public class Site {
   int id;
   /**Coordinates of the point*/
-  double x, y;
+  private double x, y;
   
   /**All neighboring sites. A neighbor site has a common edge in the 
    * Delaunay triangulation*/
   List<Site> neighbors = new Vector<Site>();
   
   Site(int id, double x, double y) {
+    this.id = id;
     this.x = x;
     this.y = y;
   }
