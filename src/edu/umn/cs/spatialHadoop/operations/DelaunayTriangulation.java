@@ -61,6 +61,8 @@ public class DelaunayTriangulation {
     public Triangulation(Triangulation L, Triangulation R) {
       // Compute the convex hull of the result
       Point[] bothHulls = new Point[L.convexHull.length + R.convexHull.length];
+      System.arraycopy(L.convexHull, 0, bothHulls, 0, L.convexHull.length);
+      System.arraycopy(R.convexHull, 0, bothHulls, L.convexHull.length, R.convexHull.length);
       this.convexHull = ConvexHull.convexHull(bothHulls);
       
       // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
@@ -69,12 +71,12 @@ public class DelaunayTriangulation {
         Point p1 = this.convexHull[i];
         Point p2 = i == this.convexHull.length - 1 ? this.convexHull[0] : this.convexHull[i+1];
         if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
-          if (baseL == null || p1.y > baseL.y) {
+          if (baseL == null || p1.y < baseL.y) {
             baseL = p1;
             baseR = p2;
           }
         } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
-          if (baseL == null || p2.y > baseL.y) {
+          if (baseL == null || p2.y < baseL.y) {
             baseL = p2;
             baseR = p1;
           }
@@ -84,49 +86,129 @@ public class DelaunayTriangulation {
       // Trace the base LR edge up to the root
       boolean finished = false;
       do {
+        // Add the current base edge to the Delaunay triangulation
+        L.edges.get(baseL).add(baseR);
+        R.edges.get(baseR).add(baseL);
+
+        
+        // Search for the potential candidate on the right
         double anglePotential = -1, angleNextPotential = -1;
-        Point rPotentialCandidate = null, rNextPotentialCandidate = null;
+        Point potentialCandidate = null, nextPotentialCandidate = null;
         for (Point rNeighbor : R.edges.get(baseR)) {
           if (R.edges.containsKey(rNeighbor)) {
             // Check this RR edge
             double cwAngle = calculateCWAngle(baseL, baseR, rNeighbor);
-            if (rPotentialCandidate == null || cwAngle < anglePotential) {
+            if (potentialCandidate == null || cwAngle < anglePotential) {
               // Found a new potential candidate
               angleNextPotential = anglePotential;
-              rNextPotentialCandidate = rPotentialCandidate;
+              nextPotentialCandidate = potentialCandidate;
               anglePotential = cwAngle;
-              rPotentialCandidate = rNeighbor;
-            } else if (rNextPotentialCandidate == null | cwAngle < angleNextPotential) {
+              potentialCandidate = rNeighbor;
+            } else if (nextPotentialCandidate == null | cwAngle < angleNextPotential) {
               angleNextPotential = cwAngle;
-              rNextPotentialCandidate = rNeighbor;
+              nextPotentialCandidate = rNeighbor;
             }
           }
         }
-        if (anglePotential >= Math.PI * 2) {
-          // Does not qualify as a candidate
-          rPotentialCandidate = null;
-        } else {
+        Point rCandidate = null;
+        if (anglePotential < Math.PI) {
           // Check if the circumcircle of the base edge with the potential
           // candidate contains the next potential candidate
-          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, rPotentialCandidate);
+          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+          double dx = circleCenter.x - nextPotentialCandidate.x;
+          double dy = circleCenter.y - nextPotentialCandidate.y;
+          double d1 = dx * dx + dy * dy;
+          dx = circleCenter.x - potentialCandidate.x;
+          dy = circleCenter.y - potentialCandidate.y;
+          double d2 = dx * dx + dy * dy;
+          if (d1 < d2) {
+            // Delete the RR edge between baseR and rPotentialCandidate and restart
+            R.edges.get(baseR).remove(potentialCandidate);
+            R.edges.get(potentialCandidate).remove(baseR);
+            continue;
+          } else {
+            rCandidate = potentialCandidate;
+          }
+        }
+        
+        // Search for the potential candidate on the left
+        anglePotential = -1; angleNextPotential = -1;
+        potentialCandidate = null; nextPotentialCandidate = null;
+        for (Point lNeighbor : L.edges.get(baseL)) {
+          if (L.edges.containsKey(lNeighbor)) {
+            // Check this LL edge
+            double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, lNeighbor);
+            if (potentialCandidate == null || ccwAngle < anglePotential) {
+              // Found a new potential candidate
+              angleNextPotential = anglePotential;
+              nextPotentialCandidate = potentialCandidate;
+              anglePotential = ccwAngle;
+              potentialCandidate = lNeighbor;
+            } else if (nextPotentialCandidate == null | ccwAngle < angleNextPotential) {
+              angleNextPotential = ccwAngle;
+              nextPotentialCandidate = lNeighbor;
+            }
+          }
+        }
+        Point lCandidate = null;
+        if (anglePotential < Math.PI) {
+          // Check if the circumcircle of the base edge with the potential
+          // candidate contains the next potential candidate
+          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+          double dx = circleCenter.x - nextPotentialCandidate.x;
+          double dy = circleCenter.y - nextPotentialCandidate.y;
+          double d1 = dx * dx + dy * dy;
+          dx = circleCenter.x - potentialCandidate.x;
+          dy = circleCenter.y - potentialCandidate.y;
+          double d2 = dx * dx + dy * dy;
+          if (d1 < d2) {
+            // Delete the LL edge between baseR and rPotentialCandidate and restart
+            L.edges.get(baseL).remove(potentialCandidate);
+            L.edges.get(potentialCandidate).remove(baseL);
+            continue;
+          } else {
+            lCandidate = potentialCandidate;
+          }
+        }
+        
+        // Choose the right candidate
+        if (lCandidate != null && rCandidate != null) {
+          // Two candidates, choose the correct one
+          Point circumCircleL = calculateCircumCircleCenter(lCandidate, baseL, baseR);
+          double dx = circumCircleL.x - lCandidate.x;
+          double dy = circumCircleL.y - lCandidate.y;
+          double lCandidateDistance = dx * dx + dy * dy;
+          dx = circumCircleL.x - rCandidate.x;
+          dy = circumCircleL.y - rCandidate.y;
+          double rCandidateDistance = dx * dx + dy * dy;
+          if (lCandidateDistance < rCandidateDistance) {
+            // rCandidate is outside the circumcircle, lCandidate is correct
+            rCandidate = null;
+          } else {
+            // rCandidate is inside the circumcircle, lCandidate is incorrect
+            lCandidate = null;
+          }
+        }
+        
+        if (lCandidate != null) {
+          // Left candidate has been chosen
+          // Make lPotentialCandidate and baseR the new base line
+          baseL = lCandidate;
+        } else if (rCandidate != null) {
+          // Right candidate has been chosen
+          // Make baseL and rPotentialCandidate the new base line
+          baseR = rCandidate;
+        } else {
+          // No candidates, merge finished
+          finished = true;
         }
       } while (!finished);
       
+      // Merge both L and R
+      this.edges.putAll(L.edges);
+      this.edges.putAll(R.edges);
     }
     
-    private static Point calculateCircumCircleCenter(Point pt1, Point pt2, Point pt3) {
-      // Calculate the perpendicular bisector of the first two points 
-      Point p1 = new Point((pt1.x + pt2.x) / 2, (pt1.y + pt2.y) /2);
-      Point v1 = new Point(pt2.y - pt1.y, pt2.x - pt1.x);
-      // Calculate the perpendicular bisector of the second two points 
-      Point p2 = new Point((pt3.x + pt2.x) / 2, (pt3.y + pt2.y) /2);
-      Point v2 = new Point(pt2.y - pt3.y, pt2.x - pt3.x);
-      
-      // Calculate the intersection of the two new lines
-      double a = ((p2.x - p1.x) * v2.y - (p2.y - p1.y) * v2.x) / (v1.x * v2.y - v1.y * v2.x);
-      return new Point(p1.x + a * v1.x, p1.y + a * v1.y);
-    }
-
     public Triangulation(Point p1, Point p2) {
       List<Point> neighbors = new Vector<Point>();
       neighbors.add(p2);
@@ -144,11 +226,22 @@ public class DelaunayTriangulation {
       neighbors = new Vector<Point>();
       neighbors.add(p1); neighbors.add(p3);
       edges.put(p2, neighbors);
+      neighbors = new Vector<Point>();
       neighbors.add(p1); neighbors.add(p2);
       edges.put(p3, neighbors);
       convexHull = new Point[] {p1, p2, p3};
     }
     
+    public String draw() {
+      String str = "";
+      for (Map.Entry<Point, List<Point>> list : edges.entrySet()) {
+        Point p1 = list.getKey();
+        for (Point p2 : list.getValue()) {
+          str += String.format("line %f, %f, %f, %f\n", p1.x, p1.y, p2.x, p2.y);
+        }
+      }
+      return str;
+    }
     
     private static boolean inArray(Object[] array, Object objectToFind) {
       for (Object objectToCompare : array)
@@ -162,9 +255,29 @@ public class DelaunayTriangulation {
       double angle2 = Math.atan2(p3.y - p2.y, p3.x - p2.x);
       return angle1 > angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
     }
+
+    private static Point calculateCircumCircleCenter(Point pt1, Point pt2, Point pt3) {
+      // Calculate the perpendicular bisector of the first two points
+      double x1 = (pt1.x + pt2.x) / 2;
+      double y1 = (pt1.y + pt2.y) /2;
+      double x2 = x1 + pt2.y - pt1.y;
+      double y2 = y1 + pt1.x - pt2.x;
+      // Calculate the perpendicular bisector of the second two points 
+      double x3 = (pt3.x + pt2.x) / 2;
+      double y3 = (pt3.y + pt2.y) / 2;
+      double x4 = x3 + pt2.y - pt3.y;
+      double y4 = y3 + pt3.x - pt2.x;
+      
+      // Calculate the intersection of the two new lines
+      // See https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+      double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
+      double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
+      return new Point(ix, iy);
+    }
   }
   
-  public static <P extends Point> void delaunayInMemory(P[] points) {
+  public static <P extends Point> Triangulation delaunayInMemory(P[] points) {
     Triangulation[] triangulations = new Triangulation[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
     // Sort all points by X
     Arrays.sort(points);
@@ -196,14 +309,15 @@ public class DelaunayTriangulation {
       int t2 = 0;
       int t1;
       for (t1 = 0; t1 < triangulations.length - 1; t1 += 2) {
-        Triangulation dt1 = triangulations[i];
-        Triangulation dt2 = triangulations[i+1];
+        Triangulation dt1 = triangulations[t1];
+        Triangulation dt2 = triangulations[t1+1];
         newTriangulations[t2++] = new Triangulation(dt1, dt2);
       }
       if (t1 < triangulations.length)
         newTriangulations[t2++] = triangulations[t1];
       triangulations = newTriangulations;
     }
+    return triangulations[0];
   }
   
   
@@ -297,14 +411,6 @@ public class DelaunayTriangulation {
    * @throws InterruptedException 
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-    Point p1 = new Point(0,0);
-    Point p2 = new Point(5,0);
-    Point p3 = new Point(8,5);
-    Point center = Triangulation.calculateCircumCircleCenter(p1, p2, p3);
-    System.out.println(center);
-    System.exit(0);
-    
-    
     GenericOptionsParser parser = new GenericOptionsParser(args);
     OperationsParams params = new OperationsParams(parser);
     
