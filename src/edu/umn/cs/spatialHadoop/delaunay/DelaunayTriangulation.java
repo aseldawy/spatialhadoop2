@@ -10,11 +10,9 @@ package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Stack;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -33,7 +31,6 @@ import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
-import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
  * Computes the Delaunay triangulation for a set of points.
@@ -122,10 +119,10 @@ public class DelaunayTriangulation {
     }
     
     LOG.info("Read "+points.size()+" points and computing DT");
-    DelaunayAlgorithm delaunay = new DelaunayAlgorithm(points.toArray(
+    GuibasStolfiDelaunayAlgorithm delaunay = new GuibasStolfiDelaunayAlgorithm(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())));
-    DelaunayAlgorithm.Triangulation dt = delaunay.compute();
-    //dt.draw();
+    GuibasStolfiDelaunayAlgorithm.Triangulation dt = delaunay.compute();
+    dt.draw();
   }
 
   private static void printUsage() {
