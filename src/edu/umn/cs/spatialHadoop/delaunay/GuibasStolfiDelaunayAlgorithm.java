@@ -1,7 +1,6 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Stack;
 import java.util.Vector;
@@ -52,18 +51,18 @@ public class GuibasStolfiDelaunayAlgorithm {
     int i, t=0;
     for (i = 0; i < sites.length - 4; i += 3) {
       // Compute Delaunay triangulation for three points
-      triangulations[t++] =  new Triangulation(sites[i], sites[i+1], sites[i+2]);
+      triangulations[t++] =  new Triangulation(i, i+1, i+2);
     }
     if (points.length - i == 4) {
       // Compute Delaunay triangulation for every two points
-       triangulations[t++] = new Triangulation(sites[i], sites[i+1]);
-       triangulations[t++] = new Triangulation(sites[i+2], sites[i+3]);
+       triangulations[t++] = new Triangulation(i, i+1);
+       triangulations[t++] = new Triangulation(i+2, i+3);
     } else if (points.length - i == 3) {
       // Compute for three points
-      triangulations[t++] = new Triangulation(sites[i], sites[i+1], sites[i+2]);
+      triangulations[t++] = new Triangulation(i, i+1, i+2);
     } else if (points.length - i == 2) {
       // Two points, connect with a line
-      triangulations[t++] = new Triangulation(sites[i], sites[i+1]);
+      triangulations[t++] = new Triangulation(i, i+1);
     } else {
       throw new RuntimeException("Cannot happen");
     }
@@ -102,12 +101,12 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param s1
      * @param s2
      */
-    public Triangulation(Site s1, Site s2) {
-      site1 = s1.id;
-      site2 = s2.id;
-      neighbors[s1.id].add(s2.id);
-      neighbors[s2.id].add(s1.id);
-      convexHull = new int[] {s1.id, s2.id};
+    public Triangulation(int s1, int s2) {
+      site1 = s1;
+      site2 = s2;
+      neighbors[s1].add(s2);
+      neighbors[s2].add(s1);
+      convexHull = new int[] {s1, s2};
     }
     
     /**
@@ -117,13 +116,13 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param s2
      * @param s3
      */
-    public Triangulation(Site s1, Site s2, Site s3) {
-      site1 = s1.id;
-      site2 = s3.id;
-      neighbors[s1.id].add(s2.id); neighbors[s1.id].add(s3.id);
-      neighbors[s2.id].add(s1.id); neighbors[s2.id].add(s3.id);
-      neighbors[s3.id].add(s1.id); neighbors[s3.id].add(s2.id);
-      convexHull = new int[] {s1.id, s2.id, s3.id};
+    public Triangulation(int s1, int s2, int s3) {
+      site1 = s1;
+      site2 = s3;
+      neighbors[s1].add(s2); neighbors[s1].add(s3);
+      neighbors[s2].add(s1); neighbors[s2].add(s3);
+      neighbors[s3].add(s1); neighbors[s3].add(s2);
+      convexHull = new int[] {s1, s2, s3};
     }
     
     /**
