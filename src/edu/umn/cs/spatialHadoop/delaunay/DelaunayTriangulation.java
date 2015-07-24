@@ -123,6 +123,8 @@ public class DelaunayTriangulation {
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())));
     GuibasStolfiDelaunayAlgorithm.Triangulation dt = dtAlgorithm.compute();
     dt.test();
+    dt.deleteSafeEdges(new Rectangle(-180, -90, 180, 90));
+    System.out.println("----------------");
     dt.draw();
   }
 

@@ -6,6 +6,8 @@ import java.util.Stack;
 import java.util.Vector;
 
 import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
@@ -291,9 +293,96 @@ public class GuibasStolfiDelaunayAlgorithm {
       this.site1 = L.site1;
       this.site2 = R.site2;
     }
+    
+    /**
+     * Delete all edges that will never be affected by a future merge.
+     */
+    public void deleteSafeEdges(Rectangle mbr) {
+      IntArray nodesToCheck = new IntArray();
+      nodesToCheck.append(convexHull, 0, convexHull.length);
+      BitArray sortedNodes = new BitArray(points.length);
+      BitArray unsafeNodes = new BitArray(points.length);
+      
+      while (!nodesToCheck.isEmpty()) {
+        int unsafeNode = nodesToCheck.pop();
+        unsafeNodes.set(unsafeNode, true);
+        IntArray neighbors1 = neighbors[unsafeNode];
+        // Sort the array to speedup merging neighbors
+        if (!sortedNodes.get(unsafeNode)) {
+          neighbors1.sort();
+          sortedNodes.set(unsafeNode, true);
+        }
+        for (int neighborID : neighbors1) {
+          IntArray neighbors2 = neighbors[neighborID];
+          // Sort neighbor nodes, if needed
+          if (!sortedNodes.get(neighborID)) {
+            neighbors2.sort();
+            sortedNodes.set(neighborID, true);
+          }
+          // Find common nodes which form triangles
+          int i1 = 0, i2 = 0;
+          while (i1 < neighbors1.size() && i2 < neighbors2.size()) {
+            if (neighbors1.get(i1) == neighbors2.get(i2)) {
+              boolean safeTriangle = true;
+              // Found a triangle between unsafeNode, neighborID and neighbors1[i1]
+              Point emptyCircle = calculateCircumCircleCenter(unsafeNode, neighborID, neighbors1.get(i1));
+              if (!mbr.contains(emptyCircle)) {
+                // The center is outside the MBR, unsafe
+                safeTriangle = false;
+              } else {
+                // If the empty circle is not completely contained in the MBR,
+                // the triangle is unsafe as the circle might become non-empty
+                // when the merge process happens
+                double dx = emptyCircle.x - xs[unsafeNode];
+                double dy = emptyCircle.y - ys[unsafeNode];
+                double r2 = dx * dx + dy * dy;
+                double dist = Math.min(Math.min(emptyCircle.x - mbr.x1, mbr.x2 - emptyCircle.x),
+                    Math.min(emptyCircle.y - mbr.y1, mbr.y2 - emptyCircle.y));
+                if (dist * dist <= r2)
+                  safeTriangle = false;
+              }
+              if (!safeTriangle) {
+                // The three nodes are unsafe and need to be further checked
+                if (!unsafeNodes.get(neighborID) && !nodesToCheck.contains(neighborID))
+                  nodesToCheck.add(neighborID);
+                if (!unsafeNodes.get(neighbors1.get(i1)) && !nodesToCheck.contains(neighbors1.get(i1)))
+                  nodesToCheck.add(neighbors1.get(i1));
+              }
+              i1++;
+              i2++;
+            } else if (neighbors1.get(i1) < neighbors2.get(i2)) {
+              i1++;
+            } else {
+              i2++;
+            }
+          }
+        }
+      }
+      // Prune all edges that connect two safe nodes
+      for (int i = site1; i <= site2; i++) {
+        if (!unsafeNodes.get(i)) {
+          // Found a safe node
+          boolean completelySafe = true;
+          int n = 0;
+          while (n < neighbors[i].size()) {
+            int neighborID = neighbors[i].get(n);
+            if (!unsafeNodes.get(neighborID)) {
+              System.out.printf("line %f, %f, %f, %f\n", xs[i], ys[i], xs[neighborID], ys[neighborID]);
+              neighbors[i].remove(neighborID);
+              neighbors[neighborID].remove(i);
+            } else {
+              completelySafe = false;
+              n++;
+            }
+          }
+          if (completelySafe)
+            System.out.printf("circle %f, %f, 0.5\n", xs[i], ys[i]);
+        }
+      }
+    }
 
     public void draw() {
-      int i =0;
+      int i = 0;
       for (int s1 = site1; s1 <= site2; s1++) {
         for (int s2 : neighbors[s1]) {
           if (s1 < s2) {

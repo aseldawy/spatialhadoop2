@@ -12,6 +12,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Iterator;
 
 import org.apache.hadoop.io.Writable;
@@ -154,12 +155,24 @@ public class IntArray implements Writable, Iterable<Integer> {
     return size;
   }
   
+  public boolean isEmpty() {
+    return size == 0;
+  }
+
   public int[] array() {
     return array;
   }
   
+  public void sort() {
+    Arrays.sort(array, 0, size);
+  }
+
   public int get(int index) {
     return array[index];
+  }
+  
+  public int pop() {
+    return array[--size];
   }
   
   public boolean remove(int value) {
