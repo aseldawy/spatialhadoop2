@@ -11,7 +11,7 @@ import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
- * The divide and conquer Delaunay Triangulation algorithm as proposed in
+ * The divide and conquer Delaunay Triangulation (DT) algorithm as proposed in
  * L. J Guibas and J. Stolfi, "Primitives for the manipulation of general
  * subdivisions and the computation of Voronoi diagrams",
  * ACM Transactions on Graphics, 4(1985), 74-123,
@@ -22,75 +22,28 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  */
 public class GuibasStolfiDelaunayAlgorithm {
   
-  /**The original input set of points*/
+  /** The original input set of points */
   Point[] points;
-  /**Coordinates of all sites*/
+
+  /** Coordinates of all sites */
   double[] xs, ys;
-  /**All neighboring sites. Two neighbor sites have a common edge in the 
-   * Delaunay triangulation*/
+
+  /**
+   * All neighboring sites. Two neighbor sites have a common edge in the DT
+   */
   IntArray[] neighbors;
 
-  public <P extends Point> GuibasStolfiDelaunayAlgorithm(P[] points) {
-    this.points = new Point[points.length];
-    System.arraycopy(points, 0, this.points, 0, points.length);
-    Arrays.sort(this.points);
-    this.xs = new double[this.points.length];
-    this.ys = new double[this.points.length];
-    this.neighbors = new IntArray[this.points.length];
-    for (int i = 0; i < this.points.length; i++) {
-      xs[i] = this.points[i].x;
-      ys[i] = this.points[i].y;
-      neighbors[i] = new IntArray();
-    }
-  }
+  /**
+   * Stores the final answer that contains the complete DT
+   */
+  private IntermediateTriangulation finalAnswer;
 
-  /** Computes the Delaunay triangulation for the points */
-  public Triangulation compute() {
-    PartialAnswer[] triangulations = new PartialAnswer[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
-    // Compute the trivial Delaunay triangles of every three consecutive points
-    int i, t=0;
-    for (i = 0; i < points.length - 4; i += 3) {
-      // Compute Delaunay triangulation for three points
-      triangulations[t++] =  new PartialAnswer(i, i+1, i+2);
-    }
-    if (points.length - i == 4) {
-      // Compute Delaunay triangulation for every two points
-       triangulations[t++] = new PartialAnswer(i, i+1);
-       triangulations[t++] = new PartialAnswer(i+2, i+3);
-    } else if (points.length - i == 3) {
-      // Compute for three points
-      triangulations[t++] = new PartialAnswer(i, i+1, i+2);
-    } else if (points.length - i == 2) {
-      // Two points, connect with a line
-      triangulations[t++] = new PartialAnswer(i, i+1);
-    } else {
-      throw new RuntimeException("Cannot happen");
-    }
-    
-    // Start the merge process
-    while (triangulations.length > 1) {
-      // Merge every pair of Deluanay triangulations
-      PartialAnswer[] newTriangulations = new PartialAnswer[triangulations.length / 2 + (triangulations.length & 1)];
-      int t2 = 0;
-      int t1;
-      for (t1 = 0; t1 < triangulations.length - 1; t1 += 2) {
-        PartialAnswer dt1 = triangulations[t1];
-        PartialAnswer dt2 = triangulations[t1+1];
-        newTriangulations[t2++] = new PartialAnswer(dt1, dt2);
-      }
-      if (t1 < triangulations.length)
-        newTriangulations[t2++] = triangulations[t1];
-      triangulations = newTriangulations;
-    }
-    return new Triangulation(this);
-  }
-  
   /**
    * A class that stores a set of triangles for part of the sites.
    * @author Ahmed Eldawy
    *
    */
-  class PartialAnswer {
+  class IntermediateTriangulation {
     /**
      * The contiguous range of sites stored at this triangulation.
      * The range is inclusive of both site1 and site2
@@ -98,6 +51,11 @@ public class GuibasStolfiDelaunayAlgorithm {
     int site1, site2;
     /**Sites on the convex null of the triangulation*/
     int[] convexHull;
+
+    /**
+     * Constructs an empty triangulation to be used for merging
+     */
+    IntermediateTriangulation() {}
     
     /**
      * Initialize a triangulation with two sites only. The triangulation consists
@@ -105,7 +63,7 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param s1
      * @param s2
      */
-    public PartialAnswer(int s1, int s2) {
+    IntermediateTriangulation(int s1, int s2) {
       site1 = s1;
       site2 = s2;
       neighbors[s1].add(s2);
@@ -120,7 +78,7 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param s2
      * @param s3
      */
-    public PartialAnswer(int s1, int s2, int s3) {
+    IntermediateTriangulation(int s1, int s2, int s3) {
       site1 = s1;
       site2 = s3;
       neighbors[s1].add(s2); neighbors[s1].add(s3);
@@ -129,324 +87,417 @@ public class GuibasStolfiDelaunayAlgorithm {
       convexHull = new int[] {s1, s2, s3};
     }
     
-    /**
-     * Constructs a triangulation that merges two existing triangulations.
-     * @param L
-     * @param R
-     */
-    public PartialAnswer(PartialAnswer L, PartialAnswer R) {
-      // Compute the convex hull of the result
-      int[] bothHulls = new int[L.convexHull.length + R.convexHull.length];
-      System.arraycopy(L.convexHull, 0, bothHulls, 0, L.convexHull.length);
-      System.arraycopy(R.convexHull, 0, bothHulls, L.convexHull.length, R.convexHull.length);
-      this.convexHull = convexHull(bothHulls);
-      
-      // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
-      int baseL = -1, baseR = -1;
-      for (int i = 0; i < this.convexHull.length; i++) {
-        int p1 = this.convexHull[i];
-        int p2 = i == this.convexHull.length - 1 ? this.convexHull[0] : this.convexHull[i+1];
-        if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
-          if (baseL == -1 || (ys[p1] <= ys[baseL] && ys[p2] <= ys[baseR]) /*||
-              (p1.x <= baseL.x && p2.x <= baseR.x)*/) {
-            baseL = p1;
-            baseR = p2;
-          }
-        } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
-          if (baseL == -1 || (ys[p2] <= ys[baseL] && ys[p1] <= ys[baseR]) /*||
-              (p2.x <= baseL.x && p1.x <= baseR.x)*/) {
-            baseL = p2;
-            baseR = p1;
-          }
-        }
-      }
+  }
 
-      // Add the first base edge
-      neighbors[baseL].add(baseR);
-      neighbors[baseR].add(baseL);
-      // Trace the base LR edge up to the top
-      boolean finished = false;
-      do {
-        // Search for the potential candidate on the right
-        double anglePotential = -1, angleNextPotential = -1;
-        int potentialCandidate = -1, nextPotentialCandidate = -1;
-        for (int rNeighbor : neighbors[baseR]) {
-          if (rNeighbor >= R.site1 && rNeighbor <= R.site2) {
-            // Check this RR edge
-            double cwAngle = calculateCWAngle(baseL, baseR, rNeighbor);
-            if (potentialCandidate == -1 || cwAngle < anglePotential) {
-              // Found a new potential candidate
-              angleNextPotential = anglePotential;
-              nextPotentialCandidate = potentialCandidate;
-              anglePotential = cwAngle;
-              potentialCandidate = rNeighbor;
-            } else if (nextPotentialCandidate == -1 || cwAngle < angleNextPotential) {
-              angleNextPotential = cwAngle;
-              nextPotentialCandidate = rNeighbor;
-            }
-          }
-        }
-        int rCandidate = -1;
-        if (anglePotential < Math.PI) {
-          if (nextPotentialCandidate != -1) {
-            // Check if the circumcircle of the base edge with the potential
-            // candidate contains the next potential candidate
-            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-            double dx = circleCenter.x - xs[nextPotentialCandidate];
-            double dy = circleCenter.y - ys[nextPotentialCandidate];
-            double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - xs[potentialCandidate];
-            dy = circleCenter.y - ys[potentialCandidate];
-            double d2 = dx * dx + dy * dy;
-            if (d1 < d2) {
-              // Delete the RR edge between baseR and rPotentialCandidate and restart
-              neighbors[baseR].remove(potentialCandidate);
-              neighbors[potentialCandidate].remove(baseR);
-              continue;
-            } else {
-              rCandidate = potentialCandidate;
-            }
-          } else {
-            rCandidate = potentialCandidate;
-          }
-        }
-        
-        // Search for the potential candidate on the left
-        anglePotential = -1; angleNextPotential = -1;
-        potentialCandidate = -1; nextPotentialCandidate = -1;
-        for (int lNeighbor : neighbors[baseL]) {
-          if (lNeighbor >= L.site1 && lNeighbor <= L.site2) {
-            // Check this LL edge
-            double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, lNeighbor);
-            if (potentialCandidate == -1 || ccwAngle < anglePotential) {
-              // Found a new potential candidate
-              angleNextPotential = anglePotential;
-              nextPotentialCandidate = potentialCandidate;
-              anglePotential = ccwAngle;
-              potentialCandidate = lNeighbor;
-            } else if (nextPotentialCandidate == -1 || ccwAngle < angleNextPotential) {
-              angleNextPotential = ccwAngle;
-              nextPotentialCandidate = lNeighbor;
-            }
-          }
-        }
-        int lCandidate = -1;
-        if (anglePotential < Math.PI) {
-          if (nextPotentialCandidate != -1) {
-            // Check if the circumcircle of the base edge with the potential
-            // candidate contains the next potential candidate
-            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-            double dx = circleCenter.x - xs[nextPotentialCandidate];
-            double dy = circleCenter.y - ys[nextPotentialCandidate];
-            double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - xs[potentialCandidate];
-            dy = circleCenter.y - ys[potentialCandidate];
-            double d2 = dx * dx + dy * dy;
-            if (d1 < d2) {
-              // Delete the LL edge between baseR and rPotentialCandidate and restart
-              neighbors[baseL].remove(potentialCandidate);
-              neighbors[potentialCandidate].remove(baseL);
-              continue;
-            } else {
-              lCandidate = potentialCandidate;
-            }
-          } else {
-            lCandidate = potentialCandidate;
-          }
-        }
-        
-        // Choose the right candidate
-        if (lCandidate != -1 && rCandidate != -1) {
-          // Two candidates, choose the correct one
-          Point circumCircleL = calculateCircumCircleCenter(lCandidate, baseL, baseR);
-          double dx = circumCircleL.x - xs[lCandidate];
-          double dy = circumCircleL.y - ys[lCandidate];
-          double lCandidateDistance = dx * dx + dy * dy;
-          dx = circumCircleL.x - xs[rCandidate];
-          dy = circumCircleL.y - ys[rCandidate];
-          double rCandidateDistance = dx * dx + dy * dy;
-          if (lCandidateDistance < rCandidateDistance) {
-            // rCandidate is outside the circumcircle, lCandidate is correct
-            rCandidate = -1;
-          } else {
-            // rCandidate is inside the circumcircle, lCandidate is incorrect
-            lCandidate = -1;
-          }
-        }
-        
-        if (lCandidate != -1) {
-          // Left candidate has been chosen
-          // Make lPotentialCandidate and baseR the new base line
-          baseL = lCandidate;
-          // Add the new base edge
-          neighbors[baseL].add(baseR);
-          neighbors[baseR].add(baseL);
-        } else if (rCandidate != -1) {
-          // Right candidate has been chosen
-          // Make baseL and rPotentialCandidate the new base line
-          baseR = rCandidate;
-          // Add the new base edge
-          neighbors[baseL].add(baseR);
-          neighbors[baseR].add(baseL);
-        } else {
-          // No candidates, merge finished
-          finished = true;
-        }
-      } while (!finished);
-      
-      // Merge both L and R
-      this.site1 = L.site1;
-      this.site2 = R.site2;
-    }
-    
-    /**
-     * Delete all edges that will never be affected by a future merge.
-     */
-    public void deleteSafeEdges(Rectangle mbr) {
-      IntArray nodesToCheck = new IntArray();
-      nodesToCheck.append(convexHull, 0, convexHull.length);
-      BitArray sortedNodes = new BitArray(points.length);
-      BitArray unsafeNodes = new BitArray(points.length);
-      
-      while (!nodesToCheck.isEmpty()) {
-        int unsafeNode = nodesToCheck.pop();
-        unsafeNodes.set(unsafeNode, true);
-        IntArray neighbors1 = neighbors[unsafeNode];
-        // Sort the array to speedup merging neighbors
-        if (!sortedNodes.get(unsafeNode)) {
-          neighbors1.sort();
-          sortedNodes.set(unsafeNode, true);
-        }
-        for (int neighborID : neighbors1) {
-          IntArray neighbors2 = neighbors[neighborID];
-          // Sort neighbor nodes, if needed
-          if (!sortedNodes.get(neighborID)) {
-            neighbors2.sort();
-            sortedNodes.set(neighborID, true);
-          }
-          // Find common nodes which form triangles
-          int i1 = 0, i2 = 0;
-          while (i1 < neighbors1.size() && i2 < neighbors2.size()) {
-            if (neighbors1.get(i1) == neighbors2.get(i2)) {
-              boolean safeTriangle = true;
-              // Found a triangle between unsafeNode, neighborID and neighbors1[i1]
-              Point emptyCircle = calculateCircumCircleCenter(unsafeNode, neighborID, neighbors1.get(i1));
-              if (!mbr.contains(emptyCircle)) {
-                // The center is outside the MBR, unsafe
-                safeTriangle = false;
-              } else {
-                // If the empty circle is not completely contained in the MBR,
-                // the triangle is unsafe as the circle might become non-empty
-                // when the merge process happens
-                double dx = emptyCircle.x - xs[unsafeNode];
-                double dy = emptyCircle.y - ys[unsafeNode];
-                double r2 = dx * dx + dy * dy;
-                double dist = Math.min(Math.min(emptyCircle.x - mbr.x1, mbr.x2 - emptyCircle.x),
-                    Math.min(emptyCircle.y - mbr.y1, mbr.y2 - emptyCircle.y));
-                if (dist * dist <= r2)
-                  safeTriangle = false;
-              }
-              if (!safeTriangle) {
-                // The three nodes are unsafe and need to be further checked
-                if (!unsafeNodes.get(neighborID) && !nodesToCheck.contains(neighborID))
-                  nodesToCheck.add(neighborID);
-                if (!unsafeNodes.get(neighbors1.get(i1)) && !nodesToCheck.contains(neighbors1.get(i1)))
-                  nodesToCheck.add(neighbors1.get(i1));
-              }
-              i1++;
-              i2++;
-            } else if (neighbors1.get(i1) < neighbors2.get(i2)) {
-              i1++;
-            } else {
-              i2++;
-            }
-          }
-        }
-      }
-      // Prune all edges that connect two safe nodes
-      for (int i = site1; i <= site2; i++) {
-        if (!unsafeNodes.get(i)) {
-          // Found a safe node
-          boolean completelySafe = true;
-          int n = 0;
-          while (n < neighbors[i].size()) {
-            int neighborID = neighbors[i].get(n);
-            if (!unsafeNodes.get(neighborID)) {
-              System.out.printf("line %f, %f, %f, %f\n", xs[i], ys[i], xs[neighborID], ys[neighborID]);
-              neighbors[i].remove(neighborID);
-              neighbors[neighborID].remove(i);
-            } else {
-              completelySafe = false;
-              n++;
-            }
-          }
-          if (completelySafe)
-            System.out.printf("circle %f, %f, 0.5\n", xs[i], ys[i]);
-        }
-      }
-    }
-
-    public void draw() {
-      int i = 0;
-      for (int s1 = site1; s1 <= site2; s1++) {
-        for (int s2 : neighbors[s1]) {
-          if (s1 < s2) {
-            System.out.printf("line %f, %f, %f, %f, :id=>'%d,%d'\n", xs[s1], ys[s1], xs[s2], ys[s2], s1, s2);
-            i++;
-          }
-        }
-      }
-      System.out.println("Total lines "+i);
-    }
-    
-    public boolean test() {
-      final double threshold = 1E-6;
-      List<Point> starts = new Vector<Point>();
-      List<Point> ends = new Vector<Point>();
-      for (int s1 = site1; s1 <= site2; s1++) {
-        for (int s2 : neighbors[s1]) {
-          if (s1 < s2) {
-            starts.add(new Point(xs[s1], ys[s1]));
-            ends.add(new Point(xs[s2], ys[s2]));
-          }
-        }
-      }
-      
-      for (int i = 0; i < starts.size(); i++) {
-        double x1 = starts.get(i).x;
-        double y1 = starts.get(i).y;
-        double x2 = ends.get(i).x;
-        double y2 = ends.get(i).y;
-        for (int j = i + 1; j < starts.size(); j++) {
-          double x3 = starts.get(j).x;
-          double y3 = starts.get(j).y;
-          double x4 = ends.get(j).x;
-          double y4 = ends.get(j).y;
-
-          double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-          double ix = (x1 * y2 - y1 * x2) * (x3 - x4) / den - (x1 - x2) * (x3 * y4 - y3 * x4) / den;
-          double iy = (x1 * y2 - y1 * x2) * (y3 - y4) / den - (y1 - y2) * (x3 * y4 - y3 * x4) / den;
-          double minx1 = Math.min(x1, x2);
-          double maxx1 = Math.max(x1, x2); 
-          double miny1 = Math.min(y1, y2);
-          double maxy1 = Math.max(y1, y2); 
-          double minx2 = Math.min(x3, x4);
-          double maxx2 = Math.max(x3, x4); 
-          double miny2 = Math.min(y3, y4);
-          double maxy2 = Math.max(y3, y4); 
-          if ((ix - minx1 > threshold && ix - maxx1 < -threshold) && (iy - miny1 > threshold && iy - maxy1 < -threshold) &&
-              (ix - minx2 > threshold && ix - maxx2 < -threshold) && (iy - miny2 > threshold && iy - maxy2 < -threshold)) {
-            System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
-            System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
-            System.out.printf("circle %f, %f, 0.5\n", ix, iy);
-            throw new RuntimeException("error");
-          }
-        }
-      }
-      return true;
+  /**
+   * Constructs a triangulation that merges two existing triangulations.
+   * @param L
+   * @param R
+   */
+  public <P extends Point> GuibasStolfiDelaunayAlgorithm(P[] points) {
+    this.points = new Point[points.length];
+    System.arraycopy(points, 0, this.points, 0, points.length);
+    Arrays.sort(this.points);
+    this.xs = new double[this.points.length];
+    this.ys = new double[this.points.length];
+    this.neighbors = new IntArray[this.points.length];
+    for (int i = 0; i < this.points.length; i++) {
+      xs[i] = this.points[i].x;
+      ys[i] = this.points[i].y;
+      neighbors[i] = new IntArray();
     }
   }
   
+  protected IntermediateTriangulation merge(IntermediateTriangulation L, IntermediateTriangulation R) {
+    IntermediateTriangulation merged = new IntermediateTriangulation();
+    // Compute the convex hull of the result
+    int[] bothHulls = new int[L.convexHull.length + R.convexHull.length];
+    System.arraycopy(L.convexHull, 0, bothHulls, 0, L.convexHull.length);
+    System.arraycopy(R.convexHull, 0, bothHulls, L.convexHull.length, R.convexHull.length);
+    merged.convexHull = convexHull(bothHulls);
+    
+    // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
+    int baseL = -1, baseR = -1;
+    for (int i = 0; i < merged.convexHull.length; i++) {
+      int p1 = merged.convexHull[i];
+      int p2 = i == merged.convexHull.length - 1 ? merged.convexHull[0] : merged.convexHull[i+1];
+      if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
+        if (baseL == -1 || (ys[p1] <= ys[baseL] && ys[p2] <= ys[baseR]) /*||
+            (p1.x <= baseL.x && p2.x <= baseR.x)*/) {
+          baseL = p1;
+          baseR = p2;
+        }
+      } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
+        if (baseL == -1 || (ys[p2] <= ys[baseL] && ys[p1] <= ys[baseR]) /*||
+            (p2.x <= baseL.x && p1.x <= baseR.x)*/) {
+          baseL = p2;
+          baseR = p1;
+        }
+      }
+    }
+
+    // Add the first base edge
+    neighbors[baseL].add(baseR);
+    neighbors[baseR].add(baseL);
+    // Trace the base LR edge up to the top
+    boolean finished = false;
+    do {
+      // Search for the potential candidate on the right
+      double anglePotential = -1, angleNextPotential = -1;
+      int potentialCandidate = -1, nextPotentialCandidate = -1;
+      for (int rNeighbor : neighbors[baseR]) {
+        if (rNeighbor >= R.site1 && rNeighbor <= R.site2) {
+          // Check this RR edge
+          double cwAngle = calculateCWAngle(baseL, baseR, rNeighbor);
+          if (potentialCandidate == -1 || cwAngle < anglePotential) {
+            // Found a new potential candidate
+            angleNextPotential = anglePotential;
+            nextPotentialCandidate = potentialCandidate;
+            anglePotential = cwAngle;
+            potentialCandidate = rNeighbor;
+          } else if (nextPotentialCandidate == -1 || cwAngle < angleNextPotential) {
+            angleNextPotential = cwAngle;
+            nextPotentialCandidate = rNeighbor;
+          }
+        }
+      }
+      int rCandidate = -1;
+      if (anglePotential < Math.PI) {
+        if (nextPotentialCandidate != -1) {
+          // Check if the circumcircle of the base edge with the potential
+          // candidate contains the next potential candidate
+          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+          double dx = circleCenter.x - xs[nextPotentialCandidate];
+          double dy = circleCenter.y - ys[nextPotentialCandidate];
+          double d1 = dx * dx + dy * dy;
+          dx = circleCenter.x - xs[potentialCandidate];
+          dy = circleCenter.y - ys[potentialCandidate];
+          double d2 = dx * dx + dy * dy;
+          if (d1 < d2) {
+            // Delete the RR edge between baseR and rPotentialCandidate and restart
+            neighbors[baseR].remove(potentialCandidate);
+            neighbors[potentialCandidate].remove(baseR);
+            continue;
+          } else {
+            rCandidate = potentialCandidate;
+          }
+        } else {
+          rCandidate = potentialCandidate;
+        }
+      }
+      
+      // Search for the potential candidate on the left
+      anglePotential = -1; angleNextPotential = -1;
+      potentialCandidate = -1; nextPotentialCandidate = -1;
+      for (int lNeighbor : neighbors[baseL]) {
+        if (lNeighbor >= L.site1 && lNeighbor <= L.site2) {
+          // Check this LL edge
+          double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, lNeighbor);
+          if (potentialCandidate == -1 || ccwAngle < anglePotential) {
+            // Found a new potential candidate
+            angleNextPotential = anglePotential;
+            nextPotentialCandidate = potentialCandidate;
+            anglePotential = ccwAngle;
+            potentialCandidate = lNeighbor;
+          } else if (nextPotentialCandidate == -1 || ccwAngle < angleNextPotential) {
+            angleNextPotential = ccwAngle;
+            nextPotentialCandidate = lNeighbor;
+          }
+        }
+      }
+      int lCandidate = -1;
+      if (anglePotential < Math.PI) {
+        if (nextPotentialCandidate != -1) {
+          // Check if the circumcircle of the base edge with the potential
+          // candidate contains the next potential candidate
+          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+          double dx = circleCenter.x - xs[nextPotentialCandidate];
+          double dy = circleCenter.y - ys[nextPotentialCandidate];
+          double d1 = dx * dx + dy * dy;
+          dx = circleCenter.x - xs[potentialCandidate];
+          dy = circleCenter.y - ys[potentialCandidate];
+          double d2 = dx * dx + dy * dy;
+          if (d1 < d2) {
+            // Delete the LL edge between baseR and rPotentialCandidate and restart
+            neighbors[baseL].remove(potentialCandidate);
+            neighbors[potentialCandidate].remove(baseL);
+            continue;
+          } else {
+            lCandidate = potentialCandidate;
+          }
+        } else {
+          lCandidate = potentialCandidate;
+        }
+      }
+      
+      // Choose the right candidate
+      if (lCandidate != -1 && rCandidate != -1) {
+        // Two candidates, choose the correct one
+        Point circumCircleL = calculateCircumCircleCenter(lCandidate, baseL, baseR);
+        double dx = circumCircleL.x - xs[lCandidate];
+        double dy = circumCircleL.y - ys[lCandidate];
+        double lCandidateDistance = dx * dx + dy * dy;
+        dx = circumCircleL.x - xs[rCandidate];
+        dy = circumCircleL.y - ys[rCandidate];
+        double rCandidateDistance = dx * dx + dy * dy;
+        if (lCandidateDistance < rCandidateDistance) {
+          // rCandidate is outside the circumcircle, lCandidate is correct
+          rCandidate = -1;
+        } else {
+          // rCandidate is inside the circumcircle, lCandidate is incorrect
+          lCandidate = -1;
+        }
+      }
+      
+      if (lCandidate != -1) {
+        // Left candidate has been chosen
+        // Make lPotentialCandidate and baseR the new base line
+        baseL = lCandidate;
+        // Add the new base edge
+        neighbors[baseL].add(baseR);
+        neighbors[baseR].add(baseL);
+      } else if (rCandidate != -1) {
+        // Right candidate has been chosen
+        // Make baseL and rPotentialCandidate the new base line
+        baseR = rCandidate;
+        // Add the new base edge
+        neighbors[baseL].add(baseR);
+        neighbors[baseR].add(baseL);
+      } else {
+        // No candidates, merge finished
+        finished = true;
+      }
+    } while (!finished);
+    
+    // Merge sites of both L and R
+    merged.site1 = L.site1;
+    merged.site2 = R.site2;
+    return merged;
+  }
+
+  /** Computes the DT for all input points */
+  public void compute() {
+    IntermediateTriangulation[] triangulations = new IntermediateTriangulation[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
+    // Compute the trivial Delaunay triangles of every three consecutive points
+    int i, t=0;
+    for (i = 0; i < points.length - 4; i += 3) {
+      // Compute DT for three points
+      triangulations[t++] =  new IntermediateTriangulation(i, i+1, i+2);
+    }
+    if (points.length - i == 4) {
+      // Compute DT for every two points
+       triangulations[t++] = new IntermediateTriangulation(i, i+1);
+       triangulations[t++] = new IntermediateTriangulation(i+2, i+3);
+    } else if (points.length - i == 3) {
+      // Compute for three points
+      triangulations[t++] = new IntermediateTriangulation(i, i+1, i+2);
+    } else if (points.length - i == 2) {
+      // Two points, connect with a line
+      triangulations[t++] = new IntermediateTriangulation(i, i+1);
+    } else {
+      throw new RuntimeException("Cannot happen");
+    }
+    
+    // Start the merge process
+    while (triangulations.length > 1) {
+      // Merge every pair of DTs
+      IntermediateTriangulation[] newTriangulations = new IntermediateTriangulation[triangulations.length / 2 + (triangulations.length & 1)];
+      int t2 = 0;
+      int t1;
+      for (t1 = 0; t1 < triangulations.length - 1; t1 += 2) {
+        IntermediateTriangulation dt1 = triangulations[t1];
+        IntermediateTriangulation dt2 = triangulations[t1+1];
+        newTriangulations[t2++] = merge(dt1, dt2);
+      }
+      if (t1 < triangulations.length)
+        newTriangulations[t2++] = triangulations[t1];
+      triangulations = newTriangulations;
+    }
+    this.finalAnswer = triangulations[0];
+  }
+  
+  /**
+   * Splits the answer into final and non-final parts. Final parts can be safely
+   * written to the output as they are not going to be affected by a future
+   * merge step. Non-final parts cannot be written to the output yet as they
+   * might be affected (i.e., some edges are pruned) by a future merge step.
+   * 
+   * @param mbr
+   *          - The MBR used to check for final and non-final edges. It is
+   *          assumed that no more points can be introduced in this MBR but more
+   *          points can appear later outside that MBR.
+   * @param safe
+   *          - The set of safe edges
+   * @param unsafe
+   *          - The set of unsafe edges
+   */
+  public void splitIntoFinalAndNonFinalParts(Rectangle mbr, Triangulation finalPart,
+      Triangulation nonfinalPart) {
+    if (finalAnswer == null)
+      compute();
+    // Nodes that has its adjacency list sorted by node ID to speed up the merge
+    BitArray sortedNodes = new BitArray(points.length);
+    // Sites that has been found to be unsafe
+    BitArray unsafeNodes = new BitArray(points.length);
+    // Sites that need to be checked whether they have unsafe triangles or not
+    IntArray nodesToCheck = new IntArray();
+    
+    // Initially, add all sites on the convex hull to unsafe edges
+    for (int convexHullPoint : finalAnswer.convexHull) {
+      nodesToCheck.add(convexHullPoint);
+      unsafeNodes.set(convexHullPoint, true);
+    }
+    
+    while (!nodesToCheck.isEmpty()) {
+      int unsafeNode = nodesToCheck.pop();
+      IntArray neighbors1 = neighbors[unsafeNode];
+      // Sort the array to speedup merging neighbors
+      if (!sortedNodes.get(unsafeNode)) {
+        neighbors1.sort();
+        sortedNodes.set(unsafeNode, true);
+      }
+      for (int neighborID : neighbors1) {
+        IntArray neighbors2 = neighbors[neighborID];
+        // Sort neighbor nodes, if needed
+        if (!sortedNodes.get(neighborID)) {
+          neighbors2.sort();
+          sortedNodes.set(neighborID, true);
+        }
+        // Find common nodes which form triangles
+        int i1 = 0, i2 = 0;
+        while (i1 < neighbors1.size() && i2 < neighbors2.size()) {
+          if (neighbors1.get(i1) == neighbors2.get(i2)) {
+            boolean safeTriangle = true;
+            // Found a triangle between unsafeNode, neighborID and neighbors1[i1]
+            Point emptyCircle = calculateCircumCircleCenter(unsafeNode, neighborID, neighbors1.get(i1));
+            if (!mbr.contains(emptyCircle)) {
+              // The center is outside the MBR, unsafe
+              safeTriangle = false;
+            } else {
+              // If the empty circle is not completely contained in the MBR,
+              // the triangle is unsafe as the circle might become non-empty
+              // when the merge process happens
+              double dx = emptyCircle.x - xs[unsafeNode];
+              double dy = emptyCircle.y - ys[unsafeNode];
+              double r2 = dx * dx + dy * dy;
+              double dist = Math.min(Math.min(emptyCircle.x - mbr.x1, mbr.x2 - emptyCircle.x),
+                  Math.min(emptyCircle.y - mbr.y1, mbr.y2 - emptyCircle.y));
+              if (dist * dist <= r2)
+                safeTriangle = false;
+            }
+            if (!safeTriangle) {
+              // The three nodes are unsafe and need to be further checked
+              if (!unsafeNodes.get(neighborID)) {
+                nodesToCheck.add(neighborID);
+                unsafeNodes.set(neighborID, true);
+              }
+              if (!unsafeNodes.get(neighbors1.get(i1))) {
+                nodesToCheck.add(neighbors1.get(i1));
+                unsafeNodes.set(neighbors1.get(i1), true);
+              }
+            }
+            i1++;
+            i2++;
+          } else if (neighbors1.get(i1) < neighbors2.get(i2)) {
+            i1++;
+          } else {
+            i2++;
+          }
+        }
+      }
+    }
+    
+    IntArray finalEdgeStarts = new IntArray();
+    IntArray finalEdgeEnds = new IntArray();
+    IntArray nonfinalEdgeStarts = new IntArray();
+    IntArray nonfinalEdgeEnds = new IntArray();
+
+    // Prune all edges that connect two safe nodes
+    for (int i = 0; i < points.length; i++) {
+      if (unsafeNodes.get(i)) {
+        // An unsafe node, all of its adjacent edges are also unsafe
+        for (int n : neighbors[i]) {
+          if (i < n) {
+            nonfinalEdgeStarts.add(i);
+            nonfinalEdgeEnds.add(n);
+          }
+        }
+      } else {
+        // Found a safe node, all edges that are adjacent to another safe node
+        // are final edges
+        
+        // Whether an adjacent edge has been written or not
+        for (int n : neighbors[i]) {
+          if (i < n) {
+            if (!unsafeNodes.get(n)) {
+              // Found a final edge
+              finalEdgeStarts.add(i);
+              finalEdgeEnds.add(n);
+            } else {
+              nonfinalEdgeStarts.add(i);
+              nonfinalEdgeEnds.add(n);
+            }
+          }
+        }
+      }
+    }
+    
+    finalPart.sites = this.points;
+    finalPart.edgeStarts = finalEdgeStarts.toArray();
+    finalPart.edgeEnds = finalEdgeEnds.toArray();
+
+    nonfinalPart.sites = this.points;
+    nonfinalPart.edgeStarts = nonfinalEdgeStarts.toArray();
+    nonfinalPart.edgeEnds = nonfinalEdgeEnds.toArray();
+  }
+
+  public boolean test() {
+    final double threshold = 1E-6;
+    List<Point> starts = new Vector<Point>();
+    List<Point> ends = new Vector<Point>();
+    for (int s1 = 0; s1 < points.length; s1++) {
+      for (int s2 : neighbors[s1]) {
+        if (s1 < s2) {
+          starts.add(new Point(xs[s1], ys[s1]));
+          ends.add(new Point(xs[s2], ys[s2]));
+        }
+      }
+    }
+    
+    for (int i = 0; i < starts.size(); i++) {
+      double x1 = starts.get(i).x;
+      double y1 = starts.get(i).y;
+      double x2 = ends.get(i).x;
+      double y2 = ends.get(i).y;
+      for (int j = i + 1; j < starts.size(); j++) {
+        double x3 = starts.get(j).x;
+        double y3 = starts.get(j).y;
+        double x4 = ends.get(j).x;
+        double y4 = ends.get(j).y;
+  
+        double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        double ix = (x1 * y2 - y1 * x2) * (x3 - x4) / den - (x1 - x2) * (x3 * y4 - y3 * x4) / den;
+        double iy = (x1 * y2 - y1 * x2) * (y3 - y4) / den - (y1 - y2) * (x3 * y4 - y3 * x4) / den;
+        double minx1 = Math.min(x1, x2);
+        double maxx1 = Math.max(x1, x2); 
+        double miny1 = Math.min(y1, y2);
+        double maxy1 = Math.max(y1, y2); 
+        double minx2 = Math.min(x3, x4);
+        double maxx2 = Math.max(x3, x4); 
+        double miny2 = Math.min(y3, y4);
+        double maxy2 = Math.max(y3, y4); 
+        if ((ix - minx1 > threshold && ix - maxx1 < -threshold) && (iy - miny1 > threshold && iy - maxy1 < -threshold) &&
+            (ix - minx2 > threshold && ix - maxx2 < -threshold) && (iy - miny2 > threshold && iy - maxy2 < -threshold)) {
+          System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
+          System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
+          System.out.printf("circle %f, %f, 0.5\n", ix, iy);
+          throw new RuntimeException("error");
+        }
+      }
+    }
+    return true;
+  }
+
   boolean inArray(int[] array, int objectToFind) {
     for (int objectToCompare : array)
       if (objectToFind == objectToCompare)

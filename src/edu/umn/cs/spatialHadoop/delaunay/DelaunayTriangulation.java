@@ -40,7 +40,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 
 /**
- * Computes the Delaunay triangulation for a set of points.
+ * Computes the Delaunay triangulation (DT) for a set of points.
  * @author Ahmed Eldawy
  * 
  * TODO use a pointer array of integers to refer to points to save memory
@@ -61,11 +61,11 @@ public class DelaunayTriangulation {
    * @param <S>
    */
   public static class DelaunayMap<S extends Point>
-    extends Mapper<Rectangle, Iterable<S>, NullWritable, NullWritable> {
+    extends Mapper<Rectangle, Iterable<S>, NullWritable, Triangulation> {
   }
 
   public static class DelaunayReduce
-  extends Reducer<NullWritable, NullWritable, NullWritable, NullWritable> {
+  extends Reducer<NullWritable, Triangulation, NullWritable, Triangulation> {
   }
 
   /**
@@ -186,7 +186,10 @@ public class DelaunayTriangulation {
     LOG.info("Read "+points.size()+" points and computing DT");
     GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())));
-    Triangulation dt = dtAlgorithm.compute();
+    dtAlgorithm.compute();
+    Triangulation finalPart = new Triangulation();
+    Triangulation nonfinalPart = new Triangulation();
+    dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
   }
   
   private static void printUsage() {

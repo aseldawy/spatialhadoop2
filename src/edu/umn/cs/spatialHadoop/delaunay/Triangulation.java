@@ -84,4 +84,20 @@ public class Triangulation implements Writable {
     }
     
   }
+
+  
+  public void draw() {
+    System.out.println("group {");
+    for (Point s : sites) {
+      System.out.printf("circle %f, %f, 0.5\n", s.x, s.y);
+    }
+    System.out.println("}");
+    System.out.println("group {");
+    for (int i = 0; i < edgeStarts.length; i++) {
+      System.out.printf("line %f, %f, %f, %f\n", sites[edgeStarts[i]].x,
+          sites[edgeStarts[i]].y, sites[edgeEnds[i]].x, sites[edgeEnds[i]].y);
+    }
+    System.out.println("}");
+  }
+  
 }

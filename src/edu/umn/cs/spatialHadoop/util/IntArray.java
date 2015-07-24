@@ -159,8 +159,25 @@ public class IntArray implements Writable, Iterable<Integer> {
     return size == 0;
   }
 
-  public int[] array() {
+  /**
+   * Returns the underlying array. The returned array might have a length that
+   * is larger than {@link #size()}. The values of those additional slots are
+   * undefined and should not be used.
+   * @return
+   */
+  public int[] underlyingArray() {
     return array;
+  }
+  
+  /**
+   * Converts this IntArray into a native Java array that with a length equal
+   * to {@link #size()}.
+   * @return
+   */
+  public int[] toArray() {
+    int[] compactArray = new int[size];
+    System.arraycopy(array, 0, compactArray, 0, size);
+    return compactArray;
   }
   
   public void sort() {
