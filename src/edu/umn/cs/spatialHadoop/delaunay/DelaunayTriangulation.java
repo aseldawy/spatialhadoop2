@@ -18,7 +18,6 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
@@ -27,6 +26,7 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -34,14 +34,10 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
-import edu.umn.cs.spatialHadoop.operations.UltimateUnion;
-import edu.umn.cs.spatialHadoop.operations.UltimateUnion.UltimateUnionMap;
-import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
 
 /**
  * Computes the Delaunay triangulation for a set of points.
@@ -51,30 +47,46 @@ import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
  *
  */
 public class DelaunayTriangulation {
-  
+
+  /**Logger to write log messages for this class*/
   static final Log LOG = LogFactory.getLog(DelaunayTriangulation.class);
   
-  public static class DelaunayMap<S extends Shape>
-    extends Mapper<Rectangle, Iterable<S>, NullWritable, RasterLayer> {
+  /**
+   * The map function computes the Delaunay trianguation for a partition and
+   * splits the triangulation into safe and non-safe edges. Safe edges are
+   * final and are written to the output, while non-safe edges can be modified
+   * and are sent to the reduce function. 
+   * @author Ahmed Eldawy
+   *
+   * @param <S>
+   */
+  public static class DelaunayMap<S extends Point>
+    extends Mapper<Rectangle, Iterable<S>, NullWritable, NullWritable> {
   }
-  
+
+  public static class DelaunayReduce
+  extends Reducer<NullWritable, NullWritable, NullWritable, NullWritable> {
+  }
+
   /**
    * Run the Dealuany Triangulation algorithm in MapReduce
    * @param inPath
    * @param outPath
    * @param params
    * @return
+   * @throws IOException 
+   * @throws ClassNotFoundException 
+   * @throws InterruptedException 
    */
-  public static Job delaunayMapReduce(Path inPath, Path outPath, OperationsParams params) {
+  public static Job delaunayMapReduce(Path inPath, Path outPath, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
     Job job = new Job(params, "Delaunay Triangulation");
     job.setJarByClass(DelaunayTriangulation.class);
 
-    Shape shape = params.getShape("shape");
     // Set map and reduce
-    job.setMapperClass(DelaynayMap.class);
-    job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(shape.getClass());
-    job.setReducerClass(DelaynayReduce.class);
+    job.setMapperClass(DelaunayMap.class);
+    //job.setMapOutputKeyClass(NullWritable.class);
+    //job.setMapOutputValueClass(shape.getClass());
+    job.setReducerClass(DelaunayReduce.class);
     ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
 
@@ -174,7 +186,7 @@ public class DelaunayTriangulation {
     LOG.info("Read "+points.size()+" points and computing DT");
     GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())));
-    GuibasStolfiDelaunayAlgorithm.Triangulation dt = dtAlgorithm.compute();
+    Triangulation dt = dtAlgorithm.compute();
   }
   
   private static void printUsage() {

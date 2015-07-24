@@ -23,12 +23,12 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
 public class GuibasStolfiDelaunayAlgorithm {
   
   /**The original input set of points*/
-  private Point[] points;
+  Point[] points;
   /**Coordinates of all sites*/
-  private double[] xs, ys;
+  double[] xs, ys;
   /**All neighboring sites. Two neighbor sites have a common edge in the 
    * Delaunay triangulation*/
-  private IntArray[] neighbors;
+  IntArray[] neighbors;
 
   public <P extends Point> GuibasStolfiDelaunayAlgorithm(P[] points) {
     this.points = new Point[points.length];
@@ -46,23 +46,23 @@ public class GuibasStolfiDelaunayAlgorithm {
 
   /** Computes the Delaunay triangulation for the points */
   public Triangulation compute() {
-    Triangulation[] triangulations = new Triangulation[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
+    PartialAnswer[] triangulations = new PartialAnswer[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
     // Compute the trivial Delaunay triangles of every three consecutive points
     int i, t=0;
     for (i = 0; i < points.length - 4; i += 3) {
       // Compute Delaunay triangulation for three points
-      triangulations[t++] =  new Triangulation(i, i+1, i+2);
+      triangulations[t++] =  new PartialAnswer(i, i+1, i+2);
     }
     if (points.length - i == 4) {
       // Compute Delaunay triangulation for every two points
-       triangulations[t++] = new Triangulation(i, i+1);
-       triangulations[t++] = new Triangulation(i+2, i+3);
+       triangulations[t++] = new PartialAnswer(i, i+1);
+       triangulations[t++] = new PartialAnswer(i+2, i+3);
     } else if (points.length - i == 3) {
       // Compute for three points
-      triangulations[t++] = new Triangulation(i, i+1, i+2);
+      triangulations[t++] = new PartialAnswer(i, i+1, i+2);
     } else if (points.length - i == 2) {
       // Two points, connect with a line
-      triangulations[t++] = new Triangulation(i, i+1);
+      triangulations[t++] = new PartialAnswer(i, i+1);
     } else {
       throw new RuntimeException("Cannot happen");
     }
@@ -70,19 +70,19 @@ public class GuibasStolfiDelaunayAlgorithm {
     // Start the merge process
     while (triangulations.length > 1) {
       // Merge every pair of Deluanay triangulations
-      Triangulation[] newTriangulations = new Triangulation[triangulations.length / 2 + (triangulations.length & 1)];
+      PartialAnswer[] newTriangulations = new PartialAnswer[triangulations.length / 2 + (triangulations.length & 1)];
       int t2 = 0;
       int t1;
       for (t1 = 0; t1 < triangulations.length - 1; t1 += 2) {
-        Triangulation dt1 = triangulations[t1];
-        Triangulation dt2 = triangulations[t1+1];
-        newTriangulations[t2++] = new Triangulation(dt1, dt2);
+        PartialAnswer dt1 = triangulations[t1];
+        PartialAnswer dt2 = triangulations[t1+1];
+        newTriangulations[t2++] = new PartialAnswer(dt1, dt2);
       }
       if (t1 < triangulations.length)
         newTriangulations[t2++] = triangulations[t1];
       triangulations = newTriangulations;
     }
-    return triangulations[0];
+    return new Triangulation(this);
   }
   
   /**
@@ -90,7 +90,7 @@ public class GuibasStolfiDelaunayAlgorithm {
    * @author Ahmed Eldawy
    *
    */
-  class Triangulation {
+  class PartialAnswer {
     /**
      * The contiguous range of sites stored at this triangulation.
      * The range is inclusive of both site1 and site2
@@ -105,7 +105,7 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param s1
      * @param s2
      */
-    public Triangulation(int s1, int s2) {
+    public PartialAnswer(int s1, int s2) {
       site1 = s1;
       site2 = s2;
       neighbors[s1].add(s2);
@@ -120,7 +120,7 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param s2
      * @param s3
      */
-    public Triangulation(int s1, int s2, int s3) {
+    public PartialAnswer(int s1, int s2, int s3) {
       site1 = s1;
       site2 = s3;
       neighbors[s1].add(s2); neighbors[s1].add(s3);
@@ -134,7 +134,7 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param L
      * @param R
      */
-    public Triangulation(Triangulation L, Triangulation R) {
+    public PartialAnswer(PartialAnswer L, PartialAnswer R) {
       // Compute the convex hull of the result
       int[] bothHulls = new int[L.convexHull.length + R.convexHull.length];
       System.arraycopy(L.convexHull, 0, bothHulls, 0, L.convexHull.length);
