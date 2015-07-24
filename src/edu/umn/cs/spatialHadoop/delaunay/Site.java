@@ -8,7 +8,6 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.delaunay;
 
-import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
  * A site in Delaunay triangulation
@@ -17,10 +16,6 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  */
 public class Site {
   int id;
-  
-  /**All neighboring sites. A neighbor site has a common edge in the 
-   * Delaunay triangulation*/
-  IntArray neighbors = new IntArray();
   
   Site(int id) {
     this.id = id;

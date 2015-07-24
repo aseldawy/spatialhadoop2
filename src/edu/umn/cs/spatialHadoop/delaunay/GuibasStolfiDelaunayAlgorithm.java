@@ -7,6 +7,7 @@ import java.util.Stack;
 import java.util.Vector;
 
 import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
  * The divide and conquer Delaunay Triangulation algorithm as proposed in
@@ -22,7 +23,11 @@ public class GuibasStolfiDelaunayAlgorithm {
   
   private Site[] sites;
   private Point[] points;
+  /**Coordinates of all sites*/
   private double[] xs, ys;
+  /**All neighboring sites. A neighbor site has a common edge in the 
+   * Delaunay triangulation*/
+  private IntArray[] neighbors;
 
   public <P extends Point> GuibasStolfiDelaunayAlgorithm(P[] points) {
     this.points = new Point[points.length];
@@ -31,10 +36,12 @@ public class GuibasStolfiDelaunayAlgorithm {
     sites = new Site[this.points.length];
     this.xs = new double[this.points.length];
     this.ys = new double[this.points.length];
+    this.neighbors = new IntArray[this.points.length];
     for (int i = 0; i < this.points.length; i++) {
       xs[i] = this.points[i].x;
       ys[i] = this.points[i].y;
       sites[i] = new Site(i);
+      neighbors[i] = new IntArray();
     }
   }
 
@@ -98,8 +105,8 @@ public class GuibasStolfiDelaunayAlgorithm {
     public Triangulation(Site s1, Site s2) {
       site1 = s1.id;
       site2 = s2.id;
-      s1.neighbors.add(s2.id);
-      s2.neighbors.add(s1.id);
+      neighbors[s1.id].add(s2.id);
+      neighbors[s2.id].add(s1.id);
       convexHull = new Site[] {s1, s2};
     }
     
@@ -113,9 +120,9 @@ public class GuibasStolfiDelaunayAlgorithm {
     public Triangulation(Site s1, Site s2, Site s3) {
       site1 = s1.id;
       site2 = s3.id;
-      s1.neighbors.add(s2.id); s1.neighbors.add(s3.id);
-      s2.neighbors.add(s1.id); s2.neighbors.add(s3.id);
-      s3.neighbors.add(s1.id); s3.neighbors.add(s2.id);
+      neighbors[s1.id].add(s2.id); neighbors[s1.id].add(s3.id);
+      neighbors[s2.id].add(s1.id); neighbors[s2.id].add(s3.id);
+      neighbors[s3.id].add(s1.id); neighbors[s3.id].add(s2.id);
       convexHull = new Site[] {s1, s2, s3};
     }
     
@@ -155,15 +162,15 @@ public class GuibasStolfiDelaunayAlgorithm {
       boolean finished = false;
       do {
         // Add the base edge to the Delaunay triangulation
-        baseL.neighbors.add(baseR.id);
-        baseR.neighbors.add(baseL.id);
+        neighbors[baseL.id].add(baseR.id);
+        neighbors[baseR.id].add(baseL.id);
         // Search for the potential candidate on the right
         double anglePotential = -1, angleNextPotential = -1;
         Site potentialCandidate = null, nextPotentialCandidate = null;
-        for (int rNeighbor : baseR.neighbors) {
+        for (int rNeighbor : neighbors[baseR.id]) {
           if (rNeighbor >= R.site1 && rNeighbor <= R.site2) {
             // Check this RR edge
-            double cwAngle = calculateCWAngle(baseL, baseR, sites[rNeighbor]);
+            double cwAngle = calculateCWAngle(baseL.id, baseR.id, rNeighbor);
             if (potentialCandidate == null || cwAngle < anglePotential) {
               // Found a new potential candidate
               angleNextPotential = anglePotential;
@@ -181,7 +188,7 @@ public class GuibasStolfiDelaunayAlgorithm {
           if (nextPotentialCandidate != null) {
             // Check if the circumcircle of the base edge with the potential
             // candidate contains the next potential candidate
-            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+            Point circleCenter = calculateCircumCircleCenter(baseL.id, baseR.id, potentialCandidate.id);
             double dx = circleCenter.x - xs[nextPotentialCandidate.id];
             double dy = circleCenter.y - ys[nextPotentialCandidate.id];
             double d1 = dx * dx + dy * dy;
@@ -190,8 +197,8 @@ public class GuibasStolfiDelaunayAlgorithm {
             double d2 = dx * dx + dy * dy;
             if (d1 < d2) {
               // Delete the RR edge between baseR and rPotentialCandidate and restart
-              baseR.neighbors.remove(potentialCandidate.id);
-              potentialCandidate.neighbors.remove(baseR.id);
+              neighbors[baseR.id].remove(potentialCandidate.id);
+              neighbors[potentialCandidate.id].remove(baseR.id);
               continue;
             } else {
               rCandidate = potentialCandidate;
@@ -204,10 +211,10 @@ public class GuibasStolfiDelaunayAlgorithm {
         // Search for the potential candidate on the left
         anglePotential = -1; angleNextPotential = -1;
         potentialCandidate = null; nextPotentialCandidate = null;
-        for (int lNeighbor : baseL.neighbors) {
+        for (int lNeighbor : neighbors[baseL.id]) {
           if (lNeighbor >= L.site1 && lNeighbor <= L.site2) {
             // Check this LL edge
-            double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, sites[lNeighbor]);
+            double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR.id, baseL.id, lNeighbor);
             if (potentialCandidate == null || ccwAngle < anglePotential) {
               // Found a new potential candidate
               angleNextPotential = anglePotential;
@@ -225,7 +232,7 @@ public class GuibasStolfiDelaunayAlgorithm {
           if (nextPotentialCandidate != null) {
             // Check if the circumcircle of the base edge with the potential
             // candidate contains the next potential candidate
-            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+            Point circleCenter = calculateCircumCircleCenter(baseL.id, baseR.id, potentialCandidate.id);
             double dx = circleCenter.x - xs[nextPotentialCandidate.id];
             double dy = circleCenter.y - ys[nextPotentialCandidate.id];
             double d1 = dx * dx + dy * dy;
@@ -234,8 +241,8 @@ public class GuibasStolfiDelaunayAlgorithm {
             double d2 = dx * dx + dy * dy;
             if (d1 < d2) {
               // Delete the LL edge between baseR and rPotentialCandidate and restart
-              baseL.neighbors.remove(potentialCandidate.id);
-              potentialCandidate.neighbors.remove(baseL.id);
+              neighbors[baseL.id].remove(potentialCandidate.id);
+              neighbors[potentialCandidate.id].remove(baseL.id);
               continue;
             } else {
               lCandidate = potentialCandidate;
@@ -248,7 +255,7 @@ public class GuibasStolfiDelaunayAlgorithm {
         // Choose the right candidate
         if (lCandidate != null && rCandidate != null) {
           // Two candidates, choose the correct one
-          Point circumCircleL = calculateCircumCircleCenter(lCandidate, baseL, baseR);
+          Point circumCircleL = calculateCircumCircleCenter(lCandidate.id, baseL.id, baseR.id);
           double dx = circumCircleL.x - xs[lCandidate.id];
           double dy = circumCircleL.y - ys[lCandidate.id];
           double lCandidateDistance = dx * dx + dy * dy;
@@ -286,7 +293,7 @@ public class GuibasStolfiDelaunayAlgorithm {
     public void draw() {
       int i =0;
       for (int s1 = site1; s1 <= site2; s1++) {
-        for (int s2 : sites[s1].neighbors) {
+        for (int s2 : neighbors[s1]) {
           System.out.printf("line %f, %f, %f, %f, :id=>'%d,%d'\n", xs[s1], ys[s1], xs[s2], ys[s2], s1, s2);
           i++;
         }
@@ -299,7 +306,7 @@ public class GuibasStolfiDelaunayAlgorithm {
       List<Point> starts = new Vector<Point>();
       List<Point> ends = new Vector<Point>();
       for (int s1 = site1; s1 <= site2; s1++) {
-        for (int s2 : sites[s1].neighbors) {
+        for (int s2 : neighbors[s1]) {
           starts.add(new Point(xs[s1], ys[s1]));
           ends.add(new Point(xs[s2], ys[s2]));
         }
@@ -347,23 +354,23 @@ public class GuibasStolfiDelaunayAlgorithm {
     return false;
   }
   
-  double calculateCWAngle(Site s1, Site s2, Site s3) {
-    double angle1 = Math.atan2(ys[s1.id] - ys[s2.id], xs[s1.id] - xs[s2.id]);
-    double angle2 = Math.atan2(ys[s3.id] - ys[s2.id], xs[s3.id] - xs[s2.id]);
+  double calculateCWAngle(int s1, int s2, int s3) {
+    double angle1 = Math.atan2(ys[s1] - ys[s2], xs[s1] - xs[s2]);
+    double angle2 = Math.atan2(ys[s3] - ys[s2], xs[s3] - xs[s2]);
     return angle1 > angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
   }
 
-  Point calculateCircumCircleCenter(Site s1, Site s2, Site s3) {
+  Point calculateCircumCircleCenter(int s1, int s2, int s3) {
     // Calculate the perpendicular bisector of the first two points
-    double x1 = (xs[s1.id] + xs[s2.id]) / 2;
-    double y1 = (ys[s1.id] + ys[s2.id]) /2;
-    double x2 = x1 + ys[s2.id] - ys[s1.id];
-    double y2 = y1 + xs[s1.id] - xs[s2.id];
+    double x1 = (xs[s1] + xs[s2]) / 2;
+    double y1 = (ys[s1] + ys[s2]) /2;
+    double x2 = x1 + ys[s2] - ys[s1];
+    double y2 = y1 + xs[s1] - xs[s2];
     // Calculate the perpendicular bisector of the second two points 
-    double x3 = (xs[s3.id] + xs[s2.id]) / 2;
-    double y3 = (ys[s3.id] + ys[s2.id]) / 2;
-    double x4 = x3 + ys[s2.id] - ys[s3.id];
-    double y4 = y3 + xs[s3.id] - xs[s2.id];
+    double x3 = (xs[s3] + xs[s2]) / 2;
+    double y3 = (ys[s3] + ys[s2]) / 2;
+    double x4 = x3 + ys[s2] - ys[s3];
+    double y4 = y3 + xs[s3] - xs[s2];
     
     // Calculate the intersection of the two new lines
     // See https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
