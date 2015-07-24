@@ -81,8 +81,11 @@ public class GuibasStolfiDelaunayAlgorithm {
   
   
   class Triangulation {
-    /**All sites (points) in the triangulation*/
-    Site[] allSites;
+    /**
+     * The contiguous range of sites stored at this triangulation.
+     * The range is inclusive of both site1 and site2
+     */
+    int site1, site2;
     /**Sites on the convex null of the triangulation*/
     Site[] convexHull;
     
@@ -93,10 +96,11 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param s2
      */
     public Triangulation(Site s1, Site s2) {
-      allSites = new Site[] {s1, s2};
+      site1 = s1.id;
+      site2 = s2.id;
       s1.neighbors.add(s2.id);
       s2.neighbors.add(s1.id);
-      convexHull = allSites;
+      convexHull = new Site[] {s1, s2};
     }
     
     /**
@@ -107,11 +111,12 @@ public class GuibasStolfiDelaunayAlgorithm {
      * @param s3
      */
     public Triangulation(Site s1, Site s2, Site s3) {
-      allSites = new Site[] {s1, s2, s3};
+      site1 = s1.id;
+      site2 = s3.id;
       s1.neighbors.add(s2.id); s1.neighbors.add(s3.id);
       s2.neighbors.add(s1.id); s2.neighbors.add(s3.id);
       s3.neighbors.add(s1.id); s3.neighbors.add(s2.id);
-      convexHull = allSites;
+      convexHull = new Site[] {s1, s2, s3};
     }
     
     /**
@@ -156,7 +161,7 @@ public class GuibasStolfiDelaunayAlgorithm {
         double anglePotential = -1, angleNextPotential = -1;
         Site potentialCandidate = null, nextPotentialCandidate = null;
         for (int rNeighbor : baseR.neighbors) {
-          if (inArray(R.allSites, sites[rNeighbor])) {
+          if (rNeighbor >= R.site1 && rNeighbor <= R.site2) {
             // Check this RR edge
             double cwAngle = calculateCWAngle(baseL, baseR, sites[rNeighbor]);
             if (potentialCandidate == null || cwAngle < anglePotential) {
@@ -200,7 +205,7 @@ public class GuibasStolfiDelaunayAlgorithm {
         anglePotential = -1; angleNextPotential = -1;
         potentialCandidate = null; nextPotentialCandidate = null;
         for (int lNeighbor : baseL.neighbors) {
-          if (inArray(L.allSites, sites[lNeighbor])) {
+          if (lNeighbor >= L.site1 && lNeighbor <= L.site2) {
             // Check this LL edge
             double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, sites[lNeighbor]);
             if (potentialCandidate == null || ccwAngle < anglePotential) {
@@ -274,16 +279,15 @@ public class GuibasStolfiDelaunayAlgorithm {
       } while (!finished);
       
       // Merge both L and R
-      this.allSites = new Site[L.allSites.length + R.allSites.length];
-      System.arraycopy(L.allSites, 0, this.allSites, 0, L.allSites.length);
-      System.arraycopy(R.allSites, 0, this.allSites, L.allSites.length, R.allSites.length);
+      this.site1 = L.site1;
+      this.site2 = R.site2;
     }
 
     public void draw() {
       int i =0;
-      for (Site s1 : allSites) {
-        for (int s2 : s1.neighbors) {
-          System.out.printf("line %f, %f, %f, %f, :id=>'%d,%d'\n", xs[s1.id], ys[s1.id], xs[s2], ys[s2], s1.id, s2);
+      for (int s1 = site1; s1 <= site2; s1++) {
+        for (int s2 : sites[s1].neighbors) {
+          System.out.printf("line %f, %f, %f, %f, :id=>'%d,%d'\n", xs[s1], ys[s1], xs[s2], ys[s2], s1, s2);
           i++;
         }
       }
@@ -294,9 +298,9 @@ public class GuibasStolfiDelaunayAlgorithm {
       final double threshold = 1E-6;
       List<Point> starts = new Vector<Point>();
       List<Point> ends = new Vector<Point>();
-      for (Site s1 : allSites) {
-        for (int s2 : s1.neighbors) {
-          starts.add(new Point(xs[s1.id], ys[s1.id]));
+      for (int s1 = site1; s1 <= site2; s1++) {
+        for (int s2 : sites[s1].neighbors) {
+          starts.add(new Point(xs[s1], ys[s1]));
           ends.add(new Point(xs[s2], ys[s2]));
         }
       }
