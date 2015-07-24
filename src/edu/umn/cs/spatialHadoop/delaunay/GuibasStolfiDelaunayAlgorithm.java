@@ -20,7 +20,6 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  */
 public class GuibasStolfiDelaunayAlgorithm {
   
-  private Site[] sites;
   private Point[] points;
   /**Coordinates of all sites*/
   private double[] xs, ys;
@@ -32,24 +31,22 @@ public class GuibasStolfiDelaunayAlgorithm {
     this.points = new Point[points.length];
     System.arraycopy(points, 0, this.points, 0, points.length);
     Arrays.sort(this.points);
-    sites = new Site[this.points.length];
     this.xs = new double[this.points.length];
     this.ys = new double[this.points.length];
     this.neighbors = new IntArray[this.points.length];
     for (int i = 0; i < this.points.length; i++) {
       xs[i] = this.points[i].x;
       ys[i] = this.points[i].y;
-      sites[i] = new Site(i);
       neighbors[i] = new IntArray();
     }
   }
 
   /** Computes the Delaunay triangulation for the points */
   public Triangulation compute() {
-    Triangulation[] triangulations = new Triangulation[sites.length / 3 + (sites.length % 3 == 0 ? 0 : 1)];
+    Triangulation[] triangulations = new Triangulation[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
     // Compute the trivial Delaunay triangles of every three consecutive points
     int i, t=0;
-    for (i = 0; i < sites.length - 4; i += 3) {
+    for (i = 0; i < points.length - 4; i += 3) {
       // Compute Delaunay triangulation for three points
       triangulations[t++] =  new Triangulation(i, i+1, i+2);
     }
@@ -138,21 +135,21 @@ public class GuibasStolfiDelaunayAlgorithm {
       this.convexHull = convexHull(bothHulls);
       
       // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
-      Site baseL = null, baseR = null;
+      int baseL = -1, baseR = -1;
       for (int i = 0; i < this.convexHull.length; i++) {
         int p1 = this.convexHull[i];
         int p2 = i == this.convexHull.length - 1 ? this.convexHull[0] : this.convexHull[i+1];
         if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
-          if (baseL == null || (ys[p1] <= ys[baseL.id] && ys[p2] <= ys[baseR.id]) /*||
+          if (baseL == -1 || (ys[p1] <= ys[baseL] && ys[p2] <= ys[baseR]) /*||
               (p1.x <= baseL.x && p2.x <= baseR.x)*/) {
-            baseL = sites[p1];
-            baseR = sites[p2];
+            baseL = p1;
+            baseR = p2;
           }
         } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
-          if (baseL == null || (ys[p2] <= ys[baseL.id] && ys[p1] <= ys[baseR.id]) /*||
+          if (baseL == -1 || (ys[p2] <= ys[baseL] && ys[p1] <= ys[baseR]) /*||
               (p2.x <= baseL.x && p1.x <= baseR.x)*/) {
-            baseL = sites[p2];
-            baseR = sites[p1];
+            baseL = p2;
+            baseR = p1;
           }
         }
       }
@@ -161,43 +158,43 @@ public class GuibasStolfiDelaunayAlgorithm {
       boolean finished = false;
       do {
         // Add the base edge to the Delaunay triangulation
-        neighbors[baseL.id].add(baseR.id);
-        neighbors[baseR.id].add(baseL.id);
+        neighbors[baseL].add(baseR);
+        neighbors[baseR].add(baseL);
         // Search for the potential candidate on the right
         double anglePotential = -1, angleNextPotential = -1;
-        Site potentialCandidate = null, nextPotentialCandidate = null;
-        for (int rNeighbor : neighbors[baseR.id]) {
+        int potentialCandidate = -1, nextPotentialCandidate = -1;
+        for (int rNeighbor : neighbors[baseR]) {
           if (rNeighbor >= R.site1 && rNeighbor <= R.site2) {
             // Check this RR edge
-            double cwAngle = calculateCWAngle(baseL.id, baseR.id, rNeighbor);
-            if (potentialCandidate == null || cwAngle < anglePotential) {
+            double cwAngle = calculateCWAngle(baseL, baseR, rNeighbor);
+            if (potentialCandidate == -1 || cwAngle < anglePotential) {
               // Found a new potential candidate
               angleNextPotential = anglePotential;
               nextPotentialCandidate = potentialCandidate;
               anglePotential = cwAngle;
-              potentialCandidate = sites[rNeighbor];
-            } else if (nextPotentialCandidate == null | cwAngle < angleNextPotential) {
+              potentialCandidate = rNeighbor;
+            } else if (nextPotentialCandidate == -1 || cwAngle < angleNextPotential) {
               angleNextPotential = cwAngle;
-              nextPotentialCandidate = sites[rNeighbor];
+              nextPotentialCandidate = rNeighbor;
             }
           }
         }
-        Site rCandidate = null;
+        int rCandidate = -1;
         if (anglePotential < Math.PI) {
-          if (nextPotentialCandidate != null) {
+          if (nextPotentialCandidate != -1) {
             // Check if the circumcircle of the base edge with the potential
             // candidate contains the next potential candidate
-            Point circleCenter = calculateCircumCircleCenter(baseL.id, baseR.id, potentialCandidate.id);
-            double dx = circleCenter.x - xs[nextPotentialCandidate.id];
-            double dy = circleCenter.y - ys[nextPotentialCandidate.id];
+            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+            double dx = circleCenter.x - xs[nextPotentialCandidate];
+            double dy = circleCenter.y - ys[nextPotentialCandidate];
             double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - xs[potentialCandidate.id];
-            dy = circleCenter.y - ys[potentialCandidate.id];
+            dx = circleCenter.x - xs[potentialCandidate];
+            dy = circleCenter.y - ys[potentialCandidate];
             double d2 = dx * dx + dy * dy;
             if (d1 < d2) {
               // Delete the RR edge between baseR and rPotentialCandidate and restart
-              neighbors[baseR.id].remove(potentialCandidate.id);
-              neighbors[potentialCandidate.id].remove(baseR.id);
+              neighbors[baseR].remove(potentialCandidate);
+              neighbors[potentialCandidate].remove(baseR);
               continue;
             } else {
               rCandidate = potentialCandidate;
@@ -209,39 +206,39 @@ public class GuibasStolfiDelaunayAlgorithm {
         
         // Search for the potential candidate on the left
         anglePotential = -1; angleNextPotential = -1;
-        potentialCandidate = null; nextPotentialCandidate = null;
-        for (int lNeighbor : neighbors[baseL.id]) {
+        potentialCandidate = -1; nextPotentialCandidate = -1;
+        for (int lNeighbor : neighbors[baseL]) {
           if (lNeighbor >= L.site1 && lNeighbor <= L.site2) {
             // Check this LL edge
-            double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR.id, baseL.id, lNeighbor);
-            if (potentialCandidate == null || ccwAngle < anglePotential) {
+            double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, lNeighbor);
+            if (potentialCandidate == -1 || ccwAngle < anglePotential) {
               // Found a new potential candidate
               angleNextPotential = anglePotential;
               nextPotentialCandidate = potentialCandidate;
               anglePotential = ccwAngle;
-              potentialCandidate = sites[lNeighbor];
-            } else if (nextPotentialCandidate == null | ccwAngle < angleNextPotential) {
+              potentialCandidate = lNeighbor;
+            } else if (nextPotentialCandidate == -1 || ccwAngle < angleNextPotential) {
               angleNextPotential = ccwAngle;
-              nextPotentialCandidate = sites[lNeighbor];
+              nextPotentialCandidate = lNeighbor;
             }
           }
         }
-        Site lCandidate = null;
+        int lCandidate = -1;
         if (anglePotential < Math.PI) {
-          if (nextPotentialCandidate != null) {
+          if (nextPotentialCandidate != -1) {
             // Check if the circumcircle of the base edge with the potential
             // candidate contains the next potential candidate
-            Point circleCenter = calculateCircumCircleCenter(baseL.id, baseR.id, potentialCandidate.id);
-            double dx = circleCenter.x - xs[nextPotentialCandidate.id];
-            double dy = circleCenter.y - ys[nextPotentialCandidate.id];
+            Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+            double dx = circleCenter.x - xs[nextPotentialCandidate];
+            double dy = circleCenter.y - ys[nextPotentialCandidate];
             double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - xs[potentialCandidate.id];
-            dy = circleCenter.y - ys[potentialCandidate.id];
+            dx = circleCenter.x - xs[potentialCandidate];
+            dy = circleCenter.y - ys[potentialCandidate];
             double d2 = dx * dx + dy * dy;
             if (d1 < d2) {
               // Delete the LL edge between baseR and rPotentialCandidate and restart
-              neighbors[baseL.id].remove(potentialCandidate.id);
-              neighbors[potentialCandidate.id].remove(baseL.id);
+              neighbors[baseL].remove(potentialCandidate);
+              neighbors[potentialCandidate].remove(baseL);
               continue;
             } else {
               lCandidate = potentialCandidate;
@@ -252,29 +249,29 @@ public class GuibasStolfiDelaunayAlgorithm {
         }
         
         // Choose the right candidate
-        if (lCandidate != null && rCandidate != null) {
+        if (lCandidate != -1 && rCandidate != -1) {
           // Two candidates, choose the correct one
-          Point circumCircleL = calculateCircumCircleCenter(lCandidate.id, baseL.id, baseR.id);
-          double dx = circumCircleL.x - xs[lCandidate.id];
-          double dy = circumCircleL.y - ys[lCandidate.id];
+          Point circumCircleL = calculateCircumCircleCenter(lCandidate, baseL, baseR);
+          double dx = circumCircleL.x - xs[lCandidate];
+          double dy = circumCircleL.y - ys[lCandidate];
           double lCandidateDistance = dx * dx + dy * dy;
-          dx = circumCircleL.x - xs[rCandidate.id];
-          dy = circumCircleL.y - ys[rCandidate.id];
+          dx = circumCircleL.x - xs[rCandidate];
+          dy = circumCircleL.y - ys[rCandidate];
           double rCandidateDistance = dx * dx + dy * dy;
           if (lCandidateDistance < rCandidateDistance) {
             // rCandidate is outside the circumcircle, lCandidate is correct
-            rCandidate = null;
+            rCandidate = -1;
           } else {
             // rCandidate is inside the circumcircle, lCandidate is incorrect
-            lCandidate = null;
+            lCandidate = -1;
           }
         }
         
-        if (lCandidate != null) {
+        if (lCandidate != -1) {
           // Left candidate has been chosen
           // Make lPotentialCandidate and baseR the new base line
           baseL = lCandidate;
-        } else if (rCandidate != null) {
+        } else if (rCandidate != -1) {
           // Right candidate has been chosen
           // Make baseL and rPotentialCandidate the new base line
           baseR = rCandidate;
