@@ -18,19 +18,30 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.JobClient;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.operations.UltimateUnion;
+import edu.umn.cs.spatialHadoop.operations.UltimateUnion.UltimateUnionMap;
+import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
 
 /**
  * Computes the Delaunay triangulation for a set of points.
@@ -43,6 +54,48 @@ public class DelaunayTriangulation {
   
   static final Log LOG = LogFactory.getLog(DelaunayTriangulation.class);
   
+  public static class DelaunayMap<S extends Shape>
+    extends Mapper<Rectangle, Iterable<S>, NullWritable, RasterLayer> {
+  }
+  
+  /**
+   * Run the Dealuany Triangulation algorithm in MapReduce
+   * @param inPath
+   * @param outPath
+   * @param params
+   * @return
+   */
+  public static Job delaunayMapReduce(Path inPath, Path outPath, OperationsParams params) {
+    Job job = new Job(params, "Delaunay Triangulation");
+    job.setJarByClass(DelaunayTriangulation.class);
+
+    Shape shape = params.getShape("shape");
+    // Set map and reduce
+    job.setMapperClass(DelaynayMap.class);
+    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputValueClass(shape.getClass());
+    job.setReducerClass(DelaynayReduce.class);
+    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
+
+    // Set input and output
+    job.setInputFormatClass(SpatialInputFormat3.class);
+    SpatialInputFormat3.addInputPath(job, inPath);
+
+    job.setOutputFormatClass(TextOutputFormat.class);
+    TextOutputFormat.setOutputPath(job, outPath);
+
+    // Submit the job
+    if (!params.getBoolean("background", false)) {
+      job.waitForCompletion(false);
+      if (!job.isSuccessful())
+        throw new RuntimeException("Job failed!");
+    } else {
+      job.submit();
+    }
+    return job;
+  }
+
   /**
    * Compute the Deluanay triangulation in the local machine
    * @param inPath
@@ -122,15 +175,17 @@ public class DelaunayTriangulation {
     GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())));
     GuibasStolfiDelaunayAlgorithm.Triangulation dt = dtAlgorithm.compute();
-    dt.test();
-    dt.deleteSafeEdges(new Rectangle(-180, -90, 180, 90));
-    System.out.println("----------------");
-    dt.draw();
   }
-
+  
   private static void printUsage() {
-    // TODO Auto-generated method stub
-    
+    System.out.println("Delaunay Triangulation");
+    System.out.println("Computes the delaunay triangulation of a set of points.");
+    System.out.println("Parameters: (* marks required parameters)");
+    System.out.println("<input file>: (*) Path to file that contains all shapes");
+    System.out.println("<output file>: (*) Path to output file");
+    System.out.println("shape:<s> - Type of shapes stored in the input file");
+    System.out.println("-dup - Automatically remove duplicates in the input");
+    System.out.println("-local - Implement a local machine algorithm (no MapReduce)");
   }
 
   /**

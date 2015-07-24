@@ -22,10 +22,11 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  */
 public class GuibasStolfiDelaunayAlgorithm {
   
+  /**The original input set of points*/
   private Point[] points;
   /**Coordinates of all sites*/
   private double[] xs, ys;
-  /**All neighboring sites. A neighbor site has a common edge in the 
+  /**All neighboring sites. Two neighbor sites have a common edge in the 
    * Delaunay triangulation*/
   private IntArray[] neighbors;
 
@@ -84,7 +85,11 @@ public class GuibasStolfiDelaunayAlgorithm {
     return triangulations[0];
   }
   
-  
+  /**
+   * A class that stores a set of triangles for part of the sites.
+   * @author Ahmed Eldawy
+   *
+   */
   class Triangulation {
     /**
      * The contiguous range of sites stored at this triangulation.
