@@ -283,7 +283,7 @@ public class GuibasStolfiDelaunayAlgorithm {
       int i =0;
       for (Site s1 : allSites) {
         for (int s2 : s1.neighbors) {
-          System.out.printf("line %f, %f, %f, %f\n", xs[s1.id], ys[s1.id], xs[s2], ys[s2]);
+          System.out.printf("line %f, %f, %f, %f, :id=>'%d,%d'\n", xs[s1.id], ys[s1.id], xs[s2], ys[s2], s1.id, s2);
           i++;
         }
       }
@@ -291,7 +291,7 @@ public class GuibasStolfiDelaunayAlgorithm {
     }
     
     public boolean test() {
-      final double threshold = 1E-5;
+      final double threshold = 1E-6;
       List<Point> starts = new Vector<Point>();
       List<Point> ends = new Vector<Point>();
       for (Site s1 : allSites) {
@@ -311,15 +311,23 @@ public class GuibasStolfiDelaunayAlgorithm {
           double y3 = starts.get(j).y;
           double x4 = ends.get(j).x;
           double y4 = ends.get(j).y;
-          
+
           double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-          double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
-          double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
-          if ((ix - x1 > threshold && ix - x2 < -threshold) && (iy - y1 > threshold && iy - y2 < -threshold) &&
-              (ix - x3 > threshold && ix - x4 < -threshold) && (iy - y3 > threshold && iy - y4 < -threshold)) {
+          double ix = (x1 * y2 - y1 * x2) * (x3 - x4) / den - (x1 - x2) * (x3 * y4 - y3 * x4) / den;
+          double iy = (x1 * y2 - y1 * x2) * (y3 - y4) / den - (y1 - y2) * (x3 * y4 - y3 * x4) / den;
+          double minx1 = Math.min(x1, x2);
+          double maxx1 = Math.max(x1, x2); 
+          double miny1 = Math.min(y1, y2);
+          double maxy1 = Math.max(y1, y2); 
+          double minx2 = Math.min(x3, x4);
+          double maxx2 = Math.max(x3, x4); 
+          double miny2 = Math.min(y3, y4);
+          double maxy2 = Math.max(y3, y4); 
+          if ((ix - minx1 > threshold && ix - maxx1 < -threshold) && (iy - miny1 > threshold && iy - maxy1 < -threshold) &&
+              (ix - minx2 > threshold && ix - maxx2 < -threshold) && (iy - miny2 > threshold && iy - maxy2 < -threshold)) {
             System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
             System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
-            System.out.printf("point %f, %f\n", ix, iy);
+            System.out.printf("circle %f, %f, 0.5\n", ix, iy);
             throw new RuntimeException("error");
           }
         }
@@ -358,6 +366,18 @@ public class GuibasStolfiDelaunayAlgorithm {
     double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
     double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
     double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
+    
+    // We can also use the following equations from
+    // http://mathforum.org/library/drmath/view/62814.html
+//    double v12x = x2 - x1;
+//    double v12y = y2 - y1;
+//    double v34x = x4 - x3;
+//    double v34y = y4 - y3;
+//    
+//    double a = ((x3 - x1) * v34y - (y3 - y1) * v34x) / (v12x * v34y - v12y * v34x);
+//    double ix = x1 + a * v12x;
+//    double iy = y1 + a * v12y;
+    
     return new Point(ix, iy);
   }
   

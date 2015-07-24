@@ -166,6 +166,7 @@ public class IntArray implements Writable, Iterable<Integer> {
     for (int i = 0; i < size; i++) {
       if (array[i] == value) {
         System.arraycopy(array, i + 1, array, i, size - (i + 1));
+        size--;
         return true;
       }
     }
