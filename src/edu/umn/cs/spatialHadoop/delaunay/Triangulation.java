@@ -11,10 +11,14 @@ package edu.umn.cs.spatialHadoop.delaunay;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
 import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.io.TextSerializable;
+import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
@@ -24,8 +28,10 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  * @author Ahmed Eldawy
  *
  */
-public class Triangulation implements Writable {
+public class Triangulation implements Writable, TextSerializable {
+  /**A list of all points in this triangulation.*/
   Point[] sites;
+  /**A set of all edges, each connecting two points in the triangulation*/
   int[] edgeStarts, edgeEnds;
   
   public Triangulation() {}
@@ -51,6 +57,47 @@ public class Triangulation implements Writable {
     }
     if (numEdges != 0)
       throw new RuntimeException("Error in edges");
+  }
+  
+  /**
+   * Remove all unnecessary nodes.
+   */
+  void compact() {
+    // Detect which nodes are connected and which are disconnected
+    BitArray connectedNodes = new BitArray(sites.length);
+    int newSiteCount = 0;
+    for (int i = 0; i < edgeStarts.length; i++) {
+      if (!connectedNodes.get(edgeStarts[i])) {
+        newSiteCount++;
+        connectedNodes.set(edgeStarts[i], true);
+      }
+      if (!connectedNodes.get(edgeEnds[i])) {
+        newSiteCount++;
+        connectedNodes.set(edgeEnds[i], true);
+      }
+    }
+    
+    // Create a mapping from each old node ID to a new node ID.
+    // Old node ID is a position in the current (soon to be old) sites array.
+    // New node ID is a position in the new (soon to be created) sites array.
+    int maxID = 0;
+    Point[] newSites = new Point[newSiteCount];
+    int[] newNodeIDs = new int[sites.length];
+    for (int oldNodeID = 0; oldNodeID < sites.length; oldNodeID++) {
+      if (connectedNodes.get(oldNodeID)) {
+        newSites[maxID] = sites[oldNodeID];
+        newNodeIDs[oldNodeID] = maxID++;
+      }
+    }
+    if (maxID != newSiteCount)
+      throw new RuntimeException(String.format("Error in compaction. Copied only %d sites instead of %d", maxID, newSiteCount));
+    this.sites = newSites;
+    
+    // Update all edges accordingly
+    for (int i = 0; i < edgeStarts.length; i++) {
+      edgeStarts[i] = newNodeIDs[edgeStarts[i]];
+      edgeEnds[i] = newNodeIDs[edgeEnds[i]];
+    }
   }
   
   @Override
@@ -98,6 +145,39 @@ public class Triangulation implements Writable {
           sites[edgeStarts[i]].y, sites[edgeEnds[i]].x, sites[edgeEnds[i]].y);
     }
     System.out.println("}");
+  }
+
+  static final byte[] SEPARATOR = new byte[] {'\t'};
+  /**New line marker to separate records*/
+  protected static byte[] NEW_LINE;
+  
+  static {
+    try {
+      NEW_LINE = System.getProperty("line.separator", "\n").getBytes("utf-8");
+    } catch (UnsupportedEncodingException e) {
+      e.printStackTrace();
+      throw new RuntimeException("Cannot retrieve system line separator", e);
+    }
+  }  
+  
+  @Override
+  public Text toText(Text text) {
+    for (int i = 0; i < edgeStarts.length; i++) {
+      // Add a line separator except before first line
+      if (i > 0)
+        text.append(NEW_LINE, 0, NEW_LINE.length);
+      Point startNode = sites[edgeStarts[i]];
+      Point endNode = sites[edgeEnds[i]];
+      startNode.toText(text);
+      text.append(SEPARATOR, 0, SEPARATOR.length);
+      endNode.toText(text);
+    }
+    return text;
+  }
+
+  @Override
+  public void fromText(Text text) {
+    throw new RuntimeException("Not yet implemented");
   }
   
 }

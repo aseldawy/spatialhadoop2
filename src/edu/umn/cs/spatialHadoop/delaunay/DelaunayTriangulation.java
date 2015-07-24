@@ -17,6 +17,7 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -52,25 +53,90 @@ public class DelaunayTriangulation {
   static final Log LOG = LogFactory.getLog(DelaunayTriangulation.class);
   
   /**
-   * The map function computes the Delaunay trianguation for a partition and
-   * splits the triangulation into safe and non-safe edges. Safe edges are
-   * final and are written to the output, while non-safe edges can be modified
-   * and are sent to the reduce function. 
-   * @author Ahmed Eldawy
-   *
-   * @param <S>
+   * The map function computes the DT for a partition and splits the
+   * triangulation into safe and non-safe edges. Safe edges are final and are
+   * written to the output, while non-safe edges can be modified and are sent to
+   * the reduce function.
+   * 
+   * @param <S> - The type of shape for sites
    */
   public static class DelaunayMap<S extends Point>
     extends Mapper<Rectangle, Iterable<S>, NullWritable, Triangulation> {
+    
+    /**Whether the map function should remove duplicates in the input or not*/
+    private boolean deduplicate;
+    /**Threshold used in duplicate detection*/
+    private float threshold;
+
+    @Override
+    protected void setup(Context context) throws IOException,
+        InterruptedException {
+      Configuration conf = context.getConfiguration();
+      this.deduplicate = conf.getBoolean("dedup", true);
+      if (deduplicate)
+        this.threshold = conf.getFloat("threshold", 1E-5f);
+    }
+    
+    @Override
+    protected void map(Rectangle key, Iterable<S> values, Context context)
+        throws IOException, InterruptedException {
+      List<S> sites = new Vector<S>();
+      for (S site : values)
+        sites.add((S) site.clone());
+      
+      if (deduplicate) {
+        LOG.info("Removing duplicates from "+sites.size()+" points");
+        // Remove duplicates to ensure correctness
+        Collections.sort(sites);
+        
+        int i = 1;
+        while (i < sites.size()) {
+          S s1 = sites.get(i-1);
+          S s2 = sites.get(i);
+          if (Math.abs(s1.x - s2.x) < threshold &&
+              Math.abs(s1.y - s2.y) < threshold)
+            sites.remove(i);
+          else
+            i++;
+        }
+        LOG.info("Duplicates removed and only "+sites.size()+" points left");
+      }
+      
+      GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
+          sites.toArray(new Point[sites.size()]), context);
+      context.setStatus("Computing DT");
+      algo.compute();
+      if (key.isValid()) {
+        context.setStatus("Splitting DT");
+        Triangulation finalPart = new Triangulation();
+        Triangulation nonfinalPart = new Triangulation();
+        algo.splitIntoFinalAndNonFinalParts(key, finalPart, nonfinalPart);
+        // TODO write final part to the output path
+        context.write(NullWritable.get(), nonfinalPart);
+      } else {
+        context.setStatus("Writing DT");
+        context.write(NullWritable.get(), algo.getFinalAnswer());
+      }
+    }
   }
 
   public static class DelaunayReduce
   extends Reducer<NullWritable, Triangulation, NullWritable, Triangulation> {
+    
+    @Override
+    protected void reduce(NullWritable dummy, Iterable<Triangulation> values,
+        Context context) throws IOException, InterruptedException {
+      List<Triangulation> partialAnswers = new Vector<Triangulation>();
+      for (Triangulation t : values)
+        partialAnswers.add(t);
+      
+      // TODO run the merge step
+    }
   }
 
   /**
-   * Run the Dealuany Triangulation algorithm in MapReduce
-   * @param inPath
+   * Run the DT algorithm in MapReduce
+   * @param inPaths
    * @param outPath
    * @param params
    * @return
@@ -78,21 +144,21 @@ public class DelaunayTriangulation {
    * @throws ClassNotFoundException 
    * @throws InterruptedException 
    */
-  public static Job delaunayMapReduce(Path inPath, Path outPath, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
+  public static Job delaunayMapReduce(Path[] inPaths, Path outPath, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
     Job job = new Job(params, "Delaunay Triangulation");
     job.setJarByClass(DelaunayTriangulation.class);
 
     // Set map and reduce
     job.setMapperClass(DelaunayMap.class);
-    //job.setMapOutputKeyClass(NullWritable.class);
-    //job.setMapOutputValueClass(shape.getClass());
+    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputValueClass(Triangulation.class);
     job.setReducerClass(DelaunayReduce.class);
     ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
 
     // Set input and output
     job.setInputFormatClass(SpatialInputFormat3.class);
-    SpatialInputFormat3.addInputPath(job, inPath);
+    SpatialInputFormat3.setInputPaths(job, inPaths);
 
     job.setOutputFormatClass(TextOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outPath);
@@ -110,20 +176,20 @@ public class DelaunayTriangulation {
 
   /**
    * Compute the Deluanay triangulation in the local machine
-   * @param inPath
+   * @param inPaths
    * @param outPath
    * @param params
    * @throws IOException
    * @throws InterruptedException
    */
-  public static <P extends Point> void delaunayLocal(Path inPath, Path outPath,
+  public static <P extends Point> void delaunayLocal(Path[] inPaths, Path outPath,
       OperationsParams params) throws IOException, InterruptedException {
     // 1- Split the input path/file to get splits that can be processed
     // independently
     final SpatialInputFormat3<Rectangle, P> inputFormat =
         new SpatialInputFormat3<Rectangle, P>();
     Job job = Job.getInstance(params);
-    SpatialInputFormat3.setInputPaths(job, inPath);
+    SpatialInputFormat3.setInputPaths(job, inPaths);
     final List<InputSplit> splits = inputFormat.getSplits(job);
     
     // 2- Read all input points in memory
@@ -150,7 +216,7 @@ public class DelaunayTriangulation {
       reader.close();
     }
     
-    if (params.getBoolean("dup", true)) {
+    if (params.getBoolean("dedup", true)) {
       // Remove duplicates to ensure correctness
       final float threshold = params.getFloat("threshold", 1E-5f);
       Collections.sort(points, new Comparator<P>() {
@@ -185,11 +251,42 @@ public class DelaunayTriangulation {
     
     LOG.info("Read "+points.size()+" points and computing DT");
     GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
-        (P[]) Array.newInstance(points.get(0).getClass(), points.size())));
+        (P[]) Array.newInstance(points.get(0).getClass(), points.size())), null);
     dtAlgorithm.compute();
-    Triangulation finalPart = new Triangulation();
+    /*Triangulation finalPart = new Triangulation();
     Triangulation nonfinalPart = new Triangulation();
     dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
+    System.out.println("group {");
+    finalPart.draw();
+    System.out.println("}");
+    System.out.println("group {");
+    nonfinalPart.draw();
+    System.out.println("}");*/
+  }
+
+  /**
+   * Compute the DT for an input file that contains points. If the params
+   * contains an explicit execution option (local or MapReduce), it is used.
+   * Otherwise, this method automatically uses a single-machine (local)
+   * algorithm or a MapReduce algorithm depending on the input file size.
+   * 
+   * @param inFiles
+   * @param outFile
+   * @param params
+   * @return
+   * @throws IOException
+   * @throws InterruptedException
+   * @throws ClassNotFoundException
+   */
+  public static Job delaunay(Path[] inFiles, Path outFile,
+      final OperationsParams params) throws IOException, InterruptedException,
+      ClassNotFoundException {
+    if (OperationsParams.isLocal(params, inFiles)) {
+      delaunayLocal(inFiles, outFile, params);
+      return null;
+    } else {
+      return delaunayMapReduce(inFiles, outFile, params);
+    }
   }
   
   private static void printUsage() {
@@ -207,26 +304,23 @@ public class DelaunayTriangulation {
    * @param args
    * @throws IOException 
    * @throws InterruptedException 
+   * @throws ClassNotFoundException 
    */
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args) throws IOException,
+      InterruptedException, ClassNotFoundException {
     GenericOptionsParser parser = new GenericOptionsParser(args);
     OperationsParams params = new OperationsParams(parser);
     
-    Path[] paths = params.getPaths();
-    if (paths.length == 0)
-    {
+    if (!params.checkInputOutput()) {
       printUsage();
       System.exit(1);
     }
-    Path inFile = paths[0];
-    Path outFile = paths.length > 1 ? paths[1] : null;
-    
+
+    Path[] inFiles = params.getInputPaths();
+    Path outFile = params.getOutputPath();
+
     long t1 = System.currentTimeMillis();
-    if (OperationsParams.isLocal(params, inFile)) {
-      delaunayLocal(inFile, outFile, params);
-    } else {
-      //voronoiMapReduce(inFile, outFile, params);
-    }
+    delaunay(inFiles, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: " + (t2 - t1) + " millis");
   }

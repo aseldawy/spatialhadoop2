@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Stack;
 import java.util.Vector;
 
+import org.apache.hadoop.util.Progressable;
+
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.BitArray;
@@ -37,6 +39,8 @@ public class GuibasStolfiDelaunayAlgorithm {
    * Stores the final answer that contains the complete DT
    */
   private IntermediateTriangulation finalAnswer;
+
+  private Progressable progress;
 
   /**
    * A class that stores a set of triangles for part of the sites.
@@ -86,7 +90,6 @@ public class GuibasStolfiDelaunayAlgorithm {
       neighbors[s3].add(s1); neighbors[s3].add(s2);
       convexHull = new int[] {s1, s2, s3};
     }
-    
   }
 
   /**
@@ -94,7 +97,8 @@ public class GuibasStolfiDelaunayAlgorithm {
    * @param L
    * @param R
    */
-  public <P extends Point> GuibasStolfiDelaunayAlgorithm(P[] points) {
+  public <P extends Point> GuibasStolfiDelaunayAlgorithm(P[] points, Progressable progress) {
+    this.progress = progress;
     this.points = new Point[points.length];
     System.arraycopy(points, 0, this.points, 0, points.length);
     Arrays.sort(this.points);
@@ -298,6 +302,8 @@ public class GuibasStolfiDelaunayAlgorithm {
       throw new RuntimeException("Cannot happen");
     }
     
+    if (progress != null)
+      progress.progress();
     // Start the merge process
     while (triangulations.length > 1) {
       // Merge every pair of DTs
@@ -308,6 +314,8 @@ public class GuibasStolfiDelaunayAlgorithm {
         IntermediateTriangulation dt1 = triangulations[t1];
         IntermediateTriangulation dt2 = triangulations[t1+1];
         newTriangulations[t2++] = merge(dt1, dt2);
+        if (progress != null)
+          progress.progress();
       }
       if (t1 < triangulations.length)
         newTriangulations[t2++] = triangulations[t1];
@@ -316,6 +324,10 @@ public class GuibasStolfiDelaunayAlgorithm {
     this.finalAnswer = triangulations[0];
   }
   
+  public Triangulation getFinalAnswer() {
+    return new Triangulation(this);
+  }
+
   /**
    * Splits the answer into final and non-final parts. Final parts can be safely
    * written to the output as they are not going to be affected by a future
@@ -323,16 +335,16 @@ public class GuibasStolfiDelaunayAlgorithm {
    * might be affected (i.e., some edges are pruned) by a future merge step.
    * 
    * @param mbr
-   *          - The MBR used to check for final and non-final edges. It is
-   *          assumed that no more points can be introduced in this MBR but more
-   *          points can appear later outside that MBR.
+   *          The MBR used to check for final and non-final edges. It is assumed
+   *          that no more points can be introduced in this MBR but more points
+   *          can appear later outside that MBR.
    * @param safe
-   *          - The set of safe edges
+   *          The set of safe edges
    * @param unsafe
-   *          - The set of unsafe edges
+   *          The set of unsafe edges
    */
-  public void splitIntoFinalAndNonFinalParts(Rectangle mbr, Triangulation finalPart,
-      Triangulation nonfinalPart) {
+  public void splitIntoFinalAndNonFinalParts(Rectangle mbr,
+      Triangulation finalPart, Triangulation nonfinalPart) {
     if (finalAnswer == null)
       compute();
     // Nodes that has its adjacency list sorted by node ID to speed up the merge
@@ -349,6 +361,8 @@ public class GuibasStolfiDelaunayAlgorithm {
     }
     
     while (!nodesToCheck.isEmpty()) {
+      if (progress != null)
+        progress.progress();
       int unsafeNode = nodesToCheck.pop();
       IntArray neighbors1 = neighbors[unsafeNode];
       // Sort the array to speedup merging neighbors
@@ -414,6 +428,8 @@ public class GuibasStolfiDelaunayAlgorithm {
 
     // Prune all edges that connect two safe nodes
     for (int i = 0; i < points.length; i++) {
+      if (progress != null)
+        progress.progress();
       if (unsafeNodes.get(i)) {
         // An unsafe node, all of its adjacent edges are also unsafe
         for (int n : neighbors[i]) {
@@ -445,10 +461,12 @@ public class GuibasStolfiDelaunayAlgorithm {
     finalPart.sites = this.points;
     finalPart.edgeStarts = finalEdgeStarts.toArray();
     finalPart.edgeEnds = finalEdgeEnds.toArray();
+    finalPart.compact();
 
     nonfinalPart.sites = this.points;
     nonfinalPart.edgeStarts = nonfinalEdgeStarts.toArray();
     nonfinalPart.edgeEnds = nonfinalEdgeEnds.toArray();
+    nonfinalPart.compact();
   }
 
   public boolean test() {
