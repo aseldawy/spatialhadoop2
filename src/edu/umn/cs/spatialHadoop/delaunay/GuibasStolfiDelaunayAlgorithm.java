@@ -94,7 +94,7 @@ public class GuibasStolfiDelaunayAlgorithm {
      */
     int site1, site2;
     /**Sites on the convex null of the triangulation*/
-    Site[] convexHull;
+    int[] convexHull;
     
     /**
      * Initialize a triangulation with two sites only. The triangulation consists
@@ -107,7 +107,7 @@ public class GuibasStolfiDelaunayAlgorithm {
       site2 = s2.id;
       neighbors[s1.id].add(s2.id);
       neighbors[s2.id].add(s1.id);
-      convexHull = new Site[] {s1, s2};
+      convexHull = new int[] {s1.id, s2.id};
     }
     
     /**
@@ -123,7 +123,7 @@ public class GuibasStolfiDelaunayAlgorithm {
       neighbors[s1.id].add(s2.id); neighbors[s1.id].add(s3.id);
       neighbors[s2.id].add(s1.id); neighbors[s2.id].add(s3.id);
       neighbors[s3.id].add(s1.id); neighbors[s3.id].add(s2.id);
-      convexHull = new Site[] {s1, s2, s3};
+      convexHull = new int[] {s1.id, s2.id, s3.id};
     }
     
     /**
@@ -133,7 +133,7 @@ public class GuibasStolfiDelaunayAlgorithm {
      */
     public Triangulation(Triangulation L, Triangulation R) {
       // Compute the convex hull of the result
-      Site[] bothHulls = new Site[L.convexHull.length + R.convexHull.length];
+      int[] bothHulls = new int[L.convexHull.length + R.convexHull.length];
       System.arraycopy(L.convexHull, 0, bothHulls, 0, L.convexHull.length);
       System.arraycopy(R.convexHull, 0, bothHulls, L.convexHull.length, R.convexHull.length);
       this.convexHull = convexHull(bothHulls);
@@ -141,19 +141,19 @@ public class GuibasStolfiDelaunayAlgorithm {
       // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
       Site baseL = null, baseR = null;
       for (int i = 0; i < this.convexHull.length; i++) {
-        Site p1 = this.convexHull[i];
-        Site p2 = i == this.convexHull.length - 1 ? this.convexHull[0] : this.convexHull[i+1];
+        int p1 = this.convexHull[i];
+        int p2 = i == this.convexHull.length - 1 ? this.convexHull[0] : this.convexHull[i+1];
         if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
-          if (baseL == null || (ys[p1.id] <= ys[baseL.id] && ys[p2.id] <= ys[baseR.id]) /*||
+          if (baseL == null || (ys[p1] <= ys[baseL.id] && ys[p2] <= ys[baseR.id]) /*||
               (p1.x <= baseL.x && p2.x <= baseR.x)*/) {
-            baseL = p1;
-            baseR = p2;
+            baseL = sites[p1];
+            baseR = sites[p2];
           }
         } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
-          if (baseL == null || (ys[p2.id] <= ys[baseL.id] && ys[p1.id] <= ys[baseR.id]) /*||
+          if (baseL == null || (ys[p2] <= ys[baseL.id] && ys[p1] <= ys[baseR.id]) /*||
               (p2.x <= baseL.x && p1.x <= baseR.x)*/) {
-            baseL = p2;
-            baseR = p1;
+            baseL = sites[p2];
+            baseR = sites[p1];
           }
         }
       }
@@ -347,8 +347,8 @@ public class GuibasStolfiDelaunayAlgorithm {
     }
   }
   
-  boolean inArray(Object[] array, Object objectToFind) {
-    for (Object objectToCompare : array)
+  boolean inArray(int[] array, int objectToFind) {
+    for (int objectToCompare : array)
       if (objectToFind == objectToCompare)
         return true;
     return false;
@@ -392,33 +392,22 @@ public class GuibasStolfiDelaunayAlgorithm {
     return new Point(ix, iy);
   }
   
-  Site[] convexHull(Site[] points) {
-    Stack<Site> lowerChain = new Stack<Site>();
-    Stack<Site> upperChain = new Stack<Site>();
+  int[] convexHull(int[] points) {
+    Stack<Integer> lowerChain = new Stack<Integer>();
+    Stack<Integer> upperChain = new Stack<Integer>();
 
     // Sort sites by increasing x-axis
-    Arrays.sort(points, new Comparator<Site>() {
-      @Override
-      public int compare(Site s1, Site s2) {
-        if (xs[s1.id] < xs[s2.id])
-          return -1;
-        if (xs[s1.id] > xs[s2.id])
-          return +1;
-        if (ys[s1.id] < ys[s2.id])
-          return -1;
-        if (ys[s1.id] > ys[s2.id])
-          return +1;
-        return 0;
-      }
-    });
+    // Sorting by Site ID is equivalent to sorting by x-axis as the original
+    // array of site is sorted by x in the Delaunay Triangulation algorithm
+    Arrays.sort(points);
     
     // Lower chain
-    for (int i=0; i<points.length; i++) {
+    for (int i = 0; i < points.length; i++) {
       while(lowerChain.size() > 1) {
-        Site s1 = lowerChain.get(lowerChain.size() - 2);
-        Site s2 = lowerChain.get(lowerChain.size() - 1);
-        Site s3 = points[i];
-        double crossProduct = (xs[s2.id] - xs[s1.id]) * (ys[s3.id] - ys[s1.id]) - (ys[s2.id] - ys[s1.id]) * (xs[s3.id] - xs[s1.id]);
+        int s1 = lowerChain.get(lowerChain.size() - 2);
+        int s2 = lowerChain.get(lowerChain.size() - 1);
+        int s3 = points[i];
+        double crossProduct = (xs[s2] - xs[s1]) * (ys[s3] - ys[s1]) - (ys[s2] - ys[s1]) * (xs[s3] - xs[s1]);
         if (crossProduct <= 0) lowerChain.pop();
         else break;
       }
@@ -426,12 +415,12 @@ public class GuibasStolfiDelaunayAlgorithm {
     }
     
     // Upper chain
-    for (int i=points.length - 1; i>=0; i--) {
+    for (int i = points.length - 1; i >= 0; i--) {
       while(upperChain.size() > 1) {
-        Site s1 = upperChain.get(upperChain.size() - 2);
-        Site s2 = upperChain.get(upperChain.size() - 1);
-        Site s3 = points[i];
-        double crossProduct = (xs[s2.id] - xs[s1.id]) * (ys[s3.id] - ys[s1.id]) - (ys[s2.id] - ys[s1.id]) * (xs[s3.id] - xs[s1.id]);
+        int s1 = upperChain.get(upperChain.size() - 2);
+        int s2 = upperChain.get(upperChain.size() - 1);
+        int s3 = points[i];
+        double crossProduct = (xs[s2] - xs[s1]) * (ys[s3] - ys[s1]) - (ys[s2] - ys[s1]) * (xs[s3] - xs[s1]);
         if (crossProduct <= 0) upperChain.pop();
         else break;
       }
@@ -440,7 +429,11 @@ public class GuibasStolfiDelaunayAlgorithm {
     
     lowerChain.pop();
     upperChain.pop();
-    lowerChain.addAll(upperChain);
-    return lowerChain.toArray(new Site[lowerChain.size()]);    
+    int[] result = new int[lowerChain.size() + upperChain.size()];
+    for (int i = 0; i < lowerChain.size(); i++)
+      result[i] = lowerChain.get(i);
+    for (int i = 0; i < upperChain.size(); i++)
+      result[i + lowerChain.size()] = upperChain.get(i);
+    return result;    
   }
 }
