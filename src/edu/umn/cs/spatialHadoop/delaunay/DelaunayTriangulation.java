@@ -35,6 +35,7 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -102,10 +103,9 @@ public class DelaunayTriangulation {
         LOG.info("Duplicates removed and only "+sites.size()+" points left");
       }
       
+      context.setStatus("Computing DT");
       GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
           sites.toArray(new Point[sites.size()]), context);
-      context.setStatus("Computing DT");
-      algo.compute();
       if (key.isValid()) {
         context.setStatus("Splitting DT");
         Triangulation finalPart = new Triangulation();
@@ -130,7 +130,12 @@ public class DelaunayTriangulation {
       for (Triangulation t : values)
         partialAnswers.add(t);
       
-      // TODO run the merge step
+      // Merge all triangulations together
+      GuibasStolfiDelaunayAlgorithm algo =
+          new GuibasStolfiDelaunayAlgorithm(partialAnswers.toArray(new Triangulation[partialAnswers.size()]), context);
+      
+      context.setStatus("Writing DT");
+      context.write(NullWritable.get(), algo.getFinalAnswer());
     }
   }
 
@@ -160,7 +165,7 @@ public class DelaunayTriangulation {
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.setInputPaths(job, inPaths);
 
-    job.setOutputFormatClass(TextOutputFormat.class);
+    job.setOutputFormatClass(TextOutputFormat3.class);
     TextOutputFormat.setOutputPath(job, outPath);
 
     // Submit the job
@@ -252,7 +257,7 @@ public class DelaunayTriangulation {
     LOG.info("Read "+points.size()+" points and computing DT");
     GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())), null);
-    dtAlgorithm.compute();
+    dtAlgorithm.getFinalAnswer().draw();
     /*Triangulation finalPart = new Triangulation();
     Triangulation nonfinalPart = new Triangulation();
     dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);

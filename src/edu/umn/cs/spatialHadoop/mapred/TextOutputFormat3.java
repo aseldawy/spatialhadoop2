@@ -25,6 +25,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
 
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 
 /** An {@link OutputFormat} that writes plain text files. 
@@ -70,7 +71,7 @@ public class TextOutputFormat3<K, V> extends FileOutputFormat<K, V> {
         out.write(to.getBytes(), 0, to.getLength());
       } else if (o instanceof TextSerializable) {
         // Serialize object to text
-        Text to = new Text();
+        Text to = new Text2();
         ((TextSerializable) o).toText(to);
         out.write(to.getBytes(), 0, to.getLength());
       } else {

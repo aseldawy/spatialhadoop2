@@ -51,12 +51,13 @@ public class Triangulation implements Writable, TextSerializable {
         if (s1 < s2) {
           numEdges--;
           edgeStarts[numEdges] = s1;
-          edgeEnds[numEdges] = s1;
+          edgeEnds[numEdges] = s2;
         }
       }
     }
     if (numEdges != 0)
-      throw new RuntimeException("Error in edges");
+      throw new RuntimeException("Error in edges! Copied "+
+    (edgeStarts.length - numEdges)+" instead of "+edgeStarts.length);
   }
   
   /**
@@ -129,9 +130,7 @@ public class Triangulation implements Writable, TextSerializable {
     } catch (IllegalAccessException e) {
       throw new RuntimeException("Cannot access the constructor of site class", e);
     }
-    
   }
-
   
   public void draw() {
     System.out.println("group {");
