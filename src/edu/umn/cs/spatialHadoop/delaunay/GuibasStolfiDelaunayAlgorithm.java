@@ -153,13 +153,13 @@ public class GuibasStolfiDelaunayAlgorithm {
           }
         }
       }
-      
+
+      // Add the first base edge
+      neighbors[baseL].add(baseR);
+      neighbors[baseR].add(baseL);
       // Trace the base LR edge up to the top
       boolean finished = false;
       do {
-        // Add the base edge to the Delaunay triangulation
-        neighbors[baseL].add(baseR);
-        neighbors[baseR].add(baseL);
         // Search for the potential candidate on the right
         double anglePotential = -1, angleNextPotential = -1;
         int potentialCandidate = -1, nextPotentialCandidate = -1;
@@ -271,10 +271,16 @@ public class GuibasStolfiDelaunayAlgorithm {
           // Left candidate has been chosen
           // Make lPotentialCandidate and baseR the new base line
           baseL = lCandidate;
+          // Add the new base edge
+          neighbors[baseL].add(baseR);
+          neighbors[baseR].add(baseL);
         } else if (rCandidate != -1) {
           // Right candidate has been chosen
           // Make baseL and rPotentialCandidate the new base line
           baseR = rCandidate;
+          // Add the new base edge
+          neighbors[baseL].add(baseR);
+          neighbors[baseR].add(baseL);
         } else {
           // No candidates, merge finished
           finished = true;
@@ -290,8 +296,10 @@ public class GuibasStolfiDelaunayAlgorithm {
       int i =0;
       for (int s1 = site1; s1 <= site2; s1++) {
         for (int s2 : neighbors[s1]) {
-          System.out.printf("line %f, %f, %f, %f, :id=>'%d,%d'\n", xs[s1], ys[s1], xs[s2], ys[s2], s1, s2);
-          i++;
+          if (s1 < s2) {
+            System.out.printf("line %f, %f, %f, %f, :id=>'%d,%d'\n", xs[s1], ys[s1], xs[s2], ys[s2], s1, s2);
+            i++;
+          }
         }
       }
       System.out.println("Total lines "+i);
@@ -303,8 +311,10 @@ public class GuibasStolfiDelaunayAlgorithm {
       List<Point> ends = new Vector<Point>();
       for (int s1 = site1; s1 <= site2; s1++) {
         for (int s2 : neighbors[s1]) {
-          starts.add(new Point(xs[s1], ys[s1]));
-          ends.add(new Point(xs[s2], ys[s2]));
+          if (s1 < s2) {
+            starts.add(new Point(xs[s1], ys[s1]));
+            ends.add(new Point(xs[s2], ys[s2]));
+          }
         }
       }
       
