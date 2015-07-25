@@ -17,6 +17,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
 import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
@@ -33,14 +34,19 @@ public class Triangulation implements Writable, TextSerializable {
   Point[] sites;
   /**A set of all edges, each connecting two points in the triangulation*/
   int[] edgeStarts, edgeEnds;
+  /**Minimum bounding rectangles for all points*/
+  Rectangle mbr;
   
   public Triangulation() {}
   
   Triangulation(GuibasStolfiDelaunayAlgorithm algo) {
     this.sites = algo.points.clone();
     int numEdges = 0;
+    this.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (int s1 = 0; s1 < algo.neighbors.length; s1++) {
       numEdges += algo.neighbors[s1].size();
+      this.mbr.expand(this.sites[s1]);
     }
     numEdges /= 2; // We store each undirected edge once
     edgeStarts = new int[numEdges];
@@ -84,9 +90,12 @@ public class Triangulation implements Writable, TextSerializable {
     int maxID = 0;
     Point[] newSites = new Point[newSiteCount];
     int[] newNodeIDs = new int[sites.length];
+    this.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (int oldNodeID = 0; oldNodeID < sites.length; oldNodeID++) {
       if (connectedNodes.get(oldNodeID)) {
         newSites[maxID] = sites[oldNodeID];
+        this.mbr.expand(newSites[maxID]);
         newNodeIDs[oldNodeID] = maxID++;
       }
     }
@@ -103,6 +112,7 @@ public class Triangulation implements Writable, TextSerializable {
   
   @Override
   public void write(DataOutput out) throws IOException {
+    this.mbr.write(out);
     out.writeInt(sites.length);
     out.writeUTF(sites[0].getClass().getName());
     for (Point site : sites)
@@ -114,6 +124,8 @@ public class Triangulation implements Writable, TextSerializable {
   @Override
   public void readFields(DataInput in) throws IOException {
     try {
+      this.mbr = new Rectangle();
+      this.mbr.readFields(in);
       int numSites = in.readInt();
       Class<? extends Point> siteClass = Class.forName(in.readUTF()).asSubclass(Point.class);
       sites = new Point[numSites];

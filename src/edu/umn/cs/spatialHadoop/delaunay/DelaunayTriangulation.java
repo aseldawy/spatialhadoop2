@@ -126,13 +126,66 @@ public class DelaunayTriangulation {
     @Override
     protected void reduce(NullWritable dummy, Iterable<Triangulation> values,
         Context context) throws IOException, InterruptedException {
-      List<Triangulation> partialAnswers = new Vector<Triangulation>();
-      for (Triangulation t : values)
-        partialAnswers.add(t);
+      List<List<Triangulation>> columns = new Vector<List<Triangulation>>();
       
-      // Merge all triangulations together
-      GuibasStolfiDelaunayAlgorithm algo =
-          new GuibasStolfiDelaunayAlgorithm(partialAnswers.toArray(new Triangulation[partialAnswers.size()]), context);
+      // Arrange triangulations column-by-column
+      for (Triangulation t : values) {
+        double x1 = t.mbr.x1, x2 = t.mbr.x2;
+        List<Triangulation> selectedColumn = null;
+        int iColumn = 0;
+        while (iColumn < columns.size() && selectedColumn == null) {
+          Rectangle cmbr = columns.get(iColumn).get(0).mbr;
+          double cx1 = cmbr.x1;
+          double cx2 = cmbr.x2;
+          if (x2 > cx1 && cx2 > x1) {
+            selectedColumn = columns.get(iColumn);
+          }
+        }
+        
+        if (selectedColumn == null) {
+          // Create a new column
+          selectedColumn = new Vector<Triangulation>();
+          columns.add(selectedColumn);
+        }
+        selectedColumn.add(t);
+      }
+      
+      List<Triangulation> mergedColumns = new Vector<Triangulation>();
+      // Merge all triangulations together column-by-column
+      for (List<Triangulation> column : columns) {
+        // Sort this column by y-axis
+        Collections.sort(column, new Comparator<Triangulation>() {
+          @Override
+          public int compare(Triangulation t1, Triangulation t2) {
+            double dy = t1.mbr.y1 - t2.mbr.y1;
+            if (dy < 0)
+              return -1;
+            if (dy > 0)
+              return 1;
+            return 0;
+          }
+        });
+
+        GuibasStolfiDelaunayAlgorithm algo =
+            new GuibasStolfiDelaunayAlgorithm(column.toArray(new Triangulation[column.size()]), context);
+        mergedColumns.add(algo.getFinalAnswer());
+      }
+      
+      // Merge the result horizontally
+      Collections.sort(mergedColumns, new Comparator<Triangulation>() {
+        @Override
+        public int compare(Triangulation t1, Triangulation t2) {
+          double dx = t1.mbr.x1 - t2.mbr.x1;
+          if (dx < 0)
+            return -1;
+          if (dx > 0)
+            return 1;
+          return 0;
+        }
+      });
+      GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
+          mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
+          context);
       
       context.setStatus("Writing DT");
       context.write(NullWritable.get(), algo.getFinalAnswer());
