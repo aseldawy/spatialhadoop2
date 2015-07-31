@@ -93,10 +93,16 @@ public class GuibasStolfiDelaunayAlgorithm {
     IntermediateTriangulation(int s1, int s2, int s3) {
       site1 = s1;
       site2 = s3;
-      neighbors[s1].add(s2); neighbors[s1].add(s3);
-      neighbors[s2].add(s1); neighbors[s2].add(s3);
-      neighbors[s3].add(s1); neighbors[s3].add(s2);
-      convexHull = new int[] {s1, s2, s3};
+      neighbors[s1].add(s2); neighbors[s2].add(s1); // edge: s1 -- s2
+      neighbors[s2].add(s3); neighbors[s3].add(s2); // edge: s3 -- s3
+      if (calculateCircumCircleCenter(s1, s2, s3) == null) {
+        // Degenerate case, three points are collinear
+        convexHull = new int[] {s1, s3};
+      } else {
+        // Normal case
+        neighbors[s1].add(s3); neighbors[s3].add(s1); // edge: s1 -- s3
+        convexHull = new int[] {s1, s2, s3};
+      }
     }
 
     /**
@@ -466,7 +472,6 @@ public class GuibasStolfiDelaunayAlgorithm {
   protected IntermediateTriangulation mergeAllTriangulations(IntermediateTriangulation[] triangulations) {
     // Start the merge process
     while (triangulations.length > 1) {
-      LOG.info("Merging "+triangulations.length+" triangulations");
       // Merge every pair of DTs
       IntermediateTriangulation[] newTriangulations = new IntermediateTriangulation[triangulations.length / 2 + (triangulations.length & 1)];
       int t2 = 0;
