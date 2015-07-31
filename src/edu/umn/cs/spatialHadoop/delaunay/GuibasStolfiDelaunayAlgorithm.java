@@ -377,7 +377,7 @@ public class GuibasStolfiDelaunayAlgorithm {
       // Choose the right candidate
       if (lCandidate != -1 && rCandidate != -1) {
         // Two candidates, choose the correct one
-        Point circumCircleL = calculateCircumCircleCenter(lCandidate, baseL, baseR);
+        Point circumCircleL = calculateCircumCircleCenter(baseL, baseR, lCandidate);
         double dx = circumCircleL.x - xs[lCandidate];
         double dy = circumCircleL.y - ys[lCandidate];
         double lCandidateDistance = dx * dx + dy * dy;
@@ -708,11 +708,11 @@ public class GuibasStolfiDelaunayAlgorithm {
     // Calculate the intersection of the two new lines
     // See https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
     double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if (den < 1E-9 && den > -1E-9) {
+    if (den < 1E-11 && den > -1E-11) {
       // The three points are collinear, circle exists at infinity
       // Although the calculations will return coordinates at infinity based
       // on the calculations, we prefer to return null to avoid the following
-      // compuations and allow the sender to easily check for this degenerate
+      // computations and allow the sender to easily check for this degenerate
       // case
       return null;
     }
