@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Stack;
 import java.util.Vector;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -24,6 +26,8 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  *
  */
 public class GuibasStolfiDelaunayAlgorithm {
+  
+  static final Log LOG = LogFactory.getLog(GuibasStolfiDelaunayAlgorithm.class);
   
   /** The original input set of points */
   Point[] points;
@@ -161,10 +165,12 @@ public class GuibasStolfiDelaunayAlgorithm {
     // Compute the answer
     IntermediateTriangulation[] triangulations = new IntermediateTriangulation[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
     // Compute the trivial Delaunay triangles of every three consecutive points
-    int i, t=0;
+    int i, t = 0;
     for (i = 0; i < points.length - 4; i += 3) {
       // Compute DT for three points
       triangulations[t++] =  new IntermediateTriangulation(i, i+1, i+2);
+      if (progress != null && (t & 0xff) == 0)
+        progress.progress();
     }
     if (points.length - i == 4) {
       // Compute DT for every two points
@@ -182,6 +188,7 @@ public class GuibasStolfiDelaunayAlgorithm {
     
     if (progress != null)
       progress.progress();
+    LOG.info("Merging "+triangulations.length+" triangulations");
     this.finalAnswer = mergeAllTriangulations(triangulations);
   }
   
@@ -276,27 +283,36 @@ public class GuibasStolfiDelaunayAlgorithm {
         }
       }
       int rCandidate = -1;
-      if (anglePotential < Math.PI) {
-        if (nextPotentialCandidate != -1) {
-          // Check if the circumcircle of the base edge with the potential
-          // candidate contains the next potential candidate
-          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-          double dx = circleCenter.x - xs[nextPotentialCandidate];
-          double dy = circleCenter.y - ys[nextPotentialCandidate];
-          double d1 = dx * dx + dy * dy;
-          dx = circleCenter.x - xs[potentialCandidate];
-          dy = circleCenter.y - ys[potentialCandidate];
-          double d2 = dx * dx + dy * dy;
-          if (d1 < d2) {
-            // Delete the RR edge between baseR and rPotentialCandidate and restart
-            neighbors[baseR].remove(potentialCandidate);
-            neighbors[potentialCandidate].remove(baseR);
-            continue;
-          } else {
-            rCandidate = potentialCandidate;
-          }
+      if (anglePotential < Math.PI && potentialCandidate != -1) {
+        // Compute the circum circle between the base edge and potential candidate
+        Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+        if (circleCenter == null) {
+          // Degnerate case of three collinear points
+          // Delete the RR edge between baseR and rPotentialCandidate and restart
+          neighbors[baseR].remove(potentialCandidate);
+          neighbors[potentialCandidate].remove(baseR);
         } else {
-          rCandidate = potentialCandidate;
+          if (nextPotentialCandidate == -1) {
+            // The only potential candidate, accept it right away
+            rCandidate = potentialCandidate;
+          } else {
+            // Check if the circumcircle of the base edge with the potential
+            // candidate contains the next potential candidate
+            double dx = circleCenter.x - xs[nextPotentialCandidate];
+            double dy = circleCenter.y - ys[nextPotentialCandidate];
+            double d1 = dx * dx + dy * dy;
+            dx = circleCenter.x - xs[potentialCandidate];
+            dy = circleCenter.y - ys[potentialCandidate];
+            double d2 = dx * dx + dy * dy;
+            if (d1 < d2) {
+              // Delete the RR edge between baseR and rPotentialCandidate and restart
+              neighbors[baseR].remove(potentialCandidate);
+              neighbors[potentialCandidate].remove(baseR);
+              continue;
+            } else {
+              rCandidate = potentialCandidate;
+            }
+          }
         }
       }
       
@@ -320,30 +336,38 @@ public class GuibasStolfiDelaunayAlgorithm {
         }
       }
       int lCandidate = -1;
-      if (anglePotential < Math.PI) {
-        if (nextPotentialCandidate != -1) {
-          // Check if the circumcircle of the base edge with the potential
-          // candidate contains the next potential candidate
-          Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-          double dx = circleCenter.x - xs[nextPotentialCandidate];
-          double dy = circleCenter.y - ys[nextPotentialCandidate];
-          double d1 = dx * dx + dy * dy;
-          dx = circleCenter.x - xs[potentialCandidate];
-          dy = circleCenter.y - ys[potentialCandidate];
-          double d2 = dx * dx + dy * dy;
-          if (d1 < d2) {
-            // Delete the LL edge between baseR and rPotentialCandidate and restart
-            neighbors[baseL].remove(potentialCandidate);
-            neighbors[potentialCandidate].remove(baseL);
-            continue;
-          } else {
-            lCandidate = potentialCandidate;
-          }
+      if (anglePotential < Math.PI && potentialCandidate != -1) {
+        // Compute the circum circle between the base edge and potential candidate
+        Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+        if (circleCenter == null) {
+          // Degenerate case, the potential candidate is collinear with base edge
+          // Delete the LL edge between baseL and potentialCandidate and restart
+          neighbors[baseL].remove(potentialCandidate);
+          neighbors[potentialCandidate].remove(baseL);
         } else {
-          lCandidate = potentialCandidate;
-        }
-      }
-      
+          if (nextPotentialCandidate == -1) {
+            // The only potential candidate, accept it right away
+            lCandidate = potentialCandidate;
+          } else {
+            // Check if the circumcircle of the base edge with the potential
+            // candidate contains the next potential candidate
+            double dx = circleCenter.x - xs[nextPotentialCandidate];
+            double dy = circleCenter.y - ys[nextPotentialCandidate];
+            double d1 = dx * dx + dy * dy;
+            dx = circleCenter.x - xs[potentialCandidate];
+            dy = circleCenter.y - ys[potentialCandidate];
+            double d2 = dx * dx + dy * dy;
+            if (d1 < d2) {
+              // Delete the LL edge between baseL and potentialCandidate and restart
+              neighbors[baseL].remove(potentialCandidate);
+              neighbors[potentialCandidate].remove(baseL);
+              continue;
+            } else {
+              lCandidate = potentialCandidate;
+            }
+          } // nextPotentialCandidate == -1
+        } // circleCenter == null
+      } // anglePotential < Math.PI      
       // Choose the right candidate
       if (lCandidate != -1 && rCandidate != -1) {
         // Two candidates, choose the correct one
@@ -442,6 +466,7 @@ public class GuibasStolfiDelaunayAlgorithm {
   protected IntermediateTriangulation mergeAllTriangulations(IntermediateTriangulation[] triangulations) {
     // Start the merge process
     while (triangulations.length > 1) {
+      LOG.info("Merging "+triangulations.length+" triangulations");
       // Merge every pair of DTs
       IntermediateTriangulation[] newTriangulations = new IntermediateTriangulation[triangulations.length / 2 + (triangulations.length & 1)];
       int t2 = 0;
@@ -678,6 +703,14 @@ public class GuibasStolfiDelaunayAlgorithm {
     // Calculate the intersection of the two new lines
     // See https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
     double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (den < 1E-9 && den > -1E-9) {
+      // The three points are collinear, circle exists at infinity
+      // Although the calculations will return coordinates at infinity based
+      // on the calculations, we prefer to return null to avoid the following
+      // compuations and allow the sender to easily check for this degenerate
+      // case
+      return null;
+    }
     double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
     double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
     

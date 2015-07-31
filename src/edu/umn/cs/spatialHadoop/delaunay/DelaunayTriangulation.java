@@ -102,9 +102,11 @@ public class DelaunayTriangulation {
       }
       
       context.setStatus("Computing DT");
+      LOG.info("Computing DT for "+sites.size()+" sites");
       GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
           sites.toArray(new Point[sites.size()]), context);
       if (key.isValid()) {
+        LOG.info("Finding final and non-final edges");
         context.setStatus("Splitting DT");
         Triangulation finalPart = new Triangulation();
         Triangulation nonfinalPart = new Triangulation();
@@ -112,6 +114,7 @@ public class DelaunayTriangulation {
         // TODO write final part to the output path
         context.write(NullWritable.get(), nonfinalPart);
       } else {
+        LOG.info("Writing the whole DT to the output");
         context.setStatus("Writing DT");
         context.write(NullWritable.get(), algo.getFinalAnswer());
       }
@@ -221,7 +224,7 @@ public class DelaunayTriangulation {
 
     // Submit the job
     if (!params.getBoolean("background", false)) {
-      job.waitForCompletion(false);
+      job.waitForCompletion(params.getBoolean("verbose", false));
       if (!job.isSuccessful())
         throw new RuntimeException("Job failed!");
     } else {
@@ -240,6 +243,25 @@ public class DelaunayTriangulation {
    */
   public static <P extends Point> void delaunayLocal(Path[] inPaths, Path outPath,
       OperationsParams params) throws IOException, InterruptedException {
+    boolean reportMem = params.getBoolean("mem", false);
+    if (reportMem) {
+      Thread memThread = new Thread(new Runnable() {
+        @Override
+        public void run() {
+          Runtime runtime = Runtime.getRuntime();
+          while (true) {
+            LOG.info(String.format("Free memory %d / Total memory %d", runtime.freeMemory(), runtime.totalMemory()));
+            try {
+              Thread.sleep(1000*60);
+            } catch (InterruptedException e) {
+              // TODO Auto-generated catch block
+              e.printStackTrace();
+            }
+          }
+        }}, "reportMem");
+      memThread.setDaemon(true);
+      memThread.start();
+    }
     // 1- Split the input path/file to get splits that can be processed
     // independently
     final SpatialInputFormat3<Rectangle, P> inputFormat =
@@ -308,7 +330,7 @@ public class DelaunayTriangulation {
     LOG.info("Read "+points.size()+" points and computing DT");
     GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())), null);
-    dtAlgorithm.getFinalAnswer().draw();
+    //dtAlgorithm.getFinalAnswer().draw();
     /*Triangulation finalPart = new Triangulation();
     Triangulation nonfinalPart = new Triangulation();
     dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
