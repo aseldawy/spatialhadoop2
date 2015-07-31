@@ -548,7 +548,7 @@ public class GuibasStolfiDelaunayAlgorithm {
             boolean safeTriangle = true;
             // Found a triangle between unsafeNode, neighborID and neighbors1[i1]
             Point emptyCircle = calculateCircumCircleCenter(unsafeNode, neighborID, neighbors1.get(i1));
-            if (!mbr.contains(emptyCircle)) {
+            if (emptyCircle == null || !mbr.contains(emptyCircle)) {
               // The center is outside the MBR, unsafe
               safeTriangle = false;
             } else {

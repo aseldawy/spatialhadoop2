@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -18,7 +19,9 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
@@ -29,12 +32,16 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
+import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
@@ -51,6 +58,9 @@ public class DelaunayTriangulation {
   /**Logger to write log messages for this class*/
   static final Log LOG = LogFactory.getLog(DelaunayTriangulation.class);
   
+  /**Configuration line to store column boundaries on which intermediate data is split*/
+  private static final String ColumnBoundaries = "DelaunayTriangulation.ColumnBoundaries";
+
   /**
    * The map function computes the DT for a partition and splits the
    * triangulation into safe and non-safe edges. Safe edges are final and are
@@ -60,12 +70,15 @@ public class DelaunayTriangulation {
    * @param <S> - The type of shape for sites
    */
   public static class DelaunayMap<S extends Point>
-    extends Mapper<Rectangle, Iterable<S>, NullWritable, Triangulation> {
+    extends Mapper<Rectangle, Iterable<S>, IntWritable, Triangulation> {
     
     /**Whether the map function should remove duplicates in the input or not*/
     private boolean deduplicate;
     /**Threshold used in duplicate detection*/
     private float threshold;
+    
+    /**Boundaries of columns to split partitions*/
+    private double[] columnBoundaries;
 
     @Override
     protected void setup(Context context) throws IOException,
@@ -74,20 +87,27 @@ public class DelaunayTriangulation {
       this.deduplicate = conf.getBoolean("dedup", true);
       if (deduplicate)
         this.threshold = conf.getFloat("threshold", 1E-5f);
+      if (conf.get(ColumnBoundaries) != null) {
+        String[] strBoundaries = conf.get(ColumnBoundaries).split(",");
+        this.columnBoundaries = new double[strBoundaries.length];
+        for (int iCol = 0; iCol < strBoundaries.length; iCol++)
+          this.columnBoundaries[iCol] = Double.parseDouble(strBoundaries[iCol]);
+      }
     }
     
     @Override
     protected void map(Rectangle key, Iterable<S> values, Context context)
         throws IOException, InterruptedException {
+      IntWritable column = new IntWritable();
       List<S> sites = new Vector<S>();
       for (S site : values)
         sites.add((S) site.clone());
-      
+
       if (deduplicate) {
         LOG.info("Removing duplicates from "+sites.size()+" points");
         // Remove duplicates to ensure correctness
         Collections.sort(sites);
-        
+
         int i = 1;
         while (i < sites.size()) {
           S s1 = sites.get(i-1);
@@ -100,32 +120,38 @@ public class DelaunayTriangulation {
         }
         LOG.info("Duplicates removed and only "+sites.size()+" points left");
       }
-      
+
       context.setStatus("Computing DT");
       LOG.info("Computing DT for "+sites.size()+" sites");
       GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
           sites.toArray(new Point[sites.size()]), context);
       if (key.isValid()) {
+        int col = Arrays.binarySearch(this.columnBoundaries, key.x1);
+        if (col < 0)
+          col = -col - 1;
+        column.set(col);
         LOG.info("Finding final and non-final edges");
         context.setStatus("Splitting DT");
         Triangulation finalPart = new Triangulation();
         Triangulation nonfinalPart = new Triangulation();
         algo.splitIntoFinalAndNonFinalParts(key, finalPart, nonfinalPart);
         // TODO write final part to the output path
-        context.write(NullWritable.get(), nonfinalPart);
+
+        // Write nonFinalpart to the reduce phase
+        context.write(column, nonfinalPart);
       } else {
         LOG.info("Writing the whole DT to the output");
         context.setStatus("Writing DT");
-        context.write(NullWritable.get(), algo.getFinalAnswer());
+        context.write(column, algo.getFinalAnswer());
       }
     }
   }
 
   public static class DelaunayReduce
-  extends Reducer<NullWritable, Triangulation, NullWritable, Triangulation> {
+  extends Reducer<IntWritable, Triangulation, NullWritable, Triangulation> {
     
     @Override
-    protected void reduce(NullWritable dummy, Iterable<Triangulation> values,
+    protected void reduce(IntWritable dummy, Iterable<Triangulation> values,
         Context context) throws IOException, InterruptedException {
       List<List<Triangulation>> columns = new Vector<List<Triangulation>>();
       
@@ -209,18 +235,54 @@ public class DelaunayTriangulation {
 
     // Set map and reduce
     job.setMapperClass(DelaunayMap.class);
-    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(Triangulation.class);
     job.setReducerClass(DelaunayReduce.class);
-    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-    job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
 
     // Set input and output
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.setInputPaths(job, inPaths);
-
-    job.setOutputFormatClass(TextOutputFormat3.class);
+    if (params.getBoolean("output", true))
+      job.setOutputFormatClass(TextOutputFormat3.class);
+    else
+      job.setOutputFormatClass(NullOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outPath);
+    
+    // Set column boundaries to define the boundaries of each reducer
+    // TODO handle multi file input
+    FileSystem inFs = inPaths[0].getFileSystem(params);
+    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inPaths[0]);
+    List<Rectangle> columns = new Vector<Rectangle>();
+    for (Partition p : gIndex) {
+      double x1 = p.x1, x2 = p.x2;
+      
+      boolean matched = false;
+      for (int iColumn = 0; iColumn < columns.size() && !matched; iColumn++) {
+        Rectangle cmbr = columns.get(iColumn);
+        double cx1 = cmbr.x1;
+        double cx2 = cmbr.x2;
+        if (x2 > cx1 && cx2 > x1) {
+          matched = true;
+          cmbr.expand(p);
+        }
+      }
+      
+      if (!matched) {
+        // Create a new column
+        columns.add(new Rectangle(p));
+      }
+    }
+    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+    int numReducers = Math.min(columns.size(), Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
+    String columnBoundaries = "";
+    for (int iReducer = 0; iReducer < numReducers; iReducer++) {
+      if (iReducer > 0)
+        columnBoundaries += ',';
+      int col = (iReducer + 1) * columns.size()  / numReducers - 1;
+      columnBoundaries +=  columns.get(col).x2;
+    }
+    job.getConfiguration().set(ColumnBoundaries, columnBoundaries);
+    job.setNumReduceTasks(numReducers);
 
     // Submit the job
     if (!params.getBoolean("background", false)) {
@@ -331,15 +393,9 @@ public class DelaunayTriangulation {
     GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
         (P[]) Array.newInstance(points.get(0).getClass(), points.size())), null);
     //dtAlgorithm.getFinalAnswer().draw();
-    /*Triangulation finalPart = new Triangulation();
+    Triangulation finalPart = new Triangulation();
     Triangulation nonfinalPart = new Triangulation();
     dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
-    System.out.println("group {");
-    finalPart.draw();
-    System.out.println("}");
-    System.out.println("group {");
-    nonfinalPart.draw();
-    System.out.println("}");*/
   }
 
   /**
