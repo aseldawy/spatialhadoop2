@@ -45,8 +45,6 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
  * Computes the Delaunay triangulation (DT) for a set of points.
  * @author Ahmed Eldawy
  * 
- * TODO use a pointer array of integers to refer to points to save memory
- *
  */
 public class DelaunayTriangulation {
 

@@ -391,6 +391,8 @@ public class GuibasStolfiDelaunayAlgorithm {
 
   /**
    * Computes the base edge that is used to merge two triangulations.
+   * There are at most two crossing edges from L to R, the base edge is the one
+   * that makes CW angles with sites in the range [0, PI]. 
    * @param mergedConvexHull
    * @param L
    * @param R
@@ -425,9 +427,10 @@ public class GuibasStolfiDelaunayAlgorithm {
     
     // Choose the right LR edge. The one which makes an angle [0, 180] with
     // each point in both partitions
-    double cwAngle = calculateCWAngle(base1L, base1R, base2R);
+    double cwAngle = base1R != base2R? calculateCWAngle(base1L, base1R, base2R)
+        : calculateCWAngle(base1L, base1R, base2L);
     
-    return cwAngle < Math.PI * 2 ? new int[] {base1L, base1R} :
+    return cwAngle < Math.PI ? new int[] {base1L, base1R} :
       new int[] {base2L, base2R};
   }
 
@@ -698,7 +701,7 @@ public class GuibasStolfiDelaunayAlgorithm {
 
     // Sort sites by increasing x-axis
     // Sorting by Site ID is equivalent to sorting by x-axis as the original
-    // array of site is sorted by x in the Delaunay Triangulation algorithm
+    // array of site is sorted by x in the DT algorithm
     Arrays.sort(points);
     
     // Lower chain
