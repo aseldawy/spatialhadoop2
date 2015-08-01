@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -47,6 +48,8 @@ import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 /**
  * Computes the Delaunay triangulation (DT) for a set of points.
@@ -304,7 +307,7 @@ public class DelaunayTriangulation {
    * @throws InterruptedException
    */
   public static <P extends Point> void delaunayLocal(Path[] inPaths, Path outPath,
-      OperationsParams params) throws IOException, InterruptedException {
+      final OperationsParams params) throws IOException, InterruptedException {
     boolean reportMem = params.getBoolean("mem", false);
     if (reportMem) {
       Thread memThread = new Thread(new Runnable() {
@@ -333,65 +336,89 @@ public class DelaunayTriangulation {
     final List<InputSplit> splits = inputFormat.getSplits(job);
     
     // 2- Read all input points in memory
-    List<P> points = new Vector<P>();
-    for (InputSplit split : splits) {
-      FileSplit fsplit = (FileSplit) split;
-      final RecordReader<Rectangle, Iterable<P>> reader =
-          inputFormat.createRecordReader(fsplit, null);
-      if (reader instanceof SpatialRecordReader3) {
-        ((SpatialRecordReader3)reader).initialize(fsplit, params);
-      } else if (reader instanceof RTreeRecordReader3) {
-        ((RTreeRecordReader3)reader).initialize(fsplit, params);
-      } else if (reader instanceof HDFRecordReader) {
-        ((HDFRecordReader)reader).initialize(fsplit, params);
-      } else {
-        throw new RuntimeException("Unknown record reader");
-      }
-      while (reader.nextKeyValue()) {
-        Iterable<P> pts = reader.getCurrentValue();
-        for (P p : pts) {
-          points.add((P) p.clone());
+    Vector<List<P>[]> allLists = Parallel.forEach(splits.size(), new RunnableRange<List<P>[]>() {
+      @Override
+      public List<P>[] run(int i1, int i2) {
+        try {
+          List<P>[] allPoints = new List[i2 - i1];
+          for (int i = i1; i < i2; i++) {
+            List<P> points = new ArrayList<P>();
+            FileSplit fsplit = (FileSplit) splits.get(i);
+            final RecordReader<Rectangle, Iterable<P>> reader =
+                inputFormat.createRecordReader(fsplit, null);
+            if (reader instanceof SpatialRecordReader3) {
+              ((SpatialRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof RTreeRecordReader3) {
+              ((RTreeRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplit, params);
+            } else {
+              throw new RuntimeException("Unknown record reader");
+            }
+            while (reader.nextKeyValue()) {
+              Iterable<P> pts = reader.getCurrentValue();
+              for (P p : pts) {
+                points.add((P) p.clone());
+              }
+            }
+            reader.close();
+            allPoints[i - i1] = points;
+          }
+          return allPoints;
+        } catch (IOException e) {
+          e.printStackTrace();
+        } catch (InterruptedException e) {
+          e.printStackTrace();
         }
+        return null;
       }
-      reader.close();
-    }
+    }, params.getInt("parallel", Runtime.getRuntime().availableProcessors()));
+    
+    int totalNumPoints = 0;
+    for (List<P>[] lists : allLists)
+      for (List<P> list : lists)
+        totalNumPoints += list.size();
+    
+    List<P> allPoints = new ArrayList<P>(totalNumPoints);
+    
+    for (List<P>[] lists : allLists)
+      for (List<P> list : lists)
+        allPoints.addAll(list);
+    
+    allLists = null;
     
     if (params.getBoolean("dedup", true)) {
       // Remove duplicates to ensure correctness
       final float threshold = params.getFloat("threshold", 1E-5f);
-      Collections.sort(points, new Comparator<P>() {
+      Collections.sort(allPoints, new Comparator<P>() {
         @Override
         public int compare(P p1, P p2) {
           double dx = p1.x - p2.x;
-          if (dx < 0)
-            return -1;
-          if (dx > 0)
-            return 1;
+          if (dx < 0) return -1;
+          if (dx > 0) return 1;
           double dy = p1.y - p2.y;
-          if (dy < 0)
-            return -1;
-          if (dy > 0)
-            return 1;
+          if (dy < 0) return -1;
+          if (dy > 0) return 1;
           return 0;
         }
       });
       
       int i = 1;
-      while (i < points.size()) {
-        P p1 = points.get(i-1);
-        P p2 = points.get(i);
+      while (i < allPoints.size()) {
+        P p1 = allPoints.get(i-1);
+        P p2 = allPoints.get(i);
         double dx = Math.abs(p1.x - p2.x);
         double dy = Math.abs(p1.y - p2.y);
         if (dx < threshold && dy < threshold)
-          points.remove(i);
+          allPoints.remove(i);
         else
           i++;
       }
     }
     
-    LOG.info("Read "+points.size()+" points and computing DT");
-    GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(points.toArray(
-        (P[]) Array.newInstance(points.get(0).getClass(), points.size())), null);
+    LOG.info("Read "+allPoints.size()+" points and computing DT");
+    GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(allPoints.toArray(
+        (P[]) Array.newInstance(allPoints.get(0).getClass(), allPoints.size())), null);
     //dtAlgorithm.getFinalAnswer().draw();
     Triangulation finalPart = new Triangulation();
     Triangulation nonfinalPart = new Triangulation();
