@@ -334,13 +334,14 @@ public class DelaunayTriangulation {
     Job job = Job.getInstance(params);
     SpatialInputFormat3.setInputPaths(job, inPaths);
     final List<InputSplit> splits = inputFormat.getSplits(job);
+    final List<P>[] allLists = new List[splits.size()];
     
     // 2- Read all input points in memory
-    Vector<List<P>[]> allLists = Parallel.forEach(splits.size(), new RunnableRange<List<P>[]>() {
+    Vector<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
       @Override
-      public List<P>[] run(int i1, int i2) {
+      public Integer run(int i1, int i2) {
         try {
-          List<P>[] allPoints = new List[i2 - i1];
+          int numPoints = 0;
           for (int i = i1; i < i2; i++) {
             List<P> points = new ArrayList<P>();
             FileSplit fsplit = (FileSplit) splits.get(i);
@@ -362,9 +363,10 @@ public class DelaunayTriangulation {
               }
             }
             reader.close();
-            allPoints[i - i1] = points;
+            numPoints += points.size();
+            allLists[i - i1] = points;
           }
-          return allPoints;
+          return numPoints;
         } catch (IOException e) {
           e.printStackTrace();
         } catch (InterruptedException e) {
@@ -375,17 +377,16 @@ public class DelaunayTriangulation {
     }, params.getInt("parallel", Runtime.getRuntime().availableProcessors()));
     
     int totalNumPoints = 0;
-    for (List<P>[] lists : allLists)
-      for (List<P> list : lists)
-        totalNumPoints += list.size();
+    for (int numPoints : numsPoints)
+      totalNumPoints += numPoints;
     
     List<P> allPoints = new ArrayList<P>(totalNumPoints);
     
-    for (List<P>[] lists : allLists)
-      for (List<P> list : lists)
-        allPoints.addAll(list);
+    for (int iList = 0; iList < allLists.length; iList++) {
+      allPoints.addAll(allLists[iList]);
+      allLists[iList] = null; // To let the GC collect it
+    }
     
-    allLists = null;
     
     if (params.getBoolean("dedup", true)) {
       // Remove duplicates to ensure correctness
