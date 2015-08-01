@@ -324,14 +324,14 @@ public class DelaunayTriangulation {
             size /= 1024;
             unit++;
           }
-          return String.format("%0.2f %s", size, units[unit]);
+          return String.format("%.2f %s", size, units[unit]);
         }
         
         @Override
         public void run() {
           Runtime runtime = Runtime.getRuntime();
           while (true) {
-            LOG.info(String.format("Free memory %d / Total memory %d",
+            LOG.info(String.format("Free memory %s / Total memory %s",
                 humanReadable(runtime.freeMemory()),
                 humanReadable(runtime.totalMemory())));
             try {
