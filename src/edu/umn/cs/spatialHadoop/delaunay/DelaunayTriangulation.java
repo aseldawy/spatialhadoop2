@@ -159,6 +159,7 @@ public class DelaunayTriangulation {
       List<List<Triangulation>> columns = new Vector<List<Triangulation>>();
       
       // Arrange triangulations column-by-column
+      int numTriangulations = 0;
       for (Triangulation t : values) {
         double x1 = t.mbr.x1, x2 = t.mbr.x2;
         List<Triangulation> selectedColumn = null;
@@ -178,7 +179,10 @@ public class DelaunayTriangulation {
           columns.add(selectedColumn);
         }
         selectedColumn.add(t);
+        numTriangulations++;
       }
+      
+      LOG.info("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
       
       List<Triangulation> mergedColumns = new Vector<Triangulation>();
       // Merge all triangulations together column-by-column
@@ -196,6 +200,7 @@ public class DelaunayTriangulation {
           }
         });
 
+        LOG.info("Merging "+column.size()+" triangulations vertically");
         GuibasStolfiDelaunayAlgorithm algo =
             new GuibasStolfiDelaunayAlgorithm(column.toArray(new Triangulation[column.size()]), context);
         mergedColumns.add(algo.getFinalAnswer());
@@ -213,6 +218,7 @@ public class DelaunayTriangulation {
           return 0;
         }
       });
+      LOG.info("Merging "+mergedColumns.size()+" triangulations horizontally");
       GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
           mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
           context);
@@ -311,16 +317,26 @@ public class DelaunayTriangulation {
     boolean reportMem = params.getBoolean("mem", false);
     if (reportMem) {
       Thread memThread = new Thread(new Runnable() {
+        private String humanReadable(double size) {
+          final String[] units = {"", "KB", "MB", "GB", "TB", "PB"};
+          int unit = 0;
+          while (unit < units.length && size > 1024) {
+            size /= 1024;
+            unit++;
+          }
+          return String.format("%0.2f %s", size, units[unit]);
+        }
+        
         @Override
         public void run() {
           Runtime runtime = Runtime.getRuntime();
           while (true) {
-            LOG.info(String.format("Free memory %d / Total memory %d", runtime.freeMemory(), runtime.totalMemory()));
+            LOG.info(String.format("Free memory %d / Total memory %d",
+                humanReadable(runtime.freeMemory()),
+                humanReadable(runtime.totalMemory())));
             try {
               Thread.sleep(1000*60);
             } catch (InterruptedException e) {
-              // TODO Auto-generated catch block
-              e.printStackTrace();
             }
           }
         }}, "reportMem");
