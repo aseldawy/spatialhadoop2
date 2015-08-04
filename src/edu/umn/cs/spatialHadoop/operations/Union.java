@@ -125,7 +125,7 @@ public class Union {
       }
     });
   
-    final int MaxBatchSize = 10000;
+    final int MaxBatchSize = 500;
     // All polygons that are to the left of the sweep line
     List<Geometry> finalPolygons = new ArrayList<Geometry>();
     // All polygons that are to the right of the sweep line
@@ -141,7 +141,6 @@ public class Union {
         basicShapes.set(i++, null); // Remove from list to release memory
       }
       double sweepLinePosition = (Double)nonFinalPolygons.get(nonFinalPolygons.size() - 1).getUserData();
-      LOG.info("Computing the union of a batch of "+nonFinalPolygons.size()+" geoms");
       Geometry batchUnion;
       batchUnion = safeUnion(nonFinalPolygons, context);
       if (context != null)
@@ -164,7 +163,7 @@ public class Union {
       } else {
         nonFinalPolygons.add(batchUnion);
       }
-      LOG.info("Final/Non-Final polygons = "+finalPolygons.size()+"/"+nonFinalPolygons.size());
+      //LOG.info("Final/Non-Final polygons = "+finalPolygons.size()+"/"+nonFinalPolygons.size());
       if (context != null) {
         context.progress();
         int progress = i * 100 / basicShapes.size();
