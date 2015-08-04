@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -83,7 +84,7 @@ public class Union {
    */
   public static Geometry unionInMemory(final List<Geometry> geoms,
       TaskAttemptContext context) throws IOException {
-    List<Geometry> basicShapes = new Vector<Geometry>();
+    List<Geometry> basicShapes = new ArrayList<Geometry>();
     for (int i = 0; i < geoms.size(); i++) {
       Geometry geom = geoms.get(i);
       if (geom instanceof GeometryCollection) {
@@ -122,11 +123,11 @@ public class Union {
       }
     });
   
-    final int MaxBatchSize = 10000;
+    final int MaxBatchSize = 1000;
     // All polygons that are to the left of the sweep line
-    List<Geometry> finalPolygons = new Vector<Geometry>();
+    List<Geometry> finalPolygons = new ArrayList<Geometry>();
     // All polygons that are to the right of the sweep line
-    List<Geometry> nonFinalPolygons = new Vector<Geometry>();
+    List<Geometry> nonFinalPolygons = new ArrayList<Geometry>();
     
     LOG.info("Sorted the geometries by x");
     
@@ -139,8 +140,22 @@ public class Union {
       }
       double sweepLinePosition = (Double)nonFinalPolygons.get(nonFinalPolygons.size() - 1).getUserData();
       LOG.info("Computing the union of a batch of "+nonFinalPolygons.size()+" geoms");
-      GeometryCollection batchInOne = (GeometryCollection) FACTORY.buildGeometry(nonFinalPolygons);
-      Geometry batchUnion = batchInOne.buffer(0);
+      Geometry batchUnion;
+      try {
+        // Union using the buffer operation
+        GeometryCollection batchInOne = (GeometryCollection) FACTORY.buildGeometry(nonFinalPolygons);
+        batchUnion = batchInOne.buffer(0);
+      } catch (Exception e) {
+        LOG.warn("Exception with buffer operation. Falling back to union");
+        // Fall back to the union operation
+        batchUnion = FACTORY.buildGeometry(new ArrayList<Geometry>());
+        int counter = 0;
+        for (Geometry poly : nonFinalPolygons) {
+          batchUnion = batchUnion.union(poly);
+          if (context != null && (counter++ & 0xff) == 0)
+            context.progress();
+        }
+      }
       if (context != null)
         context.progress();
   
@@ -189,7 +204,7 @@ public class Union {
     protected void map(Rectangle dummy, Iterable<S> shapes, Context context)
         throws IOException, InterruptedException {
       S templateShape = null;
-      List<Geometry> vgeoms = new Vector<Geometry>();
+      List<Geometry> vgeoms = new ArrayList<Geometry>();
       Iterator<S> i = shapes.iterator();
       while (i.hasNext()) {
         templateShape = i.next();
@@ -212,7 +227,7 @@ public class Union {
     protected void reduce(NullWritable dummy, Iterable<S> shapes,
         Context context) throws IOException, InterruptedException {
       S templateShape = null;
-      Vector<Geometry> vgeoms = new Vector<Geometry>();
+      List<Geometry> vgeoms = new ArrayList<Geometry>();
       Iterator<S> i = shapes.iterator();
       while (i.hasNext()) {
         templateShape = i.next();
@@ -313,7 +328,7 @@ public class Union {
         }
         // Union all remaining geometries
         try {
-          List<Geometry> finalBatch = new Vector<Geometry>(batchSize);
+          List<Geometry> finalBatch = new ArrayList<Geometry>(batchSize);
           for (int i = 0; i < batchSize; i++)
             finalBatch.add(batch[i]);
           return Union.unionInMemory(finalBatch, null);
