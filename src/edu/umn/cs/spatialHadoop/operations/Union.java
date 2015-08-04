@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Stack;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -33,6 +34,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.hadoop.util.Progressable;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
@@ -123,7 +125,7 @@ public class Union {
       }
     });
   
-    final int MaxBatchSize = 1000;
+    final int MaxBatchSize = 10000;
     // All polygons that are to the left of the sweep line
     List<Geometry> finalPolygons = new ArrayList<Geometry>();
     // All polygons that are to the right of the sweep line
@@ -141,21 +143,7 @@ public class Union {
       double sweepLinePosition = (Double)nonFinalPolygons.get(nonFinalPolygons.size() - 1).getUserData();
       LOG.info("Computing the union of a batch of "+nonFinalPolygons.size()+" geoms");
       Geometry batchUnion;
-      try {
-        // Union using the buffer operation
-        GeometryCollection batchInOne = (GeometryCollection) FACTORY.buildGeometry(nonFinalPolygons);
-        batchUnion = batchInOne.buffer(0);
-      } catch (Exception e) {
-        LOG.warn("Exception with buffer operation. Falling back to union");
-        // Fall back to the union operation
-        batchUnion = FACTORY.buildGeometry(new ArrayList<Geometry>());
-        int counter = 0;
-        for (Geometry poly : nonFinalPolygons) {
-          batchUnion = batchUnion.union(poly);
-          if (context != null && (counter++ & 0xff) == 0)
-            context.progress();
-        }
-      }
+      batchUnion = safeUnion(nonFinalPolygons, context);
       if (context != null)
         context.progress();
   
@@ -187,6 +175,57 @@ public class Union {
     // Combine all polygons together to produce the answer
     finalPolygons.addAll(nonFinalPolygons);
     return FACTORY.buildGeometry(finalPolygons);
+  }
+
+  /**
+   * Directly unions the given list of polygons using a safe method that tries
+   * to avoid geometry exceptions. First, it tries the buffer(0) method. It it
+   * fails, it falls back to the tradition union method.
+   * @param polys
+   * @param progress
+   * @return
+   */
+  private static Geometry safeUnion(List<Geometry> polys,
+      Progressable progress) {
+    Stack<Integer> rangeStarts = new Stack<Integer>();
+    Stack<Integer> rangeEnds = new Stack<Integer>();
+    rangeStarts.push(0);
+    rangeEnds.push(polys.size());
+    List<Geometry> results = new ArrayList<Geometry>();
+    
+    // Minimum range size that is broken into two subranges
+    final int MinimumThreshold = 10;
+    
+    while (!rangeStarts.isEmpty()) {
+      int rangeStart = rangeStarts.pop();
+      int rangeEnd = rangeEnds.pop();
+      
+      try {
+        // Union using the buffer operation
+        GeometryCollection rangeInOne = (GeometryCollection) FACTORY.buildGeometry(polys.subList(rangeStart, rangeEnd));
+        Geometry rangeUnion = rangeInOne.buffer(0);
+        results.add(rangeUnion);
+      } catch (Exception e) {
+        LOG.warn("Exception in merging "+(rangeEnd - rangeStart)+" polygons");
+        // Fall back to the union operation
+        if (rangeEnd - rangeStart < MinimumThreshold) {
+          // Do the union directly using the old method (union)
+          Geometry rangeUnion = FACTORY.buildGeometry(new ArrayList<Geometry>());
+          for (Geometry poly : polys)
+            rangeUnion = rangeUnion.union(poly);
+          results.add(rangeUnion);
+        } else {
+          // Further break the range into two subranges
+          rangeStarts.push(rangeStart);
+          rangeEnds.push((rangeStart + rangeEnd) / 2);
+          rangeStarts.push((rangeStart + rangeEnd) / 2);
+          rangeEnds.push(rangeEnd);
+        }
+      }
+    }
+    
+    // Finally, union all the results
+    return results.size() == 1 ? results.get(0) : safeUnion(results, progress);
   }
 
   /**
@@ -340,8 +379,9 @@ public class Union {
     }, parallelism);
     
     // Write result to output
-    S outShape = (S) params.getShape("shape");
+    LOG.info("Merge the results of all splits");
     Geometry finalResult = Union.unionInMemory(results, null);
+    S outShape = (S) params.getShape("shape");
     FileSystem outFS = outPath.getFileSystem(params);
     PrintStream out = new PrintStream(outFS.create(outPath));
     Text line = new Text2();
