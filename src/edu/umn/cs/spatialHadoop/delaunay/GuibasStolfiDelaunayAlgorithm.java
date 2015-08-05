@@ -194,7 +194,6 @@ public class GuibasStolfiDelaunayAlgorithm {
     
     if (progress != null)
       progress.progress();
-    LOG.info("Merging "+triangulations.length+" triangulations");
     this.finalAnswer = mergeAllTriangulations(triangulations);
   }
   
@@ -470,8 +469,14 @@ public class GuibasStolfiDelaunayAlgorithm {
    * @return 
    */
   protected IntermediateTriangulation mergeAllTriangulations(IntermediateTriangulation[] triangulations) {
+    long reportTime = 0;
     // Start the merge process
     while (triangulations.length > 1) {
+      long currentTime = System.currentTimeMillis();
+      if (currentTime - reportTime > 1000) {
+        LOG.info("Merging "+triangulations.length+" triangulations");
+        reportTime = currentTime;
+      }
       // Merge every pair of DTs
       IntermediateTriangulation[] newTriangulations = new IntermediateTriangulation[triangulations.length / 2 + (triangulations.length & 1)];
       int t2 = 0;

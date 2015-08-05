@@ -9,7 +9,6 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -40,6 +39,7 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
@@ -143,7 +143,7 @@ public class DelaunayTriangulation {
         // Write nonFinalpart to the reduce phase
         context.write(column, nonfinalPart);
       } else {
-        LOG.info("Writing the whole DT to the output");
+        LOG.info("Writing the whole DT to the reduce phase");
         context.setStatus("Writing DT");
         context.write(column, algo.getFinalAnswer());
       }
@@ -258,7 +258,7 @@ public class DelaunayTriangulation {
     TextOutputFormat.setOutputPath(job, outPath);
     
     // Set column boundaries to define the boundaries of each reducer
-    // TODO handle multi file input
+    // TODO handle multi file input (not really important)
     FileSystem inFs = inPaths[0].getFileSystem(params);
     GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inPaths[0]);
     List<Rectangle> columns = new Vector<Rectangle>();
@@ -312,7 +312,7 @@ public class DelaunayTriangulation {
    * @throws IOException
    * @throws InterruptedException
    */
-  public static <P extends Point> void delaunayLocal(Path[] inPaths, Path outPath,
+  public static void delaunayLocal(Path[] inPaths, Path outPath,
       final OperationsParams params) throws IOException, InterruptedException {
     boolean reportMem = params.getBoolean("mem", false);
     if (reportMem) {
@@ -345,23 +345,24 @@ public class DelaunayTriangulation {
     }
     // 1- Split the input path/file to get splits that can be processed
     // independently
-    final SpatialInputFormat3<Rectangle, P> inputFormat =
-        new SpatialInputFormat3<Rectangle, P>();
+    final SpatialInputFormat3<Rectangle, Point> inputFormat =
+        new SpatialInputFormat3<Rectangle, Point>();
     Job job = Job.getInstance(params);
     SpatialInputFormat3.setInputPaths(job, inPaths);
     final List<InputSplit> splits = inputFormat.getSplits(job);
-    final List<P>[] allLists = new List[splits.size()];
+    final Point[][] allLists = new Point[splits.size()][];
     
     // 2- Read all input points in memory
+    LOG.info("Reading points from "+splits.size()+" splits");
     Vector<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
       @Override
       public Integer run(int i1, int i2) {
         try {
           int numPoints = 0;
           for (int i = i1; i < i2; i++) {
-            List<P> points = new ArrayList<P>();
+            List<Point> points = new ArrayList<Point>();
             FileSplit fsplit = (FileSplit) splits.get(i);
-            final RecordReader<Rectangle, Iterable<P>> reader =
+            final RecordReader<Rectangle, Iterable<Point>> reader =
                 inputFormat.createRecordReader(fsplit, null);
             if (reader instanceof SpatialRecordReader3) {
               ((SpatialRecordReader3)reader).initialize(fsplit, params);
@@ -373,14 +374,14 @@ public class DelaunayTriangulation {
               throw new RuntimeException("Unknown record reader");
             }
             while (reader.nextKeyValue()) {
-              Iterable<P> pts = reader.getCurrentValue();
-              for (P p : pts) {
-                points.add((P) p.clone());
+              Iterable<Point> pts = reader.getCurrentValue();
+              for (Point p : pts) {
+                points.add(p.clone());
               }
             }
             reader.close();
             numPoints += points.size();
-            allLists[i - i1] = points;
+            allLists[i - i1] = points.toArray(new Point[points.size()]);
           }
           return numPoints;
         } catch (IOException e) {
@@ -396,50 +397,28 @@ public class DelaunayTriangulation {
     for (int numPoints : numsPoints)
       totalNumPoints += numPoints;
     
-    List<P> allPoints = new ArrayList<P>(totalNumPoints);
+    LOG.info("Read "+totalNumPoints+" points and merging into one list");
+    Point[] allPoints = new Point[totalNumPoints];
+    int pointer = 0;
     
     for (int iList = 0; iList < allLists.length; iList++) {
-      allPoints.addAll(allLists[iList]);
+      System.arraycopy(allLists[iList], 0, allPoints, pointer, allLists[iList].length);
+      pointer += allLists[iList].length;
       allLists[iList] = null; // To let the GC collect it
     }
     
-    
     if (params.getBoolean("dedup", true)) {
-      // Remove duplicates to ensure correctness
-      final float threshold = params.getFloat("threshold", 1E-5f);
-      Collections.sort(allPoints, new Comparator<P>() {
-        @Override
-        public int compare(P p1, P p2) {
-          double dx = p1.x - p2.x;
-          if (dx < 0) return -1;
-          if (dx > 0) return 1;
-          double dy = p1.y - p2.y;
-          if (dy < 0) return -1;
-          if (dy > 0) return 1;
-          return 0;
-        }
-      });
-      
-      int i = 1;
-      while (i < allPoints.size()) {
-        P p1 = allPoints.get(i-1);
-        P p2 = allPoints.get(i);
-        double dx = Math.abs(p1.x - p2.x);
-        double dy = Math.abs(p1.y - p2.y);
-        if (dx < threshold && dy < threshold)
-          allPoints.remove(i);
-        else
-          i++;
-      }
+      float threshold = params.getFloat("threshold", 1E-5f);
+      allPoints = SpatialAlgorithms.deduplicatePoints(allPoints, threshold);
     }
     
-    LOG.info("Read "+allPoints.size()+" points and computing DT");
-    GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(allPoints.toArray(
-        (P[]) Array.newInstance(allPoints.get(0).getClass(), allPoints.size())), null);
+    LOG.info("Computing DT for "+allPoints.length+" points");
+    GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(allPoints, null);
+    LOG.info("DT computed");
     //dtAlgorithm.getFinalAnswer().draw();
-    Triangulation finalPart = new Triangulation();
-    Triangulation nonfinalPart = new Triangulation();
-    dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
+    //Triangulation finalPart = new Triangulation();
+    //Triangulation nonfinalPart = new Triangulation();
+    //dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
   }
 
   /**
