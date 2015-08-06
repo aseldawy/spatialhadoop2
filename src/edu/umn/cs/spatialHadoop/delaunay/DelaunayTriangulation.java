@@ -106,28 +106,17 @@ public class DelaunayTriangulation {
       for (S site : values)
         sites.add((S) site.clone());
 
+      Point[] points = sites.toArray(new Point[sites.size()]);
+      
       if (deduplicate) {
-        LOG.info("Removing duplicates from "+sites.size()+" points");
-        // Remove duplicates to ensure correctness
-        Collections.sort(sites);
-
-        int i = 1;
-        while (i < sites.size()) {
-          S s1 = sites.get(i-1);
-          S s2 = sites.get(i);
-          if (Math.abs(s1.x - s2.x) < threshold &&
-              Math.abs(s1.y - s2.y) < threshold)
-            sites.remove(i);
-          else
-            i++;
-        }
-        LOG.info("Duplicates removed and only "+sites.size()+" points left");
+        points = SpatialAlgorithms.deduplicatePoints(points, threshold);
+        LOG.info("Duplicates removed and only "+points.length+" points left");
       }
 
       context.setStatus("Computing DT");
-      LOG.info("Computing DT for "+sites.size()+" sites");
+      LOG.info("Computing DT for "+points.length+" sites");
       GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
-          sites.toArray(new Point[sites.size()]), context);
+          points, context);
       if (key.isValid()) {
         int col = Arrays.binarySearch(this.columnBoundaries, key.x1);
         if (col < 0)
