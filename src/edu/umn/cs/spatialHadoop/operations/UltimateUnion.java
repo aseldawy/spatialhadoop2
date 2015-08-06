@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
@@ -27,17 +28,18 @@ import org.apache.hadoop.util.GenericOptionsParser;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.TopologyException;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms.RectangleID;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
  * Computes the union of a set of shapes using a distributed MapReduce program.
@@ -66,16 +68,19 @@ public class UltimateUnion {
       Mapper<Rectangle, Iterable<Shape>, NullWritable, Shape> {
     
     @Override
-    protected void map(Rectangle key, Iterable<Shape> shapes, Context context)
+    protected void map(Rectangle key, Iterable<Shape> shapes, final Context context)
         throws IOException, InterruptedException {
       context.setStatus("Clustering");
       long t1 = System.currentTimeMillis();
-      OGCJTSShape templateShape = null;
       Vector<Geometry> vgeoms = new Vector<Geometry>();
       Vector<RectangleID> rects = new Vector<RectangleID>();
-      for (Shape s : shapes) {
-        if (templateShape == null)
-          templateShape = (OGCJTSShape) s;
+      Iterator<Shape> iter = shapes.iterator();
+      final OGCJTSShape templateShape = (OGCJTSShape) iter.next();
+      vgeoms.add(templateShape.geom);
+      rects.add(new RectangleID(rects.size(), templateShape.getMBR()));
+
+      while (iter.hasNext()) {
+        Shape s = iter.next();
         vgeoms.add(((OGCJTSShape)s).geom);
         rects.add(new RectangleID(rects.size(), s.getMBR()));
       }
@@ -133,34 +138,22 @@ public class UltimateUnion {
       // Compute a separate union for each cluster
       context.setStatus("Unioning");
       t1 = System.currentTimeMillis();
-      NullWritable nullKey = NullWritable.get();
       Coordinate[] coords = new Coordinate[5];
       coords[0] = new Coordinate(key.x1, key.y1);
       coords[1] = new Coordinate(key.x2, key.y1);
       coords[2] = new Coordinate(key.x2, key.y2);
       coords[3] = new Coordinate(key.x1, key.y2);
       coords[4] = coords[0];
-      Geometry partitionMBR = FACTORY.createPolygon(FACTORY.createLinearRing(coords), null);
+      final Geometry partitionMBR = FACTORY.createPolygon(FACTORY.createLinearRing(coords), null);
 
       for (List<Geometry> group : groups.values()) {
-        Geometry theUnion = Union.unionInMemory(group, context);
-        context.progress();
-        if (theUnion != null) {
-          if (theUnion instanceof GeometryCollection) {
-            // Result is a geometry collection. Write each one to the output
-            GeometryCollection theUnionColl = (GeometryCollection) theUnion;
-            for (int n = 0; n < theUnionColl.getNumGeometries(); n++) {
-              Geometry part = theUnionColl.getGeometryN(n);
-              Geometry croppedUnion = part.getBoundary().intersection(partitionMBR);
-              if (croppedUnion != null) {
-                templateShape.geom = croppedUnion;
-                context.write(nullKey, templateShape);
-              }
-            }
-          } else {
-            // Result is one geometry. Write it to the output
+        Union.unionInMemory(group, new Progressable.TaskProgressable(context), new ResultCollector<Geometry>() {
+          NullWritable nullKey = NullWritable.get();
+          
+          @Override
+          public void collect(Geometry r) {
             try {
-              Geometry croppedUnion = theUnion.getBoundary().intersection(partitionMBR);
+              Geometry croppedUnion = r.getBoundary().intersection(partitionMBR);
               if (croppedUnion != null) {
                 templateShape.geom = croppedUnion;
                 context.write(nullKey, templateShape);
@@ -169,11 +162,22 @@ public class UltimateUnion {
               LOG.warn("Error in cropping", e);
               // Unavoidable TopologyException. Skip the clipping just to ensure
               // we write something to the output
-              templateShape.geom = theUnion;
-              context.write(nullKey, templateShape);
+              templateShape.geom = r;
+              try {
+                context.write(nullKey, templateShape);
+              } catch (IOException e1) {
+                e1.printStackTrace();
+              } catch (InterruptedException e1) {
+                e1.printStackTrace();
+              }
+            } catch (IOException e) {
+              e.printStackTrace();
+            } catch (InterruptedException e) {
+              e.printStackTrace();
             }
           }
-        }
+        });
+        context.progress();
       }
       t2 = System.currentTimeMillis();
       LOG.info("Computed the union in "+(t2-t1)/1000.0+" seconds");
