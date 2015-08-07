@@ -27,7 +27,10 @@ import org.apache.hadoop.io.compress.CompressionInputStream;
 import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.io.compress.SplitCompressionInputStream;
 import org.apache.hadoop.io.compress.SplittableCompressionCodec;
+import org.apache.hadoop.mapred.Task;
+import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.MapContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
@@ -103,10 +106,17 @@ public class SpatialRecordReader3<V extends Shape> extends
    */
   private long bytesRead;
 
+  /**
+   * Context of the map task. Used to increment counters.
+   */
+  private Counter inputRecordsCounter;
+
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
       throws IOException, InterruptedException {
     Configuration conf = context != null ? context.getConfiguration() : new Configuration();
+    if (context != null && context instanceof MapContext)
+      inputRecordsCounter = ((MapContext)context).getCounter(Task.Counter.MAP_INPUT_RECORDS);
     initialize(split, conf);
   }
 
@@ -360,6 +370,8 @@ public class SpatialRecordReader3<V extends Shape> extends
         
         if (!srr.nextShape(nextShape))
           nextShape = null;
+        if (srr.inputRecordsCounter != null)
+          srr.inputRecordsCounter.increment(1);
         return shape;
       } catch (IOException e) {
         throw new RuntimeException("Error reading from file", e);
