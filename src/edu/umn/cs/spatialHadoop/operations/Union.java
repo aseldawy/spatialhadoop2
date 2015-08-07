@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Stack;
 import java.util.Vector;
 
+import org.apache.commons.io.output.NullOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
@@ -224,11 +225,15 @@ public class Union {
         LOG.warn("Exception in merging "+(rangeEnd - rangeStart)+" polygons", e);
         // Fall back to the union operation
         if (rangeEnd - rangeStart < MinimumThreshold) {
+          LOG.info("Error in union "+rangeStart+"-"+rangeEnd);
           // Do the union directly using the old method (union)
           Geometry rangeUnion = FACTORY.buildGeometry(new ArrayList<Geometry>());
-          for (Geometry poly : polys) {
+          for (int i = rangeStart; i < rangeEnd; i++) {
+            LOG.info(polys.get(i).toText());
+          }
+          for (int i = rangeStart; i < rangeEnd; i++) {
             try {
-              rangeUnion = rangeUnion.union(poly);
+              rangeUnion = rangeUnion.union(polys.get(i));
             } catch (Exception e1) {
               // Log the error and skip it to allow the method to finish
               LOG.error("Error computing union", e);
@@ -485,8 +490,14 @@ public class Union {
       allInOne.addAll(result);
     
     final S outShape = (S) params.getShape("shape");
-    FileSystem outFS = outPath.getFileSystem(params);
-    final PrintStream out = new PrintStream(outFS.create(outPath));
+    final PrintStream out;
+    if (outPath == null || !params.getBoolean("output", true)) {
+      // Skip writing the output
+      out = new PrintStream(new NullOutputStream());
+    } else {
+      FileSystem outFS = outPath.getFileSystem(params);
+      out = new PrintStream(outFS.create(outPath));
+    }
     
     Union.unionInMemory(allInOne, new Progressable.NullProgressable() {
       int lastProgress = 0;
@@ -538,8 +549,8 @@ public class Union {
       return;
     }
     
-    Path input = params.getPath();
-    Path output = params.getPaths()[1];
+    Path input = params.getInputPath();
+    Path output = params.getOutputPath();
     Shape shape = params.getShape("shape");
     
     if (shape == null || !(shape instanceof OGCJTSShape)) {

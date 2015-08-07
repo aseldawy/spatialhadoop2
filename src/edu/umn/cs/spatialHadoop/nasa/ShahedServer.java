@@ -14,8 +14,10 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URLConnection;
+import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -319,6 +321,10 @@ public class ShahedServer extends AbstractHandler {
     } else {
       response.setContentType(URLConnection.guessContentTypeFromName(target));
     }
+    final DateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss ZZZ");
+    final long year = 1000L * 60 * 60 * 24 * 365;
+    // Expires in a year
+    response.addHeader("Expires", format.format(new Date().getTime() + year));
   }
   
   private class ImageRequestHandler extends Thread {
