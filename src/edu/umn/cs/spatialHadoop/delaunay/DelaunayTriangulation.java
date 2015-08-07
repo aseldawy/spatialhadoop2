@@ -61,6 +61,14 @@ public class DelaunayTriangulation {
   /**Logger to write log messages for this class*/
   static final Log LOG = LogFactory.getLog(DelaunayTriangulation.class);
   
+  public static enum DelaunayCounters {
+    INPUT_SITES,
+    MAP_FINAL_SITES,
+    MAP_NONFINAL_SITES,
+    REDUCE_FINAL_SITES,
+    REDUCE_NONFINAL_SITES,
+  }
+  
   /**Configuration line to store column boundaries on which intermediate data is split*/
   private static final String ColumnBoundaries = "DelaunayTriangulation.ColumnBoundaries";
 
@@ -106,6 +114,7 @@ public class DelaunayTriangulation {
       for (S site : values)
         sites.add((S) site.clone());
 
+      context.getCounter(DelaunayCounters.INPUT_SITES).increment(sites.size());
       Point[] points = sites.toArray(new Point[sites.size()]);
       
       if (deduplicate) {
@@ -128,9 +137,12 @@ public class DelaunayTriangulation {
         Triangulation nonfinalPart = new Triangulation();
         algo.splitIntoFinalAndNonFinalParts(key, finalPart, nonfinalPart);
         // TODO write final part to the output path
+        
+        context.getCounter(DelaunayCounters.MAP_FINAL_SITES).increment(finalPart.getNumSites());
 
         // Write nonFinalpart to the reduce phase
         context.write(column, nonfinalPart);
+        context.getCounter(DelaunayCounters.MAP_NONFINAL_SITES).increment(nonfinalPart.getNumSites());
       } else {
         LOG.info("Writing the whole DT to the reduce phase");
         context.setStatus("Writing DT");
@@ -148,8 +160,11 @@ public class DelaunayTriangulation {
       List<List<Triangulation>> columns = new Vector<List<Triangulation>>();
       
       // Arrange triangulations column-by-column
+      Rectangle overallMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+          -Double.MAX_VALUE, -Double.MAX_VALUE);
       int numTriangulations = 0;
       for (Triangulation t : values) {
+        overallMBR.expand(t.mbr);
         double x1 = t.mbr.x1, x2 = t.mbr.x2;
         List<Triangulation> selectedColumn = null;
         int iColumn = 0;
@@ -212,8 +227,17 @@ public class DelaunayTriangulation {
           mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
           context);
       
+      Triangulation finalPart = new Triangulation();
+      Triangulation nonfinalPart = new Triangulation();
+      algo.splitIntoFinalAndNonFinalParts(overallMBR, finalPart, nonfinalPart);
+      
+      // TODO write final part directly to the output path
+      context.getCounter(DelaunayCounters.REDUCE_FINAL_SITES).increment(finalPart.getNumSites());
+      
+      // Write non final part to the final merge phase
       context.setStatus("Writing DT");
-      context.write(NullWritable.get(), algo.getFinalAnswer());
+      context.getCounter(DelaunayCounters.REDUCE_NONFINAL_SITES).increment(nonfinalPart.getNumSites());
+      context.write(NullWritable.get(), nonfinalPart);
     }
   }
 

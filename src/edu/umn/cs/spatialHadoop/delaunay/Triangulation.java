@@ -66,6 +66,10 @@ public class Triangulation implements Writable, TextSerializable {
     (edgeStarts.length - numEdges)+" instead of "+edgeStarts.length);
   }
   
+  public int getNumSites() {
+    return sites.length;
+  }
+  
   /**
    * Remove all unnecessary nodes.
    */
