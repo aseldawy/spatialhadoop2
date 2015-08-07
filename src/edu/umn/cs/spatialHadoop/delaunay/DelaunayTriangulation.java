@@ -62,7 +62,6 @@ public class DelaunayTriangulation {
   static final Log LOG = LogFactory.getLog(DelaunayTriangulation.class);
   
   public static enum DelaunayCounters {
-    INPUT_SITES,
     MAP_FINAL_SITES,
     MAP_NONFINAL_SITES,
     REDUCE_FINAL_SITES,
@@ -114,7 +113,6 @@ public class DelaunayTriangulation {
       for (S site : values)
         sites.add((S) site.clone());
 
-      context.getCounter(DelaunayCounters.INPUT_SITES).increment(sites.size());
       Point[] points = sites.toArray(new Point[sites.size()]);
       
       if (deduplicate) {
