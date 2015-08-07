@@ -11,8 +11,6 @@ package edu.umn.cs.spatialHadoop.delaunay;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Vector;
 
@@ -32,7 +30,6 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
-import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
@@ -43,7 +40,6 @@ import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -109,7 +105,7 @@ public class DelaunayTriangulation {
     protected void map(Rectangle key, Iterable<S> values, Context context)
         throws IOException, InterruptedException {
       IntWritable column = new IntWritable();
-      List<S> sites = new Vector<S>();
+      List<S> sites = new ArrayList<S>();
       for (S site : values)
         sites.add((S) site.clone());
 
@@ -122,7 +118,7 @@ public class DelaunayTriangulation {
 
       context.setStatus("Computing DT");
       LOG.info("Computing DT for "+points.length+" sites");
-      GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
+      GSDelaunayAlgorithm algo = new GSDelaunayAlgorithm(
           points, context);
       if (key.isValid()) {
         int col = Arrays.binarySearch(this.columnBoundaries, key.x1);
@@ -149,96 +145,43 @@ public class DelaunayTriangulation {
     }
   }
 
+  /**
+   * Reduce function for DT. Merges some intermediate DTs vertically into
+   * columns and writes back the result as one trianguation to be merged at the
+   * final step. 
+   * @author Ahmed Eldawy
+   *
+   */
   public static class DelaunayReduce
-  extends Reducer<IntWritable, Triangulation, NullWritable, Triangulation> {
+  extends Reducer<IntWritable, Triangulation, Boolean, Triangulation> {
     
     @Override
     protected void reduce(IntWritable dummy, Iterable<Triangulation> values,
         Context context) throws IOException, InterruptedException {
-      List<List<Triangulation>> columns = new Vector<List<Triangulation>>();
-      
-      // Arrange triangulations column-by-column
+      List<Triangulation> triangulations = new ArrayList<Triangulation>();
       Rectangle overallMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
           -Double.MAX_VALUE, -Double.MAX_VALUE);
-      int numTriangulations = 0;
       for (Triangulation t : values) {
         overallMBR.expand(t.mbr);
-        double x1 = t.mbr.x1, x2 = t.mbr.x2;
-        List<Triangulation> selectedColumn = null;
-        int iColumn = 0;
-        while (iColumn < columns.size() && selectedColumn == null) {
-          Rectangle cmbr = columns.get(iColumn).get(0).mbr;
-          double cx1 = cmbr.x1;
-          double cx2 = cmbr.x2;
-          if (x2 > cx1 && cx2 > x1) {
-            selectedColumn = columns.get(iColumn);
-          }
-        }
-        
-        if (selectedColumn == null) {
-          // Create a new column
-          selectedColumn = new Vector<Triangulation>();
-          columns.add(selectedColumn);
-        }
-        selectedColumn.add(t);
-        numTriangulations++;
-      }
+        triangulations.add(t);
+      }      
       
-      LOG.info("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
-      
-      List<Triangulation> mergedColumns = new Vector<Triangulation>();
-      // Merge all triangulations together column-by-column
-      for (List<Triangulation> column : columns) {
-        // Sort this column by y-axis
-        Collections.sort(column, new Comparator<Triangulation>() {
-          @Override
-          public int compare(Triangulation t1, Triangulation t2) {
-            double dy = t1.mbr.y1 - t2.mbr.y1;
-            if (dy < 0)
-              return -1;
-            if (dy > 0)
-              return 1;
-            return 0;
-          }
-        });
-
-        LOG.info("Merging "+column.size()+" triangulations vertically");
-        GuibasStolfiDelaunayAlgorithm algo =
-            new GuibasStolfiDelaunayAlgorithm(column.toArray(new Triangulation[column.size()]), context);
-        mergedColumns.add(algo.getFinalAnswer());
-      }
-      
-      // Merge the result horizontally
-      Collections.sort(mergedColumns, new Comparator<Triangulation>() {
-        @Override
-        public int compare(Triangulation t1, Triangulation t2) {
-          double dx = t1.mbr.x1 - t2.mbr.x1;
-          if (dx < 0)
-            return -1;
-          if (dx > 0)
-            return 1;
-          return 0;
-        }
-      });
-      LOG.info("Merging "+mergedColumns.size()+" triangulations horizontally");
-      GuibasStolfiDelaunayAlgorithm algo = new GuibasStolfiDelaunayAlgorithm(
-          mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
-          context);
+      GSDelaunayAlgorithm algo = GSDelaunayAlgorithm.mergeTriangulations(triangulations, context);
       
       Triangulation finalPart = new Triangulation();
       Triangulation nonfinalPart = new Triangulation();
       algo.splitIntoFinalAndNonFinalParts(overallMBR, finalPart, nonfinalPart);
       
-      // TODO write final part directly to the output path
+      // Write final part directly to the output path
       context.getCounter(DelaunayCounters.REDUCE_FINAL_SITES).increment(finalPart.getNumSites());
+      context.write(Boolean.TRUE, finalPart);
       
       // Write non final part to the final merge phase
-      context.setStatus("Writing DT");
       context.getCounter(DelaunayCounters.REDUCE_NONFINAL_SITES).increment(nonfinalPart.getNumSites());
-      context.write(NullWritable.get(), nonfinalPart);
+      context.write(Boolean.FALSE, nonfinalPart);
     }
   }
-
+  
   /**
    * Run the DT algorithm in MapReduce
    * @param inPaths
@@ -262,17 +205,14 @@ public class DelaunayTriangulation {
     // Set input and output
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.setInputPaths(job, inPaths);
-    if (params.getBoolean("output", true))
-      job.setOutputFormatClass(TextOutputFormat3.class);
-    else
-      job.setOutputFormatClass(NullOutputFormat.class);
+    job.setOutputFormatClass(DelaunayTriangulationOutputFormat.class);
     TextOutputFormat.setOutputPath(job, outPath);
     
     // Set column boundaries to define the boundaries of each reducer
     // TODO handle multi file input (not really important)
     FileSystem inFs = inPaths[0].getFileSystem(params);
     GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inPaths[0]);
-    List<Rectangle> columns = new Vector<Rectangle>();
+    List<Rectangle> columns = new ArrayList<Rectangle>();
     for (Partition p : gIndex) {
       double x1 = p.x1, x2 = p.x2;
       
@@ -424,7 +364,7 @@ public class DelaunayTriangulation {
     }
     
     LOG.info("Computing DT for "+allPoints.length+" points");
-    GuibasStolfiDelaunayAlgorithm dtAlgorithm = new GuibasStolfiDelaunayAlgorithm(allPoints, null);
+    GSDelaunayAlgorithm dtAlgorithm = new GSDelaunayAlgorithm(allPoints, null);
     LOG.info("DT computed");
     //dtAlgorithm.getFinalAnswer().draw();
     //Triangulation finalPart = new Triangulation();

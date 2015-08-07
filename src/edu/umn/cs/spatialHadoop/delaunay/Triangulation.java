@@ -39,7 +39,7 @@ public class Triangulation implements Writable, TextSerializable {
   
   public Triangulation() {}
   
-  Triangulation(GuibasStolfiDelaunayAlgorithm algo) {
+  Triangulation(GSDelaunayAlgorithm algo) {
     this.sites = algo.points.clone();
     int numEdges = 0;
     this.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,

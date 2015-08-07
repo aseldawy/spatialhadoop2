@@ -1,6 +1,8 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Stack;
@@ -8,6 +10,7 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.mapreduce.Reducer.Context;
 import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -25,9 +28,9 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  * @author Ahmed Eldawy
  *
  */
-public class GuibasStolfiDelaunayAlgorithm {
+public class GSDelaunayAlgorithm {
   
-  static final Log LOG = LogFactory.getLog(GuibasStolfiDelaunayAlgorithm.class);
+  static final Log LOG = LogFactory.getLog(GSDelaunayAlgorithm.class);
   
   /** The original input set of points */
   Point[] points;
@@ -109,7 +112,7 @@ public class GuibasStolfiDelaunayAlgorithm {
      * Create an intermediate triangulation out of a triangulation created
      * somewhere else (may be another machine). It stores all the edges in the
      * neighbors array and adjusts the node IDs in edges to match their new
-     * position in the {@link GuibasStolfiDelaunayAlgorithm#points} array
+     * position in the {@link GSDelaunayAlgorithm#points} array
      * 
      * @param t
      *          The triangulation that needs to be added
@@ -143,7 +146,7 @@ public class GuibasStolfiDelaunayAlgorithm {
    * @param L
    * @param R
    */
-  public <P extends Point> GuibasStolfiDelaunayAlgorithm(P[] points, Progressable progress) {
+  public <P extends Point> GSDelaunayAlgorithm(P[] points, Progressable progress) {
     this.progress = progress;
     this.points = new Point[points.length];
     System.arraycopy(points, 0, this.points, 0, points.length);
@@ -199,11 +202,12 @@ public class GuibasStolfiDelaunayAlgorithm {
   
   /**
    * Compute the DT by merging existing triangulations created at different
-   * machines
+   * machines. The given triangulations should be sorted correctly such that
+   * they can be merged in their current sort order.
    * @param ts
    * @param progress
    */
-  public GuibasStolfiDelaunayAlgorithm(Triangulation[] ts, Progressable progress) {
+  public GSDelaunayAlgorithm(Triangulation[] ts, Progressable progress) {
     this.progress = progress;
     // Copy all triangulations
     int totalPointCount = 0;
@@ -243,6 +247,84 @@ public class GuibasStolfiDelaunayAlgorithm {
     this.finalAnswer = mergeAllTriangulations(triangulations);
   }
   
+  /**
+   * Merges a set of triangulations in any sort order. First, the triangulations
+   * are sorted in columns and each column is merged separately. After that,
+   * columns are merged together to produce one final answer.
+   * @param triangulations
+   * @param progress
+   * @return
+   */
+  static GSDelaunayAlgorithm mergeTriangulations(
+      List<Triangulation> triangulations, Progressable progress) {
+    // Arrange triangulations column-by-column
+    List<List<Triangulation>> columns = new ArrayList<List<Triangulation>>();
+    int numTriangulations = 0;
+    for (Triangulation t : triangulations) {
+      double x1 = t.mbr.x1, x2 = t.mbr.x2;
+      List<Triangulation> selectedColumn = null;
+      int iColumn = 0;
+      while (iColumn < columns.size() && selectedColumn == null) {
+        Rectangle cmbr = columns.get(iColumn).get(0).mbr;
+        double cx1 = cmbr.x1;
+        double cx2 = cmbr.x2;
+        if (x2 > cx1 && cx2 > x1) {
+          selectedColumn = columns.get(iColumn);
+        }
+      }
+      
+      if (selectedColumn == null) {
+        // Create a new column
+        selectedColumn = new ArrayList<Triangulation>();
+        columns.add(selectedColumn);
+      }
+      selectedColumn.add(t);
+      numTriangulations++;
+    }
+    
+    LOG.info("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
+    
+    List<Triangulation> mergedColumns = new ArrayList<Triangulation>();
+    // Merge all triangulations together column-by-column
+    for (List<Triangulation> column : columns) {
+      // Sort this column by y-axis
+      Collections.sort(column, new Comparator<Triangulation>() {
+        @Override
+        public int compare(Triangulation t1, Triangulation t2) {
+          double dy = t1.mbr.y1 - t2.mbr.y1;
+          if (dy < 0)
+            return -1;
+          if (dy > 0)
+            return 1;
+          return 0;
+        }
+      });
+  
+      LOG.info("Merging "+column.size()+" triangulations vertically");
+      GSDelaunayAlgorithm algo =
+          new GSDelaunayAlgorithm(column.toArray(new Triangulation[column.size()]), progress);
+      mergedColumns.add(algo.getFinalAnswer());
+    }
+    
+    // Merge the result horizontally
+    Collections.sort(mergedColumns, new Comparator<Triangulation>() {
+      @Override
+      public int compare(Triangulation t1, Triangulation t2) {
+        double dx = t1.mbr.x1 - t2.mbr.x1;
+        if (dx < 0)
+          return -1;
+        if (dx > 0)
+          return 1;
+        return 0;
+      }
+    });
+    LOG.info("Merging "+mergedColumns.size()+" triangulations horizontally");
+    GSDelaunayAlgorithm algo = new GSDelaunayAlgorithm(
+        mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
+        progress);
+    return algo;
+  }
+
   /**
    * Merge two adjacent triangulations into one
    * @param L
