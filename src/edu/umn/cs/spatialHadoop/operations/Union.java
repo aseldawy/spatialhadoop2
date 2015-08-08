@@ -257,7 +257,11 @@ public class Union {
     // Finally, union all the results
     Geometry finalResult = results.remove(results.size() - 1);
     while (!results.isEmpty()) {
-      finalResult = finalResult.union(results.remove(results.size() - 1));
+      try {
+        finalResult = finalResult.union(results.remove(results.size() - 1));
+      } catch (Exception e) {
+        LOG.error("Error in union", e);
+      }
       progressNum++;
       progress.progress(progressNum/(float)progressDen);
     }
