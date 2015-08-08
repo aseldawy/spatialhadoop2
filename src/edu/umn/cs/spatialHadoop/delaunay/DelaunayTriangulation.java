@@ -20,7 +20,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -38,6 +37,7 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.delaunay.DelaunayTriangulationOutputFormat.TriangulationRecordWriter;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
@@ -85,6 +85,8 @@ public class DelaunayTriangulation {
     
     /**Boundaries of columns to split partitions*/
     private double[] columnBoundaries;
+    /**A writer to write final parts*/
+    private TriangulationRecordWriter writer;
 
     @Override
     protected void setup(Context context) throws IOException,
@@ -99,6 +101,10 @@ public class DelaunayTriangulation {
         for (int iCol = 0; iCol < strBoundaries.length; iCol++)
           this.columnBoundaries[iCol] = Double.parseDouble(strBoundaries[iCol]);
       }
+      Path outputPath = DelaunayTriangulationOutputFormat.getOutputPath(context);
+      Path finalPath = new Path(outputPath, String.format("m-%05d.final", context.getTaskAttemptID().getTaskID().getId()));
+      FileSystem fs = finalPath.getFileSystem(context.getConfiguration());
+      writer = new TriangulationRecordWriter(fs, null, finalPath, context);
     }
     
     @Override
@@ -118,7 +124,7 @@ public class DelaunayTriangulation {
 
       context.setStatus("Computing DT");
       LOG.info("Computing DT for "+points.length+" sites");
-      GSDelaunayAlgorithm algo = new GSDelaunayAlgorithm(
+      GSDTAlgorithm algo = new GSDTAlgorithm(
           points, context);
       if (key.isValid()) {
         int col = Arrays.binarySearch(this.columnBoundaries, key.x1);
@@ -130,9 +136,9 @@ public class DelaunayTriangulation {
         Triangulation finalPart = new Triangulation();
         Triangulation nonfinalPart = new Triangulation();
         algo.splitIntoFinalAndNonFinalParts(key, finalPart, nonfinalPart);
-        // TODO write final part to the output path
-        
+        // Write final part directly to the output
         context.getCounter(DelaunayCounters.MAP_FINAL_SITES).increment(finalPart.getNumSites());
+        writer.write(Boolean.TRUE, finalPart);
 
         // Write nonFinalpart to the reduce phase
         context.write(column, nonfinalPart);
@@ -142,6 +148,14 @@ public class DelaunayTriangulation {
         context.setStatus("Writing DT");
         context.write(column, algo.getFinalAnswer());
       }
+    }
+    
+    @Override
+    protected void cleanup(
+        Mapper<Rectangle, Iterable<S>, IntWritable, Triangulation>.Context context)
+            throws IOException, InterruptedException {
+      super.cleanup(context);
+      writer.close(context);
     }
   }
 
@@ -166,7 +180,7 @@ public class DelaunayTriangulation {
         triangulations.add(t);
       }      
       
-      GSDelaunayAlgorithm algo = GSDelaunayAlgorithm.mergeTriangulations(triangulations, context);
+      GSDTAlgorithm algo = GSDTAlgorithm.mergeTriangulations(triangulations, context);
       
       Triangulation finalPart = new Triangulation();
       Triangulation nonfinalPart = new Triangulation();
@@ -364,7 +378,7 @@ public class DelaunayTriangulation {
     }
     
     LOG.info("Computing DT for "+allPoints.length+" points");
-    GSDelaunayAlgorithm dtAlgorithm = new GSDelaunayAlgorithm(allPoints, null);
+    GSDTAlgorithm dtAlgorithm = new GSDTAlgorithm(allPoints, null);
     LOG.info("DT computed");
     //dtAlgorithm.getFinalAnswer().draw();
     //Triangulation finalPart = new Triangulation();

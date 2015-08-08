@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
@@ -13,6 +14,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.RecordWriter;
@@ -20,6 +22,8 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
@@ -33,36 +37,61 @@ public class DelaunayTriangulationOutputFormat extends
   FileOutputFormat<Boolean, Triangulation> {
   static final Log LOG = LogFactory.getLog(DelaunayTriangulationOutputFormat.class);
   
-  public static class TriangulationBnaryRecordWriter extends
+  public static class TriangulationRecordWriter extends
     RecordWriter<Boolean, Triangulation> {
     
     /**An output stream to write non-final triangulations*/
     private FSDataOutputStream nonFinalOut;
     /**An output stream to write final triangulations*/
-    private FSDataOutputStream finalOut;
+    private PrintStream finalOut;
 
-    public TriangulationBnaryRecordWriter(FileSystem fs, Path nonFinalFile,
+    public TriangulationRecordWriter(FileSystem fs, Path nonFinalFile,
         Path finalFile, TaskAttemptContext context) throws IOException {
-      this.nonFinalOut = fs.create(nonFinalFile);
-      this.finalOut = fs.create(finalFile);
+      if (nonFinalFile != null)
+        this.nonFinalOut = fs.create(nonFinalFile);
+      if (finalFile != null)
+        this.finalOut = new PrintStream(fs.create(finalFile));
     }
 
     @Override
     public void write(Boolean key, Triangulation value)
         throws IOException, InterruptedException {
       if (key.booleanValue()) {
-        // TODO write in a more user-friendly text format
-        value.write(finalOut);
-      }
-      else {
+        // Write a final triangulation in a user-friendly text format
+        writeFinalTriangulation(finalOut, value);
+      } else {
         value.write(nonFinalOut);
+      }
+    }
+
+    /**
+     * Writes a final triangulation in a user-friendly format
+     * @param t
+     */
+    public static void writeFinalTriangulation(PrintStream ps, Triangulation t) {
+      Text text = new Text2();
+      for (int i = 0; i < t.edgeStarts.length; i++) {
+        Point startNode = t.sites[t.edgeStarts[i]];
+        text.clear();
+        startNode.toText(text);
+        ps.print(text); // Write start node
+
+        ps.print('\t'); // Field separator
+        
+        Point endNode = t.sites[t.edgeEnds[i]];
+        text.clear();
+        endNode.toText(text);
+        ps.println(text); // Write end node and new line
       }
     }
 
     @Override
     public void close(TaskAttemptContext context)
         throws IOException, InterruptedException {
-      nonFinalOut.close();
+      if (finalOut != null)
+        finalOut.close();
+      if (nonFinalOut != null)
+        nonFinalOut.close();
     }
   }
 
@@ -72,7 +101,7 @@ public class DelaunayTriangulationOutputFormat extends
     Path nonFinalFile = getDefaultWorkFile(context, ".nonfinal");
     Path finalFile = getDefaultWorkFile(context, ".final");
     FileSystem fs = nonFinalFile.getFileSystem(context.getConfiguration());
-    return new TriangulationBnaryRecordWriter(fs, nonFinalFile, finalFile, context);
+    return new TriangulationRecordWriter(fs, nonFinalFile, finalFile, context);
   }
   
   
@@ -122,14 +151,26 @@ public class DelaunayTriangulationOutputFormat extends
         });
         
         List<Triangulation> allTriangulations = new ArrayList<Triangulation>();
-        for (List<Triangulation> list : allLists) {
+        for (List<Triangulation> list : allLists)
           allTriangulations.addAll(list);
+        Triangulation finalAnswer;
+        if (allTriangulations.size() == 1) {
+          finalAnswer = allTriangulations.get(0);
+        } else {
+          LOG.info("Merging "+allTriangulations.size()+" triangulations");
+          finalAnswer = GSDTAlgorithm.mergeTriangulations(
+              allTriangulations, task).getFinalAnswer();
         }
-        LOG.info("Merging "+allTriangulations.size()+" triangulations");
-        /*GuibasStolfiDelaunayAlgorithm finalAnswer = */
-            GSDelaunayAlgorithm.mergeTriangulations(allTriangulations, task);
-        // TODO write the final answer to the output and delete intermediate files
+        // Write the final answer to the output and delete intermediate files
         LOG.info("Writing final output");
+        Path finalAnswerPath = new Path(outPath, "lastPart.final");
+        PrintStream ps = new PrintStream(fs.create(finalAnswerPath));
+        TriangulationRecordWriter.writeFinalTriangulation(ps, finalAnswer);
+        ps.close();
+        
+        // Delete intermediate files
+        for (FileStatus nonFinalFile : nonFinalFiles)
+          fs.delete(nonFinalFile.getPath(), false);
       } catch (InterruptedException e) {
         e.printStackTrace();
       }

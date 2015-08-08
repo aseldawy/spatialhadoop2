@@ -10,7 +10,6 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.mapreduce.Reducer.Context;
 import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -28,9 +27,9 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  * @author Ahmed Eldawy
  *
  */
-public class GSDelaunayAlgorithm {
+public class GSDTAlgorithm {
   
-  static final Log LOG = LogFactory.getLog(GSDelaunayAlgorithm.class);
+  static final Log LOG = LogFactory.getLog(GSDTAlgorithm.class);
   
   /** The original input set of points */
   Point[] points;
@@ -112,7 +111,7 @@ public class GSDelaunayAlgorithm {
      * Create an intermediate triangulation out of a triangulation created
      * somewhere else (may be another machine). It stores all the edges in the
      * neighbors array and adjusts the node IDs in edges to match their new
-     * position in the {@link GSDelaunayAlgorithm#points} array
+     * position in the {@link GSDTAlgorithm#points} array
      * 
      * @param t
      *          The triangulation that needs to be added
@@ -146,7 +145,7 @@ public class GSDelaunayAlgorithm {
    * @param L
    * @param R
    */
-  public <P extends Point> GSDelaunayAlgorithm(P[] points, Progressable progress) {
+  public <P extends Point> GSDTAlgorithm(P[] points, Progressable progress) {
     this.progress = progress;
     this.points = new Point[points.length];
     System.arraycopy(points, 0, this.points, 0, points.length);
@@ -207,7 +206,7 @@ public class GSDelaunayAlgorithm {
    * @param ts
    * @param progress
    */
-  public GSDelaunayAlgorithm(Triangulation[] ts, Progressable progress) {
+  public GSDTAlgorithm(Triangulation[] ts, Progressable progress) {
     this.progress = progress;
     // Copy all triangulations
     int totalPointCount = 0;
@@ -255,7 +254,7 @@ public class GSDelaunayAlgorithm {
    * @param progress
    * @return
    */
-  static GSDelaunayAlgorithm mergeTriangulations(
+  static GSDTAlgorithm mergeTriangulations(
       List<Triangulation> triangulations, Progressable progress) {
     // Arrange triangulations column-by-column
     List<List<Triangulation>> columns = new ArrayList<List<Triangulation>>();
@@ -301,8 +300,8 @@ public class GSDelaunayAlgorithm {
       });
   
       LOG.info("Merging "+column.size()+" triangulations vertically");
-      GSDelaunayAlgorithm algo =
-          new GSDelaunayAlgorithm(column.toArray(new Triangulation[column.size()]), progress);
+      GSDTAlgorithm algo =
+          new GSDTAlgorithm(column.toArray(new Triangulation[column.size()]), progress);
       mergedColumns.add(algo.getFinalAnswer());
     }
     
@@ -319,7 +318,7 @@ public class GSDelaunayAlgorithm {
       }
     });
     LOG.info("Merging "+mergedColumns.size()+" triangulations horizontally");
-    GSDelaunayAlgorithm algo = new GSDelaunayAlgorithm(
+    GSDTAlgorithm algo = new GSDTAlgorithm(
         mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
         progress);
     return algo;
