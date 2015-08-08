@@ -269,9 +269,10 @@ public class GSDTAlgorithm {
         double cx2 = cmbr.x2;
         if (x2 > cx1 && cx2 > x1) {
           selectedColumn = columns.get(iColumn);
+        } else {
+          iColumn++;
         }
       }
-      
       if (selectedColumn == null) {
         // Create a new column
         selectedColumn = new ArrayList<Triangulation>();

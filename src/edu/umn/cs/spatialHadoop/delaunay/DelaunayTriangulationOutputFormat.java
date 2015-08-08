@@ -49,7 +49,7 @@ public class DelaunayTriangulationOutputFormat extends
         Path finalFile, TaskAttemptContext context) throws IOException {
       if (nonFinalFile != null)
         this.nonFinalOut = fs.create(nonFinalFile);
-      if (finalFile != null)
+      if (finalFile != null && context.getConfiguration().getBoolean("output", true))
         this.finalOut = new PrintStream(fs.create(finalFile));
     }
 
@@ -58,7 +58,8 @@ public class DelaunayTriangulationOutputFormat extends
         throws IOException, InterruptedException {
       if (key.booleanValue()) {
         // Write a final triangulation in a user-friendly text format
-        writeFinalTriangulation(finalOut, value);
+        if (finalOut != null)
+          writeFinalTriangulation(finalOut, value);
       } else {
         value.write(nonFinalOut);
       }
