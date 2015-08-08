@@ -12,6 +12,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Iterator;
 
 import org.apache.hadoop.io.Writable;
 
@@ -20,7 +22,7 @@ import org.apache.hadoop.io.Writable;
  * @author Ahmed Eldawy
  *
  */
-public class IntArray implements Writable {
+public class IntArray implements Writable, Iterable<Integer> {
   /**Stores all elements*/
   protected int[] array;
   /**Number of entries occupied in array*/
@@ -28,6 +30,10 @@ public class IntArray implements Writable {
   
   public IntArray() {
     this.array = new int[16];
+  }
+  
+  public void add(int x) {
+    append(x);
   }
   
   public void append(int x) {
@@ -57,6 +63,16 @@ public class IntArray implements Writable {
   
   public void append(IntArray another, int delta) {
     append(another.array, 0, another.size, delta);
+  }
+  
+  public boolean contains(int value) {
+    for (int i = 0; i < size; i++) {
+      if (array[i] == value) {
+        return true;
+      }
+    }
+    return false;
+  
   }
   
   /**
@@ -139,11 +155,76 @@ public class IntArray implements Writable {
     return size;
   }
   
-  public int[] array() {
+  public boolean isEmpty() {
+    return size == 0;
+  }
+
+  /**
+   * Returns the underlying array. The returned array might have a length that
+   * is larger than {@link #size()}. The values of those additional slots are
+   * undefined and should not be used.
+   * @return
+   */
+  public int[] underlyingArray() {
     return array;
   }
   
+  /**
+   * Converts this IntArray into a native Java array that with a length equal
+   * to {@link #size()}.
+   * @return
+   */
+  public int[] toArray() {
+    int[] compactArray = new int[size];
+    System.arraycopy(array, 0, compactArray, 0, size);
+    return compactArray;
+  }
+  
+  public void sort() {
+    Arrays.sort(array, 0, size);
+  }
+
   public int get(int index) {
     return array[index];
+  }
+  
+  public int pop() {
+    return array[--size];
+  }
+  
+  public boolean remove(int value) {
+    for (int i = 0; i < size; i++) {
+      if (array[i] == value) {
+        System.arraycopy(array, i + 1, array, i, size - (i + 1));
+        size--;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Override
+  public Iterator<Integer> iterator() {
+    return new IntIterator();
+  }
+  
+  class IntIterator implements Iterator<Integer> {
+    int i = -1;
+
+    @Override
+    public boolean hasNext() {
+      return i < size() - 1;
+    }
+
+    @Override
+    public Integer next() {
+      return array[++i];
+    }
+
+    @Override
+    public void remove() {
+      throw new RuntimeException("Not yet supported");
+    }
+    
   }
 }
