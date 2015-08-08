@@ -96,7 +96,7 @@ public class Union {
    * @throws IOException 
    */
   public static int unionInMemory(final List<Geometry> geoms,
-      Progressable progress, ResultCollector<Geometry> output) throws IOException {
+      final Progressable prog, ResultCollector<Geometry> output) throws IOException {
     List<Geometry> basicShapes = new ArrayList<Geometry>();
     for (int i = 0; i < geoms.size(); i++) {
       Geometry geom = geoms.get(i);
@@ -107,8 +107,8 @@ public class Union {
       } else {
         basicShapes.add(geom);
       }
-      if (i % 0xff == 0 && progress != null)
-        progress.progress();
+      if (i % 0xff == 0 && prog != null)
+        prog.progress();
     }
     
     if (basicShapes.size() == 1) {
@@ -154,9 +154,12 @@ public class Union {
       }
       double sweepLinePosition = (Double)nonFinalPolygons.get(nonFinalPolygons.size() - 1).getUserData();
       Geometry batchUnion;
-      batchUnion = safeUnion(nonFinalPolygons, progress);
-      if (progress != null)
-        progress.progress();
+      batchUnion = safeUnion(nonFinalPolygons, new Progressable.NullProgressable() {
+        @Override
+        public void progress() { prog.progress(); }
+      });
+      if (prog != null)
+        prog.progress();
   
       nonFinalPolygons.clear();
       if (batchUnion instanceof GeometryCollection) {
@@ -180,9 +183,9 @@ public class Union {
 
       long currentTime = System.currentTimeMillis();
       if (currentTime - reportTime > 60*1000) {
-        if (progress != null) {
+        if (prog != null) {
           float p = i / (float)basicShapes.size();
-          progress.progress(p);
+          prog.progress(p);
         }
         reportTime =  currentTime;
       }

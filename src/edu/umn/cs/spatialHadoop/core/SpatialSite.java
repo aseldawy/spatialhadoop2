@@ -607,6 +607,8 @@ public class SpatialSite {
       OperationsParams params) throws IOException {
     FileSystem inFs = inPaths[0].getFileSystem(params);
     GlobalIndex<Partition> gIndex = getGlobalIndex(inFs, inPaths[0]);
+    if (gIndex == null)
+      return; // No global index to split the space against
     List<Rectangle> columns = new ArrayList<Rectangle>();
     for (Partition p : gIndex) {
       double x1 = p.x1, x2 = p.x2;

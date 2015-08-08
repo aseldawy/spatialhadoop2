@@ -30,9 +30,9 @@ public interface Progressable extends org.apache.hadoop.util.Progressable {
     @Override
     public void progress() {}
     @Override
-    public void progress(float p) {}
+    public void progress(float p) { progress(); }
     @Override
-    public void setStatus(String status) {}
+    public void setStatus(String status) { progress(); }
   }
   
   /**
