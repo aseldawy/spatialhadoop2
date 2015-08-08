@@ -396,8 +396,14 @@ public class DelaunayTriangulation {
     Path outFile = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    delaunay(inFiles, outFile, params);
+    Job job = delaunay(inFiles, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: " + (t2 - t1) + " millis");
+    if (job != null) {
+      System.out.println("Map final sites: "+job.getCounters().findCounter(DelaunayCounters.MAP_FINAL_SITES).getValue());
+      System.out.println("Map non-final sites: "+job.getCounters().findCounter(DelaunayCounters.MAP_NONFINAL_SITES).getValue());
+      System.out.println("Reduce final sites: "+job.getCounters().findCounter(DelaunayCounters.REDUCE_FINAL_SITES).getValue());
+      System.out.println("Reduce non-final sites: "+job.getCounters().findCounter(DelaunayCounters.REDUCE_NONFINAL_SITES).getValue());
+    }
   }
 }

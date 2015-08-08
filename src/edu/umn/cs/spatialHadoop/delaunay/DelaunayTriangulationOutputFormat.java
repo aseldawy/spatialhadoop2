@@ -157,17 +157,18 @@ public class DelaunayTriangulationOutputFormat extends
         if (allTriangulations.size() == 1) {
           finalAnswer = allTriangulations.get(0);
         } else {
-          LOG.info("Merging "+allTriangulations.size()+" triangulations");
+          System.out.println("Merging "+allTriangulations.size()+" triangulations");
           finalAnswer = GSDTAlgorithm.mergeTriangulations(
               allTriangulations, task).getFinalAnswer();
         }
         // Write the final answer to the output and delete intermediate files
-        LOG.info("Writing final output");
+        System.out.println("Writing final output");
         Path finalAnswerPath = new Path(outPath, "lastPart.final");
         PrintStream ps = new PrintStream(fs.create(finalAnswerPath));
         TriangulationRecordWriter.writeFinalTriangulation(ps, finalAnswer);
         ps.close();
         
+        System.out.println("Cleaning up");
         // Delete intermediate files
         for (FileStatus nonFinalFile : nonFinalFiles)
           fs.delete(nonFinalFile.getPath(), false);
