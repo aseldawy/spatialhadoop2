@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,7 +38,10 @@ import org.apache.hadoop.io.compress.CodecPool;
 import org.apache.hadoop.io.compress.CompressionCodec;
 import org.apache.hadoop.io.compress.CompressionCodecFactory;
 import org.apache.hadoop.io.compress.Decompressor;
+import org.apache.hadoop.mapred.ClusterStatus;
+import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapreduce.Job;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
@@ -68,6 +72,9 @@ public class SpatialSite {
       return !name.startsWith("_") && !name.startsWith("."); 
     }
   };
+
+  /**Configuration line to store column boundaries on which intermediate data is split*/
+  public static final String ColumnBoundaries = "SpatialSite.ReduceSpaceBoundaries";
 
   /**Enforce static only calls*/
   private SpatialSite() {}
@@ -588,4 +595,59 @@ public class SpatialSite {
 		}
 		return cells.get(cellID);
 	}
+
+  /**
+   * Splits the reduce space vertically among reducers
+   * @param job
+   * @param inPaths
+   * @param params
+   * @throws IOException
+   */
+  public static void splitReduceSpace(Job job, Path[] inPaths,
+      OperationsParams params) throws IOException {
+    FileSystem inFs = inPaths[0].getFileSystem(params);
+    GlobalIndex<Partition> gIndex = getGlobalIndex(inFs, inPaths[0]);
+    List<Rectangle> columns = new ArrayList<Rectangle>();
+    for (Partition p : gIndex) {
+      double x1 = p.x1, x2 = p.x2;
+      
+      boolean matched = false;
+      for (int iColumn = 0; iColumn < columns.size() && !matched; iColumn++) {
+        Rectangle cmbr = columns.get(iColumn);
+        double cx1 = cmbr.x1;
+        double cx2 = cmbr.x2;
+        if (x2 > cx1 && cx2 > x1) {
+          matched = true;
+          cmbr.expand(p);
+        }
+      }
+      
+      if (!matched) {
+        // Create a new column
+        columns.add(new Rectangle(p));
+      }
+    }
+    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+    int numReducers = Math.min(columns.size(), Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
+    String columnBoundaries = "";
+    for (int iReducer = 0; iReducer < numReducers; iReducer++) {
+      if (iReducer > 0)
+        columnBoundaries += ',';
+      int col = (iReducer + 1) * columns.size()  / numReducers - 1;
+      columnBoundaries +=  columns.get(col).x2;
+    }
+    job.getConfiguration().set(ColumnBoundaries, columnBoundaries);
+    job.setNumReduceTasks(numReducers);
+  }
+
+  public static double[] getReduceSpace(Configuration conf) {
+    if (conf.get(ColumnBoundaries) == null)
+      return null;
+    double[] columnBoundaries;
+    String[] strBoundaries = conf.get(ColumnBoundaries).split(",");
+    columnBoundaries = new double[strBoundaries.length];
+    for (int iCol = 0; iCol < strBoundaries.length; iCol++)
+      columnBoundaries[iCol] = Double.parseDouble(strBoundaries[iCol]);
+    return columnBoundaries;
+  }
 }

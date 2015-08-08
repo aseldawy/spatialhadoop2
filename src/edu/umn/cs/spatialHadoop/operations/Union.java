@@ -14,14 +14,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
+import java.util.Random;
 import java.util.Stack;
 import java.util.Vector;
 
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -29,12 +30,17 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.OutputCommitter;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.hadoop.util.LineReader;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
@@ -46,7 +52,10 @@ import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -277,34 +286,43 @@ public class Union {
    * @param <S>
    */
   static class UnionMap<S extends OGCJTSShape> extends 
-      Mapper<Rectangle, Iterable<S>, NullWritable, Shape> {
+      Mapper<Rectangle, Iterable<S>, IntWritable, OGCJTSShape> {
+    Random rand = new Random();
+    private double[] columnBoundaries;
+    IntWritable key = new IntWritable();
     
     @Override
-    protected void map(Rectangle dummy, Iterable<S> shapes, final Context context)
+    protected void setup(
+        Mapper<Rectangle, Iterable<S>, IntWritable, OGCJTSShape>.Context context)
+            throws IOException, InterruptedException {
+      super.setup(context);
+      columnBoundaries = SpatialSite.getReduceSpace(context.getConfiguration());
+      if (columnBoundaries == null)
+        key.set(new Random().nextInt(context.getNumReduceTasks()));
+    }
+    
+    @Override
+    protected void map(Rectangle mbr, Iterable<S> shapes, final Context context)
         throws IOException, InterruptedException {
-      List<Geometry> vgeoms = new ArrayList<Geometry>();
-      Iterator<S> i = shapes.iterator();
-      if (!i.hasNext())
-        return;
-      
-      final S templateShape = i.next();
-      if (templateShape.geom != null && !templateShape.geom.isEmpty())
-        vgeoms.add(templateShape.geom);
-      
-      while (i.hasNext()) {
-        Geometry geom = i.next().geom;
-        if (geom != null && !geom.isEmpty())
-          vgeoms.add(geom);
+      if (mbr.isValid()) {
+        int col = Arrays.binarySearch(this.columnBoundaries, mbr.getCenterPoint().x);
+        if (col < 0)
+          col = -col - 1;
+        key.set(col);
       }
+      
+      List<Geometry> vgeoms = new ArrayList<Geometry>();
+      for (S s : shapes)
+        vgeoms.add(s.geom);
 
       LOG.info("Computing the union of "+vgeoms.size()+" geoms");
-      final NullWritable key = NullWritable.get();
       ResultCollector<Geometry> resultCollector = new ResultCollector<Geometry>() {
+        OGCJTSShape value = new OGCJTSShape();
         @Override
         public void collect(Geometry r) {
           try {
-            templateShape.geom = r;
-            context.write(key, templateShape);
+            value.geom = r;
+            context.write(key, value);
           } catch (IOException e) {
             e.printStackTrace();
           } catch (InterruptedException e) {
@@ -317,30 +335,25 @@ public class Union {
     }
   }
   
-  static class UnionReduce<S extends OGCJTSShape> extends
-    Reducer<NullWritable, S, NullWritable, S> {
+  static class UnionReduce extends
+    Reducer<IntWritable, OGCJTSShape, NullWritable, OGCJTSShape> {
     
     @Override
-    protected void reduce(final NullWritable dummy, Iterable<S> shapes,
+    protected void reduce(final IntWritable dummy, Iterable<OGCJTSShape> shapes,
         final Context context) throws IOException, InterruptedException {
       List<Geometry> vgeoms = new ArrayList<Geometry>();
-      Iterator<S> i = shapes.iterator();
-      if (!i.hasNext())
-        return;
-      final S templateShape = i.next();
-      vgeoms.add(templateShape.geom);
-      while (i.hasNext()) {
-        Geometry geom = i.next().geom;
-        vgeoms.add(geom);
-      }
+      for (OGCJTSShape s : shapes)
+        vgeoms.add(s.geom);
 
       LOG.info("Computing the union of "+vgeoms.size()+" geoms");
       ResultCollector<Geometry> resultCollector = new ResultCollector<Geometry>() {
+        NullWritable key = NullWritable.get();
+        OGCJTSShape value = new OGCJTSShape();
         @Override
         public void collect(Geometry r) {
           try {
-            templateShape.geom = r;
-            context.write(dummy, templateShape);
+            value.geom = r;
+            context.write(key, value);
           } catch (IOException e) {
             e.printStackTrace();
           } catch (InterruptedException e) {
@@ -353,25 +366,102 @@ public class Union {
     }
   }
   
+  /**
+   * The UnionOutputCommitter performs an additional post-processing step that
+   * combines the output of all reducers
+   * @author Ahmed Eldawy
+   *
+   */
+  public static class UnionOutputCommitter extends FileOutputCommitter {
+
+    private Path outPath;
+    private TaskAttemptContext task;
+
+    public UnionOutputCommitter(Path outputPath, TaskAttemptContext task)
+        throws IOException {
+      super(outputPath, task);
+      outPath = outputPath;
+      this.task = task;
+    }
+    
+    @Override
+    public void commitJob(final JobContext context) throws IOException {
+      super.commitJob(context);
+      // Read all resulting files and combine them together
+      final FileSystem fs = outPath.getFileSystem(context.getConfiguration());
+      final FileStatus[] outFiles = fs.listStatus(outPath, SpatialSite.NonHiddenFileFilter);
+      
+      try {
+        Vector<List<Geometry>> allLists = Parallel.forEach(outFiles.length, new RunnableRange<List<Geometry>>() {
+          @Override
+          public List<Geometry> run(int i1, int i2) {
+            try {
+              List<Geometry> geoms = new ArrayList<Geometry>();
+              for (int i = i1; i < i2; i++) {
+                LineReader reader = new LineReader(fs.open(outFiles[i].getPath()));
+                Text line = new Text2();
+                while (reader.readLine(line) > 0) {
+                  geoms.add(TextSerializerHelper.consumeGeometryJTS(line, '\0'));
+                }
+                reader.close();
+              }
+              return geoms;
+            } catch (IOException e) {
+              throw new RuntimeException(e);
+            }
+          }
+        });
+        List<Geometry> allGeoms = new ArrayList<Geometry>();
+        for (List<Geometry> list : allLists)
+          allGeoms.addAll(list);
+        
+        final PrintStream ps = new PrintStream(fs.create(new Path(outPath, "finalResult.wkt")));
+        
+        Union.unionInMemory(allGeoms, new Progressable.TaskProgressable(task), new ResultCollector<Geometry>() {
+          @Override
+          public synchronized void collect(Geometry r) {
+            ps.println(r.toText());
+          }
+        });
+        ps.close();
+        
+        // Delete all intermediate files
+        for (FileStatus outFile : outFiles)
+          fs.delete(outFile.getPath(), false);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+    }
+  }
+  
+  public static class UnionOutputFormat extends TextOutputFormat3<NullWritable, OGCJTSShape> {
+    
+    @Override
+    public synchronized OutputCommitter getOutputCommitter(
+        TaskAttemptContext context) throws IOException {
+      Path jobOutputPath = getOutputPath(context);
+      return new UnionOutputCommitter(jobOutputPath, context);
+    }
+  }
+  
   private static Job unionMapReduce(Path input, Path output,
       OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {
     Job job = new Job(params, "BasicUnion");
     job.setJarByClass(Union.class);
 
-    Shape shape = params.getShape("shape");
     // Set map and reduce
     job.setMapperClass(UnionMap.class);
-    job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(shape.getClass());
+    job.setMapOutputKeyClass(IntWritable.class);
+    job.setMapOutputValueClass(OGCJTSShape.class);
     job.setReducerClass(UnionReduce.class);
-    job.setNumReduceTasks(1);
+    SpatialSite.splitReduceSpace(job, new Path[] {input}, params);
 
     // Set input and output
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.addInputPath(job, input);
 
-    job.setOutputFormatClass(TextOutputFormat.class);
+    job.setOutputFormatClass(UnionOutputFormat.class);
     TextOutputFormat.setOutputPath(job, output);
 
     // Submit the job

@@ -20,9 +20,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.mapred.ClusterStatus;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -38,8 +35,6 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.delaunay.DelaunayTriangulationOutputFormat.TriangulationRecordWriter;
-import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
-import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -64,9 +59,6 @@ public class DelaunayTriangulation {
     REDUCE_NONFINAL_SITES,
   }
   
-  /**Configuration line to store column boundaries on which intermediate data is split*/
-  private static final String ColumnBoundaries = "DelaunayTriangulation.ColumnBoundaries";
-
   /**
    * The map function computes the DT for a partition and splits the
    * triangulation into safe and non-safe edges. Safe edges are final and are
@@ -95,12 +87,7 @@ public class DelaunayTriangulation {
       this.deduplicate = conf.getBoolean("dedup", true);
       if (deduplicate)
         this.threshold = conf.getFloat("threshold", 1E-5f);
-      if (conf.get(ColumnBoundaries) != null) {
-        String[] strBoundaries = conf.get(ColumnBoundaries).split(",");
-        this.columnBoundaries = new double[strBoundaries.length];
-        for (int iCol = 0; iCol < strBoundaries.length; iCol++)
-          this.columnBoundaries[iCol] = Double.parseDouble(strBoundaries[iCol]);
-      }
+      this.columnBoundaries = SpatialSite.getReduceSpace(context.getConfiguration());
       Path outputPath = DelaunayTriangulationOutputFormat.getOutputPath(context);
       Path finalPath = new Path(outputPath, String.format("m-%05d.final", context.getTaskAttemptID().getTaskID().getId()));
       FileSystem fs = finalPath.getFileSystem(context.getConfiguration());
@@ -223,40 +210,7 @@ public class DelaunayTriangulation {
     TextOutputFormat.setOutputPath(job, outPath);
     
     // Set column boundaries to define the boundaries of each reducer
-    // TODO handle multi file input (not really important)
-    FileSystem inFs = inPaths[0].getFileSystem(params);
-    GlobalIndex<Partition> gIndex = SpatialSite.getGlobalIndex(inFs, inPaths[0]);
-    List<Rectangle> columns = new ArrayList<Rectangle>();
-    for (Partition p : gIndex) {
-      double x1 = p.x1, x2 = p.x2;
-      
-      boolean matched = false;
-      for (int iColumn = 0; iColumn < columns.size() && !matched; iColumn++) {
-        Rectangle cmbr = columns.get(iColumn);
-        double cx1 = cmbr.x1;
-        double cx2 = cmbr.x2;
-        if (x2 > cx1 && cx2 > x1) {
-          matched = true;
-          cmbr.expand(p);
-        }
-      }
-      
-      if (!matched) {
-        // Create a new column
-        columns.add(new Rectangle(p));
-      }
-    }
-    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-    int numReducers = Math.min(columns.size(), Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
-    String columnBoundaries = "";
-    for (int iReducer = 0; iReducer < numReducers; iReducer++) {
-      if (iReducer > 0)
-        columnBoundaries += ',';
-      int col = (iReducer + 1) * columns.size()  / numReducers - 1;
-      columnBoundaries +=  columns.get(col).x2;
-    }
-    job.getConfiguration().set(ColumnBoundaries, columnBoundaries);
-    job.setNumReduceTasks(numReducers);
+    SpatialSite.splitReduceSpace(job, inPaths, params);
 
     // Submit the job
     if (!params.getBoolean("background", false)) {
