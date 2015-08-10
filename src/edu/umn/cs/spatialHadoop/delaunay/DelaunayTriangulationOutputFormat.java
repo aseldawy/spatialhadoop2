@@ -21,6 +21,7 @@ import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.util.Progressable;
 
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.io.Text2;
@@ -44,9 +45,11 @@ public class DelaunayTriangulationOutputFormat extends
     private FSDataOutputStream nonFinalOut;
     /**An output stream to write final triangulations*/
     private PrintStream finalOut;
+    private TaskAttemptContext context;
 
     public TriangulationRecordWriter(FileSystem fs, Path nonFinalFile,
         Path finalFile, TaskAttemptContext context) throws IOException {
+      this.context = context;
       if (nonFinalFile != null)
         this.nonFinalOut = fs.create(nonFinalFile);
       if (finalFile != null && context.getConfiguration().getBoolean("output", true))
@@ -59,7 +62,7 @@ public class DelaunayTriangulationOutputFormat extends
       if (key.booleanValue()) {
         // Write a final triangulation in a user-friendly text format
         if (finalOut != null)
-          writeFinalTriangulation(finalOut, value);
+          writeFinalTriangulation(finalOut, value, context);
       } else {
         value.write(nonFinalOut);
       }
@@ -69,7 +72,8 @@ public class DelaunayTriangulationOutputFormat extends
      * Writes a final triangulation in a user-friendly format
      * @param t
      */
-    public static void writeFinalTriangulation(PrintStream ps, Triangulation t) {
+    public static void writeFinalTriangulation(PrintStream ps, Triangulation t,
+        Progressable progress) {
       Text text = new Text2();
       for (int i = 0; i < t.edgeStarts.length; i++) {
         Point startNode = t.sites[t.edgeStarts[i]];
@@ -83,6 +87,9 @@ public class DelaunayTriangulationOutputFormat extends
         text.clear();
         endNode.toText(text);
         ps.println(text); // Write end node and new line
+        
+        if (progress != null && (i & 0xff) == 0)
+          progress.progress();
       }
     }
 
@@ -166,7 +173,7 @@ public class DelaunayTriangulationOutputFormat extends
         System.out.println("Writing final output");
         Path finalAnswerPath = new Path(outPath, "lastPart.final");
         PrintStream ps = new PrintStream(fs.create(finalAnswerPath));
-        TriangulationRecordWriter.writeFinalTriangulation(ps, finalAnswer);
+        TriangulationRecordWriter.writeFinalTriangulation(ps, finalAnswer, task);
         ps.close();
         
         System.out.println("Cleaning up");
