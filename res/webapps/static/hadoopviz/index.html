@@ -1,0 +1,93 @@
+<html>
+	
+	<head>
+		<title>HadoopViz</title>
+		<link rel="stylesheet" type="text/css" href="css/viz.css">
+		
+		<script src="http://maps.googleapis.com/maps/api/js?libraries=places&sensor=false" type="text/javascript"></script>
+  		<script src="js/jquery-2.0.0.min.js"></script>
+  		<script src="js/hadoopviz.js" type="text/javascript"> </script>
+	</head>
+	
+	<body>
+		<form>
+		<h1 class="title"> HadoopViz </h1>
+		
+		<div class="left" id="left">
+			<br>
+			<h3 class="dataset_title"> Dataset </h3>
+			<p id="dataset"></p>
+		</div>
+		
+		<div class="right">
+			<div class="options">
+				<div class="options_title">
+					<br>
+					<h3 class="dataset_title"> Visualization Options </h3>
+				</div>
+				<div class="options_content">
+					<div class="options_content_row">
+						<div class="options_content_column">
+							<input type="radio" name="options_plot_type" value="gplot" checked="checked"> Geometric Plot
+						</div>
+						<div class="options_content_column">	
+							<input type="radio" name="options_plot_type" value="hplot"> HeatMap Plot
+						</div>
+					</div>
+					<div class="options_content_row">
+						<div class="options_content_column">
+							<input type="radio" name="options_type" value="single_level" checked="checked" onclick="singleSetting()"> Single-Level
+						</div>
+						<div class="options_content_column">	
+							<input type="radio" name="options_type" value="multi_level" onClick="multiSetting()"> Multilevel
+						</div>
+					</div>
+					<div class="options_content_row">
+						<div class="options_content_column_partitioning_1">
+							<input type="radio" name="options_partitioning" value="none" checked="checked"> Hadoop Partitioning
+						</div>
+						<div class="options_content_column_partitioning_1">
+							<input type="radio" name="options_partitioning" value="grid"> Spatial Partitioning
+						</div>
+						<div class="options_content_column_partitioning_1">
+							<input type="radio" name="options_partitioning" value="pixel"> Pixel Partitioning
+						</div>
+						<div class="options_content_column_partitioning_2" style="display: none;">
+							<input type="radio" name="options_partitioning" value="null"> Default Partitioning
+						</div>
+						<div class="options_content_column_partitioning_2" style="display: none;">
+							<input type="radio" name="options_partitioning" value="flat"> Flat Partitioning
+						</div>
+						<div class="options_content_column_partitioning_2" style="display: none;">
+							<input type="radio" name="options_partitioning" value="pyramid"> Pyramid Partitioning
+						</div>
+					</div>
+					<div class="options_content_row">
+						<div class="options_content_column">
+							Width: <input type="text" name="width" class="input" value="2000">
+						</div>
+						<div class="options_content_column">
+							Height: <input type="text" name="height" class="input" value="1000">
+						</div>
+					</div>
+					<div class="options_content_row">
+						<div class="options_content_column">
+							Min Zoom: <input type="text" name="min_zoom" class="input" disabled>
+						</div>
+						<div class="options_content_column">
+							Max Zoom: <input type="text" name="max_zoom" class="input" disabled>
+						</div>
+						<div class="options_content_column">
+							<input type="button" onclick="visualize()" value="Visualize">
+						</div>
+					</div>
+				</div>
+			</div>
+			<div class="result">
+				<h3 class="dataset_title"> Job ID </h3>
+				<p id="job_id"></p>
+			</div>
+		</div>
+		</form>
+	</body>
+</html>
