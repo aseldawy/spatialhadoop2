@@ -20,6 +20,7 @@ import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
 import edu.umn.cs.spatialHadoop.nasa.SpatioAggregateQueries;
+import edu.umn.cs.spatialHadoop.visualization.HadoopvizServer;
 
 /**
  * The main entry point to all queries.
@@ -112,6 +113,9 @@ public class Main {
       
       pgd.addClass("shahedindexer", AggregateQuadTree.class,
           "Creates a multilevel spatio-temporal indexer for NASA data");
+      
+      pgd.addClass("hadoopviz", HadoopvizServer.class,
+          "Run Hadoopviz Server");
       
       pgd.driver(args);
       
