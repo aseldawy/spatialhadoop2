@@ -59,6 +59,15 @@ public class DDNumericDataGroup extends DataDescriptor {
         return ((DDScientificData)hdfFile.retrieveElementByID(members[i])).getData();
     return null;
   }
+
+  public void getAsByteArray(byte[] buf, int bufOff, int bufLen) throws IOException {
+    lazyLoad();
+    for (int i = 0; i < members.length; i++)
+      if (members[i].tagID == HDFConstants.DFTAG_SD) {
+        ((DDScientificData)hdfFile.retrieveElementByID(members[i])).readData(buf, bufOff, bufLen);
+        return;
+      }
+  }
   
   /**
    * Returns the type of the underlying data

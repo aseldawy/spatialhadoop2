@@ -78,16 +78,16 @@ public class GridPartitioner extends Partitioner {
       
       maxCellSize = 0;
       // TODO uncomment the following part to further breakdown big tiles
-      int[] histogram = new int[gridInfo.columns * gridInfo.rows];
-      for (Point point : points) {
-        int cell = gridInfo.getOverlappingCell(point.x, point.y);
-        if (++histogram[cell] > maxCellSize)
-          maxCellSize = histogram[cell];
-      }
-      if (maxCellSize > capacity) {
-        // Further break the largest grid cell
-        numTiles = (int) (numTiles * Math.ceil((double)maxCellSize / capacity));
-      }
+//      int[] histogram = new int[gridInfo.columns * gridInfo.rows];
+//      for (Point point : points) {
+//        int cell = gridInfo.getOverlappingCell(point.x, point.y);
+//        if (++histogram[cell] > maxCellSize)
+//          maxCellSize = histogram[cell];
+//      }
+//      if (maxCellSize > capacity) {
+//        // Further break the largest grid cell
+//        numTiles = (int) (numTiles * Math.ceil((double)maxCellSize / capacity));
+//      }
     } while (maxCellSize > capacity && maxIterations-- > 0);
     LOG.info("Partitioning the space into a "+gridInfo.columns+"x"+gridInfo.rows+" grid");
     tileWidth = mbr.getWidth() / gridInfo.columns;

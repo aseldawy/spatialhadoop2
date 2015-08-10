@@ -527,8 +527,8 @@ public class SVGGraphics extends Graphics2D implements Writable {
         + "xmlns='http://www.w3.org/2000/svg'>\n", width, height);
 
     // Retrieve all xs and ys as java arrays for efficiency
-    int[] xs = this.xs.array();
-    int[] ys = this.ys.array();
+    int[] xs = this.xs.underlyingArray();
+    int[] ys = this.ys.underlyingArray();
     // 1- Draw all lines
     if (linesStart.size() > 0) {
       p.printf("<g style='stroke:rgb(0,0,0);'>\n");

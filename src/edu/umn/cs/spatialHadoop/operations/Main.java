@@ -21,11 +21,13 @@ import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
 import edu.umn.cs.spatialHadoop.nasa.SpatioAggregateQueries;
 import edu.umn.cs.spatialHadoop.visualization.HadoopvizServer;
+import edu.umn.cs.spatialHadoop.delaunay.DelaunayTriangulation;
+
 
 /**
  * The main entry point to all queries.
  * 
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class Main {
@@ -74,6 +76,12 @@ public class Main {
 
       pgd.addClass("union", Union.class,
           "Computes the union of input shapes");
+
+      pgd.addClass("uunion", UltimateUnion.class,
+          "Computes the union of input shapes using the UltimateUnion algorithm");
+
+      pgd.addClass("delaunay", DelaunayTriangulation.class,
+          "Computes the Delaunay triangulation for a set of points");
 
       pgd.addClass("multihdfplot", MultiHDFPlot.class,
           "Plots NASA datasets in the spatiotemporal range provided by user");

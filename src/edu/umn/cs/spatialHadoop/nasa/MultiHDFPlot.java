@@ -415,6 +415,9 @@ public class MultiHDFPlot {
     }
     Path[] input = params.getInputPaths();
     Path output = params.getOutputPath();
+    long t1 = System.currentTimeMillis();
     multiplot(input, output, params);
+    long t2 = System.currentTimeMillis();
+    System.out.println("MultiHDFPlot finished in "+(t2-t1)+" millis");
   }
 }

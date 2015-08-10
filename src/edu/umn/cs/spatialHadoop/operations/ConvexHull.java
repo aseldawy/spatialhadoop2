@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -63,19 +64,18 @@ public class ConvexHull {
    * @param points
    * @return
    */
-  public static Point[] convexHull(Point[] points) {
-    Stack<Point> s1 = new Stack<Point>();
-    Stack<Point> s2 = new Stack<Point>();
-    
+  public static <P extends Point> P[] convexHull(P[] points) {
+    Stack<P> s1 = new Stack<P>();
+    Stack<P> s2 = new Stack<P>();
     
     Arrays.sort(points);
     
     // Lower chain
     for (int i=0; i<points.length; i++) {
       while(s1.size() > 1) {
-        Point p1 = s1.get(s1.size() - 2);
-        Point p2 = s1.get(s1.size() - 1);
-        Point p3 = points[i];
+        P p1 = s1.get(s1.size() - 2);
+        P p2 = s1.get(s1.size() - 1);
+        P p3 = points[i];
         double crossProduct = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
         if (crossProduct <= 0) s1.pop();
         else break;
@@ -86,9 +86,9 @@ public class ConvexHull {
     // Upper chain
     for (int i=points.length - 1; i>=0; i--) {
       while(s2.size() > 1) {
-        Point p1 = s2.get(s2.size() - 2);
-        Point p2 = s2.get(s2.size() - 1);
-        Point p3 = points[i];
+        P p1 = s2.get(s2.size() - 2);
+        P p2 = s2.get(s2.size() - 1);
+        P p3 = points[i];
         double crossProduct = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
         if (crossProduct <= 0) s2.pop();
         else break;
@@ -99,7 +99,7 @@ public class ConvexHull {
     s1.pop();
     s2.pop();
     s1.addAll(s2);
-    return s1.toArray(new Point[s1.size()]);    
+    return s1.toArray((P[]) Array.newInstance(s1.firstElement().getClass(), s1.size()));    
   }
   
   /**

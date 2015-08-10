@@ -20,6 +20,9 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.Progressable;
+
+import edu.umn.cs.spatialHadoop.util.BitArray;
 
 
 /**
@@ -411,7 +414,7 @@ public class SpatialAlgorithms {
    * @throws IOException
    */
   public static <S extends Rectangle> int SelfJoin_rectangles(final S[] rs,
-      OutputCollector<S, S> output, Reporter reporter) throws IOException {
+      OutputCollector<S, S> output, Progressable reporter) throws IOException {
     int count = 0;
 
     final Comparator<Rectangle> comparator = new Comparator<Rectangle>() {
@@ -544,5 +547,67 @@ public class SpatialAlgorithms {
         }
       }, reporter);
     }
+  }
+  
+  /**
+   * Remove duplicate points from an array of points. Two points are considered
+   * duplicate if both the horizontal and vertical distances are within a given
+   * threshold distance.
+   * @param allPoints
+   * @param threshold
+   * @return
+   */
+  public static Point[] deduplicatePoints(Point[] allPoints, final float threshold) {
+    BitArray duplicates = new BitArray(allPoints.length);
+    int numDuplicates = 0;
+    LOG.info("Deduplicating a list of "+allPoints.length+" points");
+    // Remove duplicates to ensure correctness
+    Arrays.sort(allPoints, new Comparator<Point>() {
+      @Override
+      public int compare(Point p1, Point p2) {
+        double dx = p1.x - p2.x;
+        if (dx < 0) return -1;
+        if (dx > 0) return 1;
+        double dy = p1.y - p2.y;
+        if (dy < 0) return -1;
+        if (dy > 0) return 1;
+        return 0;
+      }
+    });
+
+    for (int i = 1; i < allPoints.length; i++) {
+      Point p1 = allPoints[i-1];
+      Point p2 = allPoints[i];
+      double dx = Math.abs(p1.x - p2.x);
+      double dy = Math.abs(p1.y - p2.y);
+      if (dx < threshold && dy < threshold) {
+        duplicates.set(i, true);
+        numDuplicates++;
+      }
+    }
+
+    if (numDuplicates > 0) {
+      LOG.info("Shrinking the array");
+      // Shrinking the array
+      Point[] newAllPoints = new Point[allPoints.length - numDuplicates];
+      int newI = 0, oldI1 = 0;
+      while (oldI1 < allPoints.length) {
+        // Advance to the first non-duplicate point (start of range to be copied)
+        while (oldI1 < allPoints.length && duplicates.get(oldI1))
+          oldI1++;
+        if (oldI1 < allPoints.length) {
+          int oldI2 = oldI1 + 1;
+          // Advance to the first duplicate point (end of range to be copied)
+          while (oldI2 < allPoints.length && !duplicates.get(oldI2))
+            oldI2++;
+          // Copy the range [oldI1, oldI2[ to the new array
+          System.arraycopy(allPoints, oldI1, newAllPoints, newI, oldI2 - oldI1);
+          newI += (oldI2 - oldI1);
+          oldI1 = oldI2;
+        }
+      }
+      allPoints = newAllPoints;
+    }
+    return allPoints;
   }
 }
