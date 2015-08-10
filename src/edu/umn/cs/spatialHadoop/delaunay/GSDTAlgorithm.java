@@ -349,7 +349,7 @@ public class GSDTAlgorithm {
     neighbors[baseR].add(baseL);
     // Trace the base LR edge up to the top
     boolean finished = false;
-    do {
+    do { // Until the finished flag is raised
       // Search for the potential candidate on the right
       double anglePotential = -1, angleNextPotential = -1;
       int potentialCandidate = -1, nextPotentialCandidate = -1;
@@ -423,7 +423,7 @@ public class GSDTAlgorithm {
         }
       }
       int lCandidate = -1;
-      if (anglePotential < Math.PI && potentialCandidate != -1) {
+      if (anglePotential - Math.PI < -1E-9 && potentialCandidate != -1) {
         // Compute the circum circle between the base edge and potential candidate
         Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
         if (circleCenter == null) {
