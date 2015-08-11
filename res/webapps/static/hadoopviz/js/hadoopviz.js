@@ -75,7 +75,7 @@ function visualize() {
 		var min_zoom = $('input[name="min_zoom"]').val();
 		var max_zoom = $('input[name="max_zoom"]').val();
 		if(min_zoom && max_zoom) {
-			if(max_zoom < min_zoom) {
+			if(parseInt(max_zoom) < parseInt(min_zoom)) {
 				alert("max_zoom cannot be lower than min_zoom");
 				return;
 			}
