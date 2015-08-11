@@ -15,7 +15,8 @@ import java.awt.image.BufferedImage;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.Vector;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.imageio.ImageIO;
 
@@ -25,13 +26,14 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.log.Log;
 
 import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryCollection;
-import com.vividsolutions.jts.geom.GeometryFactory;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.operations.Union;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
+import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
  * @author Ahmed Eldawy
@@ -59,17 +61,22 @@ public class RoadNetworkPlot {
     
     @Override
     public <S extends Shape> Iterable<S> smooth(Iterable<S> r) {
-      Vector<Geometry> bufferedRoads = new Vector<Geometry>();
+      List<Geometry> bufferedRoads = new ArrayList<Geometry>();
       for (S s : r) {
         OSMPolygon poly = (OSMPolygon) s;
         bufferedRoads.add(poly.geom.buffer(bufferPt));
       }
-      
-      Geometry merged = new GeometryCollection(bufferedRoads.toArray(new Geometry[bufferedRoads.size()]), new GeometryFactory());
-      merged = merged.buffer(0);
-      
-      Vector<S> finalResult = new Vector<S>();
-      finalResult.add((S) new OSMPolygon(merged));
+      final List<S> finalResult = new ArrayList<S>();
+      try {
+        Union.unionInMemory(bufferedRoads, new Progressable.NullProgressable(), new ResultCollector<Geometry>() {
+          @Override
+          public void collect(Geometry r) {
+            finalResult.add((S) new OSMPolygon(r));
+          }
+        });
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
       return finalResult;
     }
 

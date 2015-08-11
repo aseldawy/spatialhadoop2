@@ -13,14 +13,17 @@
 		<h1 class="title"> HadoopViz </h1>
 		
 		<div class="left" id="left">
-			<br>
-			<h3 class="dataset_title"> Output Result List </h3>
-			<p id="output"></p>
-			<input type="button" onclick="display()" value="Display">
+			<div class="list">
+				<h3 class="dataset_title"> Output Result List </h3>
+				<p id="output"></p>
+				<input type="button" onclick="display()" value="Display">
+				<input type="button" onClick="refresh()" value="Refresh">
+			</div>
+			<div class="statistics">
+				<p id="statistics"></p>
+			</div>
 		</div>
-		
-		<div class="right" id="result">
-			
+		<div class="right" id="result">	
 		</div>
 		</form>
 	</body>

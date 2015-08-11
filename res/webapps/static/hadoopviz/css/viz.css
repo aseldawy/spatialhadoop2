@@ -1,10 +1,10 @@
 body {
 	font-family: "Verdana", serif;
-	width: 1024px;
-	height: 703.5px;
+	width: 95%;
+	height: 95%;
 	margin-left: auto;
 	margin-right: auto;
-	margin-top: 21px;
+	margin-top: auto;
 	background: white;
 	text-align: justify;
     text-justify: inter-word;
@@ -14,8 +14,8 @@ body {
 
 div.left {
 	float: left;
-	width: 254px;
-	height: 614.25px;
+	width: 24%;
+	height: 90%;
 	background-color: white;
     border-top: 1px solid;
     border-bottom: 1px solid;
@@ -23,10 +23,24 @@ div.left {
    	position: relative;
 }
 
+div.list {
+	float:	top;
+	width:	99%;
+	height:	79%;
+	overflow: scroll;
+}
+
+div.statistics {
+	float: top;
+	width: 99%;
+	height: 20%;
+	overflow: scroll;
+}
+
 div.right {
 	float: left;
-	width: 767px;
-	height: 614.25px;
+	width: 74%;
+	height: 90%;
 	background-color: white;
     border: 1px solid;
    	position: relative;
@@ -35,8 +49,8 @@ div.right {
 
 div.options {
 	float: top;
-	width: 767px;
-	height: 250px;
+	width: 100%;
+	height: 49%;
 	background-color: white;
     border-bottom: 1px solid;
    	position: relative;
@@ -84,14 +98,19 @@ div.options_content_column_partitioning_2 {
 	position: relative;
 }
 
+div.options_content_column_partitioning_3 {
+	float: left;
+	width: 252px;
+	height: 35px;
+	position: relative;
+}
+
 div.result {
 	float: top;
-	width: 767px;
-	height: 363.25px;
+	width: 100%;
+	height: 49%;
 	background-color: white;
-	border-bottom: 1px solid;
    	position: relative;
-   	overflow: scroll;
 }
 
 div.result_options {

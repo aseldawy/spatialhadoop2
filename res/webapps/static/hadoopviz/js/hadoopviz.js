@@ -11,7 +11,6 @@ function multiSetting() {
 	$(".options_content_column_partitioning_2").show();
 	$(".options_content_column_partitioning_2").show();
 	
-	$('input[name="options_plot_type"]')[0].checked = true;
 	$('input[name="width"]').val("256");
 	$('input[name="height"]').val("256");
 	
@@ -34,7 +33,6 @@ function singleSetting() {
 	$(".options_content_column_partitioning_1").show();
 	$(".options_content_column_partitioning_1").show();
 	
-	$('input[name="options_plot_type"]')[0].checked = true;
 	$('input[name="width"]').val("2000");
 	$('input[name="height"]').val("1000");
 	
@@ -44,7 +42,17 @@ function singleSetting() {
 	$('input[name="max_zoom"]').val("");
 }
 
+function hdfSetting() {
+	$('input[name="smooth"]').prop('disabled', false);
+}
+
+function regularSetting() {
+	$('input[name="smooth"]').prop('checked', false);
+	$('input[name="smooth"]').prop('disabled', true);
+}
+
 function visualize() {
+	$(".job_id").empty();
 	var plotType = $('input[name="options_plot_type"]:checked').val();
 	var vizType = $('input[name="options_type"]:checked').val();
 	var dataset = $('input[name="dataset"]:checked').val();
@@ -85,9 +93,18 @@ function visualize() {
 	} else {
 		requestURL += "&no-merge=false";
 	}
+	if(plotType == "hdfplot") {
+		var smooth = $('input[name="smooth"]:checked').length > 0;
+		if(smooth) {
+			requestURL += "&recover=read";
+		} else {
+			requestURL += "&recover=none";
+		}
+	}
 	jQuery.ajax(requestURL, {success: function(response) {
 		document.getElementById("job_id").innerHTML = "&nbsp Hadoop Job ID: " + response.job + "<br> " +
-				"&nbsp Output Path: " + response.output;
+				"&nbsp Output Path: " + response.output+ "<br>" +
+				"&nbsp Job URL: <a target=\"_blank\" href=\"" + response.url + "\">" + response.url + "</a>";
 	}});
 }
  
