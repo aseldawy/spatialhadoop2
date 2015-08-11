@@ -48,6 +48,8 @@ function visualize() {
 	var plotType = $('input[name="options_plot_type"]:checked').val();
 	var vizType = $('input[name="options_type"]:checked').val();
 	var dataset = $('input[name="dataset"]:checked').val();
+	var noMerge = $('input[name="merge"]:checked').length > 0;
+
 	if(!dataset || !vizType || !plotType) {
 		alert("Please select a dataset, visualization type, and plot type.");
 		return;
@@ -77,6 +79,11 @@ function visualize() {
 			max_zoom = "null";
 		}
 		requestURL += "&min_zoom=" + min_zoom + "&max_zoom=" + max_zoom;
+	}
+	if(noMerge) {
+		requestURL += "&no-merge=true";
+	} else {
+		requestURL += "&no-merge=false";
 	}
 	jQuery.ajax(requestURL, {success: function(response) {
 		document.getElementById("job_id").innerHTML = "&nbsp Hadoop Job ID: " + response.job + "<br> " +

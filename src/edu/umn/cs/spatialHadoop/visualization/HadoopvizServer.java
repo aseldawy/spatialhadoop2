@@ -8,12 +8,17 @@
  *************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.URLConnection;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
@@ -26,13 +31,20 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapred.Counters;
+import org.apache.hadoop.mapred.JobClient;
+import org.apache.hadoop.mapred.JobID;
+import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapred.JobStatus;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
 import edu.umn.cs.spatialHadoop.operations.HeatMapPlot;
 
@@ -49,6 +61,9 @@ public class HadoopvizServer extends AbstractHandler {
   /** Job Number **/
   private int jobNumber;
   
+  /** Shape Map **/
+  private HashMap<String, String> shapeMap;
+  
   /**
    * A constructor that starts the Jetty server
    * @param dataPath
@@ -60,6 +75,8 @@ public class HadoopvizServer extends AbstractHandler {
     this.datasetPath = datasetPath;
     this.outputPath = outputPath;
     this.jobNumber = Integer.MAX_VALUE;
+    this.shapeMap = new HashMap<String, String>();
+    readShapeFile();
   }
 
   /**
@@ -73,6 +90,27 @@ public class HadoopvizServer extends AbstractHandler {
     server.setHandler(new HadoopvizServer(datasetPath, outputPath, params));
     server.start();
     server.join();
+  }
+  
+  /**
+   * Read the shape file from dataset path + shape.txt
+   */
+  private void readShapeFile() {
+    try {
+      LOG.info("Reading Shape File");
+      FileSystem fs = datasetPath.getFileSystem(commonParams);
+      Path shapeFile = new Path(datasetPath + "/shape.txt");
+      BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(shapeFile)));
+      
+      String line = "";
+      while((line = br.readLine()) != null) {
+        shapeMap.put(line.split(":")[0], line.split(":")[1]);
+      }
+      br.close();
+      LOG.info(shapeMap.size() + " shapes available.");
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
   }
   
   /**
@@ -177,15 +215,14 @@ public class HadoopvizServer extends AbstractHandler {
       String partition = request.getParameter("partition");
       String vizType = request.getParameter("viztype");
       String plotType = request.getParameter("plottype");
+      String noMerge = request.getParameter("no-merge");
       
       // Check the dataset and get the shape.
       String shape = "";
-      if(dataset.equals("all_ways")) {
-        shape = "osm";
-      } else if (dataset.equals("all_nodes")) {
-        shape = "edu.umn.cs.spatialHadoop.osm.OSMPoint";
+      if(shapeMap.get(dataset) != null) {
+        shape = shapeMap.get(dataset);
       }
-      
+    
       // Create the path.
       Path[] inputPath = new Path[1];
       inputPath[0] = new Path(datasetPath.toString() + "/" + dataset);
@@ -207,13 +244,23 @@ public class HadoopvizServer extends AbstractHandler {
       if(plotType.equals("gplot")) {
         params.set("color", "red");
       }
-      params.set("shape", shape);
+      if(!shape.isEmpty()) {
+        params.set("shape", shape);
+      }
   
       if(vizType.equals("single_level")) {
         params.set("width", width);
         params.set("height", height);
         params.set("partition", partition);
-        outputFolder = new Path(outputFolder.toString() + "/result.png");
+        if(noMerge.equals("true")) {
+          params.setBoolean("merge", false);
+        }
+        
+        if(noMerge.equals("false")) {
+          outputFolder = new Path(outputFolder.toString() + "/result.png");
+        } else {
+          outputFolder = new Path(outputFolder.toString() + "_no-merge");
+        }
       } else {
         params.setBoolean("pyramid", true);
         params.set("tileWidth", width);
@@ -243,15 +290,25 @@ public class HadoopvizServer extends AbstractHandler {
         job = GeometricPlot.plot(inputPath, outputFolder, params);
       } else if (plotType.equals("hplot")) {
         job = HeatMapPlot.plot(inputPath, outputFolder, params);
+      } else if (plotType.equals("hdfplot")) {
+        params.set("mbr", "-180,-90,180,90");
+        params.set("dataset", "LST_Day_1km");
+        job = HDFPlot.plotHeatMap(inputPath, outputFolder, params);
       }
       // Report the answer and time
       response.setContentType("application/json;charset=utf-8");
       PrintWriter writer = response.getWriter();
       writer.print("{\"job\":\"" + job.getJobID() + "\",");
-      writer.print("\"output\":" + "\"" + jobNumber + "\"}");
+      if(noMerge.equals("true")) {
+        writer.print("\"output\":" + "\"" + jobNumber + "_no-merge\"}");
+      } else {
+        writer.print("\"output\":" + "\"" + jobNumber + "\"}");
+      }
       writer.close();
       response.setStatus(HttpServletResponse.SC_OK);
       jobNumber++;
+      // Write the job id.
+      writeJobInfo(outputFolder, job.getJobID().toString());
     } catch (Exception e) {
       response.setContentType("text/plain;charset=utf-8");
       PrintWriter writer = response.getWriter();
@@ -318,25 +375,79 @@ public class HadoopvizServer extends AbstractHandler {
       FileSystem fs = outputPath.getFileSystem(commonParams);
       Path directoryPath = new Path(outputPath.toString() + "/" + request.getParameter("path"));
       
+      PrintWriter writer = response.getWriter();
+      response.setContentType("text/html");
       // Get the file list.
       Path fileName = null;
-      for(FileStatus fileStatus : fs.listStatus(directoryPath)) {
-        if(fileStatus.getPath().getName().endsWith("png") || fileStatus.getPath().getName().endsWith("html")) {
-          fileName = fileStatus.getPath();
-          break;
+      if(request.getParameter("path").contains("no-merge")) {
+        boolean isSpacePartitioning = isSpacePartitioning(directoryPath);
+        if(isSpacePartitioning) {
+          fileName = new Path(directoryPath.toString() + "/_master.html");
+          writer.print("<iframe src=\"/hdfs" + fileName.toUri().getPath() + "\" width=\"760\" height=\"610\">");
+        } else {
+          int count = 0;
+          for(FileStatus fileStatus : fs.listStatus(directoryPath)) {
+            if(count >= 10) {
+              break;
+            }
+            if(fileStatus.getPath().getName().endsWith("png")) {
+              fileName = fileStatus.getPath();
+              writer.print("<img src=\"/hdfs" + fileName.toUri().getPath() + "\" width=\"760\" height=\"610\"> <br>\n");
+              count ++;
+            }
+          }
+        }
+      } else {
+        for(FileStatus fileStatus : fs.listStatus(directoryPath)) {
+          if(fileStatus.getPath().getName().endsWith("png") || fileStatus.getPath().getName().endsWith("html")) {
+            fileName = fileStatus.getPath();
+            break;
+          }
+        }
+        // Single Level.
+        if(fileName.getName().endsWith("png")) {
+          writer.print("<img src=\"/hdfs" + fileName.toUri().getPath() + "\">");
+        // Multi Level.
+        } else {
+          writer.print("<iframe src=\"/hdfs" + fileName.toUri().getPath() + "\" width=\"760\" height=\"610\">");
         }
       }
-      response.setContentType("text/html");
-      PrintWriter writer = response.getWriter();
-      // Single Level.
-      if(fileName.getName().endsWith("png")) {
-        writer.print("<img src=\"/hdfs" + fileName.toUri().getPath() + "\">");
-      // Multi Level.
-      } else {
-        writer.print("<iframe src=\"/hdfs" + fileName.toUri().getPath() + "\" width=\"765\" height=\"614\">");
-      }
+      
       writer.close();
       response.setStatus(HttpServletResponse.SC_OK);
+    } catch (Exception e) {
+      System.out.println("error happened");
+      e.printStackTrace();
+      response.setContentType("text/plain;charset=utf-8");
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
+  }
+  
+  /**
+   * This method will handle the output result.
+   * @param request
+   * @param response
+   */
+  private void handleOutputInfo(HttpServletRequest request,
+      HttpServletResponse response) {
+    try {
+      FileSystem fs = outputPath.getFileSystem(commonParams);
+      Path infoPath = new Path(outputPath.toString() + "/" + request.getParameter("path") + "/info.txt");
+      BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(infoPath)));
+      JobID jobID = JobID.forName(br.readLine());
+      br.close();
+      
+      JobClient jobClient = new JobClient();
+      RunningJob runningJob = jobClient.getJob(jobID);
+      Counters counters = runningJob.getCounters();
+      
+      response.setContentType("application/json;charset=utf-8");
+      PrintWriter writer = response.getWriter();
+      writer.print("{\"inputSize\":\"" + counters.getCounter(Task.Counter.MAP_INPUT_BYTES) + "\",");
+      writer.print("{\"intermediateSize\":\"" + counters.getCounter(Task.Counter.MAP_OUTPUT_BYTES) + "\",");
+      writer.print("\"intermediateGroup\":" + "\"" + counters.getCounter(Task.Counter.REDUCE_INPUT_GROUPS) + "\"}");
+
+      
     } catch (Exception e) {
       System.out.println("error happened");
       e.printStackTrace();
@@ -421,7 +532,41 @@ public class HadoopvizServer extends AbstractHandler {
       response.setContentType(URLConnection.guessContentTypeFromName(target));
     }
   }
+  
+  private void writeJobInfo(Path path, String jobId) {
+    try {
+      Path infoFile = new Path(path.toString() + "/info.txt");
+      FileSystem fs = outputPath.getFileSystem(commonParams);
+      BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fs.create(infoFile)));
+      
+      bw.write(jobId);
+      bw.close();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  }
 
+  private boolean isSpacePartitioning(Path path) {
+    boolean spacePartitioning = false;
+    
+    try {
+      Path masterHeap = new Path(path.toString() + "/_master.heap");
+      FileSystem fs = outputPath.getFileSystem(commonParams);
+      BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(masterHeap)));
+      
+      String line = "";
+      while((line = br.readLine()) != null) {
+        if(!line.split(",")[0].equals("0") || !line.split(",")[1].equals("0")) {
+          spacePartitioning = true;
+          break;
+        }
+      }
+      br.close();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return spacePartitioning;
+  }
 
   private void reportError(HttpServletResponse response, String msg,
       Exception e)

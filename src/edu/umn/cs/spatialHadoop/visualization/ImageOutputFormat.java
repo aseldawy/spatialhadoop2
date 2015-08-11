@@ -139,7 +139,7 @@ public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
       PrintStream mergedFile = new PrintStream(fs.create(mergedFilePath));
       Path htmlPath = new Path(outPath, "_master.html");
       PrintStream htmlFile = new PrintStream(fs.create(htmlPath));
-      
+      htmlFile.print("<html> <body>");
       Text line = new Text2();
       for (FileStatus masterFile : masterFiles) {
         LineReader reader = new LineReader(fs.open(masterFile.getPath()));
@@ -152,7 +152,7 @@ public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
         
         fs.delete(masterFile.getPath(), false);
       }
-      
+      htmlFile.print("</body> </html>");
       mergedFile.close();
       htmlFile.close();
     }
