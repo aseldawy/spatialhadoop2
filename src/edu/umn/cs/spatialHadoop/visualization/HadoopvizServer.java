@@ -248,6 +248,7 @@ public class HadoopvizServer extends AbstractHandler {
       response.setContentType("application/json;charset=utf-8");
       PrintWriter writer = response.getWriter();
       writer.print("{\"job\":\"" + job.getJobID() + "\",");
+      writer.println("\"url\":\"" + job.getTrackingURL()+"\",");
       writer.print("\"output\":" + "\"" + jobNumber + "\"}");
       writer.close();
       response.setStatus(HttpServletResponse.SC_OK);
