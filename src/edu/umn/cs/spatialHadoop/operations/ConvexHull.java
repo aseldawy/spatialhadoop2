@@ -10,9 +10,11 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.Stack;
 import java.util.Vector;
@@ -31,6 +33,9 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -38,6 +43,8 @@ import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
@@ -45,7 +52,13 @@ import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.util.MemoryReporter;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 /**
  * Computes the convex hull for a set of shapes
@@ -64,7 +77,7 @@ public class ConvexHull {
    * @param points
    * @return
    */
-  public static <P extends Point> P[] convexHull(P[] points) {
+  public static <P extends Point> P[] convexHullInMemory(P[] points) {
     Stack<P> s1 = new Stack<P>();
     Stack<P> s2 = new Stack<P>();
     
@@ -110,30 +123,85 @@ public class ConvexHull {
    * @param outFile
    * @param overwrite
    * @throws IOException
+   * @throws InterruptedException 
    */
-  public static void convexHull(Path inFile, Path outFile,
-      boolean overwrite) throws IOException {
-    FileSystem inFs = inFile.getFileSystem(new Configuration());
-    long file_size = inFs.getFileStatus(inFile).getLen();
+  public static void convexHullLocal(Path inFile, Path outFile,
+      final OperationsParams params) throws IOException, InterruptedException {
+    if (params.getBoolean("mem", false))
+      MemoryReporter.startReporting();
+    // 1- Split the input path/file to get splits that can be processed
+    // independently
+    final SpatialInputFormat3<Rectangle, Point> inputFormat =
+        new SpatialInputFormat3<Rectangle, Point>();
+    Job job = Job.getInstance(params);
+    SpatialInputFormat3.setInputPaths(job, inFile);
+    final List<InputSplit> splits = inputFormat.getSplits(job);
+    final Point[][] allLists = new Point[splits.size()][];
     
-    ShapeRecordReader<Point> shapeReader = new ShapeRecordReader<Point>(
-        new Configuration(), new FileSplit(inFile, 0, file_size, new String[] {}));
-
-    Rectangle key = shapeReader.createKey();
-    Point point = new Point();
-
-    Vector<Point> points = new Vector<Point>();
+    // 2- Read all input points in memory
+    LOG.info("Reading points from "+splits.size()+" splits");
+    Vector<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
+      @Override
+      public Integer run(int i1, int i2) {
+        try {
+          int numPoints = 0;
+          for (int i = i1; i < i2; i++) {
+            List<Point> points = new ArrayList<Point>();
+            org.apache.hadoop.mapreduce.lib.input.FileSplit fsplit = (org.apache.hadoop.mapreduce.lib.input.FileSplit) splits.get(i);
+            final RecordReader<Rectangle, Iterable<Point>> reader =
+                inputFormat.createRecordReader(fsplit, null);
+            if (reader instanceof SpatialRecordReader3) {
+              ((SpatialRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof RTreeRecordReader3) {
+              ((RTreeRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplit, params);
+            } else {
+              throw new RuntimeException("Unknown record reader");
+            }
+            while (reader.nextKeyValue()) {
+              Iterable<Point> pts = reader.getCurrentValue();
+              for (Point p : pts) {
+                points.add(p.clone());
+              }
+            }
+            reader.close();
+            numPoints += points.size();
+            allLists[i - i1] = points.toArray(new Point[points.size()]);
+          }
+          return numPoints;
+        } catch (IOException e) {
+          e.printStackTrace();
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+        return null;
+      }
+    }, params.getInt("parallel", Runtime.getRuntime().availableProcessors()));
     
-    while (shapeReader.next(key, point)) {
-      points.add(point.clone());
+    int totalNumPoints = 0;
+    for (int numPoints : numsPoints)
+      totalNumPoints += numPoints;
+    
+    LOG.info("Read "+totalNumPoints+" points and merging into one list");
+    Point[] allPoints = new Point[totalNumPoints];
+    int pointer = 0;
+    
+    for (int iList = 0; iList < allLists.length; iList++) {
+      System.arraycopy(allLists[iList], 0, allPoints, pointer, allLists[iList].length);
+      pointer += allLists[iList].length;
+      allLists[iList] = null; // To let the GC collect it
     }
     
-    Point[] arPoints = points.toArray(new Point[points.size()]);
+    if (params.getBoolean("dedup", true)) {
+      float threshold = params.getFloat("threshold", 1E-5f);
+      allPoints = SpatialAlgorithms.deduplicatePoints(allPoints, threshold);
+    }
     
-    Point[] convex_hull = convexHull(arPoints);
+    Point[] convex_hull = convexHullInMemory(allPoints);
 
     if (outFile != null) {
-      if (overwrite) {
+      if (params.getBoolean("overwrite", false)) {
         FileSystem outFs = outFile.getFileSystem(new Configuration());
         outFs.delete(outFile, true);
       }
@@ -143,36 +211,6 @@ public class ConvexHull {
       }
       out.close(null);
     }
-  }
-  
-  
-  /**
-   * Computes the convex hull by reading points from stream
-   * @param point 
-   * @throws IOException 
-   */
-  public static <S extends Point> void convexHullStream(S point) throws IOException {
-    ShapeRecordReader<S> reader =
-        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
-    final int threshold = 50000000;
-    Point[] points = new Point[threshold];
-    int size = 0;
-    
-    Rectangle key = new Rectangle();
-    while (reader.next(key, point)) {
-      points[size++] = point.clone();
-      if (size >= threshold) {
-        Point[] ch = convexHull(points);
-        size = 0;
-        for (Point p : ch)
-          points[size++] = p;
-        System.err.println("Size: "+size);
-      }
-    }
-    Point[] actualPoints = new Point[size];
-    System.arraycopy(points, 0, actualPoints, 0, size);
-    Point[] convexHull = convexHull(actualPoints);
-    LOG.info("Convex hull computed with "+convexHull.length+" points");
   }
   
   /**
@@ -248,7 +286,7 @@ public class ConvexHull {
       while (points.hasNext()) {
         vpoints.add(points.next().clone());
       }
-      Point[] convex_hull = convexHull(vpoints.toArray(new Point[vpoints.size()]));
+      Point[] convex_hull = convexHullInMemory(vpoints.toArray(new Point[vpoints.size()]));
       for (Point pt : convex_hull) {
         output.collect(dummy, pt);
       }
@@ -260,6 +298,7 @@ public class ConvexHull {
     JobConf job = new JobConf(params, ConvexHull.class);
     Path outPath = userOutPath;
     FileSystem outFs = (userOutPath == null ? inFile : userOutPath).getFileSystem(job);
+    Shape shape = params.getShape("shape");
     
     if (outPath == null) {
       do {
@@ -276,13 +315,15 @@ public class ConvexHull {
       }
     }
     
+    
+    
     job.setJobName("ConvexHull");
     job.setClass(SpatialSite.FilterClass, ConvexHullFilter.class, BlockFilter.class);
     job.setMapperClass(IdentityMapper.class);
     job.setCombinerClass(ConvexHullReducer.class);
     job.setReducerClass(ConvexHullReducer.class);
     job.setOutputKeyClass(NullWritable.class);
-    job.setOutputValueClass(Point.class);
+    job.setOutputValueClass(shape.getClass());
     job.setInputFormat(ShapeInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
     job.setOutputFormat(GridOutputFormat2.class);
@@ -305,31 +346,32 @@ public class ConvexHull {
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
   
-  public static void main(String[] args) throws IOException {
-    GenericOptionsParser parser = new GenericOptionsParser(args);
-    OperationsParams params = new OperationsParams(parser);
-    if (params.getBoolean("local", false) && params.getPaths().length == 0) {
-      long t1 = System.currentTimeMillis();
-      convexHullStream((Point)params.getShape("shape"));
-      long t2 = System.currentTimeMillis();
-      System.err.println("Total time for convex hull: "+(t2-t1)+" millis");
-      return;
+  public static void convexHull(Path inFile, Path outFile, OperationsParams params) throws IOException, InterruptedException {
+    if (OperationsParams.isLocal(params, inFile)) {
+      // Process without MapReduce
+      convexHullLocal(inFile, outFile, params);
+    } else {
+      // Process with MapReduce
+      convexHullMapReduce(inFile, outFile, params);
     }
+  }
+  
+  public static void main(String[] args) throws IOException, InterruptedException {
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] paths = params.getPaths();
-    if (paths.length == 0) {
+    if (paths.length <= 1 && !params.checkInput()) {
       printUsage();
-      return;
+      System.exit(1);
     }
-    Path inFile = paths[0];
-    Path outFile = paths.length > 1? paths[1] : null;
-    boolean overwrite = params.getBoolean("overwrite", false);
-    if (!overwrite && outFile != null && outFile.getFileSystem(new Configuration()).exists(outFile)) {
-      System.err.println("Output path already exists and overwrite flag is not set");
-      return;
+    if (paths.length >= 2 && !params.checkInputOutput()) {
+      printUsage();
+      System.exit(1);
     }
+    Path inFile = params.getInputPath();
+    Path outFile = params.getOutputPath();
     
     long t1 = System.currentTimeMillis();
-    convexHullMapReduce(inFile, outFile, params);
+    convexHull(inFile, outFile, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
   }

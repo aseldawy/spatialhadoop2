@@ -34,6 +34,8 @@ import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.hadoop.util.IndexedSortable;
+import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -86,7 +88,7 @@ public class ClosestPair {
    * @param params
    * @return
    */
-  public static Pair closestPairInMemory(Point[] points, int threshold) {
+  public static Pair closestPairInMemory(final Point[] points, int threshold) {
     // Sort points by increasing x-axis
     Arrays.sort(points);
     
@@ -144,18 +146,52 @@ public class ClosestPair {
         double xmax = points[list2.start].x + mindistance;
         int leftMargin = exponentialSearchLeft(points, list1.end, xmin);
         int rightMargin = exponentialSearchRight(points, list2.start, xmax);
-        // Use brute force technique
-        if (rightMargin - leftMargin > threshold)
-          LOG.warn("Margin size is too large "+leftMargin+","+rightMargin);
-        int minPointL = leftMargin, minPointR = leftMargin + 1;
+        int minPointL = leftMargin, minPointR = list2.start;
         double minDistanceLR = points[minPointL].distanceTo(points[minPointR]);
-        for (int i1 = leftMargin; i1 < list1.end; i1++) {
-          for (int i2 = list2.start; i2 < rightMargin; i2++) {
-            double distance = points[i1].distanceTo(points[i2]);
-            if (distance < mindistance) {
-              minPointL = i1;
-              minPointR = i2;
-              minDistanceLR = distance;
+        if (rightMargin - leftMargin < threshold) {
+          // Use brute force technique
+          for (int i1 = leftMargin; i1 < list1.end; i1++) {
+            for (int i2 = list2.start; i2 < rightMargin; i2++) {
+              double distance = points[i1].distanceTo(points[i2]);
+              if (distance < mindistance) {
+                minPointL = i1;
+                minPointR = i2;
+                minDistanceLR = distance;
+              }
+            }
+          }
+        } else {
+          // Use a y-sort technique
+          final int[] rPoints = new int[rightMargin - list2.start];
+          for (int i = 0; i < rPoints.length; i++)
+            rPoints[i] = i + list2.start;
+          IndexedSortable ysort = new IndexedSortable() {
+            @Override
+            public void swap(int i, int j) {
+              int temp = rPoints[i]; rPoints[i] = rPoints[j]; rPoints[j] = temp;
+            }
+            
+            @Override
+            public int compare(int i, int j) {
+              double dy = points[rPoints[i]].y - points[rPoints[j]].y;
+              if (dy < 0) return -1; if (dy > 0) return 1; return 0;
+            }
+          };
+          new QuickSort().sort(ysort, 0, rPoints.length);
+          int rpoint1 = 0, rpoint2 = 0;
+          for (int ilPoint = leftMargin; ilPoint < list1.end; ilPoint++) {
+            Point lPoint = points[ilPoint];
+            while (rpoint1 < rPoints.length && lPoint.y - points[rPoints[rpoint1]].y > mindistance)
+              rpoint1++;
+            while (rpoint2 < rPoints.length && points[rPoints[rpoint2]].y - lPoint.y < mindistance)
+              rpoint2++;
+            for (int rpoint = rpoint1; rpoint < rpoint2; rpoint++) {
+              double distance = lPoint.distanceTo(points[rPoints[rpoint]]);
+              if (distance < minDistanceLR) {
+                minPointL = ilPoint;
+                minPointR = rPoints[rpoint];
+                minDistanceLR = distance;
+              }
             }
           }
         }

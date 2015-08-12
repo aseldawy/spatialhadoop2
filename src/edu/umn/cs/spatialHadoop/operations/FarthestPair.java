@@ -354,7 +354,7 @@ public class FarthestPair {
       System.arraycopy(shapes2, 0, points, shapes1.length, shapes2.length);
       
       // Calculate the farthest pair of all points
-      Point[] convexHull = ConvexHull.convexHull(points);
+      Point[] convexHull = ConvexHull.convexHullInMemory(points);
       PairDistance farthestPair = rotatingCallipers(convexHull);
       out.collect(NullWritable.get(), farthestPair);
     }
