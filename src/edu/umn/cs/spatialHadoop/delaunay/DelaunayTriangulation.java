@@ -39,6 +39,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.util.MemoryReporter;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
@@ -233,35 +234,8 @@ public class DelaunayTriangulation {
    */
   public static void delaunayLocal(Path[] inPaths, Path outPath,
       final OperationsParams params) throws IOException, InterruptedException {
-    boolean reportMem = params.getBoolean("mem", false);
-    if (reportMem) {
-      Thread memThread = new Thread(new Runnable() {
-        private String humanReadable(double size) {
-          final String[] units = {"", "KB", "MB", "GB", "TB", "PB"};
-          int unit = 0;
-          while (unit < units.length && size > 1024) {
-            size /= 1024;
-            unit++;
-          }
-          return String.format("%.2f %s", size, units[unit]);
-        }
-        
-        @Override
-        public void run() {
-          Runtime runtime = Runtime.getRuntime();
-          while (true) {
-            LOG.info(String.format("Free memory %s / Total memory %s",
-                humanReadable(runtime.freeMemory()),
-                humanReadable(runtime.totalMemory())));
-            try {
-              Thread.sleep(1000*60);
-            } catch (InterruptedException e) {
-            }
-          }
-        }}, "reportMem");
-      memThread.setDaemon(true);
-      memThread.start();
-    }
+    if (params.getBoolean("mem", false))
+      MemoryReporter.startReporting();
     // 1- Split the input path/file to get splits that can be processed
     // independently
     final SpatialInputFormat3<Rectangle, Point> inputFormat =
