@@ -178,13 +178,14 @@ public class RandomSpatialGenerator {
 
     int rectSize = params.getInt("rectsize", 100);
     long seed = params.getLong("seed", System.currentTimeMillis());
+    float circleThickness = params.getFloat("thickness", 1);
     DistributionType type = SpatialSite.getDistributionType(params, "type",
         DistributionType.UNIFORM);
     Shape shape = params.getShape("shape");
     long t1 = System.currentTimeMillis();
     
     RandomShapeGenerator<Shape> generator = new RandomShapeGenerator<Shape>(
-        totalSize, mbr, type, rectSize, seed);
+        totalSize, mbr, type, rectSize, seed, circleThickness);
     
     Rectangle key = generator.createKey();
     

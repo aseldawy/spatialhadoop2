@@ -63,6 +63,9 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   
   /**A temporary text used to serialize shapes to determine its size*/
   private Text text = new Text();
+
+  /**The thickness of the circle (maxRadius - minRadius) if a circle distribution is used*/
+  private double circleThickness;
   
   
   /**
@@ -77,18 +80,20 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
     this(split.length, OperationsParams.getShape(job, "mbr").getMBR(),
         SpatialSite.getDistributionType(job, "type", DistributionType.UNIFORM),
         job.getInt("rectsize", 100),
-        split.index + job.getLong("seed", System.currentTimeMillis()));
+        split.index + job.getLong("seed", System.currentTimeMillis()),
+        job.getFloat("thickness", 1));
     setShape((S) SpatialSite.createStockShape(job));
   }
 
   public RandomShapeGenerator(long size, Rectangle mbr,
-      DistributionType type, int rectsize, long seed) {
+      DistributionType type, int rectsize, long seed, double circleThickness) {
     this.totalSize = size;
     this.mbr = mbr;
     this.type = type;
     this.rectsize = rectsize;
     this.random = new Random(seed);
     this.generatedSize = 0;
+    this.circleThickness = circleThickness;
   }
   
   public void setShape(S shape) {
@@ -98,7 +103,7 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   @Override
   public boolean next(Rectangle key, S value) throws IOException {
     // Generate a random shape
-    generateShape(value, mbr, type, rectsize, random);
+    generateShape(value, mbr, type, rectsize, random, circleThickness);
     
     // Serialize it to text first to make it easy count its size
     text.clear();
@@ -145,9 +150,9 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   }
   
   private static void generateShape(Shape shape, Rectangle mbr,
-      DistributionType type, int rectSize, Random random) {
+      DistributionType type, int rectSize, Random random, double circleThickness) {
     if (shape instanceof Point) {
-      generatePoint((Point)shape, mbr, type, random);
+      generatePoint((Point)shape, mbr, type, random, circleThickness);
     } else if (shape instanceof Rectangle) {
       ((Rectangle)shape).x1 = random.nextDouble() * (mbr.x2 - mbr.x1) + mbr.x1;
       ((Rectangle)shape).y1 = random.nextDouble() * (mbr.y2 - mbr.y1) + mbr.y1;
@@ -166,7 +171,7 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
     return res;
   }
   
-  public static void generatePoint(Point p, Rectangle mbr, DistributionType type, Random rand) {
+  public static void generatePoint(Point p, Rectangle mbr, DistributionType type, Random rand, double circleThickness) {
     double x, y;
     switch (type) {
     case UNIFORM:
@@ -190,14 +195,9 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
       break;
     case CIRCLE:
       double degree = rand.nextDouble() * Math.PI * 2;
-      double xradius;
-      do {
-        xradius = (mbr.x2 - mbr.x1) / 2  * (0.8 + rand.nextGaussian() / 30);
-      } while (xradius > (mbr.x2 - mbr.x1) / 2);
-      double yradius;
-      do {
-        yradius = (mbr.y2 - mbr.y1) / 2  * (0.8 + rand.nextGaussian() / 30);
-      } while (yradius > (mbr.y2 - mbr.y1) / 2);
+      double layer = rand.nextDouble() * circleThickness;
+      double xradius = (mbr.x2 - mbr.x1) / 2 - layer;
+      double yradius = (mbr.y2 - mbr.y1) / 2 - layer;
       double dx = Math.cos(degree) * xradius;
       double dy = Math.sin(degree) * yradius;
       p.x = (mbr.x1 + mbr.x2) / 2 + dx;

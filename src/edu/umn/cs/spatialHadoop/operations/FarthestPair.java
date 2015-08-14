@@ -14,7 +14,9 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Stack;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -34,6 +36,7 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
@@ -54,8 +57,14 @@ import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.util.MemoryReporter;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 /**
  * Computes the farthest pair for a set of points
@@ -108,15 +117,15 @@ public class FarthestPair {
       double dist = a[i].distanceTo(a[j]);
       if (dist > farthest_pair.distance) {
         farthest_pair.distance = dist;
-        farthest_pair.first = a[i];
-        farthest_pair.second = a[j];
+        farthest_pair.first.set(a[i].x, a[i].y);
+        farthest_pair.second.set(a[j].x, a[j].y);
       }
 
       dist = a[i_plus_one].distanceTo(a[j]);
       if (dist > farthest_pair.distance) {
         farthest_pair.distance = dist;
-        farthest_pair.first = a[i_plus_one];
-        farthest_pair.second = a[j];
+        farthest_pair.first.set(a[i_plus_one].x, a[i_plus_one].y);
+        farthest_pair.second.set(a[j].x, a[j].y);
       }
     }
     return farthest_pair;
@@ -145,15 +154,15 @@ public class FarthestPair {
       double dist = pi.distanceTo(pj);
       if (dist > farthest_pair.distance) {
         farthest_pair.distance = dist;
-        farthest_pair.first = pi;
-        farthest_pair.second = pj;
+        farthest_pair.first.set(pi.x, pi.y);
+        farthest_pair.second.set(pj.x, pj.y);
       }
 
       dist = pi_plus_one.distanceTo(pj);
       if (dist > farthest_pair.distance) {
         farthest_pair.distance = dist;
-        farthest_pair.first = pi_plus_one;
-        farthest_pair.second = pj;
+        farthest_pair.first.set(pi_plus_one.x, pi_plus_one.y);
+        farthest_pair.second.set(pj.x, pj.y);
       }
     }
     return farthest_pair;
@@ -243,44 +252,6 @@ public class FarthestPair {
     return hull_points;    
   }
 
-  
-  /**
-   * Computes the closest pair by reading points from stream
-   * @param p 
-   * @return 
-   */
-  public static <S extends Point> PairDistance farthestPairStream(S p) throws IOException {
-    ShapeRecordReader<S> reader =
-        new ShapeRecordReader<S>(System.in, 0, Long.MAX_VALUE);
-    double[] xs = new double[1000000];
-    double[] ys = new double[1000000];
-    int size = 0;
-    
-    Rectangle key = new Rectangle();
-    while (reader.next(key, p)) {
-      xs[size] = p.x;
-      ys[size] = p.y;
-      size++;
-      if (size == xs.length) {
-        // Need to expand array
-        double[] old_xs = xs;
-        xs = new double[old_xs.length * 2];
-        System.arraycopy(old_xs, 0, xs, 0, old_xs.length);
-        double[] old_ys = ys;
-        ys = new double[old_ys.length * 2];
-        System.arraycopy(old_ys, 0, ys, 0, old_ys.length);
-      }
-      if ((size % 10000000) == 0) {
-        LOG.info("Loaded "+size+" points");
-      }
-    }
-    LOG.info("Loaded a total of "+size+ " points");
-    int[] hull_points = convexHullInPlace(xs, ys, size);
-    LOG.info("Convex hull computed with "+hull_points.length+" points");
-    return rotatingCallipersLocal(xs, ys, hull_points);
-  }
-
-
   public static class FarthestPairFilter extends DefaultBlockFilter {
 
     static class PartitionPair {
@@ -338,8 +309,7 @@ public class FarthestPair {
     }
   }
 
-  public static class FarthestPairMap extends MapReduceBase
-      implements
+  public static class FarthestPairMap extends MapReduceBase implements
       Mapper<PairWritable<Rectangle>, PairWritable<ArrayWritable>, NullWritable, PairDistance> {
     @Override
     public void map(PairWritable<Rectangle> key,
@@ -445,7 +415,6 @@ public class FarthestPair {
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(PairDistance.class);
     job.setInputFormat(FPInputFormatArray.class);
-    job.setClass("shape", Point.class, Shape.class);
     // Add input file twice to treat it as a binary function
     FPInputFormatArray.addInputPath(job, inFile);
     FPInputFormatArray.addInputPath(job, inFile);
@@ -459,6 +428,89 @@ public class FarthestPair {
       outFs.delete(outPath, true);
   }
   
+  public static PairDistance farthestPairLocal(Path[] inPaths, final OperationsParams params)
+      throws IOException, InterruptedException {
+    if (params.getBoolean("mem", false))
+      MemoryReporter.startReporting();
+    // 1- Split the input path/file to get splits that can be processed
+    // independently
+    final SpatialInputFormat3<Rectangle, Point> inputFormat =
+        new SpatialInputFormat3<Rectangle, Point>();
+    Job job = Job.getInstance(params);
+    SpatialInputFormat3.setInputPaths(job, inPaths);
+    final List<org.apache.hadoop.mapreduce.InputSplit> splits = inputFormat.getSplits(job);
+    final Point[][] allLists = new Point[splits.size()][];
+    
+    // 2- Read all input points in memory
+    LOG.info("Reading points from "+splits.size()+" splits");
+    Vector<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
+      @Override
+      public Integer run(int i1, int i2) {
+        try {
+          int numPoints = 0;
+          for (int i = i1; i < i2; i++) {
+            List<Point> points = new ArrayList<Point>();
+            org.apache.hadoop.mapreduce.lib.input.FileSplit fsplit = (org.apache.hadoop.mapreduce.lib.input.FileSplit) splits.get(i);
+            final org.apache.hadoop.mapreduce.RecordReader<Rectangle, Iterable<Point>> reader =
+                inputFormat.createRecordReader(fsplit, null);
+            if (reader instanceof SpatialRecordReader3) {
+              ((SpatialRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof RTreeRecordReader3) {
+              ((RTreeRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplit, params);
+            } else {
+              throw new RuntimeException("Unknown record reader");
+            }
+            while (reader.nextKeyValue()) {
+              Iterable<Point> pts = reader.getCurrentValue();
+              for (Point p : pts) {
+                points.add(p.clone());
+              }
+            }
+            reader.close();
+            numPoints += points.size();
+            allLists[i] = points.toArray(new Point[points.size()]);
+          }
+          return numPoints;
+        } catch (IOException e) {
+          e.printStackTrace();
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+        return null;
+      }
+    }, params.getInt("parallel", Runtime.getRuntime().availableProcessors()));
+    
+    int totalNumPoints = 0;
+    for (int numPoints : numsPoints)
+      totalNumPoints += numPoints;
+    
+    LOG.info("Read "+totalNumPoints+" points and merging into one list");
+    Point[] allPoints = new Point[totalNumPoints];
+    int pointer = 0;
+    
+    for (int iList = 0; iList < allLists.length; iList++) {
+      System.arraycopy(allLists[iList], 0, allPoints, pointer, allLists[iList].length);
+      pointer += allLists[iList].length;
+      allLists[iList] = null; // To let the GC collect it
+    }
+    
+    LOG.info("Computing closest-pair for "+allPoints.length+" points");
+    Point[] convexHull = ConvexHull.convexHullInMemory(allPoints);
+    PairDistance farthestPair = rotatingCallipers(convexHull);
+    return farthestPair;
+  }
+  
+  public static void farthestPair(Path[] inFiles, Path outPath, OperationsParams params)
+      throws IOException, InterruptedException,      ClassNotFoundException {
+    if (OperationsParams.isLocal(params, inFiles)) {
+      farthestPairLocal(inFiles, params);
+    } else {
+      farthestPairMapReduce(inFiles[0], outPath, params);
+    }
+  }
+  
   private static void printUsage() {
     System.err.println("Computes the farthest pair of points in an input file of points");
     System.err.println("Parameters: (* marks required parameters)");
@@ -469,36 +521,22 @@ public class FarthestPair {
     GenericOptionsParser.printGenericCommandUsage(System.err);
   }
   
-  public static void main(String[] args) throws IOException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    Path[] paths = params.getPaths();
-    if (paths.length == 0) {
-      if (params.getBoolean("local", false)) {
-        long t1 = System.currentTimeMillis();
-        farthestPairStream((Point)params.getShape("shape"));
-        long t2 = System.currentTimeMillis();
-        System.out.println("Total time: "+(t2-t1)+" millis");
-      } else {
-        printUsage();
-        System.exit(1);
-      }
-      return;
-    }
-    if (paths.length == 1 && !params.checkInput()) {
-      printUsage();
-      System.exit(1);
-    }
-    if (paths.length > 1 && !params.checkInputOutput()) {
-      printUsage();
-      System.exit(1);
-    }
-    Path inFile = params.getInputPath();
-    Path outFile = params.getOutputPath();
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
+    GenericOptionsParser parser = new GenericOptionsParser(args);
+    OperationsParams params = new OperationsParams(parser);
     
+    if (!params.checkInputOutput()) {
+      printUsage();
+      System.exit(1);
+    }
+
+    Path[] inFiles = params.getInputPaths();
+    Path outPath = params.getOutputPath();
+
     long t1 = System.currentTimeMillis();
-    farthestPairMapReduce(inFile, outFile, params);
+    farthestPair(inFiles, outPath, params);
     long t2 = System.currentTimeMillis();
-    System.out.println("Total time: "+(t2-t1)+" millis");
+    System.out.println("Total time: " + (t2 - t1) + " millis");
   }
   
 }

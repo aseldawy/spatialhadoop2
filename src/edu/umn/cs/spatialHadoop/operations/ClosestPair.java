@@ -499,7 +499,7 @@ public class ClosestPair {
             }
             reader.close();
             numPoints += points.size();
-            allLists[i - i1] = points.toArray(new Point[points.size()]);
+            allLists[i] = points.toArray(new Point[points.size()]);
           } catch (IOException e) {
             throw new RuntimeException("Error reading file", e);
           } catch (InterruptedException e) {

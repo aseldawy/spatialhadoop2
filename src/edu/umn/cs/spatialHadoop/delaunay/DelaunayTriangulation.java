@@ -274,7 +274,7 @@ public class DelaunayTriangulation {
             }
             reader.close();
             numPoints += points.size();
-            allLists[i - i1] = points.toArray(new Point[points.size()]);
+            allLists[i] = points.toArray(new Point[points.size()]);
           }
           return numPoints;
         } catch (IOException e) {
