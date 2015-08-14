@@ -475,9 +475,9 @@ public class ClosestPair {
     Vector<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
       @Override
       public Integer run(int i1, int i2) {
-        try {
-          int numPoints = 0;
-          for (int i = i1; i < i2; i++) {
+        int numPoints = 0;
+        for (int i = i1; i < i2; i++) {
+          try {
             List<Point> points = new ArrayList<Point>();
             FileSplit fsplit = (FileSplit) splits.get(i);
             final RecordReader<Rectangle, Iterable<Point>> reader =
@@ -500,14 +500,13 @@ public class ClosestPair {
             reader.close();
             numPoints += points.size();
             allLists[i - i1] = points.toArray(new Point[points.size()]);
+          } catch (IOException e) {
+            throw new RuntimeException("Error reading file", e);
+          } catch (InterruptedException e) {
+            throw new RuntimeException("Error reading file", e);
           }
-          return numPoints;
-        } catch (IOException e) {
-          e.printStackTrace();
-        } catch (InterruptedException e) {
-          e.printStackTrace();
         }
-        return null;
+        return numPoints;
       }
     }, params.getInt("parallel", Runtime.getRuntime().availableProcessors()));
     
