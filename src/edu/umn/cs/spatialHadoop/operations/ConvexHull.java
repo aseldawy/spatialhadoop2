@@ -39,6 +39,7 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.OperationsParams.Direction;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -136,17 +137,18 @@ public class ConvexHull {
     Job job = Job.getInstance(params);
     SpatialInputFormat3.setInputPaths(job, inFile);
     final List<InputSplit> splits = inputFormat.getSplits(job);
-    final Point[][] allLists = new Point[splits.size()][];
     
     // 2- Read all input points in memory
     LOG.info("Reading points from "+splits.size()+" splits");
-    Vector<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
+    Vector<Point[]> allLists = Parallel.forEach(splits.size(), new RunnableRange<Point[]>() {
       @Override
-      public Integer run(int i1, int i2) {
+      public Point[] run(int i1, int i2) {
         try {
-          int numPoints = 0;
+          List<Point> finalPoints = new ArrayList<Point>();
+          final int MaxSize = 100000;
+          Point[] points = new Point[MaxSize];
+          int size = 0;
           for (int i = i1; i < i2; i++) {
-            List<Point> points = new ArrayList<Point>();
             org.apache.hadoop.mapreduce.lib.input.FileSplit fsplit = (org.apache.hadoop.mapreduce.lib.input.FileSplit) splits.get(i);
             final RecordReader<Rectangle, Iterable<Point>> reader =
                 inputFormat.createRecordReader(fsplit, null);
@@ -162,14 +164,21 @@ public class ConvexHull {
             while (reader.nextKeyValue()) {
               Iterable<Point> pts = reader.getCurrentValue();
               for (Point p : pts) {
-                points.add(p.clone());
+                points[size++] = p.clone();
+                if (size >= points.length) {
+                  // Perform convex hull and write the result to finalPoints
+                  Point[] chPoints = convexHullInMemory(points);
+                  for (Point skylinePoint : chPoints)
+                    finalPoints.add(skylinePoint);
+                  size = 0; // reset
+                }
               }
             }
             reader.close();
-            numPoints += points.size();
-            allLists[i] = points.toArray(new Point[points.size()]);
           }
-          return numPoints;
+          while (size-- > 0)
+            finalPoints.add(points[size]);
+          return finalPoints.toArray(new Point[finalPoints.size()]);
         } catch (IOException e) {
           e.printStackTrace();
         } catch (InterruptedException e) {
@@ -180,25 +189,20 @@ public class ConvexHull {
     }, params.getInt("parallel", Runtime.getRuntime().availableProcessors()));
     
     int totalNumPoints = 0;
-    for (int numPoints : numsPoints)
-      totalNumPoints += numPoints;
+    for (Point[] list : allLists)
+      totalNumPoints += list.length;
     
     LOG.info("Read "+totalNumPoints+" points and merging into one list");
     Point[] allPoints = new Point[totalNumPoints];
     int pointer = 0;
     
-    for (int iList = 0; iList < allLists.length; iList++) {
-      System.arraycopy(allLists[iList], 0, allPoints, pointer, allLists[iList].length);
-      pointer += allLists[iList].length;
-      allLists[iList] = null; // To let the GC collect it
+    for (Point[] list : allLists) {
+      System.arraycopy(list, 0, allPoints, pointer, list.length);
+      pointer += list.length;
     }
+    allLists.clear(); // To the let the GC collect it
     
-    if (params.getBoolean("dedup", true)) {
-      float threshold = params.getFloat("threshold", 1E-5f);
-      allPoints = SpatialAlgorithms.deduplicatePoints(allPoints, threshold);
-    }
-    
-    Point[] convex_hull = convexHullInMemory(allPoints);
+    Point[] ch = convexHullInMemory(allPoints);
 
     if (outFile != null) {
       if (params.getBoolean("overwrite", false)) {
@@ -206,7 +210,7 @@ public class ConvexHull {
         outFs.delete(outFile, true);
       }
       GridRecordWriter<Point> out = new GridRecordWriter<Point>(outFile, null, null, null);
-      for (Point pt : convex_hull) {
+      for (Point pt : ch) {
         out.write(NullWritable.get(), pt);
       }
       out.close(null);

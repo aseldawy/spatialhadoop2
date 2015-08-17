@@ -21,7 +21,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -41,7 +40,6 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
@@ -193,17 +191,19 @@ public class Skyline {
     Job job = Job.getInstance(params);
     SpatialInputFormat3.setInputPaths(job, inFile);
     final List<InputSplit> splits = inputFormat.getSplits(job);
-    final Point[][] allLists = new Point[splits.size()][];
+    final Direction dir = params.getDirection("dir", Direction.MaxMax);
     
     // 2- Read all input points in memory
     LOG.info("Reading points from "+splits.size()+" splits");
-    Vector<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
+    Vector<Point[]> allLists = Parallel.forEach(splits.size(), new RunnableRange<Point[]>() {
       @Override
-      public Integer run(int i1, int i2) {
+      public Point[] run(int i1, int i2) {
         try {
-          int numPoints = 0;
+          List<Point> finalPoints = new ArrayList<Point>();
+          final int MaxSize = 100000;
+          Point[] points = new Point[MaxSize];
+          int size = 0;
           for (int i = i1; i < i2; i++) {
-            List<Point> points = new ArrayList<Point>();
             org.apache.hadoop.mapreduce.lib.input.FileSplit fsplit = (org.apache.hadoop.mapreduce.lib.input.FileSplit) splits.get(i);
             final RecordReader<Rectangle, Iterable<Point>> reader =
                 inputFormat.createRecordReader(fsplit, null);
@@ -219,14 +219,21 @@ public class Skyline {
             while (reader.nextKeyValue()) {
               Iterable<Point> pts = reader.getCurrentValue();
               for (Point p : pts) {
-                points.add(p.clone());
+                points[size++] = p.clone();
+                if (size >= points.length) {
+                  // Perform Skyline and write the result to finalPoints
+                  Point[] skylinePoints = skylineInMemory(points, dir);
+                  for (Point skylinePoint : skylinePoints)
+                    finalPoints.add(skylinePoint);
+                  size = 0; // reset
+                }
               }
             }
             reader.close();
-            numPoints += points.size();
-            allLists[i] = points.toArray(new Point[points.size()]);
           }
-          return numPoints;
+          while (size-- > 0)
+            finalPoints.add(points[size]);
+          return finalPoints.toArray(new Point[finalPoints.size()]);
         } catch (IOException e) {
           e.printStackTrace();
         } catch (InterruptedException e) {
@@ -237,25 +244,19 @@ public class Skyline {
     }, params.getInt("parallel", Runtime.getRuntime().availableProcessors()));
     
     int totalNumPoints = 0;
-    for (int numPoints : numsPoints)
-      totalNumPoints += numPoints;
+    for (Point[] list : allLists)
+      totalNumPoints += list.length;
     
     LOG.info("Read "+totalNumPoints+" points and merging into one list");
     Point[] allPoints = new Point[totalNumPoints];
     int pointer = 0;
     
-    for (int iList = 0; iList < allLists.length; iList++) {
-      System.arraycopy(allLists[iList], 0, allPoints, pointer, allLists[iList].length);
-      pointer += allLists[iList].length;
-      allLists[iList] = null; // To let the GC collect it
+    for (Point[] list : allLists) {
+      System.arraycopy(list, 0, allPoints, pointer, list.length);
+      pointer += list.length;
     }
+    allLists.clear(); // To the let the GC collect it
     
-    if (params.getBoolean("dedup", true)) {
-      float threshold = params.getFloat("threshold", 1E-5f);
-      allPoints = SpatialAlgorithms.deduplicatePoints(allPoints, threshold);
-    }
-    
-    Direction dir = params.getDirection("dir", Direction.MaxMax);
     Point[] skyline = skylineInMemory(allPoints, dir);
 
     if (outFile != null) {
