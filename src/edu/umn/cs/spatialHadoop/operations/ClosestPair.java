@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -569,9 +570,14 @@ public class ClosestPair {
     Path outPath = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    closestPair(inFiles, outPath, params);
+    Job job = closestPair(inFiles, outPath, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: " + (t2 - t1) + " millis");
+    if (job != null) {
+      System.out.println("Input points: "+job.getCounters().findCounter(Task.Counter.MAP_INPUT_RECORDS));
+      System.out.println("Map output points: "+job.getCounters().findCounter(Task.Counter.MAP_OUTPUT_RECORDS));
+      System.out.println("Reduce output points: "+job.getCounters().findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS));
+    }
   }
 
 }
