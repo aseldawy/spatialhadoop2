@@ -497,8 +497,13 @@ public class FarthestPair {
     }
     
     LOG.info("Computing closest-pair for "+allPoints.length+" points");
+    long t1 = System.currentTimeMillis();
     Point[] convexHull = ConvexHull.convexHullInMemory(allPoints);
+    long t2 = System.currentTimeMillis();
     PairDistance farthestPair = rotatingCallipers(convexHull);
+    long t3 = System.currentTimeMillis();
+    System.out.println("Convex hull in "+(t2-t1)/1000.0+" seconds "
+        + "and rotating calipers in "+(t3-t2)/1000.0+" seconds");
     return farthestPair;
   }
   
