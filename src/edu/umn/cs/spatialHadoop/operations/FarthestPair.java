@@ -397,7 +397,7 @@ public class FarthestPair {
   
   public static void farthestPairMapReduce(Path inFile, Path userOutPath,
       OperationsParams params) throws IOException {
-    JobConf job = new JobConf(FarthestPair.class);
+    JobConf job = new JobConf(params, FarthestPair.class);
     Path outPath = userOutPath;
     FileSystem outFs = (userOutPath == null ? inFile : userOutPath).getFileSystem(job);
     
