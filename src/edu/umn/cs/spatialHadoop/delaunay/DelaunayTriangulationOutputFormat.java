@@ -35,11 +35,11 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  *
  */
 public class DelaunayTriangulationOutputFormat extends
-  FileOutputFormat<Boolean, Triangulation> {
+  FileOutputFormat<Boolean, SimpleGraph> {
   static final Log LOG = LogFactory.getLog(DelaunayTriangulationOutputFormat.class);
   
   public static class TriangulationRecordWriter extends
-    RecordWriter<Boolean, Triangulation> {
+    RecordWriter<Boolean, SimpleGraph> {
     
     /**An output stream to write non-final triangulations*/
     private FSDataOutputStream nonFinalOut;
@@ -57,7 +57,7 @@ public class DelaunayTriangulationOutputFormat extends
     }
 
     @Override
-    public void write(Boolean key, Triangulation value)
+    public void write(Boolean key, SimpleGraph value)
         throws IOException, InterruptedException {
       if (key.booleanValue()) {
         // Write a final triangulation in a user-friendly text format
@@ -72,7 +72,7 @@ public class DelaunayTriangulationOutputFormat extends
      * Writes a final triangulation in a user-friendly format
      * @param t
      */
-    public static void writeFinalTriangulation(PrintStream ps, Triangulation t,
+    public static void writeFinalTriangulation(PrintStream ps, SimpleGraph t,
         Progressable progress) {
       Text text = new Text2();
       for (int i = 0; i < t.edgeStarts.length; i++) {
@@ -104,7 +104,7 @@ public class DelaunayTriangulationOutputFormat extends
   }
 
   @Override
-  public RecordWriter<Boolean, Triangulation> getRecordWriter(
+  public RecordWriter<Boolean, SimpleGraph> getRecordWriter(
       TaskAttemptContext context) throws IOException, InterruptedException {
     Path nonFinalFile = getDefaultWorkFile(context, ".nonfinal");
     Path finalFile = getDefaultWorkFile(context, ".final");
@@ -137,15 +137,15 @@ public class DelaunayTriangulationOutputFormat extends
       });
       
       try {
-        Vector<List<Triangulation>> allLists = Parallel.forEach(nonFinalFiles.length, new RunnableRange<List<Triangulation>>() {
+        Vector<List<SimpleGraph>> allLists = Parallel.forEach(nonFinalFiles.length, new RunnableRange<List<SimpleGraph>>() {
           @Override
-          public List<Triangulation> run(int i1, int i2) {
+          public List<SimpleGraph> run(int i1, int i2) {
             try {
-              List<Triangulation> triangulations = new ArrayList<Triangulation>();
+              List<SimpleGraph> triangulations = new ArrayList<SimpleGraph>();
               for (int i = i1; i < i2; i++) {
                 FSDataInputStream in = fs.open(nonFinalFiles[i].getPath());
                 while (in.available() > 0) {
-                  Triangulation t = new Triangulation();
+                  SimpleGraph t = new SimpleGraph();
                   t.readFields(in);
                   triangulations.add(t);
                 }
@@ -158,16 +158,16 @@ public class DelaunayTriangulationOutputFormat extends
           }
         });
         
-        List<Triangulation> allTriangulations = new ArrayList<Triangulation>();
-        for (List<Triangulation> list : allLists)
+        List<SimpleGraph> allTriangulations = new ArrayList<SimpleGraph>();
+        for (List<SimpleGraph> list : allLists)
           allTriangulations.addAll(list);
-        Triangulation finalAnswer;
+        SimpleGraph finalAnswer;
         if (allTriangulations.size() == 1) {
           finalAnswer = allTriangulations.get(0);
         } else {
           System.out.println("Merging "+allTriangulations.size()+" triangulations");
           finalAnswer = GSDTAlgorithm.mergeTriangulations(
-              allTriangulations, task).getFinalAnswer();
+              allTriangulations, task).getFinalAnswerAsGraph();
         }
         // Write the final answer to the output and delete intermediate files
         System.out.println("Writing final output");

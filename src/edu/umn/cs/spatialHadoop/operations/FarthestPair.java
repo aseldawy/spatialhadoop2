@@ -302,6 +302,8 @@ public class FarthestPair {
       }
       LOG.info("Selected " + selectedPairs.size() + " out of "
           + (gIndex1.size() * gIndex2.size()) + " possible pairs");
+      System.out.println("Selected " + selectedPairs.size() + " out of "
+          + (gIndex1.size() * gIndex2.size()) + " possible pairs");
       
       for (PartitionPair pp : selectedPairs) {
         output.collect(pp.p1, pp.p2);

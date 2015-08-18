@@ -10,7 +10,14 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.util.QuickSort;
+
+import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.LinearRing;
+import com.vividsolutions.jts.geom.Polygon;
 
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -119,7 +126,7 @@ public class GSDTAlgorithm {
      *          How much shift should be added to each edge to adjust it to the
      *          new points array
      */
-    public IntermediateTriangulation(Triangulation t, int pointShift) {
+    public IntermediateTriangulation(SimpleGraph t, int pointShift) {
       // Assume that points have already been copied
       this.site1 = pointShift;
       this.site2 = pointShift + t.sites.length - 1;
@@ -206,11 +213,11 @@ public class GSDTAlgorithm {
    * @param ts
    * @param progress
    */
-  public GSDTAlgorithm(Triangulation[] ts, Progressable progress) {
+  public GSDTAlgorithm(SimpleGraph[] ts, Progressable progress) {
     this.progress = progress;
     // Copy all triangulations
     int totalPointCount = 0;
-    for (Triangulation t : ts)
+    for (SimpleGraph t : ts)
       totalPointCount += t.sites.length;
     
     this.points = new Point[totalPointCount];
@@ -224,7 +231,7 @@ public class GSDTAlgorithm {
     IntermediateTriangulation[] triangulations = new IntermediateTriangulation[ts.length];
     int currentPointsCount = 0;
     for (int it = 0; it < ts.length; it++) {
-      Triangulation t = ts[it];
+      SimpleGraph t = ts[it];
       // Copy sites from that triangulation
       System.arraycopy(t.sites, 0, this.points, currentPointsCount, t.sites.length);
       
@@ -255,13 +262,13 @@ public class GSDTAlgorithm {
    * @return
    */
   static GSDTAlgorithm mergeTriangulations(
-      List<Triangulation> triangulations, Progressable progress) {
+      List<SimpleGraph> triangulations, Progressable progress) {
     // Arrange triangulations column-by-column
-    List<List<Triangulation>> columns = new ArrayList<List<Triangulation>>();
+    List<List<SimpleGraph>> columns = new ArrayList<List<SimpleGraph>>();
     int numTriangulations = 0;
-    for (Triangulation t : triangulations) {
+    for (SimpleGraph t : triangulations) {
       double x1 = t.mbr.x1, x2 = t.mbr.x2;
-      List<Triangulation> selectedColumn = null;
+      List<SimpleGraph> selectedColumn = null;
       int iColumn = 0;
       while (iColumn < columns.size() && selectedColumn == null) {
         Rectangle cmbr = columns.get(iColumn).get(0).mbr;
@@ -275,7 +282,7 @@ public class GSDTAlgorithm {
       }
       if (selectedColumn == null) {
         // Create a new column
-        selectedColumn = new ArrayList<Triangulation>();
+        selectedColumn = new ArrayList<SimpleGraph>();
         columns.add(selectedColumn);
       }
       selectedColumn.add(t);
@@ -284,13 +291,13 @@ public class GSDTAlgorithm {
     
     LOG.info("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
     
-    List<Triangulation> mergedColumns = new ArrayList<Triangulation>();
+    List<SimpleGraph> mergedColumns = new ArrayList<SimpleGraph>();
     // Merge all triangulations together column-by-column
-    for (List<Triangulation> column : columns) {
+    for (List<SimpleGraph> column : columns) {
       // Sort this column by y-axis
-      Collections.sort(column, new Comparator<Triangulation>() {
+      Collections.sort(column, new Comparator<SimpleGraph>() {
         @Override
-        public int compare(Triangulation t1, Triangulation t2) {
+        public int compare(SimpleGraph t1, SimpleGraph t2) {
           double dy = t1.mbr.y1 - t2.mbr.y1;
           if (dy < 0)
             return -1;
@@ -302,14 +309,14 @@ public class GSDTAlgorithm {
   
       LOG.info("Merging "+column.size()+" triangulations vertically");
       GSDTAlgorithm algo =
-          new GSDTAlgorithm(column.toArray(new Triangulation[column.size()]), progress);
-      mergedColumns.add(algo.getFinalAnswer());
+          new GSDTAlgorithm(column.toArray(new SimpleGraph[column.size()]), progress);
+      mergedColumns.add(algo.getFinalAnswerAsGraph());
     }
     
     // Merge the result horizontally
-    Collections.sort(mergedColumns, new Comparator<Triangulation>() {
+    Collections.sort(mergedColumns, new Comparator<SimpleGraph>() {
       @Override
-      public int compare(Triangulation t1, Triangulation t2) {
+      public int compare(SimpleGraph t1, SimpleGraph t2) {
         double dx = t1.mbr.x1 - t2.mbr.x1;
         if (dx < 0)
           return -1;
@@ -320,7 +327,7 @@ public class GSDTAlgorithm {
     });
     LOG.info("Merging "+mergedColumns.size()+" triangulations horizontally");
     GSDTAlgorithm algo = new GSDTAlgorithm(
-        mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
+        mergedColumns.toArray(new SimpleGraph[mergedColumns.size()]),
         progress);
     return algo;
   }
@@ -577,8 +584,137 @@ public class GSDTAlgorithm {
     return triangulations[0];
   }
 
-  public Triangulation getFinalAnswer() {
-    return new Triangulation(this);
+  /**
+   * Returns the final answer as a graph.
+   * @return
+   */
+  public SimpleGraph getFinalAnswerAsGraph() {
+    SimpleGraph graph = new SimpleGraph();
+
+    graph.sites = this.points.clone();
+    int numEdges = 0;
+    graph.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+        -Double.MAX_VALUE, -Double.MAX_VALUE);
+    for (int s1 = 0; s1 < this.neighbors.length; s1++) {
+      numEdges += this.neighbors[s1].size();
+      graph.mbr.expand(graph.sites[s1]);
+    }
+    graph.safeSites = new BitArray(graph.sites.length);
+    graph.safeSites.fill(true);
+    numEdges /= 2; // We store each undirected edge once
+    graph.edgeStarts = new int[numEdges];
+    graph.edgeEnds = new int[numEdges];
+
+    for (int s1 = 0; s1 < this.neighbors.length; s1++) {
+      for (int s2 : this.neighbors[s1]) {
+        if (s1 < s2) {
+          numEdges--;
+          graph.edgeStarts[numEdges] = s1;
+          graph.edgeEnds[numEdges] = s2;
+        }
+      }
+    }
+    if (numEdges != 0)
+      throw new RuntimeException("Error in edges! Copied "+
+    (graph.edgeStarts.length - numEdges)+" instead of "+graph.edgeStarts.length);
+  
+    return graph;
+  }
+  
+  /**
+   * Computes the final answer as a set of Voronoi regions. Each region is
+   * represented by a Geometry. The associated site for each Voronoi region is
+   * stored as user data inside the geometry. The polygon that represents each
+   * region is clipped to the given rectangle (MBR) to ensure the possibility
+   * of representing infinite open regions.
+   * The answer is split into final and non-final regions based on the given
+   * MBR.
+   */
+  public void getFinalAnswerAsVoronoiRegions(Rectangle mbr,
+      List<Polygon> finalRegions, List<Polygon> nonFinalRegions) {
+    // Detect final and non-final sites
+    BitArray unsafeSites = detectUnsafeSites(mbr);
+    // A factory that creates polygons
+    final GeometryFactory Factory = new GeometryFactory();
+    
+    for (int iSite = 0; iSite < points.length; iSite++) {
+      // Compute the Voronoi region of this site as a polygon
+      // Sort all neighbors in CCW order and compute the perependicular bisector
+      // of each incident edge. The intersection of perpendicular bisectors form
+      // the points of the polygon that represents the Voronoi region.
+      // If the angle between two neighbors is larger than PI, this indicates
+      // an open region
+      final IntArray siteNeighbors = neighbors[iSite];
+
+      // Compute angles between the points and its neighbors
+      final double[] angles = new double[siteNeighbors.size()];
+      for (int iNeighbor = 0; iNeighbor < siteNeighbors.size(); iNeighbor++) {
+        double dx = points[siteNeighbors.get(iNeighbor)].x - points[iSite].x;
+        double dy = points[siteNeighbors.get(iNeighbor)].y - points[iSite].y;
+        double ccwAngle = Math.atan2(dy, dx);
+        angles[iNeighbor] = ccwAngle < 0 ? ccwAngle += Math.PI * 2 : ccwAngle;
+      }
+      
+      // Sort neighbors by CCW order
+      IndexedSortable ccwSort = new IndexedSortable() {
+        
+        @Override
+        public void swap(int i, int j) {
+          siteNeighbors.swap(i, j);
+          double t = angles[i];
+          angles[i] = angles[j];
+          angles[j] = t;
+        }
+        
+        @Override
+        public int compare(int i, int j) {
+          double diff = angles[i] - angles[j];
+          if (diff < 0) return -1;
+          if (diff > 0) return 1;
+          return 0;
+        }
+      };
+      new QuickSort().sort(ccwSort, 0, siteNeighbors.size());
+      
+      // Traverse neighbors in CCW order and compute intersections of
+      // perpendicular bisectors
+      List<Point> voronoiRegionPoints = new ArrayList<Point>();
+
+      boolean closedRegion = true;
+      for (int iNeighbor1 = 0; iNeighbor1 < siteNeighbors.size(); iNeighbor1++) {
+        int iNeighbor2 = (iNeighbor1 + 1) % siteNeighbors.size();
+        double ccwAngle = angles[iNeighbor2] - angles[iNeighbor1];
+        if (ccwAngle < 0)
+          ccwAngle += Math.PI * 2;
+        if (ccwAngle > Math.PI) {
+          // Open side of the Voronoi region
+          // TODO Compute the intersection of each perpendicular bisector to the
+          // boundary
+          closedRegion = false;
+        } else {
+          // Closed side of the Voronoi region. Calculate the next point as
+          // the center of the empty circle
+          Point emptyCircleCenter = calculateCircumCircleCenter(iSite,
+              siteNeighbors.get(iNeighbor1), siteNeighbors.get(iNeighbor2));
+          voronoiRegionPoints.add(emptyCircleCenter);
+        }
+      }
+      
+      // Create the polygon from points
+      if (closedRegion) {
+        Coordinate[] coords = new Coordinate[voronoiRegionPoints.size() + 1];
+        for (int i = 0; i < voronoiRegionPoints.size(); i++) {
+          Point voronoiPoint = voronoiRegionPoints.get(i);
+          coords[i] = new Coordinate(voronoiPoint.x, voronoiPoint.y);
+        }
+        coords[coords.length - 1] = coords[0];
+        LinearRing ring = Factory.createLinearRing(coords);
+        Polygon polygon = Factory.createPolygon(ring, null);
+        (unsafeSites.get(iSite) ? nonFinalRegions : finalRegions).add(polygon);
+      } else {
+        // TODO Create line string
+      }
+    }
   }
 
   /**
@@ -596,107 +732,34 @@ public class GSDTAlgorithm {
    * @param unsafe
    *          The set of unsafe edges
    */
-  public void splitIntoFinalAndNonFinalParts(Rectangle mbr,
-      Triangulation finalPart, Triangulation nonfinalPart) {
-    // Nodes that has its adjacency list sorted by node ID to speed up the merge
-    BitArray sortedNodes = new BitArray(points.length);
-    // Sites that has been found to be unsafe
-    BitArray unsafeNodes = new BitArray(points.length);
-    // Sites that need to be checked whether they have unsafe triangles or not
-    IntArray nodesToCheck = new IntArray();
+  public void splitIntoFinalAndNonFinalGraphs(Rectangle mbr,
+      SimpleGraph finalGraph, SimpleGraph nonfinalGraph) {
+    BitArray unsafeSites = detectUnsafeSites(mbr);
     
-    // Initially, add all sites on the convex hull to unsafe edges
-    for (int convexHullPoint : finalAnswer.convexHull) {
-      nodesToCheck.add(convexHullPoint);
-      unsafeNodes.set(convexHullPoint, true);
-    }
-    
-    while (!nodesToCheck.isEmpty()) {
-      if (progress != null)
-        progress.progress();
-      int unsafeNode = nodesToCheck.pop();
-      IntArray neighbors1 = neighbors[unsafeNode];
-      // Sort the array to speedup merging neighbors
-      if (!sortedNodes.get(unsafeNode)) {
-        neighbors1.sort();
-        sortedNodes.set(unsafeNode, true);
-      }
-      for (int neighborID : neighbors1) {
-        IntArray neighbors2 = neighbors[neighborID];
-        // Sort neighbor nodes, if needed
-        if (!sortedNodes.get(neighborID)) {
-          neighbors2.sort();
-          sortedNodes.set(neighborID, true);
-        }
-        // Find common nodes which form triangles
-        int i1 = 0, i2 = 0;
-        while (i1 < neighbors1.size() && i2 < neighbors2.size()) {
-          if (neighbors1.get(i1) == neighbors2.get(i2)) {
-            boolean safeTriangle = true;
-            // Found a triangle between unsafeNode, neighborID and neighbors1[i1]
-            Point emptyCircle = calculateCircumCircleCenter(unsafeNode, neighborID, neighbors1.get(i1));
-            if (emptyCircle == null || !mbr.contains(emptyCircle)) {
-              // The center is outside the MBR, unsafe
-              safeTriangle = false;
-            } else {
-              // If the empty circle is not completely contained in the MBR,
-              // the triangle is unsafe as the circle might become non-empty
-              // when the merge process happens
-              double dx = emptyCircle.x - xs[unsafeNode];
-              double dy = emptyCircle.y - ys[unsafeNode];
-              double r2 = dx * dx + dy * dy;
-              double dist = Math.min(Math.min(emptyCircle.x - mbr.x1, mbr.x2 - emptyCircle.x),
-                  Math.min(emptyCircle.y - mbr.y1, mbr.y2 - emptyCircle.y));
-              if (dist * dist <= r2)
-                safeTriangle = false;
-            }
-            if (!safeTriangle) {
-              // The three nodes are unsafe and need to be further checked
-              if (!unsafeNodes.get(neighborID)) {
-                nodesToCheck.add(neighborID);
-                unsafeNodes.set(neighborID, true);
-              }
-              if (!unsafeNodes.get(neighbors1.get(i1))) {
-                nodesToCheck.add(neighbors1.get(i1));
-                unsafeNodes.set(neighbors1.get(i1), true);
-              }
-            }
-            i1++;
-            i2++;
-          } else if (neighbors1.get(i1) < neighbors2.get(i2)) {
-            i1++;
-          } else {
-            i2++;
-          }
-        }
-      }
-    }
-    
+    // A final edge is incident to at least one unsafe site
     IntArray finalEdgeStarts = new IntArray();
     IntArray finalEdgeEnds = new IntArray();
+    // A final edge connects two safe sites
     IntArray nonfinalEdgeStarts = new IntArray();
     IntArray nonfinalEdgeEnds = new IntArray();
 
-    // Prune all edges that connect two safe nodes
     for (int i = 0; i < points.length; i++) {
       if (progress != null)
         progress.progress();
-      if (unsafeNodes.get(i)) {
-        // An unsafe node, all of its adjacent edges are also unsafe
+      if (unsafeSites.get(i)) {
+        // An unsafe site, all of its adjacent edges are also unsafe
         for (int n : neighbors[i]) {
-          if (i < n) {
+          if (i < n) { // To ensure that an edge is written only once
             nonfinalEdgeStarts.add(i);
             nonfinalEdgeEnds.add(n);
           }
         }
       } else {
-        // Found a safe node, all edges that are adjacent to another safe node
+        // Found a safe site, all edges that are adjacent to another safe site
         // are final edges
-        
-        // Whether an adjacent edge has been written or not
         for (int n : neighbors[i]) {
-          if (i < n) {
-            if (!unsafeNodes.get(n)) {
+          if (i < n) { // To ensure that an edge is written only once
+            if (!unsafeSites.get(n)) {
               // Found a final edge
               finalEdgeStarts.add(i);
               finalEdgeEnds.add(n);
@@ -709,15 +772,106 @@ public class GSDTAlgorithm {
       }
     }
     
-    finalPart.sites = this.points;
-    finalPart.edgeStarts = finalEdgeStarts.toArray();
-    finalPart.edgeEnds = finalEdgeEnds.toArray();
-    finalPart.compact();
+    finalGraph.sites = this.points;
+    finalGraph.edgeStarts = finalEdgeStarts.toArray();
+    finalGraph.edgeEnds = finalEdgeEnds.toArray();
+    finalGraph.safeSites = unsafeSites.invert();
+    finalGraph.compact();
 
-    nonfinalPart.sites = this.points;
-    nonfinalPart.edgeStarts = nonfinalEdgeStarts.toArray();
-    nonfinalPart.edgeEnds = nonfinalEdgeEnds.toArray();
-    nonfinalPart.compact();
+    nonfinalGraph.sites = this.points;
+    nonfinalGraph.edgeStarts = nonfinalEdgeStarts.toArray();
+    nonfinalGraph.edgeEnds = nonfinalEdgeEnds.toArray();
+    nonfinalGraph.safeSites = new BitArray(this.points.length); // No safe sites
+    nonfinalGraph.compact();
+  }
+
+  /**
+   * Detects which sites are unsafe based on the definition of Delaunay
+   * triangulation. An unsafe site participates to at least one unsafe triangle.
+   * An unsafe triangle has an empty circle that goes (partially) outside the
+   * given MBR.
+   * @param mbr
+   * @return
+   */
+  private BitArray detectUnsafeSites(Rectangle mbr) {
+    // Nodes that has its adjacency list sorted by node ID to speed up the merge
+    BitArray sortedSites = new BitArray(points.length);
+    // An unsafe site is a site that participates to at least one unsafe triangle 
+    BitArray unsafeSites = new BitArray(points.length);
+    // Sites that need to be checked whether they have unsafe triangles or not
+    IntArray sitesToCheck = new IntArray();
+    
+    // Initially, add all sites on the convex hull to unsafe sites
+    for (int convexHullPoint : finalAnswer.convexHull) {
+      sitesToCheck.add(convexHullPoint);
+      unsafeSites.set(convexHullPoint, true);
+    }
+    
+    while (!sitesToCheck.isEmpty()) {
+      if (progress != null)
+        progress.progress();
+      int siteToCheck = sitesToCheck.pop();
+      IntArray neighbors1 = neighbors[siteToCheck];
+      // Sort the array to speedup merging neighbors
+      if (!sortedSites.get(siteToCheck)) {
+        neighbors1.sort();
+        sortedSites.set(siteToCheck, true);
+      }
+      for (int neighborID : neighbors1) {
+        IntArray neighbors2 = neighbors[neighborID];
+        // Sort neighbor nodes, if needed
+        if (!sortedSites.get(neighborID)) {
+          neighbors2.sort();
+          sortedSites.set(neighborID, true);
+        }
+        // Find common nodes which form triangles
+        int i1 = 0, i2 = 0;
+        while (i1 < neighbors1.size() && i2 < neighbors2.size()) {
+          if (neighbors1.get(i1) == neighbors2.get(i2)) {
+            // Found a triangle. Check whether the triangle is safe or not
+            // A safe triangle is a triangle with an empty circle that fits
+            // completely inside partition boundaries. This means that this safe
+            // triangle cannot be disrupted by any point in other partitions
+            boolean safeTriangle = true;
+            // Found a triangle between unsafeNode, neighborID and neighbors1[i1]
+            Point emptyCircle = calculateCircumCircleCenter(siteToCheck, neighborID, neighbors1.get(i1));
+            if (emptyCircle == null || !mbr.contains(emptyCircle)) {
+              // The center is outside the MBR, unsafe
+              safeTriangle = false;
+            } else {
+              // If the empty circle is not completely contained in the MBR,
+              // the triangle is unsafe as the circle might become non-empty
+              // when the merge process happens
+              double dx = emptyCircle.x - xs[siteToCheck];
+              double dy = emptyCircle.y - ys[siteToCheck];
+              double r2 = dx * dx + dy * dy;
+              double dist = Math.min(Math.min(emptyCircle.x - mbr.x1, mbr.x2 - emptyCircle.x),
+                  Math.min(emptyCircle.y - mbr.y1, mbr.y2 - emptyCircle.y));
+              if (dist * dist <= r2)
+                safeTriangle = false;
+            }
+            if (!safeTriangle) {
+              // The two additional sites are unsafe and need to be further checked
+              if (!unsafeSites.get(neighborID)) {
+                sitesToCheck.add(neighborID);
+                unsafeSites.set(neighborID, true);
+              }
+              if (!unsafeSites.get(neighbors1.get(i1))) {
+                sitesToCheck.add(neighbors1.get(i1));
+                unsafeSites.set(neighbors1.get(i1), true);
+              }
+            }
+            i1++;
+            i2++;
+          } else if (neighbors1.get(i1) < neighbors2.get(i2)) {
+            i1++;
+          } else {
+            i2++;
+          }
+        }
+      }
+    }
+    return unsafeSites;
   }
 
   public boolean test() {

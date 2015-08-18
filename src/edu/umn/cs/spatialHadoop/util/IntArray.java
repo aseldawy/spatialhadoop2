@@ -227,4 +227,10 @@ public class IntArray implements Writable, Iterable<Integer> {
     }
     
   }
+
+  public void swap(int i, int j) {
+    int t = array[i];
+    array[i] = array[j];
+    array[j] = t;
+  }
 }

@@ -309,6 +309,7 @@ public class Skyline {
       }
       
       LOG.info("Processing "+non_dominated_partitions.size()+" out of "+gIndex.size()+" partition");
+      System.out.println("Processing "+non_dominated_partitions.size()+" out of "+gIndex.size()+" partition");
       // Output all non-dominated partitions
       for (Partition p : non_dominated_partitions) {
         output.collect(p);

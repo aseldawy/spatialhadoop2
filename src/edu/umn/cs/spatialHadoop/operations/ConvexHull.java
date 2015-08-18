@@ -256,6 +256,7 @@ public class ConvexHull {
       }
       
       LOG.info("Processing "+non_dominated_partitions_all.size()+" out of "+gIndex.size()+" partition");
+      System.out.println("Processing "+non_dominated_partitions_all.size()+" out of "+gIndex.size()+" partition");
       // Output all non-dominated partitions
       for (Partition p : non_dominated_partitions_all) {
         output.collect(p);

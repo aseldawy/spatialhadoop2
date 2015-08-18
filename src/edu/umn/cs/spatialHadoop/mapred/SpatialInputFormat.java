@@ -82,19 +82,18 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
         rrConstructor.setAccessible(true);
         return rrConstructor.newInstance(new Object [] {job, fsplit});
       } catch (SecurityException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (NoSuchMethodException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (IllegalArgumentException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (InstantiationException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (IllegalAccessException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (InvocationTargetException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       }
-      throw new RuntimeException("Cannot generate a record reader");
     } else {
       throw new RuntimeException("Cannot handle splits of type "+split.getClass());
     }

@@ -95,4 +95,18 @@ public class BitArray implements Writable {
   public int size() {
     return entries.length * BitsPerEntry;
   }
+
+  public void fill(boolean b) {
+    long fillValue = b ? 0xffffffffffffffffL : 0;
+    for (int i = 0; i < entries.length; i++)
+      entries[i] = fillValue;
+  }
+
+  public BitArray invert() {
+    BitArray inverse = new BitArray();
+    inverse.entries = new long[this.entries.length];
+    for (int i = 0; i < entries.length; i++)
+      inverse.entries[i] = ~this.entries[i];
+    return inverse;
+  }
 }

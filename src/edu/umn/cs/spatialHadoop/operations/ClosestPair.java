@@ -574,9 +574,9 @@ public class ClosestPair {
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: " + (t2 - t1) + " millis");
     if (job != null) {
-      System.out.println("Input points: "+job.getCounters().findCounter(Task.Counter.MAP_INPUT_RECORDS));
-      System.out.println("Map output points: "+job.getCounters().findCounter(Task.Counter.MAP_OUTPUT_RECORDS));
-      System.out.println("Reduce output points: "+job.getCounters().findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS));
+      System.out.println("Input points: "+job.getCounters().findCounter(Task.Counter.MAP_INPUT_RECORDS).getValue());
+      System.out.println("Map output points: "+job.getCounters().findCounter(Task.Counter.MAP_OUTPUT_RECORDS).getValue());
+      System.out.println("Reduce output points: "+job.getCounters().findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS).getValue());
     }
   }
 
