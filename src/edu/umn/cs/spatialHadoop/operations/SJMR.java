@@ -50,6 +50,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
  * An implementation of Spatial Join MapReduce as described in
@@ -229,7 +230,7 @@ public class SJMR {
             }
           }
         }
-      }, reporter);
+      }, new Progressable.ReporterProgressable(reporter));
     }
   }
   

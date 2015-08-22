@@ -9,18 +9,13 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Iterator;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
@@ -37,7 +32,6 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
-import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms.RectangleID;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.util.Progressable;
 
@@ -65,79 +59,17 @@ public class UltimateUnion {
    * @param <S>
    */
   static class UltimateUnionMap<S extends OGCJTSShape> extends 
-      Mapper<Rectangle, Iterable<Shape>, NullWritable, Shape> {
+      Mapper<Rectangle, Iterable<Shape>, NullWritable, OGCJTSShape> {
     
     @Override
     protected void map(Rectangle key, Iterable<Shape> shapes, final Context context)
         throws IOException, InterruptedException {
-      context.setStatus("Clustering");
-      long t1 = System.currentTimeMillis();
-      Vector<Geometry> vgeoms = new Vector<Geometry>();
-      Vector<RectangleID> rects = new Vector<RectangleID>();
-      Iterator<Shape> iter = shapes.iterator();
-      final OGCJTSShape templateShape = (OGCJTSShape) iter.next();
-      vgeoms.add(templateShape.geom);
-      rects.add(new RectangleID(rects.size(), templateShape.getMBR()));
-
-      while (iter.hasNext()) {
-        Shape s = iter.next();
-        vgeoms.add(((OGCJTSShape)s).geom);
-        rects.add(new RectangleID(rects.size(), s.getMBR()));
-      }
+      List<Geometry> vgeoms = new ArrayList<Geometry>();
+      for (Shape s : shapes)
+        vgeoms.add(((OGCJTSShape) s).geom);
+      Geometry[] geoms = vgeoms.toArray(new Geometry[vgeoms.size()]);
       
-      RectangleID[] mbrs = rects.toArray(new RectangleID[rects.size()]);
-      rects = null;
-      // Parent link of the Set Union Find data structure
-      final int[] parent = new int[mbrs.length];
-      Arrays.fill(parent, -1);
-      
-      // Group records in clusters by overlapping
-      SpatialAlgorithms.SelfJoin_rectangles(mbrs, new OutputCollector<RectangleID, RectangleID>(){
-        @Override
-        public void collect(RectangleID r, RectangleID s)
-            throws IOException {
-          int rid = r.id;
-          while (parent[rid] != -1) {
-            int pid = parent[rid];
-            if (parent[pid] != -1)
-              parent[rid] = parent[pid];
-            rid = pid;
-          }
-          int sid = s.id;
-          while (parent[sid] != -1) {
-            int pid = parent[sid];
-            if (parent[pid] != -1)
-              parent[sid] = parent[pid];
-            sid = pid;
-          }
-          if (rid != sid)
-            parent[rid] = sid;
-        }}, context);
-      mbrs = null;
-      // Put all records in one cluster as a list
-      Map<Integer, List<Geometry>> groups = new HashMap<Integer, List<Geometry>>();
-      for (int i = 0; i < parent.length; i++) {
-        int root = parent[i];
-        if (root == -1)
-          root = i;
-        while (parent[root] != -1) {
-          root = parent[root];
-        }
-        List<Geometry> group = groups.get(root);
-        if (group == null) {
-          group = new Vector<Geometry>();
-          groups.put(root, group);
-        }
-        group.add(vgeoms.get(i));
-      }
-      // Early clean some memory
-      vgeoms = null;
-      long t2 = System.currentTimeMillis();
-      LOG.info("Grouped "+parent.length+" shapes into "+groups.size()+" clusters in "+(t2-t1)/1000.0+" seconds");
-      
-      // Compute a separate union for each cluster
-      context.setStatus("Unioning");
-      t1 = System.currentTimeMillis();
+      // Compute the union and clip to the partition MBR
       Coordinate[] coords = new Coordinate[5];
       coords[0] = new Coordinate(key.x1, key.y1);
       coords[1] = new Coordinate(key.x2, key.y1);
@@ -145,42 +77,41 @@ public class UltimateUnion {
       coords[3] = new Coordinate(key.x1, key.y2);
       coords[4] = coords[0];
       final Geometry partitionMBR = FACTORY.createPolygon(FACTORY.createLinearRing(coords), null);
-
-      for (List<Geometry> group : groups.values()) {
-        Union.unionInMemory(group, new Progressable.TaskProgressable(context), new ResultCollector<Geometry>() {
-          NullWritable nullKey = NullWritable.get();
-          
-          @Override
-          public void collect(Geometry r) {
-            try {
-              Geometry croppedUnion = r.getBoundary().intersection(partitionMBR);
-              if (croppedUnion != null) {
-                templateShape.geom = croppedUnion;
-                context.write(nullKey, templateShape);
-              }
-            } catch (TopologyException e) {
-              LOG.warn("Error in cropping", e);
-              // Unavoidable TopologyException. Skip the clipping just to ensure
-              // we write something to the output
-              templateShape.geom = r;
-              try {
-                context.write(nullKey, templateShape);
-              } catch (IOException e1) {
-                e1.printStackTrace();
-              } catch (InterruptedException e1) {
-                e1.printStackTrace();
-              }
-            } catch (IOException e) {
-              e.printStackTrace();
-            } catch (InterruptedException e) {
-              e.printStackTrace();
+      
+      ResultCollector<Geometry> resultCollector = new ResultCollector<Geometry>() {
+        NullWritable nullKey = NullWritable.get();
+        OGCJTSShape value = new OGCJTSShape();
+        
+        @Override
+        public void collect(Geometry r) {
+          try {
+            Geometry croppedUnion = r.getBoundary().intersection(partitionMBR);
+            if (croppedUnion != null) {
+              value.geom = croppedUnion;
+              context.write(nullKey, value);
             }
+          } catch (TopologyException e) {
+            LOG.warn("Error in cropping", e);
+            // Unavoidable TopologyException. Skip the clipping just to ensure
+            // we write something to the output
+            value.geom = r;
+            try {
+              context.write(nullKey, value);
+            } catch (IOException e1) {
+              e1.printStackTrace();
+            } catch (InterruptedException e1) {
+              e1.printStackTrace();
+            }
+          } catch (IOException e) {
+            e.printStackTrace();
+          } catch (InterruptedException e) {
+            e.printStackTrace();
           }
-        });
-        context.progress();
-      }
-      t2 = System.currentTimeMillis();
-      LOG.info("Computed the union in "+(t2-t1)/1000.0+" seconds");
+        }
+      };
+      
+      SpatialAlgorithms.multiUnion(geoms,
+          new Progressable.TaskProgressable(context), resultCollector);
     }
   }
   
@@ -190,11 +121,10 @@ public class UltimateUnion {
     Job job = new Job(params, "UltimateUnion");
     job.setJarByClass(UltimateUnion.class);
 
-    Shape shape = params.getShape("shape");
     // Set map and reduce
     job.setMapperClass(UltimateUnionMap.class);
     job.setMapOutputKeyClass(NullWritable.class);
-    job.setMapOutputValueClass(shape.getClass());
+    job.setMapOutputValueClass(OGCJTSShape.class);
     job.setNumReduceTasks(0);
 
     // Set input and output

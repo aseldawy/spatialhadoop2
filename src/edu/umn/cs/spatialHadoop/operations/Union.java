@@ -12,11 +12,8 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
-import java.util.Stack;
 import java.util.Vector;
 
 import org.apache.commons.io.output.NullOutputStream;
@@ -42,9 +39,7 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
-import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -52,6 +47,7 @@ import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
@@ -75,211 +71,8 @@ public class Union {
   public static final GeometryFactory FACTORY = new GeometryFactory();
   
   /**Logger for this class*/
-  private static final Log LOG = LogFactory.getLog(Union.class);
-
-  /**
-   * Union a set of geometries by combining them into one GeometryCollection
-   * and taking its buffer. This function is optimized to run with a large
-   * collection of polygons. It runs as follows.
-   * <ol>
-   *  <li>The given polygons are flattened by extracting all geometries from
-   *    GeometryCollections</li>
-   *  <li>All polygons are sorted by the x-dimension of their left most point</li>
-   *  <li>We run a plane-sweep algorithm that keeps merging polygons in batches of 10,000 objects</li>
-   *  <li>As soon as part of the answer is to the left of the sweep-line, it
-   *   is finalized and no-longer processed</li>
-   *  <li>Finally, all finalized polygons are put together in a GeometryCollection
-   *   to be returned as one object</li>
-   * </ol>
-   * @param geoms
-   * @return
-   * @throws IOException 
-   */
-  public static int unionInMemory(final List<Geometry> geoms,
-      final Progressable prog, ResultCollector<Geometry> output) throws IOException {
-    List<Geometry> basicShapes = new ArrayList<Geometry>();
-    for (int i = 0; i < geoms.size(); i++) {
-      Geometry geom = geoms.get(i);
-      if (geom instanceof GeometryCollection) {
-        GeometryCollection coll = (GeometryCollection) geom;
-        for (int n = 0; n < coll.getNumGeometries(); n++)
-          basicShapes.add(coll.getGeometryN(n));
-      } else {
-        basicShapes.add(geom);
-      }
-      if (i % 0xff == 0 && prog != null)
-        prog.progress();
-    }
-    
-    if (basicShapes.size() == 1) {
-      // No need to union.
-      if (output != null)
-        output.collect(basicShapes.get(0));
-      return 1;
-    }
-    
-    LOG.info("Flattened the geoms ino "+basicShapes.size()+" geoms");
-    
-    // Sort objects by x to increase the chance of merging overlapping objects
-    for (Geometry geom : basicShapes) {
-      Coordinate[] coords = geom.getEnvelope().getCoordinates();
-      double minx = Math.min(coords[0].x, coords[2].x);
-      geom.setUserData(minx);
-    }
-    
-    Collections.sort(basicShapes, new Comparator<Geometry>() {
-      @Override
-      public int compare(Geometry o1, Geometry o2) {
-        Double d1 = (Double) o1.getUserData();
-        Double d2 = (Double) o2.getUserData();
-        if (d1 < d2) return -1;
-        if (d1 > d2) return +1;
-        return 0;
-      }
-    });
-    LOG.info("Sorted "+basicShapes.size()+" geometries by x");
+  public static final Log LOG = LogFactory.getLog(Union.class);
   
-    final int MaxBatchSize = 500;
-    // All polygons that are to the right of the sweep line
-    List<Geometry> nonFinalPolygons = new ArrayList<Geometry>();
-    int resultSize = 0;
-    
-    long reportTime = 0;
-    int i = 0;
-    while (i < basicShapes.size()) {
-      int batchSize = Math.min(MaxBatchSize, basicShapes.size() - i);
-      for (int j = 0; j < batchSize; j++) {
-        nonFinalPolygons.add(basicShapes.get(i));
-        basicShapes.set(i++, null); // Remove from list to release memory
-      }
-      double sweepLinePosition = (Double)nonFinalPolygons.get(nonFinalPolygons.size() - 1).getUserData();
-      Geometry batchUnion;
-      batchUnion = safeUnion(nonFinalPolygons, new Progressable.NullProgressable() {
-        @Override
-        public void progress() { prog.progress(); }
-      });
-      if (prog != null)
-        prog.progress();
-  
-      nonFinalPolygons.clear();
-      if (batchUnion instanceof GeometryCollection) {
-        GeometryCollection coll = (GeometryCollection) batchUnion;
-        for (int n = 0; n < coll.getNumGeometries(); n++) {
-          Geometry geom = coll.getGeometryN(n);
-          Coordinate[] coords = geom.getEnvelope().getCoordinates();
-          double maxx = Math.max(coords[0].x, coords[2].x);
-          if (maxx < sweepLinePosition) {
-            // This part is finalized
-            resultSize++;
-            if (output != null)
-              output.collect(geom);
-          } else {
-            nonFinalPolygons.add(geom);
-          }
-        }
-      } else {
-        nonFinalPolygons.add(batchUnion);
-      }
-
-      long currentTime = System.currentTimeMillis();
-      if (currentTime - reportTime > 60*1000) {
-        if (prog != null) {
-          float p = i / (float)basicShapes.size();
-          prog.progress(p);
-        }
-        reportTime =  currentTime;
-      }
-    }
-    
-    // Combine all polygons together to produce the answer
-    if (output != null) {
-      for (Geometry finalPolygon : nonFinalPolygons)
-        output.collect(finalPolygon);
-    }
-    resultSize += nonFinalPolygons.size();
-      
-    return resultSize;
-  }
-
-  /**
-   * Directly unions the given list of polygons using a safe method that tries
-   * to avoid geometry exceptions. First, it tries the buffer(0) method. It it
-   * fails, it falls back to the tradition union method.
-   * @param polys
-   * @param progress
-   * @return
-   * @throws IOException 
-   */
-  private static Geometry safeUnion(List<Geometry> polys,
-      Progressable progress) throws IOException {
-    Stack<Integer> rangeStarts = new Stack<Integer>();
-    Stack<Integer> rangeEnds = new Stack<Integer>();
-    rangeStarts.push(0);
-    rangeEnds.push(polys.size());
-    List<Geometry> results = new ArrayList<Geometry>();
-    
-    // Minimum range size that is broken into two subranges
-    final int MinimumThreshold = 10;
-    // Progress numerator and denominator
-    int progressNum = 0, progressDen = polys.size();
-    
-    while (!rangeStarts.isEmpty()) {
-      int rangeStart = rangeStarts.pop();
-      int rangeEnd = rangeEnds.pop();
-      
-      try {
-        // Union using the buffer operation
-        GeometryCollection rangeInOne = (GeometryCollection) FACTORY.buildGeometry(polys.subList(rangeStart, rangeEnd));
-        Geometry rangeUnion = rangeInOne.buffer(0);
-        results.add(rangeUnion);
-        progressNum += rangeEnd - rangeStart;
-      } catch (Exception e) {
-        LOG.warn("Exception in merging "+(rangeEnd - rangeStart)+" polygons", e);
-        // Fall back to the union operation
-        if (rangeEnd - rangeStart < MinimumThreshold) {
-          LOG.info("Error in union "+rangeStart+"-"+rangeEnd);
-          // Do the union directly using the old method (union)
-          Geometry rangeUnion = FACTORY.buildGeometry(new ArrayList<Geometry>());
-          for (int i = rangeStart; i < rangeEnd; i++) {
-            LOG.info(polys.get(i).toText());
-          }
-          for (int i = rangeStart; i < rangeEnd; i++) {
-            try {
-              rangeUnion = rangeUnion.union(polys.get(i));
-            } catch (Exception e1) {
-              // Log the error and skip it to allow the method to finish
-              LOG.error("Error computing union", e);
-            }
-          }
-          results.add(rangeUnion);
-          progressNum += rangeEnd - rangeStart;
-        } else {
-          // Further break the range into two subranges
-          rangeStarts.push(rangeStart);
-          rangeEnds.push((rangeStart + rangeEnd) / 2);
-          rangeStarts.push((rangeStart + rangeEnd) / 2);
-          rangeEnds.push(rangeEnd);
-          progressDen++;
-        }
-      }
-      if (progress != null)
-        progress.progress(progressNum/(float)progressDen);
-    }
-    
-    // Finally, union all the results
-    Geometry finalResult = results.remove(results.size() - 1);
-    while (!results.isEmpty()) {
-      try {
-        finalResult = finalResult.union(results.remove(results.size() - 1));
-      } catch (Exception e) {
-        LOG.error("Error in union", e);
-      }
-      progressNum++;
-      progress.progress(progressNum/(float)progressDen);
-    }
-    return finalResult;
-  }
-
   /**
    * The map function for the BasicUnion algorithm which works on a set of
    * shapes. It computes the union of all these shapes and writes the result
@@ -333,7 +126,8 @@ public class Union {
           }
         }
       };
-      Union.unionInMemory(vgeoms, new Progressable.TaskProgressable(context),resultCollector);
+      SpatialAlgorithms.multiUnion(vgeoms.toArray(new Geometry[vgeoms.size()]),
+          new Progressable.TaskProgressable(context),resultCollector);
       LOG.info("Union computed");
     }
   }
@@ -364,7 +158,8 @@ public class Union {
           }
         }
       };
-      Union.unionInMemory(vgeoms, new Progressable.TaskProgressable(context), resultCollector);
+      SpatialAlgorithms.multiUnion(vgeoms.toArray(new Geometry[vgeoms.size()]),
+          new Progressable.TaskProgressable(context), resultCollector);
       LOG.info("Union computed");
     }
   }
@@ -420,14 +215,16 @@ public class Union {
         
         final PrintStream ps = new PrintStream(fs.create(new Path(outPath, "finalResult.wkt")));
         
-        Union.unionInMemory(allGeoms, new Progressable.TaskProgressable(task), new ResultCollector<Geometry>() {
+        ResultCollector<Geometry> resultCollector = new ResultCollector<Geometry>() {
           @Override
           public synchronized void collect(Geometry r) {
             ps.println(r.toText());
           }
-        });
+        };
+        SpatialAlgorithms.multiUnion(allGeoms.toArray(new Geometry[allGeoms.size()]),
+            new Progressable.TaskProgressable(task), resultCollector);
         ps.close();
-        
+
         // Delete all intermediate files
         for (FileStatus outFile : outFiles)
           fs.delete(outFile.getPath(), false);
@@ -478,7 +275,7 @@ public class Union {
     return job;
   }
   
-  public static <S extends OGCJTSShape> void unionLocal(Path inPath, Path outPath,
+  private static <S extends OGCJTSShape> void unionLocal(Path inPath, Path outPath,
       final OperationsParams params) throws IOException, InterruptedException,
       ClassNotFoundException {
     // 1- Split the input path/file to get splits that can be processed independently
@@ -551,7 +348,7 @@ public class Union {
                   continue;
                 batch[batchSize++] = s.geom;
                 if (batchSize >= MaxBatchSize) {
-                  Union.unionInMemory(Arrays.asList(batch), progress, output);
+                  SpatialAlgorithms.multiUnion(batch, progress, output);
                   batchSize = 0;
                 }
               }
@@ -565,10 +362,9 @@ public class Union {
         }
         // Union all remaining geometries
         try {
-          List<Geometry> finalBatch = new ArrayList<Geometry>(batchSize);
-          for (int i = 0; i < batchSize; i++)
-            finalBatch.add(batch[i]);
-          Union.unionInMemory(finalBatch, progress, output);
+          Geometry[] finalBatch = new Geometry[batchSize];
+          System.arraycopy(batch, 0, finalBatch, 0, batchSize);
+          SpatialAlgorithms.multiUnion(finalBatch, progress, output);
           return localUnion;
         } catch (IOException e) {
           // Should never happen as the context is passed as null
@@ -596,7 +392,8 @@ public class Union {
       out = new PrintStream(outFS.create(outPath));
     }
     
-    Union.unionInMemory(allInOne, new Progressable.NullProgressable() {
+    SpatialAlgorithms.multiUnion(allInOne.toArray(new Geometry[allInOne.size()]),
+        new Progressable.NullProgressable() {
       int lastProgress = 0;
       public void progress(float p) {
         int newProgresss = (int) (p * 100);

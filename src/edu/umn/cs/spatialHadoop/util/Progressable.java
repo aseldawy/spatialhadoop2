@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.util;
 
 import java.io.IOException;
 
+import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
@@ -68,6 +69,41 @@ public interface Progressable extends org.apache.hadoop.util.Progressable {
       this.status = status;
       this.context.setStatus(this.status+" ("+lastProgress+"%)");
     }
+  }
+  
+  public static class ReporterProgressable implements Progressable {
+    
+    /**Underlying reporter to update*/
+    private Reporter reporter;
+    
+    private int lastProgress = 0;
+    private String status = "";
+    
+    public ReporterProgressable(Reporter reporter) {
+      super();
+      this.reporter = reporter;
+    }
+    
+    @Override
+    public void progress() {
+      this.reporter.progress();
+    }
+
+    @Override
+    public void progress(float p) throws IOException {
+      int prog = (int) (p * 100);
+      if (prog > lastProgress) {
+        lastProgress = prog;
+        reporter.setStatus(this.status+" ("+lastProgress+"%)");
+      }
+    }
+
+    @Override
+    public void setStatus(String status) throws IOException {
+      this.status = status;
+      this.reporter.setStatus(this.status+" ("+lastProgress+"%)");
+    }
+    
   }
   
   /**

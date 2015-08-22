@@ -15,7 +15,9 @@ import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.QuickSort;
 
 import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
+import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.LinearRing;
 import com.vividsolutions.jts.geom.Polygon;
 
@@ -631,9 +633,13 @@ public class GSDTAlgorithm {
    * MBR.
    */
   public void getFinalAnswerAsVoronoiRegions(Rectangle mbr,
-      List<Polygon> finalRegions, List<Polygon> nonFinalRegions) {
+      List<Geometry> finalRegions, List<Geometry> nonfinalRegions) {
     // Detect final and non-final sites
     BitArray unsafeSites = detectUnsafeSites(mbr);
+    // We use the big MBR to clip open sides of Voronoi regions
+    double bufferSize = Math.max(mbr.getWidth(), mbr.getHeight()) / 10;
+    Rectangle bigMBR = mbr.buffer(bufferSize, bufferSize);
+    Rectangle biggerMBR = mbr.buffer(bufferSize, bufferSize * 1.1);
     // A factory that creates polygons
     final GeometryFactory Factory = new GeometryFactory();
     
@@ -680,19 +686,24 @@ public class GSDTAlgorithm {
       // perpendicular bisectors
       List<Point> voronoiRegionPoints = new ArrayList<Point>();
 
-      boolean closedRegion = true;
+      int firstPoint = -1; // -1 indicates a closed polygon with no first point
       for (int iNeighbor1 = 0; iNeighbor1 < siteNeighbors.size(); iNeighbor1++) {
         int iNeighbor2 = (iNeighbor1 + 1) % siteNeighbors.size();
         double ccwAngle = angles[iNeighbor2] - angles[iNeighbor1];
         if (ccwAngle < 0)
           ccwAngle += Math.PI * 2;
         if (ccwAngle > Math.PI) {
-          // Open side of the Voronoi region
-          // TODO Compute the intersection of each perpendicular bisector to the
+          // An open side of the Voronoi region
+          // Compute the intersection of each perpendicular bisector to the
           // boundary
-          closedRegion = false;
+          Point p1 = intersectPerpendicularBisector(iSite, siteNeighbors.get(iNeighbor1), biggerMBR);
+          Point p2 = intersectPerpendicularBisector(siteNeighbors.get(iNeighbor2), iSite, biggerMBR);
+          voronoiRegionPoints.add(p1);
+          voronoiRegionPoints.add(p2);
+          // Mark p2 as the first point in the open line string
+          firstPoint = voronoiRegionPoints.size() - 1;
         } else {
-          // Closed side of the Voronoi region. Calculate the next point as
+          // A closed side of the Voronoi region. Calculate the next point as
           // the center of the empty circle
           Point emptyCircleCenter = calculateCircumCircleCenter(iSite,
               siteNeighbors.get(iNeighbor1), siteNeighbors.get(iNeighbor2));
@@ -700,8 +711,11 @@ public class GSDTAlgorithm {
         }
       }
       
-      // Create the polygon from points
-      if (closedRegion) {
+      
+      // Create the Voronoi polygon
+      Geometry geom;
+      if (firstPoint == -1) {
+        // Indicates a closed polygon with no starting point
         Coordinate[] coords = new Coordinate[voronoiRegionPoints.size() + 1];
         for (int i = 0; i < voronoiRegionPoints.size(); i++) {
           Point voronoiPoint = voronoiRegionPoints.get(i);
@@ -709,14 +723,51 @@ public class GSDTAlgorithm {
         }
         coords[coords.length - 1] = coords[0];
         LinearRing ring = Factory.createLinearRing(coords);
-        Polygon polygon = Factory.createPolygon(ring, null);
-        (unsafeSites.get(iSite) ? nonFinalRegions : finalRegions).add(polygon);
+        geom = Factory.createPolygon(ring, null);
       } else {
-        // TODO Create line string
+        // Indicates an open line string with 'firstPoint' as the starting point
+        // Reorder points according to first point
+        List<Point> orderedPoints = new ArrayList<Point>(voronoiRegionPoints.size());
+        orderedPoints.addAll(voronoiRegionPoints.subList(firstPoint, voronoiRegionPoints.size()));
+        orderedPoints.addAll(voronoiRegionPoints.subList(0, firstPoint));
+        voronoiRegionPoints = orderedPoints;
+        
+        // Cut all the segments to the bigMBR
+        for (int i2 = 1; i2 < voronoiRegionPoints.size(); i2++) {
+          int i1 = i2 - 1;
+          if (!bigMBR.contains(voronoiRegionPoints.get(i1)) &&
+              !bigMBR.contains(voronoiRegionPoints.get(i2))) {
+            // The whole line segment is outside, remove the whole segment
+            voronoiRegionPoints.remove(i1);
+          } else if (!bigMBR.contains(voronoiRegionPoints.get(i1))) {
+            // Only the first point is outside the bigMBR
+            Point cutPoint = bigMBR.intersectLineSegment(
+                voronoiRegionPoints.get(i2), voronoiRegionPoints.get(i1));
+            voronoiRegionPoints.set(i1, cutPoint);
+          } else if (!bigMBR.contains(voronoiRegionPoints.get(i2))) {
+            // Only i2 is outside bigMBR. We cut the whole linestring
+            Point cutPoint = bigMBR.intersectLineSegment(
+                voronoiRegionPoints.get(i1), voronoiRegionPoints.get(i2));
+            voronoiRegionPoints.set(i2, cutPoint);
+            // Remove all points after i2
+            while (voronoiRegionPoints.size() > i2+1)
+              voronoiRegionPoints.remove(voronoiRegionPoints.size() - 1);
+          }
+        }
+        
+        
+        Coordinate[] coords = new Coordinate[voronoiRegionPoints.size()];
+        for (int i = 0; i < voronoiRegionPoints.size(); i++) {
+          Point voronoiPoint = voronoiRegionPoints.get(i);
+          coords[i] = new Coordinate(voronoiPoint.x, voronoiPoint.y);
+        }
+        geom = Factory.createLineString(coords);
       }
+      geom.setUserData(points[iSite]);
+      (unsafeSites.get(iSite) ? nonfinalRegions : finalRegions).add(geom);
     }
   }
-
+  
   /**
    * Splits the answer into final and non-final parts. Final parts can be safely
    * written to the output as they are not going to be affected by a future
@@ -933,7 +984,28 @@ public class GSDTAlgorithm {
     double angle2 = Math.atan2(ys[s3] - ys[s2], xs[s3] - xs[s2]);
     return angle1 > angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
   }
-
+  
+  /**
+   * Calculate the intersection between the perpendicular bisector of the line
+   * segment (p1, p2) towards the right (CCW) and the given rectangle.
+   * It is assumed that the two end points p1 and p2 lie inside the given
+   * rectangle.
+   * @param p1
+   * @param p2
+   * @param rect
+   * @return
+   */
+  Point intersectPerpendicularBisector(int p1, int p2, Rectangle rect) {
+    double px = (xs[p1] + xs[p2]) / 2;
+    double py = (ys[p1] + ys[p2]) / 2;
+    double vx = ys[p1] - ys[p2];
+    double vy = xs[p2] - xs[p1];
+    double a1 = ((vx >= 0 ? rect.x2 : rect.x1) - px) / vx;
+    double a2 = ((vy >= 0 ? rect.y2 : rect.y1) - py) / vy;
+    double a = Math.min(a1, a2);
+    return new Point(px + a * vx, py + a * vy);
+  }
+  
   Point calculateCircumCircleCenter(int s1, int s2, int s3) {
     // Calculate the perpendicular bisector of the first two points
     double x1 = (xs[s1] + xs[s2]) / 2;

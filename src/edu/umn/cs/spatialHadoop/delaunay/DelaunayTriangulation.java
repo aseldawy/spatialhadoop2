@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -30,6 +31,8 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import com.vividsolutions.jts.geom.Coordinate;
+import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.Polygon;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -42,6 +45,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.util.MemoryReporter;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
@@ -312,23 +316,79 @@ public class DelaunayTriangulation {
     GSDTAlgorithm dtAlgorithm = new GSDTAlgorithm(allPoints, null);
     LOG.info("DT computed");
     
-    List<Polygon> finalRegions = new ArrayList<Polygon>();
-    List<Polygon> nonFinalRegions = new ArrayList<Polygon>();
-    dtAlgorithm.getFinalAnswerAsVoronoiRegions(new Rectangle(-180, -90, 180, 90), finalRegions, nonFinalRegions);
-    System.out.println("group {");
-    for (Polygon p : finalRegions) {
-      Coordinate[] coords = p.getCoordinates();
-      System.out.print("polygon [");
-      for (Coordinate c : coords)
-        System.out.printf("%f, %f, ", c.x, c.y);
-      System.out.println("]");
-    }
-    System.out.println("}");
+    List<Geometry> finalRegions = new ArrayList<Geometry>();
+    List<Geometry> nonfinalRegions = new ArrayList<Geometry>();
+    
+    Rectangle mbr = FileMBR.fileMBR(inPaths, params);
+    double buffer = Math.max(mbr.getWidth(), mbr.getHeight()) / 10;
+    Rectangle bigMBR = mbr.buffer(buffer, buffer);
+    dtAlgorithm.getFinalAnswerAsVoronoiRegions(mbr, finalRegions, nonfinalRegions);
+    drawVoronoiDiagram(System.out, mbr, bigMBR, finalRegions, nonfinalRegions);
     
 //    dtAlgorithm.getFinalAnswerAsGraph().draw();
     //Triangulation finalPart = new Triangulation();
     //Triangulation nonfinalPart = new Triangulation();
     //dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
+  }
+
+  private static void drawVoronoiDiagram(PrintStream out, Rectangle mbr,
+      Rectangle bigMBR, List<Geometry> finalRegions,
+      List<Geometry> nonfinalRegions) {
+    Coordinate[] mbrCoords = new Coordinate[5];
+    mbrCoords[0] = new Coordinate(bigMBR.x1, bigMBR.y1);
+    mbrCoords[1] = new Coordinate(bigMBR.x2, bigMBR.y1);
+    mbrCoords[2] = new Coordinate(bigMBR.x2, bigMBR.y2);
+    mbrCoords[3] = new Coordinate(bigMBR.x1, bigMBR.y2);
+    mbrCoords[4] = mbrCoords[0];
+    GeometryFactory factory = new GeometryFactory();
+    Polygon bigMBRPoly = factory.createPolygon(factory.createLinearRing(mbrCoords), null);
+    
+    out.printf("rectangle %f, %f, %f, %f, :fill=>:none, :stroke=>:black\n", mbr.x1, mbr.y1, mbr.getWidth(), mbr.getHeight());
+
+    out.println("group {");
+    out.println("group(:fill => :none, :stroke=>:green) {");
+    for (Geometry p : finalRegions) {
+      Coordinate[] coords = p.getCoordinates();
+      out.print("polygon [");
+      for (Coordinate c : coords)
+        out.printf("%f, %f, ", c.x, c.y);
+      out.println("]");
+    }
+    out.println("}");
+    out.println("group(:stroke=>:none, :fill=>:green) {");
+    for (Geometry p : finalRegions) {
+      Point site = (Point) p.getUserData();
+      out.printf("circle %f, %f, 1\n", site.x, site.y);
+    }
+    out.println("}");
+    out.println("}");
+    out.println("group {");
+    out.println("group(:fill => :none, :strok=>:red) {");
+    for (Geometry p : nonfinalRegions) {
+      if (!bigMBRPoly.contains(p)) {
+        if (p instanceof Polygon) {
+          p = p.intersection(bigMBRPoly);
+        } else {
+          p = p.intersection(bigMBRPoly);
+        }
+      }
+      Coordinate[] coords = p.getCoordinates();
+      if (p instanceof Polygon)
+        out.print("polygon [");
+      else
+        out.print("polyline [");
+      for (Coordinate c : coords)
+        out.printf("%f, %f, ", c.x, c.y);
+      out.println("]");
+    }
+    out.println("}");
+    out.println("group(:fill => :red, :stroke=>nil) {");
+    for (Geometry p : nonfinalRegions) {
+      Point site = (Point) p.getUserData();
+      out.printf("circle %f, %f, 1\n", site.x, site.y);
+    }
+    out.println("}");
+    out.println("}");
   }
 
   /**

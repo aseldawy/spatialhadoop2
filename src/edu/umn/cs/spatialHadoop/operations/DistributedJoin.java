@@ -72,6 +72,7 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
 import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMap;
 import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMapNoReplication;
+import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
  * Performs a spatial join between two or more files using the redistribute-join
@@ -127,7 +128,8 @@ public class DistributedJoin {
 				final OutputCollector<Shape, Shape> output, Reporter reporter)
 				throws IOException {
 			Shape[] objects = (Shape[]) value.get();
-			SpatialAlgorithms.SelfJoin_planeSweep(objects, true, output, reporter);
+			SpatialAlgorithms.SelfJoin_planeSweep(objects, true, output,
+			    new Progressable.ReporterProgressable(reporter));
 		}
 	}
 

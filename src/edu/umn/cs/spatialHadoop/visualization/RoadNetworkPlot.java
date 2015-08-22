@@ -31,7 +31,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.operations.Union;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 import edu.umn.cs.spatialHadoop.util.Progressable;
 
@@ -68,7 +68,8 @@ public class RoadNetworkPlot {
       }
       final List<S> finalResult = new ArrayList<S>();
       try {
-        Union.unionInMemory(bufferedRoads, new Progressable.NullProgressable(), new ResultCollector<Geometry>() {
+        SpatialAlgorithms.unionGroup(bufferedRoads.toArray(new Geometry[bufferedRoads.size()]),
+            new Progressable.NullProgressable(), new ResultCollector<Geometry>() {
           @Override
           public void collect(Geometry r) {
             finalResult.add((S) new OSMPolygon(r));
