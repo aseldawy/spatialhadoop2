@@ -822,6 +822,10 @@ public class SpatialAlgorithms {
    */
   public static int unionGroup(final Geometry[] geoms,
       final Progressable prog, ResultCollector<Geometry> output) throws IOException {
+    if (geoms.length == 1) {
+      output.collect(geoms[0]);
+      return 1;
+    }
     // Sort objects by x to increase the chance of merging overlapping objects
     for (Geometry geom : geoms) {
       Coordinate[] coords = geom.getEnvelope().getCoordinates();
@@ -851,7 +855,7 @@ public class SpatialAlgorithms {
     while (i < geoms.length) {
       int batchSize = Math.min(MaxBatchSize, geoms.length - i);
       for (int j = 0; j < batchSize; j++) {
-        nonFinalPolygons.add(geoms[i]);
+        nonFinalPolygons.add(geoms[i++]);
       }
       double sweepLinePosition = (Double)nonFinalPolygons.get(nonFinalPolygons.size() - 1).getUserData();
       Geometry batchUnion;
