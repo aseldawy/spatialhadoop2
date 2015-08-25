@@ -367,7 +367,7 @@ public class DelaunayTriangulation {
     for (Geometry p : nonfinalRegions) {
       if (!bigMBRPoly.contains(p)) {
         if (p instanceof Polygon) {
-          p = p.intersection(bigMBRPoly);
+          p = p.intersection(bigMBRPoly).getBoundary().difference(bigMBRPoly.getBoundary());
         } else {
           p = p.intersection(bigMBRPoly);
         }

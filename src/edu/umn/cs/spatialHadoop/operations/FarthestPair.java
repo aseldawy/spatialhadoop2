@@ -253,61 +253,131 @@ public class FarthestPair {
   }
 
   public static class FarthestPairFilter extends DefaultBlockFilter {
-
-    static class PartitionPair {
-      Partition p1, p2;
-      double mindist, maxdist;
-      public PartitionPair(Partition p1, Partition p2) {
-        this.p1 = p1;
-        this.p2 = p2;
-        mindist = this.p1.getMinDistance(this.p2);
-        maxdist = this.p1.getMaxDistance(this.p2);
+    
+    /**
+     * Computes an upper bound of the farthest pair of all possible points
+     * that could be in two partitions.
+     * @param mbr1
+     * @param mbr2
+     * @return
+     */
+    private static double computeUB(Rectangle mbr1, Rectangle mbr2) {
+      // Since the farthest distance has to be on the convex hull, we compute
+      // all pair-wise distances between the corner points on the two rectangles
+      // and take the maximum out of them
+      double[] xs = {mbr1.x1, mbr1.x1, mbr1.x2, mbr1.x2,
+          mbr2.x1, mbr2.x1, mbr2.x2, mbr2.x2};
+      double[] ys = {mbr1.y1, mbr1.y2, mbr1.y1, mbr1.y2,
+          mbr2.y1, mbr2.y2, mbr2.y1, mbr2.y2};
+      double maxd2 = 0;
+      for (int i1 = 0; i1 < 4; i1++) {
+        for (int i2 = 4; i2 < 8; i2++) {
+          double dx = xs[i1] - xs[i2];
+          double dy = ys[i1] - ys[i2];
+          double d2 = dx * dx + dy * dy;
+          if (d2 > maxd2)
+            maxd2 = d2;
+        }
       }
-
-      boolean dominates(PartitionPair pp2) {
-        return this.mindist > pp2.maxdist;
-      }
+      return Math.sqrt(maxd2);
     }
     
+    /**
+     * Computes a lower bound of the maximum distance between two points in
+     * the two given rectangles. It is assumed that both rectangles
+     * are minimal bounding rectangles (MBRs), that is, there has to be at least
+     * one point on each of the four edges of each rectangle.
+     * @param mbr1
+     * @param mbr2
+     * @return
+     */
+    private static double computeLB(Rectangle mbr1, Rectangle mbr2) {
+      double distance;
+      double lb = 0;
+      // Closest possible points on the left and right edges of mbr1
+      distance = mbr1.x2 - mbr1.x1;
+      if (distance > lb) lb = distance;
+      // Same for mbr2
+      distance = mbr2.x2 - mbr2.x1;
+      if (distance > lb) lb = distance;
+      // Closest possible points on the top and bottom edges of mbr1
+      distance = mbr1.y2 - mbr1.y1;
+      if (distance > lb) lb = distance;
+      // Same for mbr2
+      distance = mbr2.y2 - mbr2.y1;
+      if (distance > lb) lb = distance;
+
+      // Calculate the minimum possible distance between a point on the left
+      // edge of one MBR and the right edge of the other MBR
+      double dx, dy;
+      dx = Math.max(Math.abs(mbr2.x2 - mbr1.x1), Math.abs(mbr1.x2 - mbr2.x1));
+      if (mbr1.y2 > mbr2.y1 && mbr2.y2 > mbr1.y1) {
+        // The MBRs overlap in the y-coordinate
+        dy = 0;
+      } else {
+        // Non-overlapping, compute the minimum possible vertical distance
+        // as the worse case scenario
+        dy = Math.min(Math.abs(mbr2.y1 - mbr1.y2), Math.abs(mbr1.y1 - mbr2.y2));
+      }
+      distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance > lb) lb = distance;
+      
+      // Calculate the minimum possible distance between a point on the top
+      // edge of one MBR and the bottom edge of the other MBR
+      dy = Math.max(Math.abs(mbr2.y2 - mbr1.y1), Math.abs(mbr1.y2 - mbr2.y1));
+      if (mbr1.x2 > mbr2.x1 && mbr2.x2 > mbr1.x1) {
+        // The MBRs overlap in the x-coordinate
+        dx = 0;
+      } else {
+        // Non-overlapping, compute the minimum possible vertical distance
+        // as the worse case scenario
+        dx = Math.min(Math.abs(mbr2.x1 - mbr1.x2), Math.abs(mbr1.x1 - mbr2.x2));
+      }
+      distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance > lb) lb = distance;
+      
+      return distance;
+    }
+
     @Override
     public void selectCellPairs(GlobalIndex<Partition> gIndex1,
         GlobalIndex<Partition> gIndex2,
         ResultCollector2<Partition, Partition> output) {
-      ArrayList<PartitionPair> selectedPairs = new ArrayList<PartitionPair>();
+      double fp_lb = 0;
       for (Partition p1 : gIndex1) {
+        for (Partition p2 : gIndex2) {
+          double min_distance = computeLB(p1, p2);
+          if (min_distance > fp_lb)
+            fp_lb = min_distance;
+        }
+      }
+      LOG.info("LB on distance is "+fp_lb);
+      int selectedPairs = 0;
+      for (Partition p1 : gIndex1) {
+        boolean selected = false;
         for (Partition p2 : gIndex2) {
           if (p1.equals(p2))
             continue;
-
-          // Compare this partition pair to all other pairs
-          PartitionPair pp = new PartitionPair(p1, p2);
-          int i = 0;
-          boolean dominated = false;
-          while (!dominated && i < selectedPairs.size()) {
-            PartitionPair pp2 = selectedPairs.get(i);
-            // Check if pp dominates an already selected partition pair
-            if (pp.dominates(pp2)) {
-              selectedPairs.remove(i);
-            } else {
-              // Check if pp is dominated
-              dominated = pp2.dominates(pp);
-              i++;
-            }
+          double max_distance = computeUB(p1, p2);
+          if (max_distance >= fp_lb) {
+            output.collect(p1, p2);
+            selectedPairs++;
+            selected = true;
           }
-          
-          // The new pair is not dominated by any other pair, add it
-          if (!dominated)
-            selectedPairs.add(pp);
+        }
+        if (!selected) {
+          // Test if this partition should be processed by itself and has not
+          // been selected for process with any other partition
+          if (computeUB(p1, p1) >= fp_lb) {
+            output.collect(p1, p1);
+            selectedPairs++;
+          }
         }
       }
-      LOG.info("Selected " + selectedPairs.size() + " out of "
-          + (gIndex1.size() * gIndex2.size()) + " possible pairs");
-      System.out.println("Selected " + selectedPairs.size() + " out of "
-          + (gIndex1.size() * gIndex2.size()) + " possible pairs");
-      
-      for (PartitionPair pp : selectedPairs) {
-        output.collect(pp.p1, pp.p2);
-      }
+      LOG.info("Selected " + selectedPairs + " out of "
+          + (gIndex1.size() * (gIndex2.size()-1) / 2) + " possible pairs");
+      System.out.println("Selected " + selectedPairs + " out of "
+          + (gIndex1.size() * (gIndex2.size()-1) / 2) + " possible pairs");
     }
   }
 
