@@ -1,6 +1,8 @@
 #!/bin/bash
 
-$HDP_VERSION = 2.2.6.0-2800
+# This script installs the redistributable package (in this case spatialhadoop-2.3-2 onto a Hortonworks HDP cluster)
+
+$HDP_VERSION="2.2.6.0-2800"
 
 mkdir spatialhadoop2
 cd spatialhadoop2
