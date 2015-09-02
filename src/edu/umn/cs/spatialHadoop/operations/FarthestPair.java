@@ -15,49 +15,33 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Stack;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapred.FileSplit;
-import org.apache.hadoop.mapred.InputSplit;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.Mapper;
-import org.apache.hadoop.mapred.OutputCollector;
-import org.apache.hadoop.mapred.RecordReader;
-import org.apache.hadoop.mapred.Reducer;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.lib.CombineFileSplit;
+import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.IndexedSortable;
-import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.mapred.BinaryRecordReader;
-import edu.umn.cs.spatialHadoop.mapred.BinarySpatialInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
-import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
-import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -74,6 +58,10 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 public class FarthestPair {
   
   private static final Log LOG = LogFactory.getLog(FarthestPair.class);
+  
+  private static final String FarthestPairLowerBound = "FarthestPair.FarthestPairLowerBound";
+  
+  public static enum FarthestPairCounters {FP_ProcessedPairs};
   
   public static double cross(Point o, Point a, Point b) {
     return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);   
@@ -131,295 +119,248 @@ public class FarthestPair {
     return farthest_pair;
   }
   
-  
-  private static PairDistance rotatingCallipersLocal(double[] xs, double[] ys, int[] hull_points) {
-    PairDistance farthest_pair = new PairDistance();
-    Point pi = new Point();
-    Point pi_plus_one = new Point();
-    Point pj = new Point();
-    Point pj_plus_one = new Point();
-    int i = 0, j = 1, j_plus_one = 2 % hull_points.length;
-    pj.x = xs[hull_points[j]]; pj.y = ys[hull_points[j]];
-    pj_plus_one.x = xs[hull_points[j_plus_one]]; pj_plus_one.y = ys[hull_points[j_plus_one]];
-    for (i = 0; i < hull_points.length; i++) {
-      pi.x = xs[hull_points[i]]; pi.y = ys[hull_points[i]];
-      int i_plus_one = (i + 1) % hull_points.length;
-      pi_plus_one.x = xs[hull_points[i_plus_one]]; pi_plus_one.y = ys[hull_points[i_plus_one]];
-      while(cross(pi, pi_plus_one, pj_plus_one) > cross(pi, pi_plus_one, pj)) {
-        j = j_plus_one;
-        j_plus_one = (j + 1) % hull_points.length;
-        pj.x = xs[hull_points[j]]; pj.y = ys[hull_points[j]];
-        pj_plus_one.x = xs[hull_points[j_plus_one]]; pj_plus_one.y = ys[hull_points[j_plus_one]];
-      }
-      double dist = pi.distanceTo(pj);
-      if (dist > farthest_pair.distance) {
-        farthest_pair.distance = dist;
-        farthest_pair.first.set(pi.x, pi.y);
-        farthest_pair.second.set(pj.x, pj.y);
-      }
-
-      dist = pi_plus_one.distanceTo(pj);
-      if (dist > farthest_pair.distance) {
-        farthest_pair.distance = dist;
-        farthest_pair.first.set(pi_plus_one.x, pi_plus_one.y);
-        farthest_pair.second.set(pj.x, pj.y);
-      }
-    }
-    return farthest_pair;
-  }
-
-  
   /**
-   * In place version of convex hull. Given points are sorted on x direction
-   * and the indexes of points on the convex hull are returned.
-   * @param xs
-   * @param ys
-   * @param size
+   * Computes an upper bound of the farthest pair of all possible points
+   * that could be in two partitions.
+   * @param mbr1
+   * @param mbr2
    * @return
    */
-  public static int[] convexHullInPlace(final double[] xs, final double[] ys, final int size) {
-    Stack<Integer> s1 = new Stack<Integer>();
-    Stack<Integer> s2 = new Stack<Integer>();
-    
-    
-    IndexedSortable sortableX = new IndexedSortable() {
-      
-      @Override
-      public void swap(int a, int b) {
-        double temp = xs[a];
-        xs[a] = xs[b];
-        xs[b] = temp;
-        temp = ys[a];
-        ys[a] = ys[b];
-        ys[b] = temp;
+  private static double computeUB(Rectangle mbr1, Rectangle mbr2) {
+    // Since the farthest distance has to be on the convex hull, we compute
+    // all pair-wise distances between the corner points on the two rectangles
+    // and take the maximum out of them
+    double[] xs = {mbr1.x1, mbr1.x1, mbr1.x2, mbr1.x2,
+        mbr2.x1, mbr2.x1, mbr2.x2, mbr2.x2};
+    double[] ys = {mbr1.y1, mbr1.y2, mbr1.y1, mbr1.y2,
+        mbr2.y1, mbr2.y2, mbr2.y1, mbr2.y2};
+    double maxd2 = 0;
+    for (int i1 = 0; i1 < 4; i1++) {
+      for (int i2 = 4; i2 < 8; i2++) {
+        double dx = xs[i1] - xs[i2];
+        double dy = ys[i1] - ys[i2];
+        double d2 = dx * dx + dy * dy;
+        if (d2 > maxd2)
+          maxd2 = d2;
       }
-      
-      @Override
-      public int compare(int a, int b) {
-    	if (xs[a] == xs[b])
-    	  return 0;
-        if (xs[a] < xs[b])
-          return -1;
-        return 1;
-      }
-    };
-    
-    final IndexedSorter sorter = new QuickSort();
-    sorter.sort(sortableX, 0, size);    
-    
-    Point p1 = new Point();
-    Point p2 = new Point();
-    Point p3 = new Point();
-    
-    // Lower chain
-    for (int i=0; i<size; i++) {
-      while(s1.size() > 1) {
-        p1.x = xs[s1.get(s1.size() - 2)];
-        p1.y = ys[s1.get(s1.size() - 2)];
-        p2.x = xs[s1.get(s1.size() - 1)];
-        p2.y = ys[s1.get(s1.size() - 1)];
-        p3.x = xs[i];
-        p3.y = ys[i];
-        double crossProduct = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
-        if (crossProduct <= 0) s1.pop();
-        else break;
-      }
-      s1.push(i);
     }
-    
-    // Upper chain
-    for (int i = size - 1; i >= 0; i--) {
-      while(s2.size() > 1) {
-        p1.x = xs[s2.get(s2.size() - 2)];
-        p1.y = ys[s2.get(s2.size() - 2)];
-        p2.x = xs[s2.get(s2.size() - 1)];
-        p2.y = ys[s2.get(s2.size() - 1)];
-        p3.x = xs[i];
-        p3.y = ys[i];
-        double crossProduct = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
-        if (crossProduct <= 0) s2.pop();
-        else break;
-      }
-      s2.push(i);
-    }
-    
-    s1.pop();
-    s2.pop();
-    s1.addAll(s2);
-    int[] hull_points = new int[s1.size()];
-    for (int i = 0; i < s1.size(); i++)
-      hull_points[i] = s1.get(i);
-    return hull_points;    
+    return Math.sqrt(maxd2);
   }
 
-  public static class FarthestPairFilter extends DefaultBlockFilter {
-    
-    /**
-     * Computes an upper bound of the farthest pair of all possible points
-     * that could be in two partitions.
-     * @param mbr1
-     * @param mbr2
-     * @return
-     */
-    private static double computeUB(Rectangle mbr1, Rectangle mbr2) {
-      // Since the farthest distance has to be on the convex hull, we compute
-      // all pair-wise distances between the corner points on the two rectangles
-      // and take the maximum out of them
-      double[] xs = {mbr1.x1, mbr1.x1, mbr1.x2, mbr1.x2,
-          mbr2.x1, mbr2.x1, mbr2.x2, mbr2.x2};
-      double[] ys = {mbr1.y1, mbr1.y2, mbr1.y1, mbr1.y2,
-          mbr2.y1, mbr2.y2, mbr2.y1, mbr2.y2};
-      double maxd2 = 0;
-      for (int i1 = 0; i1 < 4; i1++) {
-        for (int i2 = 4; i2 < 8; i2++) {
-          double dx = xs[i1] - xs[i2];
-          double dy = ys[i1] - ys[i2];
-          double d2 = dx * dx + dy * dy;
-          if (d2 > maxd2)
-            maxd2 = d2;
-        }
-      }
-      return Math.sqrt(maxd2);
-    }
-    
-    /**
-     * Computes a lower bound of the maximum distance between two points in
-     * the two given rectangles. It is assumed that both rectangles
-     * are minimal bounding rectangles (MBRs), that is, there has to be at least
-     * one point on each of the four edges of each rectangle.
-     * @param mbr1
-     * @param mbr2
-     * @return
-     */
-    private static double computeLB(Rectangle mbr1, Rectangle mbr2) {
-      double distance;
-      double lb = 0;
-      // Closest possible points on the left and right edges of mbr1
-      distance = mbr1.x2 - mbr1.x1;
-      if (distance > lb) lb = distance;
-      // Same for mbr2
-      distance = mbr2.x2 - mbr2.x1;
-      if (distance > lb) lb = distance;
-      // Closest possible points on the top and bottom edges of mbr1
-      distance = mbr1.y2 - mbr1.y1;
-      if (distance > lb) lb = distance;
-      // Same for mbr2
-      distance = mbr2.y2 - mbr2.y1;
-      if (distance > lb) lb = distance;
+  /**
+   * Computes a lower bound of the maximum distance between two points in
+   * the two given rectangles. It is assumed that both rectangles
+   * are minimal bounding rectangles (MBRs), that is, there has to be at least
+   * one point on each of the four edges of each rectangle.
+   * @param mbr1
+   * @param mbr2
+   * @return
+   */
+  private static double computeLB(Rectangle mbr1, Rectangle mbr2) {
+    double distance;
+    double lb = 0;
+    // Closest possible points on the left and right edges of mbr1
+    distance = mbr1.x2 - mbr1.x1;
+    if (distance > lb) lb = distance;
+    // Same for mbr2
+    distance = mbr2.x2 - mbr2.x1;
+    if (distance > lb) lb = distance;
+    // Closest possible points on the top and bottom edges of mbr1
+    distance = mbr1.y2 - mbr1.y1;
+    if (distance > lb) lb = distance;
+    // Same for mbr2
+    distance = mbr2.y2 - mbr2.y1;
+    if (distance > lb) lb = distance;
 
-      // Calculate the minimum possible distance between a point on the left
-      // edge of one MBR and the right edge of the other MBR
-      double dx, dy;
-      dx = Math.max(Math.abs(mbr2.x2 - mbr1.x1), Math.abs(mbr1.x2 - mbr2.x1));
-      if (mbr1.y2 > mbr2.y1 && mbr2.y2 > mbr1.y1) {
-        // The MBRs overlap in the y-coordinate
-        dy = 0;
-      } else {
-        // Non-overlapping, compute the minimum possible vertical distance
-        // as the worse case scenario
-        dy = Math.min(Math.abs(mbr2.y1 - mbr1.y2), Math.abs(mbr1.y1 - mbr2.y2));
-      }
-      distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance > lb) lb = distance;
-      
-      // Calculate the minimum possible distance between a point on the top
-      // edge of one MBR and the bottom edge of the other MBR
-      dy = Math.max(Math.abs(mbr2.y2 - mbr1.y1), Math.abs(mbr1.y2 - mbr2.y1));
-      if (mbr1.x2 > mbr2.x1 && mbr2.x2 > mbr1.x1) {
-        // The MBRs overlap in the x-coordinate
-        dx = 0;
-      } else {
-        // Non-overlapping, compute the minimum possible vertical distance
-        // as the worse case scenario
-        dx = Math.min(Math.abs(mbr2.x1 - mbr1.x2), Math.abs(mbr1.x1 - mbr2.x2));
-      }
-      distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance > lb) lb = distance;
-      
-      return distance;
+    // Calculate the minimum possible distance between a point on the left
+    // edge of one MBR and the right edge of the other MBR
+    double dx, dy;
+    dx = Math.max(Math.abs(mbr2.x2 - mbr1.x1), Math.abs(mbr1.x2 - mbr2.x1));
+    if (mbr1.y2 > mbr2.y1 && mbr2.y2 > mbr1.y1) {
+      // The MBRs overlap in the y-coordinate
+      dy = 0;
+    } else {
+      // Non-overlapping, compute the minimum possible vertical distance
+      // as the worse case scenario
+      dy = Math.min(Math.abs(mbr2.y1 - mbr1.y2), Math.abs(mbr1.y1 - mbr2.y2));
     }
-
-    @Override
-    public void selectCellPairs(GlobalIndex<Partition> gIndex1,
-        GlobalIndex<Partition> gIndex2,
-        ResultCollector2<Partition, Partition> output) {
-      double fp_lb = 0;
-      for (Partition p1 : gIndex1) {
-        for (Partition p2 : gIndex2) {
-          double min_distance = computeLB(p1, p2);
-          if (min_distance > fp_lb)
-            fp_lb = min_distance;
-        }
-      }
-      LOG.info("LB on distance is "+fp_lb);
-      int selectedPairs = 0;
-      for (Partition p1 : gIndex1) {
-        boolean selected = false;
-        for (Partition p2 : gIndex2) {
-          if (p1.equals(p2))
-            continue;
-          double max_distance = computeUB(p1, p2);
-          if (max_distance >= fp_lb) {
-            output.collect(p1, p2);
-            selectedPairs++;
-            selected = true;
-          }
-        }
-        if (!selected) {
-          // Test if this partition should be processed by itself and has not
-          // been selected for process with any other partition
-          if (computeUB(p1, p1) >= fp_lb) {
-            output.collect(p1, p1);
-            selectedPairs++;
-          }
-        }
-      }
-      LOG.info("Selected " + selectedPairs + " out of "
-          + (gIndex1.size() * (gIndex2.size()-1) / 2) + " possible pairs");
-      System.out.println("Selected " + selectedPairs + " out of "
-          + (gIndex1.size() * (gIndex2.size()-1) / 2) + " possible pairs");
+    distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance > lb) lb = distance;
+    
+    // Calculate the minimum possible distance between a point on the top
+    // edge of one MBR and the bottom edge of the other MBR
+    dy = Math.max(Math.abs(mbr2.y2 - mbr1.y1), Math.abs(mbr1.y2 - mbr2.y1));
+    if (mbr1.x2 > mbr2.x1 && mbr2.x2 > mbr1.x1) {
+      // The MBRs overlap in the x-coordinate
+      dx = 0;
+    } else {
+      // Non-overlapping, compute the minimum possible vertical distance
+      // as the worse case scenario
+      dx = Math.min(Math.abs(mbr2.x1 - mbr1.x2), Math.abs(mbr1.x1 - mbr2.x2));
     }
+    distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance > lb) lb = distance;
+    
+    return distance;
   }
 
-  public static class FarthestPairMap extends MapReduceBase implements
-      Mapper<PairWritable<Rectangle>, PairWritable<ArrayWritable>, NullWritable, PairDistance> {
+  
+  public static class FarthestPairMap extends
+    Mapper<Rectangle, Iterable<Shape>, NullWritable, PairDistance> {
+    
+    /**
+     * An initial lower bound for the distance of the farthest pair. If the
+     * mapper cannot produce a farthest pair that is bigger than that, it does
+     * not have to continue processing. 
+     */
+    private float fplb;
+    /**File system of the input*/
+    private FileSystem fs;
+    /**The input path*/
+    private Path inPath;
+    /**The main partition assigned to this mapper*/
+    private Partition mainPartition;
+    /**Candidate partitions that can produce an answer with the main partition*/
+    private Partition[] candidatePartitions;
+    /**Upper bounds of candidate partitions*/
+    private double[] candidateUpperBounds;
+
     @Override
-    public void map(PairWritable<Rectangle> key,
-        PairWritable<ArrayWritable> value,
-        OutputCollector<NullWritable, PairDistance> out, Reporter reporter)
-        throws IOException {
-      Shape[] shapes1 = (Shape[]) value.first.get();
-      Shape[] shapes2 = (Shape[]) value.second.get();
-      // Concatenate shapes1 and shapes2 into one array
-      Point[] points = new Point[shapes1.length + shapes2.length];
-      System.arraycopy(shapes1, 0, points, 0, shapes1.length);
-      System.arraycopy(shapes2, 0, points, shapes1.length, shapes2.length);
+    protected void setup(Context context) throws IOException, InterruptedException {
+      inPath = SpatialInputFormat3.getInputPaths(context)[0];
+      fs = inPath.getFileSystem(context.getConfiguration());
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, inPath);
+      if (gindex == null) // If not global index
+        throw new RuntimeException("Farthest pair operation can only work with indexed files");
+      fplb = context.getConfiguration().getFloat(FarthestPairLowerBound, 0);
+
+      FileSplit fsplit = (FileSplit) context.getInputSplit();
+      mainPartition = null;
+      final List<Partition> otherPartitions = new ArrayList<Partition>();
+      for (Partition p : gindex) {
+        if (p.filename.equals(fsplit.getPath().getName()))
+          mainPartition = p;
+        else
+          otherPartitions.add(p);
+      }
+      int i = 0;
+      final List<Double> upperbounds = new ArrayList<Double>();
+      while (i < otherPartitions.size()) {
+        double upperBound = computeUB(mainPartition, otherPartitions.get(i));
+        if (upperBound < fplb) {
+          // It cannot produce any possible answer
+          otherPartitions.remove(i);
+        } else {
+          // Can produce a possible answer, consider it
+          upperbounds.add(upperBound);
+          i++;
+        }
+      }
       
-      // Calculate the farthest pair of all points
-      Point[] convexHull = ConvexHull.convexHullInMemory(points);
-      PairDistance farthestPair = rotatingCallipers(convexHull);
-      out.collect(NullWritable.get(), farthestPair);
+      // Sort by upper bounds
+      IndexedSortable sortable = new IndexedSortable() {
+        @Override
+        public void swap(int i, int j) {
+          double temp = upperbounds.get(i);
+          upperbounds.set(i, upperbounds.get(j));
+          upperbounds.set(j, temp);
+          
+          Partition temp2 = otherPartitions.get(i);
+          otherPartitions.set(i, otherPartitions.get(j));
+          otherPartitions.set(j, temp2);
+        }
+        
+        @Override
+        public int compare(int i, int j) {
+          double d = upperbounds.get(i) - upperbounds.get(j);
+          // Sort in descending order
+          if (d < 0) return +1;
+          if (d > 0) return -1;
+          return 0;
+        }
+      };
+      new QuickSort().sort(sortable, 0, i);
+      candidatePartitions = otherPartitions.toArray(new Partition[i]);
+      candidateUpperBounds = new double[i];
+      while (i-- > 0)
+        candidateUpperBounds[i] = upperbounds.get(i);
+    }
+    
+    @Override
+    protected void map(Rectangle key, Iterable<Shape> value, Context context)
+            throws IOException, InterruptedException {
+      Counter processedPairs = context.getCounter(FarthestPairCounters.FP_ProcessedPairs);
+      List<Point> tempPoints = new ArrayList<Point>();
+      for (Shape s : value)
+        tempPoints.add((Point) s.clone());
+      Point[] mainPoints = tempPoints.toArray(new Point[tempPoints.size()]);
+      mainPoints = ConvexHull.convexHullInMemory(mainPoints);
+      
+      // Process other partitions, one-by-one in their order
+      PairDistance answer = new PairDistance();
+      answer.distance = fplb;
+      int i = 0;
+      final SpatialInputFormat3<Rectangle, Point> inputFormat =
+          new SpatialInputFormat3<Rectangle, Point>();
+      while (i < candidatePartitions.length && candidateUpperBounds[i] > answer.distance) {
+        processedPairs.increment(1);
+        tempPoints = new ArrayList<Point>();
+        Path partitionPath = new Path(inPath, candidatePartitions[i].filename);
+        FileStatus partitionStatus = fs.getFileStatus(partitionPath);
+        FileSplit fsplit = new FileSplit(partitionPath, 0, partitionStatus.getLen(), new String[0]);
+        final RecordReader<Rectangle, Iterable<Point>> reader =
+            inputFormat.createRecordReader(fsplit, null);
+        if (reader instanceof SpatialRecordReader3) {
+          ((SpatialRecordReader3)reader).initialize(fsplit, context);
+        } else if (reader instanceof RTreeRecordReader3) {
+          ((RTreeRecordReader3)reader).initialize(fsplit, context);
+        } else if (reader instanceof HDFRecordReader) {
+          ((HDFRecordReader)reader).initialize(fsplit, context);
+        } else {
+          throw new RuntimeException("Unknown record reader");
+        }
+        while (reader.nextKeyValue()) {
+          Iterable<Point> pts = reader.getCurrentValue();
+          for (Point p : pts) {
+            tempPoints.add(p.clone());
+          }
+        }
+        reader.close();
+        
+        // Compute the farthest pair between mainPoints and otherPoints
+        Point[] otherPoints = tempPoints.toArray(new Point[tempPoints.size()]);
+        Point[] allPoints = new Point[mainPoints.length + otherPoints.length];
+        System.arraycopy(mainPoints, 0, allPoints, 0, mainPoints.length);
+        System.arraycopy(otherPoints, 0, allPoints, mainPoints.length, otherPoints.length);
+        Point[] chull = ConvexHull.convexHullInMemory(allPoints);
+        PairDistance fp = rotatingCallipers(chull);
+        if (fp.distance > answer.distance)
+          answer = fp;
+        i++;
+      }
+      
+      if (answer.first != null)
+        context.write(NullWritable.get(), answer);
     }
   }
   
-  
-  public static class FarthestPairReducer extends MapReduceBase implements
-  Reducer<NullWritable, PairDistance, NullWritable, PairDistance> {
+  public static class FarthestPairReducer extends
+      Reducer<NullWritable, PairDistance, NullWritable, PairDistance> {
 
     @Override
-    public void reduce(NullWritable key, Iterator<PairDistance> values,
-        OutputCollector<NullWritable, PairDistance> output, Reporter reporter)
-        throws IOException {
+    protected void reduce(NullWritable dummy, Iterable<PairDistance> values,
+        Context context) throws IOException, InterruptedException {
       PairDistance globalFarthestPair = new PairDistance();
-      if (values.hasNext()) {
-        PairDistance temp = values.next();
+      Iterator<PairDistance> ivalues = values.iterator();
+      if (ivalues.hasNext()) {
+        PairDistance temp = ivalues.next();
         globalFarthestPair.first = temp.first.clone();
         globalFarthestPair.second = temp.second.clone();
         globalFarthestPair.distance = temp.distance;
       }
       
-      while (values.hasNext()) {
-        PairDistance temp = values.next();
+      while (ivalues.hasNext()) {
+        PairDistance temp = ivalues.next();
         if (temp.distance > globalFarthestPair.distance) {
           globalFarthestPair.first = temp.first.clone();
           globalFarthestPair.second = temp.second.clone();
@@ -427,79 +368,50 @@ public class FarthestPair {
         }
       }
       
-      output.collect(key, globalFarthestPair);
+      context.write(dummy, globalFarthestPair);
     }
   }
   
-  
-  /**
-   * Input format that returns a record reader that reads a pair of arrays of
-   * shapes
-   * @author Ahmed Eldawy
-   *
-   */
-  public static class FPInputFormatArray extends BinarySpatialInputFormat<Rectangle, ArrayWritable> {
-
-    /**
-     * Reads a pair of arrays of shapes
-     * @author Ahmed Eldawy
-     *
-     */
-    public static class FPRecordReader extends BinaryRecordReader<Rectangle, ArrayWritable> {
-      public FPRecordReader(Configuration conf, CombineFileSplit fileSplits) throws IOException {
-        super(conf, fileSplits);
-      }
-      
-      @Override
-      protected RecordReader<Rectangle, ArrayWritable> createRecordReader(
-          Configuration conf, CombineFileSplit split, int i) throws IOException {
-        FileSplit fsplit = new FileSplit(split.getPath(i),
-            split.getStartOffsets()[i],
-            split.getLength(i), split.getLocations());
-        return new ShapeArrayRecordReader(conf, fsplit);
-      }
-    }
-
-    @Override
-    public RecordReader<PairWritable<Rectangle>, PairWritable<ArrayWritable>> getRecordReader(
-        InputSplit split, JobConf job, Reporter reporter) throws IOException {
-      return new FPRecordReader(job, (CombineFileSplit)split);
-    }
-  }
-  
-  public static void farthestPairMapReduce(Path inFile, Path userOutPath,
-      OperationsParams params) throws IOException {
-    JobConf job = new JobConf(params, FarthestPair.class);
-    Path outPath = userOutPath;
-    FileSystem outFs = (userOutPath == null ? inFile : userOutPath).getFileSystem(job);
-    
-    if (outPath == null) {
-      do {
-        outPath = new Path(inFile.toUri().getPath()+
-            ".farthest_pair_"+(int)(Math.random() * 1000000));
-      } while (outFs.exists(outPath));
-    }
-    
-    job.setJobName("FarthestPair");
-    job.setClass(SpatialSite.FilterClass, FarthestPairFilter.class, BlockFilter.class);
+  public static Job farthestPairMapReduce(Path inFile, Path outPath,
+      OperationsParams params)
+          throws IOException, InterruptedException, ClassNotFoundException {
+    Job job = new Job(params, "FarthestPair");
+    job.setJarByClass(FarthestPair.class);
     job.setMapperClass(FarthestPairMap.class);
     job.setReducerClass(FarthestPairReducer.class);
     job.setMapOutputKeyClass(NullWritable.class);
     job.setMapOutputValueClass(PairDistance.class);
-    job.setInputFormat(FPInputFormatArray.class);
+    job.setInputFormatClass(SpatialInputFormat3.class);
     // Add input file twice to treat it as a binary function
-    FPInputFormatArray.addInputPath(job, inFile);
-    FPInputFormatArray.addInputPath(job, inFile);
-    job.setOutputFormat(TextOutputFormat.class);
-    GridOutputFormat2.setOutputPath(job, outPath);
+    SpatialInputFormat3.addInputPath(job, inFile);
+    job.setOutputFormatClass(TextOutputFormat3.class);
+    TextOutputFormat3.setOutputPath(job, outPath);
     
-    JobClient.runJob(job);
-    
-    // If outputPath not set by user, automatically delete it
-    if (userOutPath == null)
-      outFs.delete(outPath, true);
+    // Calculate an initial lower bound on the farthest pair from the global index
+    FileSystem fs = inFile.getFileSystem(params);
+    GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, inFile);
+    if (gindex != null) {
+      double tightLowerBound = 0;
+      for (Partition p1 : gindex) {
+        for (Partition p2 : gindex) {
+          double lb = computeLB(p1, p2);
+          if (lb > tightLowerBound)
+            tightLowerBound = lb;
+        }
+      }
+      job.getConfiguration().setFloat(FarthestPairLowerBound, (float) tightLowerBound);
+    }
+
+    // Start the job
+    if (params.getBoolean("background", false)) {
+      // Run in background
+      job.submit();
+    } else {
+      job.waitForCompletion(params.getBoolean("verbose", false));
+    }
+    return job;
   }
-  
+
   public static PairDistance farthestPairLocal(Path[] inPaths, final OperationsParams params)
       throws IOException, InterruptedException {
     if (params.getBoolean("mem", false))
@@ -579,12 +491,13 @@ public class FarthestPair {
     return farthestPair;
   }
   
-  public static void farthestPair(Path[] inFiles, Path outPath, OperationsParams params)
+  public static Job farthestPair(Path[] inFiles, Path outPath, OperationsParams params)
       throws IOException, InterruptedException,      ClassNotFoundException {
     if (OperationsParams.isLocal(params, inFiles)) {
       farthestPairLocal(inFiles, params);
+      return null;
     } else {
-      farthestPairMapReduce(inFiles[0], outPath, params);
+      return farthestPairMapReduce(inFiles[0], outPath, params);
     }
   }
   
@@ -611,9 +524,13 @@ public class FarthestPair {
     Path outPath = params.getOutputPath();
 
     long t1 = System.currentTimeMillis();
-    farthestPair(inFiles, outPath, params);
+    Job job = farthestPair(inFiles, outPath, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: " + (t2 - t1) + " millis");
+    if (job != null) {
+      Counter processedPairs = job.getCounters().findCounter(FarthestPairCounters.FP_ProcessedPairs);
+      System.out.println("Processed "+processedPairs.getValue()+" pairs");
+    }
   }
   
 }
