@@ -147,7 +147,7 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
         }
         return finalLayer;
       }
-    });
+    }, conf.getInt("parallel", Runtime.getRuntime().availableProcessors()));
     
     // Merge all intermediate layers into one final layer
     Rasterizer rasterizer = Rasterizer.getRasterizer(conf);
