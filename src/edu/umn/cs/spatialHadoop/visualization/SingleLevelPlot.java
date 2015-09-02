@@ -47,6 +47,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
@@ -438,6 +439,17 @@ public class SingleLevelPlot {
         // Special case for pixel level partitioning as it depends on the
         // visualization parameters
         partitioner = new GridPartitioner(inputMBR, imageWidth, imageHeight);
+      } else if (partition.equals("grid")) {
+        int numBlocks = 0;
+        for (Path in : inFiles) {
+          FileSystem fs = in.getFileSystem(params);
+          long size = FileUtil.getPathSize(fs, in);
+          long blockSize = fs.getDefaultBlockSize(in);
+          numBlocks += Math.ceil(size / (double) blockSize);
+        }
+        int numPartitions = numBlocks * 1000;
+        int gridSize = (int) Math.ceil(Math.sqrt(numPartitions));
+        partitioner = new GridPartitioner(inputMBR, gridSize, gridSize);
       } else {
         // Use a standard partitioner as created by the indexer
         partitioner = Indexer.createPartitioner(inFiles, outFile, conf, partition);
