@@ -35,6 +35,7 @@ import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobID;
+import org.apache.hadoop.mapred.JobTracker;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Job;
@@ -476,6 +477,8 @@ public class HadoopvizServer extends AbstractHandler {
       writer.print("\"intermediateSize\":\""
           + humanReadable(counters.getCounter(Task.Counter.MAP_OUTPUT_BYTES))
           + "\",");
+      writer.printf("\"jobID\":\"%s\",\n", jobID);
+      writer.printf("\"jobURL\":\"%s\",\n", runningJob.getTrackingURL());
       writer.print("\"intermediateGroup\":" + "\""
           + counters.getCounter(Task.Counter.REDUCE_INPUT_GROUPS) + "\"}");
       writer.close();
