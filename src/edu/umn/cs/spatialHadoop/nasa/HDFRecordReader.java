@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -21,6 +22,7 @@ import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -54,9 +56,6 @@ public class HDFRecordReader<S extends NASAShape>
   /**Value used to read from input*/
   private S nasaShape;
 
-  /**Special value used to mark non-set entries*/
-  private int fillValue;
-
   /**Set to true to skip non-set (fill) values in the input*/
   private boolean skipFillValue;
   
@@ -87,6 +86,13 @@ public class HDFRecordReader<S extends NASAShape>
   /**A flag to delete the underlying HDF file on exit (if copied over HTTP)*/
   private boolean deleteOnEnd;
 
+  /**A list of file splits to read*/
+  private Vector<FileSplit> splits;
+
+  /**The configuration of the underlying task. Used to initialize more splits*/
+  private Configuration conf;
+
+  private byte[] fillValueBytes;
 
   @Override
   public void initialize(InputSplit split, TaskAttemptContext context)
@@ -96,9 +102,21 @@ public class HDFRecordReader<S extends NASAShape>
   }
 
   public void initialize(InputSplit split, Configuration conf) throws IOException {
+    this.conf = conf;
     String datasetName = conf.get("dataset");
     if (datasetName == null)
       throw new RuntimeException("Dataset name should be provided");
+    if (split instanceof CombineFileSplit) {
+      CombineFileSplit csplits = (CombineFileSplit) split;
+      splits = new Vector<FileSplit>(csplits.getNumPaths());
+      for (int i = 0; i < csplits.getNumPaths(); i++) {
+        FileSplit fsplit = new FileSplit(csplits.getPath(i),
+            csplits.getOffset(i), csplits.getLength(i), csplits.getLocations());
+        splits.add(fsplit);
+      }
+      this.initialize(splits.remove(splits.size() - 1), conf);
+      return;
+    }
     inFile = ((FileSplit) split).getPath();
     fs = inFile.getFileSystem(conf);
     if (fs instanceof HTTPFileSystem) {
@@ -118,22 +136,21 @@ public class HDFRecordReader<S extends NASAShape>
     DDVGroup dataGroup = hdfFile.findGroupByName(datasetName);
     boolean fillValueFound = false;
     int resolution = 0;
+    // Retrieve metadata
+    int fillValuee=0;
     for (DataDescriptor dd : dataGroup.getContents()) {
-      if (dd instanceof DDNumericDataGroup) {
-        DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
-        unparsedDataArray = numericDataGroup.getAsByteArray();
-        valueSize = numericDataGroup.getDataSize();
-        resolution = numericDataGroup.getDimensions()[0];
-        if (valueSize * resolution * resolution != unparsedDataArray.length)
-          throw new RuntimeException("Error parsing metadata");
-      } else if (dd instanceof DDVDataHeader) {
+      if (dd instanceof DDVDataHeader) {
         DDVDataHeader vheader = (DDVDataHeader) dd;
         if (vheader.getName().equals("_FillValue")) {
           Object fillValue = vheader.getEntryAt(0);
           if (fillValue instanceof Integer)
-            this.fillValue = (Integer) fillValue;
+            fillValuee = (Integer) fillValue;
+          else if (fillValue instanceof Short)
+            fillValuee = (Short) fillValue;
           else if (fillValue instanceof Byte)
-            this.fillValue = (Byte) fillValue;
+            fillValuee = (Byte) fillValue;
+          else
+            throw new RuntimeException("Unsupported type: "+fillValue.getClass());
           fillValueFound = true;
         } else if (vheader.getName().equals("valid_range")) {
           Object minValue = vheader.getEntryAt(0);
@@ -149,6 +166,23 @@ public class HDFRecordReader<S extends NASAShape>
         }
       }
     }
+    // Retrieve data
+    for (DataDescriptor dd : dataGroup.getContents()) {
+      if (dd instanceof DDNumericDataGroup) {
+        DDNumericDataGroup numericDataGroup = (DDNumericDataGroup) dd;
+        valueSize = numericDataGroup.getDataSize();
+        resolution = numericDataGroup.getDimensions()[0];
+        unparsedDataArray = new byte[valueSize * resolution * resolution];
+        if (fillValueFound) {
+          fillValueBytes = new byte[valueSize];
+          HDFConstants.writeAt(fillValueBytes, 0, fillValuee, valueSize);
+          for (int i = 0; i < unparsedDataArray.length; i++)
+            unparsedDataArray[i] = fillValueBytes[i % valueSize];
+        }
+        numericDataGroup.getAsByteArray(unparsedDataArray, 0, unparsedDataArray.length);
+      }
+    }
+    
     nasaDataset.resolution = resolution;
     if (!fillValueFound) {
       skipFillValue = false;
@@ -182,7 +216,14 @@ public class HDFRecordReader<S extends NASAShape>
 
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
-    return value.hasNext();
+    boolean moreRecordsInCurrentFile = value.hasNext();
+    while (!moreRecordsInCurrentFile && splits != null && !splits.isEmpty()) {
+      // End of current file. Open next file and check if it has any records
+      this.close(); // Close current HDF file
+      this.initialize(splits.remove(splits.size() - 1), conf);
+      moreRecordsInCurrentFile = value.hasNext();
+    }
+    return moreRecordsInCurrentFile;
   }
   
   @Override
@@ -254,11 +295,9 @@ public class HDFRecordReader<S extends NASAShape>
     
     private void skipFillValue() {
       while (position < unparsedDataArray.length
-          && (!skipFillValue || HDFConstants.readAsAinteger(unparsedDataArray,
-              position, valueSize) == fillValue))
+          && (!skipFillValue || isFillValue(position)))
         position += valueSize;
     }
-
 
     @Override
     public Iterator<S> iterator() {
@@ -272,7 +311,7 @@ public class HDFRecordReader<S extends NASAShape>
     
     @Override
     public S next() {
-      shape.setValue(HDFConstants.readAsAinteger(unparsedDataArray, position, valueSize));
+      shape.setValue(HDFConstants.readAsInteger(unparsedDataArray, position, valueSize));
       setShapeGeometry(shape, position);
       position += valueSize;
       skipFillValue();
@@ -293,7 +332,20 @@ public class HDFRecordReader<S extends NASAShape>
    */
   private int getValueAt(int x, int y) {
     int position = (y * nasaDataset.resolution + x) * valueSize;
-    return HDFConstants.readAsAinteger(unparsedDataArray, position, valueSize);
+    return HDFConstants.readAsInteger(unparsedDataArray, position, valueSize);
+  }
+  
+  private boolean isFillValue(int x, int y) {
+    int position = (y * nasaDataset.resolution + x) * valueSize;
+    return isFillValue(position);
+  }
+  
+  private boolean isFillValue(int position) {
+    int sizeToCheck = valueSize;
+    int b = 0;
+    while (sizeToCheck > 0 && unparsedDataArray[position++] == fillValueBytes[b++])
+      sizeToCheck--;
+    return sizeToCheck == 0;
   }
 
   private void setValueAt(int x, int y, int value) {
@@ -376,11 +428,11 @@ public class HDFRecordReader<S extends NASAShape>
       while (x2 < inputRes) {
         int x1 = x2;
         // x1 should point to the first missing point
-        while (x1 < inputRes && getValueAt(x1, y) != fillValue)
+        while (x1 < inputRes && !isFillValue(x1, y))
           x1++;
         // Now advance x2 until it reaches the first non-missing value
         x2 = x1;
-        while (x2 < inputRes && getValueAt(x2, y) == fillValue)
+        while (x2 < inputRes && isFillValue(x2, y))
           x2++;
         // Recover all points in the range [x1, x2)
         if (x1 == 0 && x2 == inputRes) {

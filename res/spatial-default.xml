@@ -38,7 +38,7 @@
 
 <property>
   <name>spatialHadoop.storage.SampleRatio</name>
-  <value>0.1</value>
+  <value>0.01</value>
   <description>Ratio of input file (in terms of records) to be sampled to
   provide a big picture about data distribution when building a global index</description>
 </property>

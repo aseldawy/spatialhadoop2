@@ -20,7 +20,7 @@ import java.util.Arrays;
  */
 public class DDNumericDataGroup extends DataDescriptor {
 
-  /**Mumbers of the group*/
+  /**Members of the group*/
   protected DDID[] members;
 
   DDNumericDataGroup(HDFFile hdfFile, int tagID, int refNo, int offset,
@@ -58,6 +58,15 @@ public class DDNumericDataGroup extends DataDescriptor {
       if (members[i].tagID == HDFConstants.DFTAG_SD)
         return ((DDScientificData)hdfFile.retrieveElementByID(members[i])).getData();
     return null;
+  }
+
+  public void getAsByteArray(byte[] buf, int bufOff, int bufLen) throws IOException {
+    lazyLoad();
+    for (int i = 0; i < members.length; i++)
+      if (members[i].tagID == HDFConstants.DFTAG_SD) {
+        ((DDScientificData)hdfFile.retrieveElementByID(members[i])).readData(buf, bufOff, bufLen);
+        return;
+      }
   }
   
   /**

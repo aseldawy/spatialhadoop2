@@ -10,7 +10,6 @@ package edu.umn.cs.spatialHadoop.hdf;
 
 import java.io.DataInput;
 import java.io.IOException;
-import java.nio.charset.Charset;
 
 /**
  * Header of VData
@@ -69,18 +68,14 @@ public class DDVDataHeader extends DataDescriptor {
     this.order = new int[nfields];
     for (int i = 0; i < nfields; i++)
       this.order[i] = input.readUnsignedShort();
-    int maxLength = 0;
-    int[] fieldNameLength = new int[nfields];
-    for (int i = 0; i < nfields; i++) {
-      fieldNameLength[i] = input.readUnsignedShort();
-      if (fieldNameLength[i] > maxLength)
-        maxLength = fieldNameLength[i];
-    }
-    byte[] nameBytes = new byte[maxLength];
     fieldNames = new String[nfields];
+    byte[] nameBytes = new byte[1024];
     for (int i = 0; i < nfields; i++) {
-      input.readFully(nameBytes, 0, fieldNameLength[i]);
-      fieldNames[i] = new String(nameBytes, 0, fieldNameLength[i]);
+      int fieldNameLength = input.readUnsignedShort();
+      if (fieldNameLength > nameBytes.length)
+        nameBytes = new byte[fieldNameLength];
+      input.readFully(nameBytes, 0, fieldNameLength);
+      fieldNames[i] = new String(nameBytes, 0, fieldNameLength);
     }
     int nameLength = input.readUnsignedShort();
     if (nameLength > nameBytes.length)
@@ -120,9 +115,10 @@ public class DDVDataHeader extends DataDescriptor {
         fields[iField] = new String(data, offset, sizes[iField]);
         break;
       case HDFConstants.DFNT_UINT8: fields[iField] = data[offset] < 0 ? (int) data[offset] + 256 : (int)data[offset]; break;
+      case HDFConstants.DFNT_INT16: fields[iField] = HDFConstants.readSignedShort(data, offset); break;
       case HDFConstants.DFNT_UINT16: fields[iField] = HDFConstants.readUnsignedShort(data, offset); break;
       case HDFConstants.DFNT_INT32: fields[iField] = HDFConstants.readInt32(data, offset); break;
-      default: return null;
+      default: throw new RuntimeException("Unsupported type "+types[iField]);
       }
       offset += sizes[iField];
     }

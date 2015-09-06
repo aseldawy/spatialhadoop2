@@ -13,17 +13,21 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
+import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
 import edu.umn.cs.spatialHadoop.nasa.SpatioAggregateQueries;
+import edu.umn.cs.spatialHadoop.visualization.HadoopvizServer;
+import edu.umn.cs.spatialHadoop.delaunay.DelaunayTriangulation;
+
 
 /**
  * The main entry point to all queries.
  * 
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class Main {
@@ -52,11 +56,11 @@ public class Main {
           "Computes the spatial join between two input files using the " +
           "SJMR algorithm");
       
-      pgd.addClass("index", Repartition.class,
-          "Builds an index on an input file");
-
-      pgd.addClass("partition", Indexer.class,
-          "Spatially partition a file using a specific partitioner");
+      pgd.addClass("index", Indexer.class,
+          "Spatially index a file using a specific indexer");
+      
+      pgd.addClass("oldindex", Repartition.class,
+          "Spatially index a file using a specific indexer");
       
       pgd.addClass("mbr", FileMBR.class,
           "Finds the minimal bounding rectangle of an input file");
@@ -72,6 +76,12 @@ public class Main {
 
       pgd.addClass("union", Union.class,
           "Computes the union of input shapes");
+
+      pgd.addClass("uunion", UltimateUnion.class,
+          "Computes the union of input shapes using the UltimateUnion algorithm");
+
+      pgd.addClass("delaunay", DelaunayTriangulation.class,
+          "Computes the Delaunay triangulation for a set of points");
 
       pgd.addClass("multihdfplot", MultiHDFPlot.class,
           "Plots NASA datasets in the spatiotemporal range provided by user");
@@ -111,6 +121,9 @@ public class Main {
       
       pgd.addClass("shahedindexer", AggregateQuadTree.class,
           "Creates a multilevel spatio-temporal indexer for NASA data");
+      
+      pgd.addClass("hadoopviz", HadoopvizServer.class,
+          "Run Hadoopviz Server");
       
       pgd.driver(args);
       

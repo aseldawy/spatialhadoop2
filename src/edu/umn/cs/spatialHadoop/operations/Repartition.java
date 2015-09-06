@@ -41,18 +41,18 @@ import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
-import edu.umn.cs.spatialHadoop.core.RTree;
 import edu.umn.cs.spatialHadoop.core.RTreeGridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.ShapeRecordWriter;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
+import edu.umn.cs.spatialHadoop.indexing.RTree;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
@@ -189,12 +189,15 @@ public class Repartition {
         OutputCollector<IntWritable, T> output, Reporter reporter)
         throws IOException {
       T shape = null;
+      LOG.info("Closing partition #"+cellIndex);
       while (shapes.hasNext()) {
         shape = shapes.next();
         output.collect(cellIndex, shape);
       }
+      LOG.info("Done with all records in #"+cellIndex);
       // Close cell
       output.collect(new IntWritable(-cellIndex.get()), shape);
+      LOG.info("Done with cell #"+cellIndex);
     }
     
   }

@@ -23,6 +23,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.JobConf;
 
+import edu.umn.cs.spatialHadoop.indexing.RTree;
+
 public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> {
   public static final Log LOG = LogFactory.getLog(RTreeGridRecordWriter.class);
   
@@ -109,15 +111,13 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
     cellIn.close();
 
     // Build an RTree over the elements read from file
-    RTree<S> rtree = new RTree<S>();
-    rtree.setStockObject((S) stockObject.clone());
     // It should create a new stream
     DataOutputStream cellStream =
       (DataOutputStream) createFinalCellStream(finalCellPath);
     cellStream.writeLong(SpatialSite.RTreeFileMarker);
     int degree = 4096 / RTree.NodeSize;
-    rtree.bulkLoadWrite(cellData, 0, cellData.length, degree, cellStream,
-        fastRTree);
+    RTree.bulkLoadWrite(cellData, 0, cellData.length, degree, cellStream,
+        stockObject.clone(), fastRTree);
     cellStream.close();
     cellData = null; // To allow GC to collect it
     

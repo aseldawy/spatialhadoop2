@@ -6,7 +6,7 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.awt.Graphics;
 import java.io.DataInput;
@@ -15,6 +15,8 @@ import java.io.IOException;
 
 import org.apache.hadoop.io.Text;
 
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 public class Partition extends CellInfo {

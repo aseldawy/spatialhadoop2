@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.Random;
 import java.util.Vector;
 
@@ -20,6 +21,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.NullWritable;
+import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
@@ -33,17 +35,18 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.Partitioner;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.GridPartitioner;
+import edu.umn.cs.spatialHadoop.indexing.Indexer;
+import edu.umn.cs.spatialHadoop.indexing.Partitioner;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
-import edu.umn.cs.spatialHadoop.operations.Indexer;
-import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
@@ -120,16 +123,79 @@ public class SingleLevelPlot {
       int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partitionMBR);
-      if (smooth)
+      if (smooth) {
         shapes = rasterizer.smooth(shapes);
-      rasterizer.rasterize(rasterLayer, shapes);
+        context.progress();
+      }
+      int i = 0;
+      for (Shape shape : shapes) {
+        rasterizer.rasterize(rasterLayer, shape);
+        if (((++i) & 0xff) == 0)
+          context.progress();
+      }
       // If we set the output value to one constant, all intermediate layers
       // will be merged in one machine. Alternatively, We can set it to several values
       // to allow multiple reducers to collaborate in merging intermediate
       // layers. We will need to run a follow up merge process that runs
       // on a single machine in the OutputCommitter function.
       outputValue.set(random.nextInt(numReducers));
+      outputValue.set(0);
       context.write(outputValue, rasterLayer);
+    }
+  }
+  
+  public static class NoPartitionPlotCombine<S extends Shape>
+  extends Reducer<IntWritable, RasterLayer, IntWritable, RasterLayer> {
+    
+    /**The MBR of the input file*/
+    private Rectangle inputMBR;
+    /**Generated image width in pixels*/
+    private int imageWidth;
+    /**Generated image height in pixels*/
+    private int imageHeight;
+    /**The component that rasterizes the shapes*/
+    private Rasterizer rasterizer;
+    /**Number of reduce jobs*/
+    private int numReducers;
+    /**Random number generator to send the raster layer to a random reducer*/
+    private Random random;
+    
+    @Override
+    protected void setup(Context context)
+        throws IOException, InterruptedException {
+      // TODO Auto-generated method stub
+      super.setup(context);
+      Configuration conf = context.getConfiguration();
+      this.imageWidth = conf.getInt("width", 1000);
+      this.imageHeight = conf.getInt("height", 1000);
+      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
+      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.numReducers = Math.max(1, context.getNumReduceTasks());
+      this.random = new Random();
+    }
+    
+    @Override
+    protected void reduce(IntWritable key,
+        Iterable<RasterLayer> intermediateLayers, Context context)
+            throws IOException, InterruptedException {
+      Iterator<RasterLayer> iLayers = intermediateLayers.iterator();
+      if (iLayers.hasNext()) {
+        RasterLayer layer = iLayers.next();
+        if (!iLayers.hasNext()) {
+          // Only one layer in the input. Output it as-is
+          key.set(random.nextInt(numReducers));
+          context.write(key, layer);
+        } else {
+          RasterLayer finalLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
+          rasterizer.merge(finalLayer, layer);
+          while (iLayers.hasNext()) {
+            layer = iLayers.next();
+            rasterizer.merge(finalLayer, layer);
+          }
+          key.set(random.nextInt(numReducers));
+          context.write(key, finalLayer);
+        }
+      }
     }
   }
   
@@ -208,9 +274,8 @@ public class SingleLevelPlot {
             }
           }
         });
-        if (((++i) & 0xff) == 0) {
+        if (((++i) & 0xff) == 0)
           context.progress();
-        }
       }
     
     }
@@ -260,9 +325,16 @@ public class SingleLevelPlot {
       RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
       if (smooth) {
         shapes = rasterizer.smooth(shapes);
+        context.progress();
       }
 
-      rasterizer.rasterize(rasterLayer, shapes);
+      int i = 0;
+      for (Shape shape : shapes) {
+        rasterizer.rasterize(rasterLayer, shape);
+        if (((++i) & 0xff) == 0)
+          context.progress();
+      }
+      
       context.write(NullWritable.get(), rasterLayer);
     }
   }
@@ -306,20 +378,20 @@ public class SingleLevelPlot {
       OperationsParams.setShape(conf, SpatialInputFormat3.InputQueryRange, drawRect);
     
     // Adjust width and height if aspect ratio is to be kept
-    int width = conf.getInt("width", 1000);
-    int height = conf.getInt("height", 1000);
+    int imageWidth = conf.getInt("width", 1000);
+    int imageHeight = conf.getInt("height", 1000);
     if (params.getBoolean("keepratio", true)) {
       // Adjust width and height to maintain aspect ratio
-      if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height) {
+      if (inputMBR.getWidth() / inputMBR.getHeight() > (double) imageWidth / imageHeight) {
         // Fix width and change height
-        height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth());
+        imageHeight = (int) (inputMBR.getHeight() * imageWidth / inputMBR.getWidth());
         // Make divisible by two for compatibility with ffmpeg
-        if (height % 2 == 1)
-          height--;
-        conf.setInt("height", height);
+        if (imageHeight % 2 == 1)
+          imageHeight--;
+        conf.setInt("height", imageHeight);
       } else {
-        width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight());
-        conf.setInt("width", width);
+        imageWidth = (int) (inputMBR.getWidth() * imageHeight / inputMBR.getHeight());
+        conf.setInt("width", imageWidth);
       }
     }
     
@@ -343,30 +415,40 @@ public class SingleLevelPlot {
     
     // Set mapper and reducer based on the partitioning scheme
     String partition = conf.get("partition", "none");
+    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
     if (partition.equalsIgnoreCase("none")) {
       LOG.info("Using no-partition plot");
       job.setMapperClass(NoPartitionPlotMap.class);
+      job.setCombinerClass(NoPartitionPlotCombine.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(rasterizer.getRasterClass());
       if (merge) {
         int numSplits = new SpatialInputFormat3().getSplits(job).size();
         job.setReducerClass(NoPartitionPlotReduce.class);
         // Set number of reduce tasks according to cluster status
-        int maxReduce = new JobClient(new JobConf()).getClusterStatus().getMaxReduceTasks() * 7 / 8;
+        int maxReduce = Math.max(1, clusterStatus.getMaxReduceTasks() * 7 / 8);
         job.setNumReduceTasks(Math.max(1, Math.min(maxReduce, numSplits / maxReduce)));
       } else {
         job.setNumReduceTasks(0);
       }
     } else {
       LOG.info("Using repartition plot");
-      Partitioner partitioner = Indexer.createPartitioner(inFiles, outFile, conf, partition);
+      Partitioner partitioner;
+      if (partition.equals("pixel")) {
+        // Special case for pixel level partitioning as it depends on the
+        // visualization parameters
+        partitioner = new GridPartitioner(inputMBR, imageWidth, imageHeight);
+      } else {
+        // Use a standard partitioner as created by the indexer
+        partitioner = Indexer.createPartitioner(inFiles, outFile, conf, partition);
+      }
       Shape shape = params.getShape("shape");
       job.setMapperClass(RepartitionPlotMap.class);
       job.setMapOutputKeyClass(IntWritable.class);
       job.setMapOutputValueClass(shape.getClass());
       job.setReducerClass(RepartitionPlotReduce.class);
-      // TODO set number of reducers according to cluster size
-      //job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));        
+      // Set number of reducers according to cluster size
+      job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));        
       Partitioner.setPartitioner(conf, partitioner);
     }
     
@@ -418,13 +500,21 @@ public class SingleLevelPlot {
     for (Path inFile : inFiles) {
       FileSystem inFs = inFile.getFileSystem(params);
       if (!OperationsParams.isWildcard(inFile) && inFs.exists(inFile) && !inFs.isDirectory(inFile)) {
-        // One file, retrieve it immediately.
-        // This is useful if the input is a hidden file which is automatically
-        // skipped by FileInputFormat. We need to plot a hidden file for the case
-        // of plotting partition boundaries of a spatial index
-        splits.add(new FileSplit(inFile, 0,
-            inFs.getFileStatus(inFile).getLen(), new String[0]));
+        if (SpatialSite.NonHiddenFileFilter.accept(inFile)) {
+          // Use the normal input format splitter to add this non-hidden file
+          Job job = Job.getInstance(params);
+          SpatialInputFormat3.addInputPath(job, inFile);
+          splits.addAll(inputFormat.getSplits(job));
+        } else {
+          // A hidden file, add it immediately as one split
+          // This is useful if the input is a hidden file which is automatically
+          // skipped by FileInputFormat. We need to plot a hidden file for the case
+          // of plotting partition boundaries of a spatial index
+          splits.add(new FileSplit(inFile, 0,
+              inFs.getFileStatus(inFile).getLen(), new String[0]));
+        }
       } else {
+        // Use the normal input format splitter to add this non-hidden file
         Job job = Job.getInstance(params);
         SpatialInputFormat3.addInputPath(job, inFile);
         splits.addAll(inputFormat.getSplits(job));
@@ -433,7 +523,8 @@ public class SingleLevelPlot {
     
     // Copy splits to a final array to be used in parallel
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
-    
+    int parallelism = params.getInt("parallel",
+        Runtime.getRuntime().availableProcessors());
     Vector<RasterLayer> partialRasters = Parallel.forEach(fsplits.length, new RunnableRange<RasterLayer>() {
       @Override
       public RasterLayer run(int i1, int i2) {
@@ -482,7 +573,7 @@ public class SingleLevelPlot {
         }
         return partialRaster;
       }
-    });
+    }, parallelism);
     boolean merge = params.getBoolean("merge", true);
     Rasterizer rasterizer;
     try {
@@ -494,6 +585,7 @@ public class SingleLevelPlot {
       throw new RuntimeException("Error creating rastierizer", e);
     }
     if (merge) {
+      LOG.info("Merging "+partialRasters.size()+" partial rasters");
       // Create the final raster layer that will contain the final image
       RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
       for (RasterLayer partialRaster : partialRasters)

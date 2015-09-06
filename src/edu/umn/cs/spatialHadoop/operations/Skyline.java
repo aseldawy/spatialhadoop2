@@ -9,8 +9,10 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -19,8 +21,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -28,25 +28,34 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reducer;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.OperationsParams.Direction;
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
-import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat2;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterInputFormat;
-import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
+import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.util.MemoryReporter;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 /**
  * Computes the skyline of a set of points
@@ -66,9 +75,9 @@ public class Skyline {
    * @param dir
    * @return
    */
-  public static Point[] skyline(Point[] points, Direction dir) {
+  public static Point[] skylineInMemory(Point[] points, Direction dir) {
     Arrays.sort(points);
-    return skyline(points, 0, points.length, dir);
+    return skylineRecursive(points, 0, points.length, dir);
   }
   
   /**
@@ -79,15 +88,15 @@ public class Skyline {
    * @param dir
    * @return
    */
-  private static Point[] skyline(Point[] points, int start, int end, Direction dir) {
+  private static Point[] skylineRecursive(Point[] points, int start, int end, Direction dir) {
     if (end - start == 1) {
       // Return the one input point as the skyline
       return new Point[] {points[start]};
     }
     int mid = (start + end) / 2;
     // Find the skyline of each half
-    Point[] skyline1 = skyline(points, start, mid, dir);
-    Point[] skyline2 = skyline(points, mid, end, dir);
+    Point[] skyline1 = skylineRecursive(points, start, mid, dir);
+    Point[] skyline2 = skylineRecursive(points, mid, end, dir);
     // Merge the two skylines
     int cut_point = 0;
     while (cut_point < skyline1.length && !skylineDominate(skyline2[0], skyline1[cut_point], dir))
@@ -169,27 +178,86 @@ public class Skyline {
    * @param dir
    * @param overwrite
    * @throws IOException
+   * @throws InterruptedException 
    */
   public static void skylineLocal(Path inFile, Path outFile,
-      OperationsParams params) throws IOException {
-    FileSystem inFs = inFile.getFileSystem(new Configuration());
-    long file_size = inFs.getFileStatus(inFile).getLen();
+      final OperationsParams params) throws IOException, InterruptedException {
+    if (params.getBoolean("mem", false))
+      MemoryReporter.startReporting();
+    // 1- Split the input path/file to get splits that can be processed
+    // independently
+    final SpatialInputFormat3<Rectangle, Point> inputFormat =
+        new SpatialInputFormat3<Rectangle, Point>();
+    Job job = Job.getInstance(params);
+    SpatialInputFormat3.setInputPaths(job, inFile);
+    final List<InputSplit> splits = inputFormat.getSplits(job);
+    final Direction dir = params.getDirection("dir", Direction.MaxMax);
     
-    ShapeRecordReader<Point> shapeReader = new ShapeRecordReader<Point>(
-        new Configuration(), new FileSplit(inFile, 0, file_size, new String[] {}));
-
-    Rectangle key = shapeReader.createKey();
-    Point point = new Point();
-
-    Vector<Point> points = new Vector<Point>();
+    // 2- Read all input points in memory
+    LOG.info("Reading points from "+splits.size()+" splits");
+    Vector<Point[]> allLists = Parallel.forEach(splits.size(), new RunnableRange<Point[]>() {
+      @Override
+      public Point[] run(int i1, int i2) {
+        try {
+          List<Point> finalPoints = new ArrayList<Point>();
+          final int MaxSize = 100000;
+          Point[] points = new Point[MaxSize];
+          int size = 0;
+          for (int i = i1; i < i2; i++) {
+            org.apache.hadoop.mapreduce.lib.input.FileSplit fsplit = (org.apache.hadoop.mapreduce.lib.input.FileSplit) splits.get(i);
+            final RecordReader<Rectangle, Iterable<Point>> reader =
+                inputFormat.createRecordReader(fsplit, null);
+            if (reader instanceof SpatialRecordReader3) {
+              ((SpatialRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof RTreeRecordReader3) {
+              ((RTreeRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplit, params);
+            } else {
+              throw new RuntimeException("Unknown record reader");
+            }
+            while (reader.nextKeyValue()) {
+              Iterable<Point> pts = reader.getCurrentValue();
+              for (Point p : pts) {
+                points[size++] = p.clone();
+                if (size >= points.length) {
+                  // Perform Skyline and write the result to finalPoints
+                  Point[] skylinePoints = skylineInMemory(points, dir);
+                  for (Point skylinePoint : skylinePoints)
+                    finalPoints.add(skylinePoint);
+                  size = 0; // reset
+                }
+              }
+            }
+            reader.close();
+          }
+          while (size-- > 0)
+            finalPoints.add(points[size]);
+          return finalPoints.toArray(new Point[finalPoints.size()]);
+        } catch (IOException e) {
+          e.printStackTrace();
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+        return null;
+      }
+    }, params.getInt("parallel", Runtime.getRuntime().availableProcessors()));
     
-    while (shapeReader.next(key, point)) {
-      points.add(point.clone());
+    int totalNumPoints = 0;
+    for (Point[] list : allLists)
+      totalNumPoints += list.length;
+    
+    LOG.info("Read "+totalNumPoints+" points and merging into one list");
+    Point[] allPoints = new Point[totalNumPoints];
+    int pointer = 0;
+    
+    for (Point[] list : allLists) {
+      System.arraycopy(list, 0, allPoints, pointer, list.length);
+      pointer += list.length;
     }
+    allLists.clear(); // To the let the GC collect it
     
-    Point[] arPoints = points.toArray(new Point[points.size()]);
-    Direction dir = params.getDirection("dir", Direction.MaxMax);
-    Point[] skyline = skyline(arPoints, dir);
+    Point[] skyline = skylineInMemory(allPoints, dir);
 
     if (outFile != null) {
       if (params.getBoolean("overwrite", false)) {
@@ -241,6 +309,7 @@ public class Skyline {
       }
       
       LOG.info("Processing "+non_dominated_partitions.size()+" out of "+gIndex.size()+" partition");
+      System.out.println("Processing "+non_dominated_partitions.size()+" out of "+gIndex.size()+" partition");
       // Output all non-dominated partitions
       for (Partition p : non_dominated_partitions) {
         output.collect(p);
@@ -285,7 +354,7 @@ public class Skyline {
       while (points.hasNext()) {
         vpoints.add(points.next().clone());
       }
-      Point[] skyline = skyline(vpoints.toArray(new Point[vpoints.size()]), dir);
+      Point[] skyline = skylineInMemory(vpoints.toArray(new Point[vpoints.size()]), dir);
       for (Point pt : skyline) {
         output.collect(dummy, pt);
       }
@@ -297,6 +366,7 @@ public class Skyline {
     JobConf job = new JobConf(params, Skyline.class);
     Path outPath = userOutPath;
     FileSystem outFs = (userOutPath == null ? inFile : userOutPath).getFileSystem(job);
+    Shape shape = params.getShape("shape");
     
     if (outPath == null) {
       do {
@@ -311,11 +381,11 @@ public class Skyline {
     job.setCombinerClass(SkylineReducer.class);
     job.setReducerClass(SkylineReducer.class);
     job.setOutputKeyClass(NullWritable.class);
-    job.setOutputValueClass(Point.class);
+    job.setOutputValueClass(shape.getClass());
     job.setInputFormat(ShapeIterInputFormat.class);
     ShapeInputFormat.addInputPath(job, inFile);
-    job.setOutputFormat(GridOutputFormat2.class);
-    GridOutputFormat2.setOutputPath(job, outPath);
+    job.setOutputFormat(TextOutputFormat.class);
+    TextOutputFormat.setOutputPath(job, outPath);
     
     JobClient.runJob(job);
     
@@ -324,20 +394,13 @@ public class Skyline {
       outFs.delete(outPath, true);
   }
   
-  public static void skyline(Path inFile, Path outFile, OperationsParams params) throws IOException {
-    JobConf job = new JobConf(params, FileMBR.class);
-    FileInputFormat.addInputPath(job, inFile);
-    ShapeInputFormat<Shape> inputFormat = new ShapeInputFormat<Shape>();
-
-    boolean autoLocal = inputFormat.getSplits(job, 1).length <= 3;
-    boolean isLocal = params.getBoolean("local", autoLocal);
-    
-    if (!isLocal) {
-      // Process with MapReduce
-      skylineMapReduce(inFile, outFile, params);
-    } else {
+  public static void skyline(Path inFile, Path outFile, OperationsParams params) throws IOException, InterruptedException {
+    if (OperationsParams.isLocal(params, inFile)) {
       // Process without MapReduce
       skylineLocal(inFile, outFile, params);
+    } else {
+      // Process with MapReduce
+      skylineMapReduce(inFile, outFile, params);
     }
   }
   
@@ -351,7 +414,7 @@ public class Skyline {
     GenericOptionsParser.printGenericCommandUsage(System.err);
   }
   
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) throws IOException, InterruptedException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] paths = params.getPaths();
     if (paths.length <= 1 && !params.checkInput()) {

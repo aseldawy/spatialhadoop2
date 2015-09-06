@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>HadoopViz</title>
+  <link rel="stylesheet" href="http://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+  <script src="http://code.jquery.com/jquery-1.10.2.js"></script>
+  <script src="http://code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+  <link rel="stylesheet" href="css/shahed.css">
+  <script>
+  $(function() {
+    $( "#tabs" ).tabs();
+  });
+  </script>
+</head>
+<body style="height: 100%">
+ 
+<div id="tabs" class="fullscreen">
+  <ul>
+    <li><a href="#tabs-1">Plot</a></li>
+    <li><a href="#tabs-2">Display</a></li>
+  </ul>
+  <div id="tabs-1" class="fullscreen" style="padding: 0;">
+    <iframe src="plot.html" class="fullscreen"></iframe>
+  </div>
+  <div id="tabs-2" class="fullscreen" style="padding: 0;">
+    <iframe src="display.html" class="fullscreen"></iframe>
+  </div>
+</div>
+ 
+ 
+</body>
+</html>

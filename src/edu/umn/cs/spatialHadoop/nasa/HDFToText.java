@@ -13,6 +13,7 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Counters;
@@ -21,7 +22,6 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
@@ -35,7 +35,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
  */
 public class HDFToText {
   public static class HDFToTextMap extends
-      Mapper<NASADataset, Iterable<? extends NASAShape>, Rectangle, NASAShape> {
+      Mapper<NASADataset, Iterable<? extends NASAShape>, NullWritable, NASAShape> {
     
     @Override
     protected void map(
@@ -43,8 +43,9 @@ public class HDFToText {
         Iterable<? extends NASAShape> values,
         Context context)
         throws IOException, InterruptedException {
+      NullWritable dummyKey = NullWritable.get();
       for (NASAShape s : values)
-        context.write(dataset, s);
+        context.write(dummyKey, s);
     }
   }
   
@@ -61,23 +62,22 @@ public class HDFToText {
    * @throws InterruptedException 
    */
   public static long HDFToTextMapReduce(Path inPath, Path outPath,
-      String datasetName, boolean skipFillValue) throws IOException,
+      String datasetName, boolean skipFillValue, OperationsParams params) throws IOException,
       InterruptedException, ClassNotFoundException {
-    Job job = Job.getInstance();
+    Job job = new Job(params, "HDFToText");
     Configuration conf = job.getConfiguration();
     job.setJarByClass(HDFToText.class);
     job.setJobName("HDFToText");
 
     // Set Map function details
     job.setMapperClass(HDFToTextMap.class);
-    job.setMapOutputKeyClass(Rectangle.class);
-    job.setMapOutputValueClass(NASAPoint.class);
     job.setNumReduceTasks(0);
     
     // Set input information
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.setInputPaths(job, inPath);
-    conf.setClass("shape", NASAPoint.class, Shape.class);
+    if (conf.get("shape") == null)
+      conf.setClass("shape", NASAPoint.class, Shape.class);
     conf.set("dataset", datasetName);
     conf.setBoolean("skipfillvalue", skipFillValue);
     
@@ -86,7 +86,8 @@ public class HDFToText {
     TextOutputFormat3.setOutputPath(job, outPath);
     
     // Run the job
-    job.waitForCompletion(false);
+    boolean verbose = conf.getBoolean("verbose", false);
+    job.waitForCompletion(verbose);
     Counters counters = job.getCounters();
     Counter outputRecordCounter = counters.findCounter(Task.Counter.MAP_OUTPUT_RECORDS);
     final long resultCount = outputRecordCounter.getValue();
@@ -97,9 +98,10 @@ public class HDFToText {
   private static void printUsage() {
     System.out.println("Converts a set of HDF files to text format");
     System.out.println("Parameters: (* marks required parameters)");
-    System.out.println("<input file>: (*) Path to input file");
-    System.out.println("<output file>: (*) Path to output file");
-    System.out.println("dataset:<dataset>: (*) Name of the dataset to read from HDF");
+    System.out.println("<input file> - (*) Path to input file");
+    System.out.println("<output file> - (*) Path to output file");
+    System.out.println("dataset:<dataset> - (*) Name of the dataset to read from HDF");
+    System.out.println("shape:<NASAPoint|(NASARectangle)> - Type of shape in the output");
     System.out.println("-skipfillvalue: Skip fill value");
   }
   /**
@@ -109,7 +111,7 @@ public class HDFToText {
    * @throws InterruptedException 
    */
   public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     Path[] paths = params.getPaths();
     if (paths.length < 2) {
       printUsage();
@@ -143,6 +145,9 @@ public class HDFToText {
     }
     boolean skipFillValue = params.getBoolean("skipfillvalue", true);
     
-    HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue);
+    long t1 = System.currentTimeMillis();
+    long records = HDFToTextMapReduce(inPath, outPath, datasetName, skipFillValue, params);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Wrote "+records+" records in "+(t2-t1)+" millis");
   }
 }

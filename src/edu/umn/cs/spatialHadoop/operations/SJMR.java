@@ -50,6 +50,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
  * An implementation of Spatial Join MapReduce as described in
@@ -66,7 +67,7 @@ public class SJMR {
   /**Class logger*/
   private static final Log LOG = LogFactory.getLog(SJMR.class);
   private static final String PartitionGrid = "SJMR.PartitionGrid";
-  public static final String PartitioiningGridParam = "partition-grid-factor";
+  public static final String PartitioiningFactor = "partition-grid-factor";
   private static final String InactiveMode = "SJMR.InactiveMode";
   private static final String isFilterOnlyMode = "DJ.FilterOnlyMode";
   private static final String JoiningThresholdPerOnce = "DJ.JoiningThresholdPerOnce";
@@ -229,7 +230,7 @@ public class SJMR {
             }
           }
         }
-      }, reporter);
+      }, new Progressable.ReporterProgressable(reporter));
     }
   }
   
@@ -264,83 +265,82 @@ public class SJMR {
     @Override
     public void reduce(IntWritable cellId, Iterator<IndexedText> values,
         final OutputCollector<S, S> output, Reporter reporter)
-        throws IOException {
-     if(!inactiveMode){
- 	  LOG.info("Start reduce() logic now !!!"); 
-      long t1 = System.currentTimeMillis();	
-      
-      // Extract CellInfo (MBR) for duplicate avoidance checking
-      final CellInfo cellInfo = grid.getCell(cellId.get());
-      
-      // Partition retrieved shapes (values) into lists for each file
-      List<S>[] shapeLists = new List[inputFileCount];
-      for (int i = 0; i < shapeLists.length; i++) {
-        shapeLists[i] = new Vector<S>();
-      }
-      
-      while (values.hasNext()) {
-    	int currNumOfShapes = 0;
-    	do{
-    		IndexedText t = values.next();
+            throws IOException {
+      if(!inactiveMode){
+        LOG.info("Start reduce() logic now !!!"); 
+        long t1 = System.currentTimeMillis();	
+
+        // Extract CellInfo (MBR) for duplicate avoidance checking
+        final CellInfo cellInfo = grid.getCell(cellId.get());
+
+        // Partition retrieved shapes (values) into lists for each file
+        List<S>[] shapeLists = new List[inputFileCount];
+        for (int i = 0; i < shapeLists.length; i++) {
+          shapeLists[i] = new Vector<S>();
+        }
+
+        while (values.hasNext()) {
+          do{
+            IndexedText t = values.next();
             S s = (S) shape.clone();
             s.fromText(t.text);
             shapeLists[t.index].add(s);	
-			currNumOfShapes++;
-		} while(values.hasNext() && currNumOfShapes < shapesThresholdPerOnce);
-    	  
-    	// Perform spatial join between the two lists
-        sjmrReduceLOG.info("Joining (" + shapeLists[0].size() +" X "+ shapeLists[1].size()+ ")...");
-        if(isFilterOnly){
-            SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(shapeLists[0], shapeLists[1], new ResultCollector2<S, S>() {
-                @Override
-                public void collect(S x, S y) {
-                	if(isSpatialJoinOutputRequired){
-                		try {
-                            Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
-                            // Error: intersectionMBR may be null.
-                            if (intersectionMBR != null) {
-                              if (cellInfo.contains(intersectionMBR.x1, intersectionMBR.y1)) {
-                                // Report to the reduce result collector
-                                output.collect(x, y);
-                              }
-                            }
-                          } catch (IOException e) {
-                            e.printStackTrace();
-                          }	
-                	}
-                }
-              }, reporter);  
-        }else{
-            SpatialAlgorithms.SpatialJoin_planeSweep(shapeLists[0], shapeLists[1], new ResultCollector2<S, S>() {
-                @Override
-                public void collect(S x, S y) {
-                	if(isSpatialJoinOutputRequired){
-                		try {
-                            Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
-                            // Error: intersectionMBR may be null.
-                            if (intersectionMBR != null) {
-                              if (cellInfo.contains(intersectionMBR.x1, intersectionMBR.y1)) {
-                                // Report to the reduce result collector
-                                output.collect(x, y);
-                              }
-                            }
-                          } catch (IOException e) {
-                            e.printStackTrace();
-                          }	
-                	}
-                }
-              }, reporter);
-        
-      }  
-    }
-      
-      long t2 = System.currentTimeMillis();
-      System.out.println("Reducer finished in: "+(t2-t1)+" millis");
+          } while(values.hasNext() && shapeLists[1].size() < shapesThresholdPerOnce);
 
-    }else{
-      LOG.info("Nothing to do !!!");	
+          // Perform spatial join between the two lists
+          sjmrReduceLOG.info("Joining (" + shapeLists[0].size() +" X "+ shapeLists[1].size()+ ")...");
+          if(isFilterOnly){
+            SpatialAlgorithms.SpatialJoin_planeSweepFilterOnly(shapeLists[0], shapeLists[1], new ResultCollector2<S, S>() {
+              @Override
+              public void collect(S x, S y) {
+                if(isSpatialJoinOutputRequired){
+                  try {
+                    Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
+                    // Error: intersectionMBR may be null.
+                    if (intersectionMBR != null) {
+                      if (cellInfo.contains(intersectionMBR.x1, intersectionMBR.y1)) {
+                        // Report to the reduce result collector
+                        output.collect(x, y);
+                      }
+                    }
+                  } catch (IOException e) {
+                    e.printStackTrace();
+                  }	
+                }
+              }
+            }, reporter);  
+          }else{
+            SpatialAlgorithms.SpatialJoin_planeSweep(shapeLists[0], shapeLists[1], new ResultCollector2<S, S>() {
+              @Override
+              public void collect(S x, S y) {
+                if(isSpatialJoinOutputRequired){
+                  try {
+                    Rectangle intersectionMBR = x.getMBR().getIntersection(y.getMBR());
+                    // Error: intersectionMBR may be null.
+                    if (intersectionMBR != null) {
+                      if (cellInfo.contains(intersectionMBR.x1, intersectionMBR.y1)) {
+                        // Report to the reduce result collector
+                        output.collect(x, y);
+                      }
+                    }
+                  } catch (IOException e) {
+                    e.printStackTrace();
+                  }	
+                }
+              }
+            }, reporter);
+
+          }
+          shapeLists[1].clear();
+        }
+
+        long t2 = System.currentTimeMillis();
+        LOG.info("Reducer finished in: "+(t2-t1)+" millis");
+
+      }else{
+        LOG.info("Nothing to do !!!");	
+      }
     }
-   }
   }
 
   public static <S extends Shape> long sjmr(Path[] inFiles,
@@ -378,14 +378,7 @@ public class SJMR {
       job.setOutputFormat(TextOutputFormat.class);
     else
       job.setOutputFormat(NullOutputFormat.class);
-    
-    String commaSeparatedFiles = "";
-    for (int i = 0; i < inFiles.length; i++) {
-      if (i > 0)
-        commaSeparatedFiles += ',';
-      commaSeparatedFiles += inFiles[i].toUri().toString();
-    }
-    ShapeLineInputFormat.addInputPaths(job, commaSeparatedFiles);
+    ShapeLineInputFormat.setInputPaths(job, inFiles);
     
     // Calculate and set the dimensions of the grid to use in the map phase
     long total_size = 0;
@@ -397,14 +390,10 @@ public class SJMR {
       total_size += FileMBR.sizeOfLastProcessedFile;
     }
     // If the largest file is globally indexed, use its partitions
-    int sjmrPartitioningGridFactor = 20;
-    if(params.getSJMRGridPartitioiningFactor(PartitioiningGridParam) > 0){
-    	sjmrPartitioningGridFactor = (int)(params.getSJMRGridPartitioiningFactor(PartitioiningGridParam));
-        LOG.info("SJMRPartitioningGrid is configured");
-    }
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
-    int num_cells = (int) (total_size / outFs.getDefaultBlockSize(outputPath)
-        * sjmrPartitioningGridFactor);
+    int sjmrPartitioningGridFactor = params.getInt(PartitioiningFactor, 20);
+    int num_cells = (int) Math.max(1, total_size * sjmrPartitioningGridFactor /
+        outFs.getDefaultBlockSize(outputPath));
     LOG.info("Number of cells is configured to be " + num_cells);
 
     OperationsParams.setInactiveModeFlag(job, InactiveMode, isReduceInactive);
@@ -448,14 +437,16 @@ public class SJMR {
    * @throws InterruptedException 
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-	OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     Path[] allFiles = params.getPaths();
     if (allFiles.length < 2) {
-      System.err.println("Input files are missing");
+      System.err
+          .println("This operation requires at least two input files");
       printUsage();
       System.exit(1);
     }
     if (allFiles.length == 2 && !params.checkInput()) {
+      // One of the input files does not exist
       printUsage();
       System.exit(1);
     }
@@ -463,48 +454,40 @@ public class SJMR {
       printUsage();
       System.exit(1);
     }
-    
-    Path[] inputFiles = new Path[] {allFiles[0], allFiles[1]};
-    JobConf conf = new JobConf(DistributedJoin.class);
-    FileSystem fs = inputFiles[0].getFileSystem(conf);
-    
-    if (!fs.exists(inputFiles[0]) || !fs.exists(inputFiles[1])) {
-      printUsage();
-      throw new RuntimeException("Input file does not exist");
-    }
-    
-    if (params.get("repartition-only", "no").equals("yes")) {
-		System.out.println("Repartition-only is true");
-		isReduceInactive = true;
-	}
-    
 
-	if (params.get("joining-per-once") != null) {
-		System.out.println("joining-per-once is set to: " + params.get("joining-per-once"));
-		joiningThresholdPerOnce = Integer.parseInt(params.get("joining-per-once"));
-	}
-	
-	if (params.get("filter-only") != null) {
-		System.out.println("filer-only mode is set to: " + params.get("filter-only"));
-		if (params.get("filter-only").equals("yes")) {
-			isFilterOnly = true;
-		}else{
-			isFilterOnly = false;
-		}
-	}
-	
-	if (params.get("no-output") != null) {
-		System.out.println("no-output mode is set to: " + params.get("no-output"));
-		if (params.get("no-output").equals("yes")){
-			isSpatialJoinOutputRequired = false;
-		}else{
-			isSpatialJoinOutputRequired = true;
-		}
-	}
-    
-    Path outputPath = allFiles.length > 2 ? allFiles[2] : null;
+    Path[] inputPaths = allFiles.length == 2 ? allFiles : params.getInputPaths();
+    Path outputPath = allFiles.length == 2 ? null : params.getOutputPath();
+
+    if (params.get("repartition-only", "no").equals("yes")) {
+      isReduceInactive = true;
+    }
+
+
+    if (params.get("joining-per-once") != null) {
+      System.out.println("joining-per-once is set to: " + params.get("joining-per-once"));
+      joiningThresholdPerOnce = Integer.parseInt(params.get("joining-per-once"));
+    }
+
+    if (params.get("filter-only") != null) {
+      System.out.println("filer-only mode is set to: " + params.get("filter-only"));
+      if (params.get("filter-only").equals("yes")) {
+        isFilterOnly = true;
+      }else{
+        isFilterOnly = false;
+      }
+    }
+
+    if (params.get("no-output") != null) {
+      System.out.println("no-output mode is set to: " + params.get("no-output"));
+      if (params.get("no-output").equals("yes")){
+        isSpatialJoinOutputRequired = false;
+      }else{
+        isSpatialJoinOutputRequired = true;
+      }
+    }
+
     long t1 = System.currentTimeMillis();
-    long resultSize = sjmr(inputFiles, outputPath, params);
+    long resultSize = sjmr(inputPaths, outputPath, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total time: "+(t2-t1)+" millis");
     System.out.println("Result size: "+resultSize);

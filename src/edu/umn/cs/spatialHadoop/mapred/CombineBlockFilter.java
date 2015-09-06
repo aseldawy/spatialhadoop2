@@ -12,9 +12,9 @@ import java.util.Vector;
 
 import org.apache.hadoop.conf.Configuration;
 
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 
 /**
  * A block filter that combines multiple block filters with an AND clause.

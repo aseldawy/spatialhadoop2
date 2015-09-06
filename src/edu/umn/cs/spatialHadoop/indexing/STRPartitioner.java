@@ -6,7 +6,7 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -14,6 +14,13 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Comparator;
+
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.GridInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * A partitioner that partitioner data using the STR bulk loading algorithm.
@@ -38,7 +45,7 @@ public class STRPartitioner extends Partitioner {
   }
   
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
     // Apply the STR algorithm in two rounds
     // 1- First round, sort points by X and split into the given columns
     Arrays.sort(points, new Comparator<Point>() {
@@ -47,8 +54,9 @@ public class STRPartitioner extends Partitioner {
         return a.x < b.x? -1 : (a.x > b.x? 1 : 0);
       }});
     // Calculate partitioning numbers based on a grid
+    int numSplits = (int) Math.ceil((double)points.length / capacity);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-    gridInfo.calculateCellDimensions(numPartitions);
+    gridInfo.calculateCellDimensions(numSplits);
     this.columns = gridInfo.columns;
     this.rows = gridInfo.rows;
     this.xSplits = new double[columns];

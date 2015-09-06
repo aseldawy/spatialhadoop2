@@ -301,7 +301,7 @@ public class HDFPlot {
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("width:<w> - Maximum width of the image (1000)");
     System.out.println("height:<h> - Maximum height of the image (1000)");
-    System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
+    System.out.println("partition:<data|space|flat|pyramid> - which partitioning technique to use");
     System.out.println("valuerange:<v1..v2> - Range of values for the generated heat map");
     System.out.println("color1:<c1> - The color associated with v1");
     System.out.println("color2:<c2> - The color associated with v2");

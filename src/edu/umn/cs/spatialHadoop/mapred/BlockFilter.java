@@ -10,10 +10,10 @@ package edu.umn.cs.spatialHadoop.mapred;
 
 import org.apache.hadoop.conf.Configuration;
 
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 
 /**
  * An interface for filtering blocks before running map tasks.

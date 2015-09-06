@@ -51,6 +51,10 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   }
   
   public void set(Shape s) {
+    if (s == null) {
+      System.out.println("tozz");
+      return;
+    }
     Rectangle mbr = s.getMBR();
     set(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
   }
@@ -258,6 +262,22 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   
   public Point getCenterPoint() {
     return new Point((x1 + x2) / 2, (y1 + y2)/2);
+  }
+  
+  /**
+   * Compute the intersection of a line segment with the rectangle border.
+   * It is assumed that p1 lies inside the rectangle while p2 is outside it.
+   * @param p1
+   * @param p2
+   * @return
+   */
+  public Point intersectLineSegment(Point p1, Point p2) {
+    double vx = p2.x - p1.x;
+    double vy = p2.y - p1.y;
+    double a1 = ((vx >= 0 ? this.x2 : this.x1) - p1.x) / vx;
+    double a2 = ((vy >= 0 ? this.y2 : this.y1) - p1.y) / vy;
+    double a = Math.min(a1, a2);
+    return new Point(p1.x + a * vx, p1.y + a * vy);
   }
 
   @Override

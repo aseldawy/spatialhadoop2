@@ -32,10 +32,10 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.nasa.HTTPFileSystem;
 
 /**
@@ -82,19 +82,18 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
         rrConstructor.setAccessible(true);
         return rrConstructor.newInstance(new Object [] {job, fsplit});
       } catch (SecurityException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (NoSuchMethodException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (IllegalArgumentException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (InstantiationException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (IllegalAccessException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       } catch (InvocationTargetException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Cannot generate a record reader", e);
       }
-      throw new RuntimeException("Cannot generate a record reader");
     } else {
       throw new RuntimeException("Cannot handle splits of type "+split.getClass());
     }

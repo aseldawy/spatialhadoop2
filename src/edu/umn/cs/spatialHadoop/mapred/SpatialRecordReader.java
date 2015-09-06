@@ -37,12 +37,12 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.lib.CombineFileSplit;
 import org.apache.hadoop.util.LineReader;
 
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
-import edu.umn.cs.spatialHadoop.core.Partition;
-import edu.umn.cs.spatialHadoop.core.RTree;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
+import edu.umn.cs.spatialHadoop.indexing.RTree;
 
 /**
  * A base class to read shapes from files. It reads either single shapes,
@@ -151,12 +151,12 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     this.start = s;
     this.end = s + l;
     this.path = p;
+    LOG.info("Open a SpatialRecordReader to file: "+p+"["+s+","+(s+l)+")");
     this.fs = this.path.getFileSystem(job);
     this.directIn = fs.open(this.path);
     this.blockSize = fs.getFileStatus(this.path).getBlockSize();
     this.cellMbr = new Rectangle();
     
-    LOG.info("Open a SpatialRecordReader to file: "+this.path);
 
     codec = new CompressionCodecFactory(job).getCodec(this.path);
 

@@ -6,7 +6,7 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
 
@@ -18,6 +18,12 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Writable;
 import org.mortbay.log.Log;
+
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * An interface for spatially partitioning data into partitions.
@@ -31,12 +37,12 @@ public abstract class Partitioner implements Writable {
 
   /**
    * Populate this partitioner for a set of points and number of partitions
-   * @param mbr
-   * @param points
-   * @param numPartitions
+   * @param mbr - the minimal bounding rectangle of the input space
+   * @param points - the points to be partitioned
+   * @param capacity - maximum number of points per partition
    */
   public abstract void createFromPoints(Rectangle mbr, Point[] points,
-      int numPartitions);
+      int capacity);
   
   /**
    * Overlap a shape with partitions and calls a matcher for each overlapping

@@ -199,7 +199,7 @@ public class Sampler {
     // Number of reduces can be set to zero. However, setting it to a reasonable
     // number ensures that number of output files is limited to that number
     job.setNumReduceTasks(
-        Math.max(1, (int)Math.round(clusterStatus.getMaxReduceTasks() * 0.9)));
+        Math.max(1, clusterStatus.getMaxReduceTasks() * 9 / 10));
     
     job.setInputFormat(ShapeLineInputFormat.class);
     job.setOutputFormat(TextOutputFormat.class);

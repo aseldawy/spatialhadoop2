@@ -6,7 +6,7 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -18,6 +18,12 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.QuickSort;
+
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.ResultCollector2;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 
 /**
  * A very simple spatial index that provides some spatial operations based

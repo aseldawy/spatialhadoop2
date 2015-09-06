@@ -27,19 +27,20 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.core.CSVOGC;
 import edu.umn.cs.spatialHadoop.core.OGCESRIShape;
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Polygon;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
-import edu.umn.cs.spatialHadoop.operations.Sampler2;
+import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
+import edu.umn.cs.spatialHadoop.operations.LocalSampler;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -364,58 +365,56 @@ public class OperationsParams extends Configuration {
 			shapeType = shapeType.substring(0, separatorIndex);
 		}
 
-		String shapeTypeI = shapeType.toLowerCase();
-		TextSerializable shape = null;
-
-		if (shapeTypeI.startsWith("rect")) {
-			shape = new Rectangle();
-		} else if (shapeTypeI.startsWith("point")) {
-			shape = new Point();
-		} else if (shapeTypeI.startsWith("tiger")) {
-			shape = new TigerShape();
-		} else if (shapeTypeI.startsWith("osm")) {
-			shape = new OSMPolygon();
-		} else if (shapeTypeI.startsWith("poly")) {
-			shape = new Polygon();
-		} else if (shapeTypeI.startsWith("ogc")) {
-			shape = new OGCESRIShape();
-		} else if (shapeTypeI.startsWith("wkt")) {
-			shape = new OGCJTSShape();
-		} else if (shapeTypeI.startsWith("nasa")) {
-			shape = new NASAPoint();
-		} else if (shapeTypeI.startsWith("text")) {
-			shape = new Text2();
-		} else {
-			// Use the shapeType as a class name and try to instantiate it
-			// dynamically
-			try {
-				Class<? extends TextSerializable> shapeClass = conf
-						.getClassByName(shapeType).asSubclass(
-								TextSerializable.class);
-				shape = shapeClass.newInstance();
-			} catch (ClassNotFoundException e) {
-			} catch (InstantiationException e) {
-			} catch (IllegalAccessException e) {
-			}
-			if (shape == null) {
-				// Couldn't detect shape from short name or full class name
-				// May be it's an actual value that we can parse
-				if (shapeType.split(",").length == 2) {
-					// A point
-					shape = new Point();
-					shape.fromText(new Text((String) conf.get(key)));
-				} else if (shapeType.split(",").length == 4) {
-					// A rectangle
-					shape = new Rectangle();
-					shape.fromText(new Text((String) conf.get(key)));
-				}
-				// TODO parse from WKT
-			}
+		TextSerializable shape;
+		
+		try {
+		  Class<? extends TextSerializable> shapeClass = conf
+          .getClassByName(shapeType).asSubclass(
+              TextSerializable.class);
+      shape = shapeClass.newInstance();
+		} catch (Exception e) {
+		  // shapeClass is not an explicit class name
+		  String shapeTypeI = shapeType.toLowerCase();
+		  if (shapeTypeI.startsWith("rect")) {
+		    shape = new Rectangle();
+		  } else if (shapeTypeI.startsWith("point")) {
+		    shape = new Point();
+		  } else if (shapeTypeI.startsWith("tiger")) {
+		    shape = new TigerShape();
+		  } else if (shapeTypeI.startsWith("osm")) {
+		    shape = new OSMPolygon();
+		  } else if (shapeTypeI.startsWith("poly")) {
+		    shape = new Polygon();
+		  } else if (shapeTypeI.startsWith("ogc")) {
+		    shape = new OGCESRIShape();
+		  } else if (shapeTypeI.startsWith("wkt")) {
+		    shape = new OGCJTSShape();
+		  } else if (shapeTypeI.startsWith("nasapoint")) {
+		    shape = new NASAPoint();
+		  } else if (shapeTypeI.startsWith("nasarect")) {
+		    shape = new NASARectangle();
+		  } else if (shapeTypeI.startsWith("text")) {
+		    shape = new Text2();
+		  } else {
+		    // Couldn't detect shape from short name or full class name
+		    // May be it's an actual value that we can parse
+		    if (shapeType.split(",").length == 2) {
+		      // A point
+		      shape = new Point();
+		      shape.fromText(new Text((String) conf.get(key)));
+		    } else if (shapeType.split(",").length == 4) {
+		      // A rectangle
+		      shape = new Rectangle();
+		      shape.fromText(new Text((String) conf.get(key)));
+		    } else {
+		      LOG.warn("unknown shape type: '" + conf.get(key) + "'");
+		      return null;
+		    }
+		  }
 		}
-		if (shape == null)
-			LOG.warn("unknown shape type: '" + conf.get(key) + "'");
-		else if (shapeValue != null)
-			shape.fromText(shapeValue);
+
+		if (shapeValue != null)
+		  shape.fromText(shapeValue);
 		// Special case for CSVOGC shape, specify the column if possible
 		if (shape instanceof CSVOGC) {
 			CSVOGC csvShape = (CSVOGC) shape;
@@ -448,10 +447,6 @@ public class OperationsParams extends Configuration {
 
 	public long getSize(String key) {
 		return getSize(this, key);
-	}
-
-	public long getSJMRGridPartitioiningFactor(String key) {
-		return getSJMRPartitioningGrid(this, key);
 	}
 
 	/**
@@ -489,17 +484,6 @@ public class OperationsParams extends Configuration {
 			size *= 1024 * 1024 * 1024 * 1024;
 		return size;
 	}
-
-	public static long getSJMRPartitioningGrid(Configuration conf, String key) {
-		String sjmrPartitioningGrid_str = conf.get(key);
-		if (sjmrPartitioningGrid_str == null)
-			return 0;
-		long sjmrPartitioningGrid = Long.parseLong(sjmrPartitioningGrid_str);
-		if (sjmrPartitioningGrid < 1)
-			return 1;
-		return sjmrPartitioningGrid;
-	}
-
 	
 	public static int getJoiningThresholdPerOnce(Configuration conf,
 			String key) {
@@ -628,12 +612,16 @@ public class OperationsParams extends Configuration {
 			// the auto detected shape is consistent in many lines
 			final int sampleCount = 10;
 			OperationsParams sampleParams = new OperationsParams(this);
-			Sampler2.sampleLocalByCount(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
-        @Override
-        public void collect(Text line) {
-          sampleLines.add(line.toString());
-        }
-      }, sampleParams);
+			try {
+        LocalSampler.sampleLocal(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
+          @Override
+          public void collect(Text line) {
+            sampleLines.add(line.toString());
+          }
+        }, sampleParams);
+      } catch (InterruptedException e1) {
+        e1.printStackTrace();
+      }
 
 			if (sampleLines.isEmpty()) {
 				LOG.warn("No input to detect in '" + this.getInputPath() + "-");

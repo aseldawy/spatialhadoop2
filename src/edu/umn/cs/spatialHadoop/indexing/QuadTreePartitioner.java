@@ -6,12 +6,11 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Queue;
@@ -22,8 +21,15 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
+import edu.umn.cs.spatialHadoop.util.BitArray;
+import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
  * Partition the space based on a Quad tree
@@ -33,7 +39,15 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 public class QuadTreePartitioner extends Partitioner {
   /**The minimal bounding rectangle of the underlying file*/
   protected final Rectangle mbr = new Rectangle();
-  /**ID of all leaf nodes in partition tree*/
+  // TODO instead of storing leaf node IDs, store them in a bit array to ensure
+  // constant time lookup instead of logarithmic
+  /**
+   * A bit array in which a bit set for each leaf node at the position
+   * corresponding to its node ID
+   */
+  protected BitArray leafNodes;
+  
+  /**IDs of all partitions sorted in an ascending order*/
   protected int[] leafNodeIDs;
 
   /**
@@ -44,23 +58,22 @@ public class QuadTreePartitioner extends Partitioner {
   }
   
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
     this.mbr.set(mbr);
     long[] zValues = new long[points.length];
     for (int i = 0; i < points.length; i++)
       zValues[i] = ZCurvePartitioner.computeZ(mbr, points[i].x, points[i].y);
-    createFromZValues(zValues, numPartitions);
+    createFromZValues(zValues, capacity);
   }
   
   /**
    * Create a ZCurvePartitioner from a list of points
    * @param vsample
    * @param inMBR
-   * @param partitions
+   * @param capacity
    * @return
    */
-  protected void createFromZValues(final long[] zValues, int partitions) {
-    int nodeCapacity = zValues.length / partitions;
+  protected void createFromZValues(final long[] zValues, int capacity) {
     Arrays.sort(zValues);
     class QuadTreeNode {
       int fromIndex, toIndex;
@@ -86,12 +99,15 @@ public class QuadTreePartitioner extends Partitioner {
     nodesToSplit.add(root);
 
     Vector<Integer> leafNodeIDs = new Vector<Integer>();
+    int maxNodeID = 0;
     
     while (!nodesToSplit.isEmpty()) {
       QuadTreeNode nodeToSplit = nodesToSplit.remove();
-      if (nodeToSplit.toIndex - nodeToSplit.fromIndex <= nodeCapacity) {
+      if (nodeToSplit.toIndex - nodeToSplit.fromIndex <= capacity) {
         // No need to split
         leafNodeIDs.add(nodeToSplit.nodeID);
+        if (nodeToSplit.nodeID > maxNodeID)
+          maxNodeID = nodeToSplit.nodeID;
       } else {
         // The position of the lowest of the two bits that change for these
         // children in the Z-order
@@ -118,35 +134,29 @@ public class QuadTreePartitioner extends Partitioner {
       }
     }
     
+    leafNodes = new BitArray(maxNodeID + 1);
     this.leafNodeIDs = new int[leafNodeIDs.size()];
-    for (int i = 0; i < leafNodeIDs.size(); i++)
+    for (int i = 0; i < leafNodeIDs.size(); i++) {
+      leafNodes.set(leafNodeIDs.get(i), true);
       this.leafNodeIDs[i] = leafNodeIDs.get(i);
+    }
     Arrays.sort(this.leafNodeIDs);
   }
 
 
   @Override
   public void write(DataOutput out) throws IOException {
+    IntArray.writeIntArray(leafNodeIDs, out);
     mbr.write(out);
-    out.writeInt(leafNodeIDs.length);
-    ByteBuffer bbuffer = ByteBuffer.allocate(leafNodeIDs.length * 4);
-    for (int leafNodeID : leafNodeIDs)
-      bbuffer.putInt(leafNodeID);
-    if (bbuffer.hasRemaining())
-      throw new RuntimeException("Did not calculate buffer size correctly");
-    out.write(bbuffer.array(), bbuffer.arrayOffset(), bbuffer.position());
+    leafNodes.write(out);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
+    leafNodeIDs = IntArray.readIntArray(leafNodeIDs, in);
     mbr.readFields(in);
-    int numberOfLeafNodes = in.readInt();
-    leafNodeIDs = new int[numberOfLeafNodes];
-    byte[] buffer = new byte[leafNodeIDs.length * 4];
-    in.readFully(buffer);
-    ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
-    for (int i = 0; i < leafNodeIDs.length; i++)
-      leafNodeIDs[i] = bbuffer.getInt();
+    leafNodes = new BitArray();
+    leafNodes.readFields(in);
   }
 
   @Override
@@ -157,11 +167,8 @@ public class QuadTreePartitioner extends Partitioner {
     Point queryPoint = shape.getMBR().getCenterPoint();
     int nodeToSearch = 1; // Start from the root
     Rectangle nodeMBR = mbr.clone();
-    while (Arrays.binarySearch(leafNodeIDs, nodeToSearch) < 0) {
-      if (nodeToSearch > leafNodeIDs[leafNodeIDs.length - 1]) {
-        System.err.println("not found");
-        return -1;
-      }
+    // Keep going deeper in the Quad tree until reaching a leaf node
+    while (nodeToSearch < leafNodes.size() && !leafNodes.get(nodeToSearch)) {
       Point nodeCenter = nodeMBR.getCenterPoint();
       if (queryPoint.x < nodeCenter.x && queryPoint.y < nodeCenter.y) {
         nodeToSearch = nodeToSearch * 4;
@@ -181,6 +188,9 @@ public class QuadTreePartitioner extends Partitioner {
         nodeMBR.y1 = nodeCenter.y;
       }
     }
+    // Reached a node deeper than the deepest leaf node in the Quad tree
+    if (nodeToSearch >= leafNodes.size())
+      return -1;
     return nodeToSearch;
   }
   
@@ -196,7 +206,7 @@ public class QuadTreePartitioner extends Partitioner {
       // Go down as necessary
       CellInfo nodeToSearch = nodesToSearch.remove();
       if (shapeMBR.isIntersected(nodeToSearch)) {
-        if (Arrays.binarySearch(leafNodeIDs, nodeToSearch.cellId) >= 0) {
+        if (leafNodes.get(nodeToSearch.cellId)) {
           // Reached a leaf node that overlaps the given shape
           matcher.collect(nodeToSearch.cellId);
         } else {

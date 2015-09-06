@@ -19,6 +19,7 @@ import javax.imageio.ImageIO;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -145,20 +146,18 @@ public class HeatMapPlot {
     System.out.println("width:<w> - Maximum width of the image (1000)");
     System.out.println("height:<h> - Maximum height of the image (1000)");
     System.out.println("color:<c> - Main color used to draw the picture (black)");
-    System.out.println("partition:<data|space> - whether to use data partitioning (default) or space partitioning");
+    System.out.println("partition:<data|space|flat|pyramid> - which partitioning technique to use");
     System.out.println("-overwrite: Override output file without notice");
     System.out.println("-vflip: Vertically flip generated image to correct +ve Y-axis direction");
-    System.out.println("-fade: Use the gradual fade option");
-    System.out.println("-sample: Use the daptive sample option");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
-  public static void plot(Path[] inFiles, Path outFile, OperationsParams params)
+  public static Job plot(Path[] inFiles, Path outFile, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFiles, outFile, HeatMapRasterizer.class, params);
+      return MultilevelPlot.plot(inFiles, outFile, HeatMapRasterizer.class, params);
     } else {
-      SingleLevelPlot.plot(inFiles, outFile, HeatMapRasterizer.class, params);
+      return SingleLevelPlot.plot(inFiles, outFile, HeatMapRasterizer.class, params);
     }
   }
 

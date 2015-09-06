@@ -6,7 +6,7 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.core;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -23,6 +23,11 @@ import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 
@@ -49,13 +54,14 @@ public class KdTreePartitioner extends Partitioner {
   }
   
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int numPartitions) {
+  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
 
     // Enumerate all partition IDs to be able to count leaf nodes in any split
     // TODO do the same functionality without enumerating all IDs
-    String[] ids = new String[numPartitions];
-    for (int id = numPartitions; id < 2 * numPartitions; id++)
-      ids[id - numPartitions] = Integer.toBinaryString(id);
+    int numSplits = (int) Math.ceil((double)points.length / capacity);
+    String[] ids = new String[numSplits];
+    for (int id = numSplits; id < 2 * numSplits; id++)
+      ids[id - numSplits] = Integer.toBinaryString(id);
     
     // Keep splitting the space into halves until we reach the desired number of
     // partitions
@@ -93,11 +99,11 @@ public class KdTreePartitioner extends Partitioner {
     splitTasks.add(new SplitTask(0, points.length, 0, 1));
     
     this.mbr.set(mbr);
-    this.splits = new double[numPartitions];
+    this.splits = new double[numSplits];
     
     while (!splitTasks.isEmpty()) {
       SplitTask splitTask = splitTasks.remove();
-      if (splitTask.partitionID < numPartitions) {
+      if (splitTask.partitionID < numSplits) {
         String child1 = Integer.toBinaryString(splitTask.partitionID * 2);
         String child2 = Integer.toBinaryString(splitTask.partitionID * 2 + 1);
         int size_child1 = 0, size_child2 = 0;

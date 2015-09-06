@@ -31,6 +31,7 @@ import org.apache.hadoop.mapred.RecordWriter;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
 
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapred.GridRecordWriter2;
 import edu.umn.cs.spatialHadoop.mapred.GridRecordWriter3;
 
@@ -507,6 +508,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
       if (progressable != null)
         progressable.progress();
     }
+    LOG.info("Closing record writer with "+closingThreads.size()+" remaining threads");
 
     while (!closingThreads.isEmpty()) {
       try {

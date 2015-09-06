@@ -10,7 +10,11 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -22,6 +26,8 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.Counters.Counter;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapred.FileOutputCommitter;
 import org.apache.hadoop.mapred.FileSplit;
 import org.apache.hadoop.mapred.InputSplit;
@@ -40,16 +46,23 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.GlobalIndex;
-import edu.umn.cs.spatialHadoop.core.Partition;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
+import edu.umn.cs.spatialHadoop.util.Parallel;
+import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
 
 /**
  * Finds the minimal bounding rectangle for a file.
@@ -194,6 +207,113 @@ public class FileMBR {
       }
     }
   }
+  
+  public static Partition fileMBRLocal(Path[] inFiles, final OperationsParams params)
+      throws IOException, InterruptedException {
+    // 1- Split the input path/file to get splits that can be processed independently
+    final SpatialInputFormat3<Rectangle, Shape> inputFormat =
+        new SpatialInputFormat3<Rectangle, Shape>();
+    Job job = Job.getInstance(params);
+    SpatialInputFormat3.setInputPaths(job, inFiles);
+    final List<org.apache.hadoop.mapreduce.InputSplit> splits = inputFormat.getSplits(job);
+    int parallelism = params.getInt("parallel", Runtime.getRuntime().availableProcessors());
+
+    // 2- Process splits in parallel
+    Vector<Map<String, Partition>> allMbrs = Parallel.forEach(splits.size(), new RunnableRange<Map<String, Partition>>() {
+      @Override
+      public Map<String, Partition> run(int i1, int i2) {
+        Map<String, Partition> mbrs = new HashMap<String, Partition>();
+        for (int i = i1; i < i2; i++) {
+          try {
+            org.apache.hadoop.mapreduce.lib.input.FileSplit fsplit = (org.apache.hadoop.mapreduce.lib.input.FileSplit) splits.get(i);
+            final RecordReader<Rectangle, Iterable<Shape>> reader =
+                inputFormat.createRecordReader(fsplit, null);
+            if (reader instanceof SpatialRecordReader3) {
+              ((SpatialRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof RTreeRecordReader3) {
+              ((RTreeRecordReader3)reader).initialize(fsplit, params);
+            } else if (reader instanceof HDFRecordReader) {
+              ((HDFRecordReader)reader).initialize(fsplit, params);
+            } else {
+              throw new RuntimeException("Unknown record reader");
+            }
+            Partition p = mbrs.get(fsplit.getPath().getName());
+            if (p == null) {
+              p = new Partition();
+              p.filename = fsplit.getPath().getName();
+              p.cellId = p.filename.hashCode();
+              p.size = 0;
+              p.recordCount = 0;
+              p.set(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
+              mbrs.put(p.filename, p);
+            }
+            Text temp = new Text2();
+            while (reader.nextKeyValue()) {
+              Iterable<Shape> shapes = reader.getCurrentValue();
+              for (Shape s : shapes) {
+                Rectangle mbr = s.getMBR();
+                if (mbr != null)
+                  p.expand(mbr);
+                p.recordCount++;
+                temp.clear();
+                s.toText(temp);
+                p.size += temp.getLength() + 1;
+              }
+            }
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+        }
+        return mbrs;
+      }
+    }, parallelism);
+    Map<String, Partition> mbrs = allMbrs.remove(allMbrs.size() - 1);
+    for (Map<String, Partition> list : allMbrs) {
+      for (Partition p1 : list.values()) {
+        Partition p2 = mbrs.get(p1.filename);
+        if (p2 != null) {
+          p2.expand(p1);
+        } else {
+          mbrs.put(p1.filename, p1);
+        }
+      }
+    }
+    
+    // Cache the final result, if needed
+    for (Path inFile : inFiles) {
+      FileSystem inFs = inFile.getFileSystem(params);
+      if (!inFs.getFileStatus(inFile).isDir())
+        continue;
+      Path gindex_path = new Path(inFile, "_master.heap");
+      // Answer has been already cached (may be by another job)
+      if (inFs.exists(gindex_path))
+        continue;
+      FileStatus[] files = inFs.listStatus(inFile, SpatialSite.NonHiddenFileFilter);
+      PrintStream wktout = new PrintStream(inFs.create(new Path(inFile, "_heap.wkt"), false));
+      PrintStream gout = new PrintStream(inFs.create(gindex_path, false));
+      
+      Text text = new Text2();
+      for (FileStatus file : files) {
+        Partition p = mbrs.get(file.getPath().getName());
+        gout.println(p.toText(text).toString());
+        wktout.println(p.toWKT());
+      }
+      
+      wktout.close();
+      gout.close();
+    }
+
+    // Return the final answer
+    Partition finalResult = new Partition();
+    finalResult.size = finalResult.recordCount = 0;
+    finalResult.x1 = finalResult.y1 = Double.MAX_VALUE;
+    finalResult.x2 = finalResult.y2 = -Double.MAX_VALUE;
+    for (Partition p2 : mbrs.values())
+      finalResult.expand(p2);
+    return finalResult;
+  }
 
   /**
    * Computes the MBR of the input file using an aggregate MapReduce job.
@@ -203,7 +323,7 @@ public class FileMBR {
    * @return
    * @throws IOException
    * @throws InterruptedException 
-//   */
+   */
   private static <S extends Shape> Partition fileMBRMapReduce(Path[] inFiles,
       OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, FileMBR.class);
@@ -312,7 +432,11 @@ public class FileMBR {
     }
     
     // Process with MapReduce
-    return fileMBRMapReduce(files, params);
+    if (OperationsParams.isLocal(params, files)) {
+      return fileMBRLocal(files, params);
+    } else {
+      return fileMBRMapReduce(files, params);
+    }
   }
 
   private static void printUsage() {
