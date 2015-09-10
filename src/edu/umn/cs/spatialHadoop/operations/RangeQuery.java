@@ -179,6 +179,7 @@ public class RangeQuery {
     System.out.println("Parameters: (* marks required parameters)");
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - Path to output file");
+    System.out.println("shape:<point|rectangle|polygon> - (*) Type of shapes stored in input file");
     System.out.println("rect:<x1,y1,x2,y2> - (*) Query rectangle");
     System.out.println("-overwrite - Overwrite output file without notice");
     GenericOptionsParser.printGenericCommandUsage(System.out);
