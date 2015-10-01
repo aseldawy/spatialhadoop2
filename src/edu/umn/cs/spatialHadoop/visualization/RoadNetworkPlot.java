@@ -60,7 +60,8 @@ public class RoadNetworkPlot {
     }
     
     @Override
-    public <S extends Shape> Iterable<S> smooth(Iterable<S> r) {
+    public <S extends Shape> Iterable<S> smooth(Iterable<S> r, Rectangle dataMBR,
+    		int canvasWidth, int canvasHeight) {
       List<Geometry> bufferedRoads = new ArrayList<Geometry>();
       for (S s : r) {
         OSMPolygon poly = (OSMPolygon) s;

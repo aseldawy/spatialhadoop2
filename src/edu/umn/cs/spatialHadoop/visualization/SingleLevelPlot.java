@@ -125,7 +125,7 @@ public class SingleLevelPlot {
       int canvasY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       CanvasLayer canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partitionMBR);
       if (smooth) {
-        shapes = plotter.smooth(shapes);
+        shapes = plotter.smooth(shapes, partitionMBR, canvasX2 - canvasX1, canvasY2 - canvasY1);
         context.progress();
       }
       int i = 0;
@@ -325,7 +325,7 @@ public class SingleLevelPlot {
       int canvasY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       CanvasLayer canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partition);
       if (smooth) {
-        shapes = plotter.smooth(shapes);
+        shapes = plotter.smooth(shapes, partition, canvasX1 - canvasX1, canvasY2 - canvasY1);
         context.progress();
       }
 
@@ -574,7 +574,7 @@ public class SingleLevelPlot {
               Iterable<Shape> shapes = reader.getCurrentValue();
               // Run the plot step
               plotter.plot(partialCanvas,
-                  plotter.isSmooth() ? plotter.smooth(shapes) : shapes);
+                  plotter.isSmooth() ? plotter.smooth(shapes, partition, fwidth, fheight) : shapes);
             }
             reader.close();
           } catch (IOException e) {

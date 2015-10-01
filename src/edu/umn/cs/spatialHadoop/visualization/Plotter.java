@@ -120,7 +120,8 @@ public abstract class Plotter {
    * @param r
    * @return
    */
-  public <S extends Shape> Iterable<S> smooth(Iterable<S> r) {
+  public <S extends Shape> Iterable<S> smooth(Iterable<S> r, Rectangle dataMBR,
+		  int canvasWidth, int canvasHeight) {
     throw new RuntimeException("Not implemented");
   }
   
@@ -130,7 +131,7 @@ public abstract class Plotter {
    */
   public boolean isSmooth() {
     try {
-      smooth(new Vector<Shape>());
+      smooth(new Vector<Shape>(), new Rectangle(), 0, 0);
       return true;
     } catch (RuntimeException e) {
       return false;
