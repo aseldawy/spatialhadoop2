@@ -6,7 +6,7 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.operations;
+package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Color;
 import java.awt.geom.AffineTransform;
@@ -26,12 +26,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.visualization.FrequencyMap;
 import edu.umn.cs.spatialHadoop.visualization.FrequencyMap.GradientType;
-import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
-import edu.umn.cs.spatialHadoop.visualization.CanvasLayer;
-import edu.umn.cs.spatialHadoop.visualization.Plotter;
-import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
 
 /**
  * @author Ahmed Eldawy

@@ -46,8 +46,6 @@ import org.mortbay.jetty.handler.AbstractHandler;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
-import edu.umn.cs.spatialHadoop.operations.GeometricPlot;
-import edu.umn.cs.spatialHadoop.operations.HeatMapPlot;
 
 public class HadoopvizServer extends AbstractHandler {
 

@@ -20,7 +20,9 @@ import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
 import edu.umn.cs.spatialHadoop.nasa.SpatioAggregateQueries;
+import edu.umn.cs.spatialHadoop.visualization.GeometricPlot;
 import edu.umn.cs.spatialHadoop.visualization.HadoopvizServer;
+import edu.umn.cs.spatialHadoop.visualization.HeatMapPlot;
 import edu.umn.cs.spatialHadoop.delaunay.DelaunayTriangulation;
 
 
