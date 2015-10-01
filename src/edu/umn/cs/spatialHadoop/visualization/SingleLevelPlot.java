@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.IOException;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Random;
 import java.util.Vector;
 
@@ -72,7 +73,7 @@ public class SingleLevelPlot {
    *
    */
   public static class NoPartitionPlotMap<S extends Shape>
-    extends Mapper<Rectangle, Iterable<S>, IntWritable, CanvasLayer> {
+    extends Mapper<Rectangle, Iterable<S>, IntWritable, Canvas> {
     
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -123,7 +124,7 @@ public class SingleLevelPlot {
       int canvasX2 = (int) Math.ceil((partitionMBR.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
       int canvasY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int canvasY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      CanvasLayer canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partitionMBR);
+      Canvas canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partitionMBR);
       if (smooth) {
         shapes = plotter.smooth(shapes, partitionMBR, canvasX2 - canvasX1, canvasY2 - canvasY1);
         context.progress();
@@ -146,7 +147,7 @@ public class SingleLevelPlot {
   }
   
   public static class NoPartitionPlotCombine<S extends Shape>
-  extends Reducer<IntWritable, CanvasLayer, IntWritable, CanvasLayer> {
+  extends Reducer<IntWritable, Canvas, IntWritable, Canvas> {
     
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -177,17 +178,17 @@ public class SingleLevelPlot {
     
     @Override
     protected void reduce(IntWritable key,
-        Iterable<CanvasLayer> intermediateLayers, Context context)
+        Iterable<Canvas> intermediateLayers, Context context)
             throws IOException, InterruptedException {
-      Iterator<CanvasLayer> iLayers = intermediateLayers.iterator();
+      Iterator<Canvas> iLayers = intermediateLayers.iterator();
       if (iLayers.hasNext()) {
-        CanvasLayer layer = iLayers.next();
+        Canvas layer = iLayers.next();
         if (!iLayers.hasNext()) {
           // Only one layer in the input. Output it as-is
           key.set(random.nextInt(numReducers));
           context.write(key, layer);
         } else {
-          CanvasLayer finalLayer = plotter.createCanvas(imageWidth, imageHeight, inputMBR);
+          Canvas finalLayer = plotter.createCanvas(imageWidth, imageHeight, inputMBR);
           plotter.merge(finalLayer, layer);
           while (iLayers.hasNext()) {
             layer = iLayers.next();
@@ -201,7 +202,7 @@ public class SingleLevelPlot {
   }
   
   public static class NoPartitionPlotReduce<S extends Shape>
-    extends Reducer<IntWritable, CanvasLayer, NullWritable, CanvasLayer> {
+    extends Reducer<IntWritable, Canvas, NullWritable, Canvas> {
 
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -226,12 +227,12 @@ public class SingleLevelPlot {
     
     @Override
     protected void reduce(IntWritable dummy,
-        Iterable<CanvasLayer> intermediateLayers, Context context)
+        Iterable<Canvas> intermediateLayers, Context context)
         throws IOException, InterruptedException {
       // TODO Auto-generated method stub
-      CanvasLayer finalLayer = plotter.createCanvas(imageWidth, imageHeight, inputMBR);
+      Canvas finalLayer = plotter.createCanvas(imageWidth, imageHeight, inputMBR);
       
-      for (CanvasLayer intermediateLayer : intermediateLayers) {
+      for (Canvas intermediateLayer : intermediateLayers) {
         plotter.merge(finalLayer, intermediateLayer);
         context.progress();
       }
@@ -283,7 +284,7 @@ public class SingleLevelPlot {
   }
   
   public static class RepartitionPlotReduce
-      extends Reducer<IntWritable, Shape, NullWritable, CanvasLayer> {
+      extends Reducer<IntWritable, Shape, NullWritable, Canvas> {
     
     /**The partitioner used to partitioner the data across reducers*/
     private Partitioner partitioner;
@@ -323,7 +324,7 @@ public class SingleLevelPlot {
       int canvasX2 = (int) Math.ceil((partition.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
       int canvasY1 = (int) Math.floor((partition.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       int canvasY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      CanvasLayer canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partition);
+      Canvas canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partition);
       if (smooth) {
         shapes = plotter.smooth(shapes, partition, canvasX1 - canvasX1, canvasY2 - canvasY1);
         context.progress();
@@ -478,29 +479,25 @@ public class SingleLevelPlot {
   }
 
   public static void plotLocal(Path[] inFiles, Path outFile,
-      final Class<? extends Plotter> plotterClass, final OperationsParams params) throws IOException, InterruptedException {
-
-    boolean vflip = params.getBoolean("vflip", true);
-    
+      final Class<? extends Plotter> plotterClass,
+      final OperationsParams params) throws IOException, InterruptedException {
     OperationsParams mbrParams = new OperationsParams(params);
     mbrParams.setBoolean("background", false);
-    final Rectangle inputMBR = params.get("mbr") != null ?
+    final Rectangle inputMBR = params.get(InputMBR) != null ?
         params.getShape("mbr").getMBR() : FileMBR.fileMBR(inFiles, mbrParams);
-    OperationsParams.setShape(params, InputMBR, inputMBR);
+    if (params.get(InputMBR) == null)
+      OperationsParams.setShape(params, InputMBR, inputMBR);
 
     // Retrieve desired output image size and keep aspect ratio if needed
     int width = params.getInt("width", 1000);
     int height = params.getInt("height", 1000);
     if (params.getBoolean("keepratio", true)) {
-      // Adjust width and height to maintain aspect ratio
-      // Store the adjusted values back in params in case the caller needs to
-      // retrieve them
-      if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height) {
-        // Fix width and change height
+      // Adjust width and height to maintain aspect ratio and store the adjusted
+      // values back in params in case the caller needs to retrieve them
+      if (inputMBR.getWidth() / inputMBR.getHeight() > (double) width / height)
         params.setInt("height", height = (int) (inputMBR.getHeight() * width / inputMBR.getWidth()));
-      } else {
+      else
         params.setInt("width", width = (int) (inputMBR.getWidth() * height / inputMBR.getHeight()));
-      }
     }
     // Store width and height in final variables to make them accessible in parallel
     final int fwidth = width, fheight = height;
@@ -537,9 +534,9 @@ public class SingleLevelPlot {
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
     int parallelism = params.getInt("parallel",
         Runtime.getRuntime().availableProcessors());
-    Vector<CanvasLayer> partialCanvases = Parallel.forEach(fsplits.length, new RunnableRange<CanvasLayer>() {
+    List<Canvas> partialCanvases = Parallel.forEach(fsplits.length, new RunnableRange<Canvas>() {
       @Override
-      public CanvasLayer run(int i1, int i2) {
+      public Canvas run(int i1, int i2) {
         Plotter plotter;
         try {
           plotter = plotterClass.newInstance();
@@ -550,7 +547,7 @@ public class SingleLevelPlot {
         }
         plotter.configure(params);
         // Create the partial layer that will contain the plot of the assigned partitions
-        CanvasLayer partialCanvas = plotter.createCanvas(fwidth, fheight, inputMBR);
+        Canvas partialCanvas = plotter.createCanvas(fwidth, fheight, inputMBR);
         
         for (int i = i1; i < i2; i++) {
           try {
@@ -596,11 +593,14 @@ public class SingleLevelPlot {
     } catch (IllegalAccessException e) {
       throw new RuntimeException("Error creating plotter", e);
     }
+    
+    // Whether we should vertically flip the final image or not
+    boolean vflip = params.getBoolean("vflip", true);
     if (merge) {
       LOG.info("Merging "+partialCanvases.size()+" partial canvases");
       // Create the final canvas that will contain the final image
-      CanvasLayer finalCanvas = plotter.createCanvas(fwidth, fheight, inputMBR);
-      for (CanvasLayer partialCanvas : partialCanvases)
+      Canvas finalCanvas = plotter.createCanvas(fwidth, fheight, inputMBR);
+      for (Canvas partialCanvas : partialCanvases)
         plotter.merge(finalCanvas, partialCanvas);
       
       // Finally, write the resulting image to the given output path

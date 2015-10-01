@@ -9,7 +9,7 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.IOException;
-import java.util.Vector;
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -34,7 +34,7 @@ import edu.umn.cs.spatialHadoop.util.Parallel;
  * @author Ahmed Eldawy
  *
  */
-public class CanvasOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
+public class CanvasOutputFormat extends FileOutputFormat<Object, Canvas> {
   
   private static final String InputMBR = "mbr";
 
@@ -43,13 +43,13 @@ public class CanvasOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
    * @author Ahmed Eldawy
    *
    */
-  class CanvasRecordWriter extends RecordWriter<Object, CanvasLayer> {
+  class CanvasRecordWriter extends RecordWriter<Object, Canvas> {
     /**The output file where all canvases are written*/
     private FSDataOutputStream outFile;
     /**Plotter used to merge intermediate canvases*/
     private Plotter plotter;
     /**The canvas resulting of merging all written canvases*/
-    private CanvasLayer mergedCanvas;
+    private Canvas mergedCanvas;
     /**Associated task context to report progress*/
     private TaskAttemptContext task;
     
@@ -66,7 +66,7 @@ public class CanvasOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
     }
 
     @Override
-    public void write(Object dummy, CanvasLayer r) throws IOException {
+    public void write(Object dummy, Canvas r) throws IOException {
       plotter.merge(mergedCanvas, r);
       task.progress();
     }
@@ -81,7 +81,7 @@ public class CanvasOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
   }
   
   @Override
-  public RecordWriter<Object, CanvasLayer> getRecordWriter(
+  public RecordWriter<Object, Canvas> getRecordWriter(
       TaskAttemptContext task) throws IOException, InterruptedException {
     Path file = getDefaultWorkFile(task, "");
     FileSystem fs = file.getFileSystem(task.getConfiguration());
@@ -111,13 +111,13 @@ public class CanvasOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
       return;
     }
     System.out.println(System.currentTimeMillis()+": Merging "+resultFiles.length+" layers into one");
-    Vector<CanvasLayer> intermediateLayers = Parallel.forEach(resultFiles.length, new Parallel.RunnableRange<CanvasLayer>() {
+    List<Canvas> intermediateLayers = Parallel.forEach(resultFiles.length, new Parallel.RunnableRange<Canvas>() {
       @Override
-      public CanvasLayer run(int i1, int i2) {
+      public Canvas run(int i1, int i2) {
         Plotter plotter = Plotter.getPlotter(conf);
         // The canvas that contains the merge of all assigned layers
-        CanvasLayer finalLayer = null;
-        CanvasLayer tempLayer = plotter.createCanvas(1, 1, new Rectangle());
+        Canvas finalLayer = null;
+        Canvas tempLayer = plotter.createCanvas(1, 1, new Rectangle());
         for (int i = i1; i < i2; i++) {
           FileStatus resultFile = resultFiles[i];
           try {
@@ -151,12 +151,12 @@ public class CanvasOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
     
     // Merge all intermediate layers into one final layer
     Plotter plotter = Plotter.getPlotter(conf);
-    CanvasLayer finalLayer;
+    Canvas finalLayer;
     if (intermediateLayers.size() == 1) {
-      finalLayer = intermediateLayers.elementAt(0);
+      finalLayer = intermediateLayers.get(0);
     } else {
       finalLayer = plotter.createCanvas(width, height, inputMBR);
-      for (CanvasLayer intermediateLayer : intermediateLayers) {
+      for (Canvas intermediateLayer : intermediateLayers) {
         plotter.merge(finalLayer, intermediateLayer);
       }
     }

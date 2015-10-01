@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
 import java.text.ParseException;
+import java.util.List;
 import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -115,7 +116,7 @@ public class SpatioAggregateQueries {
     final int resolution = AggregateQuadTree.getResolution(fs, allMatchingFiles.get(0));
     
     // 3- Query all matching files in parallel
-    Vector<Node> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<AggregateQuadTree.Node>() {
+    List<Node> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<AggregateQuadTree.Node>() {
       @Override
       public Node run(int i1, int i2) {
         Node threadResult = new AggregateQuadTree.Node();
@@ -203,7 +204,7 @@ public class SpatioAggregateQueries {
     queryInMatchingTile.y = (int) Math.floor((queryPoint.y - v) * resolution);
     
     // 3- Query all matching files in parallel
-    Vector<Long> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<Long>() {
+    List<Long> threadsResults = Parallel.forEach(allMatchingFiles.size(), new RunnableRange<Long>() {
       @Override
       public Long run(int i1, int i2) {
         ResultCollector<AggregateQuadTree.PointValue> internalOutput = output == null ? null :

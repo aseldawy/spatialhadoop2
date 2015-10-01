@@ -8,6 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.util;
 
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -56,15 +57,15 @@ public class Parallel {
     }
   }
   
-  public static <T> Vector<T> forEach(int size, RunnableRange<T> r) throws InterruptedException {
+  public static <T> List<T> forEach(int size, RunnableRange<T> r) throws InterruptedException {
     return forEach(0, size, r, Runtime.getRuntime().availableProcessors());
   }
   
-  public static <T> Vector<T> forEach(int size, RunnableRange<T> r, int parallelism) throws InterruptedException {
+  public static <T> List<T> forEach(int size, RunnableRange<T> r, int parallelism) throws InterruptedException {
       return forEach(0, size, r, parallelism);
     }
   
-  public static <T> Vector<T> forEach(int start, int end, RunnableRange<T> r, int parallelism) throws InterruptedException {
+  public static <T> List<T> forEach(int start, int end, RunnableRange<T> r, int parallelism) throws InterruptedException {
     Vector<T> results = new Vector<T>();
     if (end <= start)
       return results;
@@ -113,7 +114,7 @@ public class Parallel {
     final int[] values = new int[1000000];
     for (int i = 0; i < values.length; i++)
       values[i] = i;
-    Vector<Long> results = Parallel.forEach(values.length, new RunnableRange<Long>() {
+    List<Long> results = Parallel.forEach(values.length, new RunnableRange<Long>() {
       @Override
       public Long run(int i1, int i2) {
         long total = 0;

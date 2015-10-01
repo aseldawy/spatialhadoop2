@@ -219,7 +219,7 @@ public class FileMBR {
     int parallelism = params.getInt("parallel", Runtime.getRuntime().availableProcessors());
 
     // 2- Process splits in parallel
-    Vector<Map<String, Partition>> allMbrs = Parallel.forEach(splits.size(), new RunnableRange<Map<String, Partition>>() {
+    List<Map<String, Partition>> allMbrs = Parallel.forEach(splits.size(), new RunnableRange<Map<String, Partition>>() {
       @Override
       public Map<String, Partition> run(int i1, int i2) {
         Map<String, Partition> mbrs = new HashMap<String, Partition>();

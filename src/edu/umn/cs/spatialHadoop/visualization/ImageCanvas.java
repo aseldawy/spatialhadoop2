@@ -28,7 +28,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
-public class ImageCanvas extends CanvasLayer {
+public class ImageCanvas extends Canvas {
 
   /**
    * The underlying image

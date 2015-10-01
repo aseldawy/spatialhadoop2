@@ -30,7 +30,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  * @author Ahmed Eldawy
  *
  */
-public class FrequencyMap extends CanvasLayer {
+public class FrequencyMap extends Canvas {
   @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(FrequencyMap.class);
   

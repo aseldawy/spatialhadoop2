@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 import java.util.Vector;
 
@@ -106,7 +107,7 @@ public class LocalSampler {
       }
     }
     
-    Vector<Integer> actualSampleSizes = Parallel.forEach(files.length, new RunnableRange<Integer>() {
+    List<Integer> actualSampleSizes = Parallel.forEach(files.length, new RunnableRange<Integer>() {
       @Override
       public Integer run(int i1, int i2) {
         int sampledLines;

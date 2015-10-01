@@ -190,7 +190,7 @@ public class Union {
       final FileStatus[] outFiles = fs.listStatus(outPath, SpatialSite.NonHiddenFileFilter);
       
       try {
-        Vector<List<Geometry>> allLists = Parallel.forEach(outFiles.length, new RunnableRange<List<Geometry>>() {
+        List<List<Geometry>> allLists = Parallel.forEach(outFiles.length, new RunnableRange<List<Geometry>>() {
           @Override
           public List<Geometry> run(int i1, int i2) {
             try {
@@ -289,7 +289,7 @@ public class Union {
     // 2- Process splits in parallel
     final List<Float> progresses = new Vector<Float>();
     final IntWritable overallProgress = new IntWritable(0);
-    Vector<List<Geometry>> results = Parallel.forEach(splits.size(), new RunnableRange<List<Geometry>>() {
+    List<List<Geometry>> results = Parallel.forEach(splits.size(), new RunnableRange<List<Geometry>>() {
       @Override
       public List<Geometry> run(final int i1, final int i2) {
         final int pi;

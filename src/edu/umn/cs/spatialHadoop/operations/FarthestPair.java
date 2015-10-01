@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -427,7 +426,7 @@ public class FarthestPair {
     
     // 2- Read all input points in memory
     LOG.info("Reading points from "+splits.size()+" splits");
-    Vector<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
+    List<Integer> numsPoints = Parallel.forEach(splits.size(), new RunnableRange<Integer>() {
       @Override
       public Integer run(int i1, int i2) {
         try {

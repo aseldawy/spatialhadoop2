@@ -137,7 +137,7 @@ public class DelaunayTriangulationOutputFormat extends
       });
       
       try {
-        Vector<List<SimpleGraph>> allLists = Parallel.forEach(nonFinalFiles.length, new RunnableRange<List<SimpleGraph>>() {
+        List<List<SimpleGraph>> allLists = Parallel.forEach(nonFinalFiles.length, new RunnableRange<List<SimpleGraph>>() {
           @Override
           public List<SimpleGraph> run(int i1, int i2) {
             try {

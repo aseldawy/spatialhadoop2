@@ -47,31 +47,31 @@ public class GeometricPlot {
     }
 
     @Override
-    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
+    public Canvas createCanvas(int width, int height, Rectangle mbr) {
       ImageCanvas imageCanvas = new ImageCanvas(mbr, width, height);
       imageCanvas.setColor(strokeColor);
       return imageCanvas;
     }
 
     @Override
-    public void plot(CanvasLayer canvasLayer, Shape shape) {
+    public void plot(Canvas canvasLayer, Shape shape) {
       ImageCanvas imgLayer = (ImageCanvas) canvasLayer;
       imgLayer.drawShape(shape);
     }
 
     @Override
-    public Class<? extends CanvasLayer> getCanvasClass() {
+    public Class<? extends Canvas> getCanvasClass() {
       return ImageCanvas.class;
     }
 
     @Override
-    public void merge(CanvasLayer finalLayer,
-        CanvasLayer intermediateLayer) {
+    public void merge(Canvas finalLayer,
+        Canvas intermediateLayer) {
       ((ImageCanvas)finalLayer).mergeWith((ImageCanvas) intermediateLayer);
     }
 
     @Override
-    public void writeImage(CanvasLayer layer, DataOutputStream out,
+    public void writeImage(Canvas layer, DataOutputStream out,
         boolean vflip) throws IOException {
       BufferedImage img =  ((ImageCanvas)layer).getImage();
       // Flip image vertically if needed

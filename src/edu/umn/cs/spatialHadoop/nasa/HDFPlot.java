@@ -35,7 +35,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
-import edu.umn.cs.spatialHadoop.visualization.CanvasLayer;
+import edu.umn.cs.spatialHadoop.visualization.Canvas;
 import edu.umn.cs.spatialHadoop.visualization.Plotter;
 import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
 
@@ -103,7 +103,7 @@ public class HDFPlot {
     }
     
     @Override
-    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
+    public Canvas createCanvas(int width, int height, Rectangle mbr) {
       HDFRasterLayer rasterLayer = new HDFRasterLayer(mbr, width, height);
       rasterLayer.setGradientInfo(color1, color2, gradientType);
       if (this.minValue <= maxValue)
@@ -112,7 +112,7 @@ public class HDFPlot {
     }
     
     @Override
-    public void plot(CanvasLayer layer, Iterable<? extends Shape> shapes) {
+    public void plot(Canvas layer, Iterable<? extends Shape> shapes) {
       Iterator<? extends Shape> iShapes = shapes.iterator();
       if (!iShapes.hasNext())
         return;
@@ -126,7 +126,7 @@ public class HDFPlot {
     }
     
     @Override
-    public void plot(CanvasLayer canvasLayer, Shape shape) {
+    public void plot(Canvas canvasLayer, Shape shape) {
       HDFRasterLayer hdfMap = (HDFRasterLayer) canvasLayer;
       int x1, y1, x2, y2;
       Rectangle inputMBR = canvasLayer.getInputMBR();
@@ -149,18 +149,18 @@ public class HDFPlot {
     }
 
     @Override
-    public Class<? extends CanvasLayer> getCanvasClass() {
+    public Class<? extends Canvas> getCanvasClass() {
       return HDFRasterLayer.class;
     }
 
     @Override
-    public void merge(CanvasLayer finalLayer,
-        CanvasLayer intermediateLayer) {
+    public void merge(Canvas finalLayer,
+        Canvas intermediateLayer) {
       ((HDFRasterLayer)finalLayer).mergeWith((HDFRasterLayer) intermediateLayer);
     }
 
     @Override
-    public void writeImage(CanvasLayer layer, DataOutputStream out,
+    public void writeImage(Canvas layer, DataOutputStream out,
         boolean vflip) throws IOException {
       HDFRasterLayer hdfLayer = (HDFRasterLayer)layer;
       if (waterMaskPath != null) {
@@ -198,7 +198,7 @@ public class HDFPlot {
   
   public static class HDFRasterizeWaterMask extends HDFRasterizer {
     @Override
-    public void writeImage(CanvasLayer layer, DataOutputStream out,
+    public void writeImage(Canvas layer, DataOutputStream out,
         boolean vflip) throws IOException {
       HDFRasterLayer hdfLayer = ((HDFRasterLayer)layer);
       BitArray bits = new BitArray((long)hdfLayer.getWidth() * hdfLayer.getHeight());

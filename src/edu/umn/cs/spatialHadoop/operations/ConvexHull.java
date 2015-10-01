@@ -137,7 +137,7 @@ public class ConvexHull {
     
     // 2- Read all input points in memory
     LOG.info("Reading points from "+splits.size()+" splits");
-    Vector<Point[]> allLists = Parallel.forEach(splits.size(), new RunnableRange<Point[]>() {
+    List<Point[]> allLists = Parallel.forEach(splits.size(), new RunnableRange<Point[]>() {
       @Override
       public Point[] run(int i1, int i2) {
         try {

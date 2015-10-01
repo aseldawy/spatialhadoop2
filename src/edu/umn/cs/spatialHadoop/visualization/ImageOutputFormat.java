@@ -35,14 +35,14 @@ import edu.umn.cs.spatialHadoop.io.Text2;
  * @author Ahmed Eldawy
  *
  */
-public class ImageOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
+public class ImageOutputFormat extends FileOutputFormat<Object, Canvas> {
 
   /**
    * Writes canvases to a file
    * @author Ahmed Eldawy
    *
    */
-  class ImageRecordWriter extends RecordWriter<Object, CanvasLayer> {
+  class ImageRecordWriter extends RecordWriter<Object, Canvas> {
     /**Plotter used to merge intermediate canvases*/
     private Plotter plotter;
     private Path outPath;
@@ -54,7 +54,7 @@ public class ImageOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
     /**PrintStream to write the master file*/
     private PrintStream masterFile;
     /**The canvas resulting of merging all written canvases*/
-    private CanvasLayer mergedCanvas;
+    private Canvas mergedCanvas;
     private int imageHeight;
 
     public ImageRecordWriter(FileSystem fs, Path taskOutputPath,
@@ -80,7 +80,7 @@ public class ImageOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
     }
 
     @Override
-    public void write(Object dummy, CanvasLayer r) throws IOException {
+    public void write(Object dummy, Canvas r) throws IOException {
       String suffix = String.format("-%05d.png", canvasesWritten++);
       Path p = new Path(outPath.getParent(), outPath.getName()+suffix);
       FSDataOutputStream outFile = outFS.create(p);
@@ -101,7 +101,7 @@ public class ImageOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
   }
   
   @Override
-  public RecordWriter<Object, CanvasLayer> getRecordWriter(
+  public RecordWriter<Object, Canvas> getRecordWriter(
       TaskAttemptContext task) throws IOException, InterruptedException {
     Path file = getDefaultWorkFile(task, "");
     FileSystem fs = file.getFileSystem(task.getConfiguration());

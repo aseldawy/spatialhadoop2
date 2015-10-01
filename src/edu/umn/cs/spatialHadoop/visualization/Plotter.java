@@ -63,14 +63,14 @@ public abstract class Plotter {
     throw new RuntimeException("Not implemented");
   }
 
-/**
+  /**
    * Creates an empty canvas of the given width and height.
    * @param width - Width of the created layer in pixels
    * @param height - Height of the created layer in pixels
    * @param mbr - The minimal bounding rectangle of the layer in the input
    * @return
    */
-  public abstract CanvasLayer createCanvas(int width, int height, Rectangle mbr);
+  public abstract Canvas createCanvas(int width, int height, Rectangle mbr);
 
   /**
    * Plots one shape to the given layer
@@ -78,14 +78,14 @@ public abstract class Plotter {
    * using the method {@link #createCanvas(int, int, Rectangle)}.
    * @param shape - the shape to plot
    */
-  public abstract void plot(CanvasLayer layer, Shape shape);
+  public abstract void plot(Canvas layer, Shape shape);
 
-/**
+  /**
    * Merges an intermediate layer into the final layer based on its location
    * @param finalLayer
    * @param intermediateLayer
    */
-  public abstract void merge(CanvasLayer finalLayer, CanvasLayer intermediateLayer);
+  public abstract void merge(Canvas finalLayer, Canvas intermediateLayer);
 
   /**
    * Writes a canvas as an image to the output.
@@ -93,7 +93,7 @@ public abstract class Plotter {
    * @param out - the output stream to which the image will be written
    * @param vflip - if <code>true</code>, the image is vertically flipped before written
    */
-  public abstract void writeImage(CanvasLayer layer, DataOutputStream out,
+  public abstract void writeImage(Canvas layer, DataOutputStream out,
       boolean vflip) throws IOException;
   
   /**
@@ -109,21 +109,21 @@ public abstract class Plotter {
     }
   }
 
-/**
+  /**
    * Returns the raster class associated with this rasterizer
    * @return
    */
-  public Class<? extends CanvasLayer> getCanvasClass() {
+  public Class<? extends Canvas> getCanvasClass() {
     return this.createCanvas(0, 0, new Rectangle()).getClass();
   }
 
-/**
+  /**
    * Plots a set of shapes to the given layer
    * @param layer - the canvas to plot to. This canvas has to be created
    * using the method {@link #createCanvas(int, int, Rectangle)}.
    * @param shapes - a set of shapes to plot
    */
-  public void plot(CanvasLayer layer, Iterable<? extends Shape> shapes) {
+  public void plot(Canvas layer, Iterable<? extends Shape> shapes) {
     for (Shape shape : shapes)
       plot(layer, shape);
   }

@@ -18,7 +18,7 @@ import org.apache.hadoop.io.Writable;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 /**An abstract interface for any canvas*/
-public abstract class CanvasLayer implements Writable {
+public abstract class Canvas implements Writable {
   /**The MBR of the this layer in input coordinates*/
   protected Rectangle inputMBR;
   
@@ -28,9 +28,9 @@ public abstract class CanvasLayer implements Writable {
   /**Height of this layer in pixels*/
   protected int height;
   
-  public CanvasLayer() {}
+  public Canvas() {}
   
-  public CanvasLayer(Rectangle inputMBR, int width, int height) {
+  public Canvas(Rectangle inputMBR, int width, int height) {
     super();
     this.inputMBR = inputMBR;
     this.width = width;

@@ -70,7 +70,7 @@ public class MultilevelPlot {
   private static final String FlatPartitioningLevelThreshold = "MultilevelPlot.FlatPartitioningLevelThreshold";
   
   public static class FlatPartitionMap extends
-      Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, CanvasLayer> {
+      Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Canvas> {
     /**Minimum and maximum levels of the pyramid to plot (inclusive and zero-based)*/
     private int minLevel, maxLevel;
     
@@ -125,7 +125,7 @@ public class MultilevelPlot {
       if (smooth)
         shapes = plotter.smooth(shapes, partition, tileWidth, tileHeight);
       TileIndex key = new TileIndex();
-      Map<TileIndex, CanvasLayer> canvasLayers = new HashMap<TileIndex, CanvasLayer>();
+      Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
       int i = 0; // Counter to report progress often
       for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
@@ -137,7 +137,7 @@ public class MultilevelPlot {
         for (key.level = maxLevel; key.level >= minLevel; key.level--) {
           for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
             for (key.y = overlappingCells.y; key.y < overlappingCells.y + overlappingCells.height; key.y++) {
-              CanvasLayer canvasLayer = canvasLayers.get(key);
+              Canvas canvasLayer = canvasLayers.get(key);
               if (canvasLayer == null) {
                 Rectangle tileMBR = new Rectangle();
                 int gridSize = 1 << key.level;
@@ -165,14 +165,14 @@ public class MultilevelPlot {
           context.progress();
       }
       // Write all created layers to the output
-      for (Map.Entry<TileIndex, CanvasLayer> entry : canvasLayers.entrySet()) {
+      for (Map.Entry<TileIndex, Canvas> entry : canvasLayers.entrySet()) {
         context.write(entry.getKey(), entry.getValue());
       }
     }
   }
   
   public static class FlatPartitionReduce
-      extends Reducer<TileIndex, CanvasLayer, TileIndex, CanvasLayer> {
+      extends Reducer<TileIndex, Canvas, TileIndex, Canvas> {
     /**Minimum and maximum levels of the pyramid to plot (inclusive and zero-based)*/
     private int minLevel, maxLevel;
     
@@ -213,7 +213,7 @@ public class MultilevelPlot {
     }
     
     @Override
-    protected void reduce(TileIndex tileID, Iterable<CanvasLayer> interLayers,
+    protected void reduce(TileIndex tileID, Iterable<Canvas> interLayers,
         Context context) throws IOException, InterruptedException {
       Rectangle tileMBR = new Rectangle();
       int gridSize = 1 << tileID.level;
@@ -222,8 +222,8 @@ public class MultilevelPlot {
       tileMBR.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
       tileMBR.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y+1)) / gridSize;
 
-      CanvasLayer finalLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-      for (CanvasLayer interLayer : interLayers) {
+      Canvas finalLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+      for (Canvas interLayer : interLayers) {
         plotter.merge(finalLayer, interLayer);
         context.progress();
       }
@@ -304,7 +304,7 @@ public class MultilevelPlot {
   }
   
   public static class PyramidPartitionReduce extends
-      Reducer<TileIndex, Shape, TileIndex, CanvasLayer> {
+      Reducer<TileIndex, Shape, TileIndex, Canvas> {
 
     private int minLevel, maxLevel;
     /**Maximum level to replicate to*/
@@ -365,7 +365,7 @@ public class MultilevelPlot {
       bottomGrid.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
       bottomGrid.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y+1)) / gridSize;
       bottomGrid.columns = bottomGrid.rows = (1 << (level2 - level1));
-      Map<TileIndex, CanvasLayer> canvasLayers = new HashMap<TileIndex, CanvasLayer>();
+      Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
       
       TileIndex key = new TileIndex();
       
@@ -388,7 +388,7 @@ public class MultilevelPlot {
         for (key.level = level2; key.level >= level1; key.level--) {
           for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
             for (key.y = overlappingCells.y; key.y < overlappingCells.y + overlappingCells.height; key.y++) {
-              CanvasLayer canvasLayer = canvasLayers.get(key);
+              Canvas canvasLayer = canvasLayers.get(key);
               if (canvasLayer == null) {
                 Rectangle tileMBR = new Rectangle();
                 gridSize = 1 << key.level;
@@ -419,7 +419,7 @@ public class MultilevelPlot {
       }
       context.setStatus("Writing "+canvasLayers.size()+" tiles");
       // Write all created layers to the output as images
-      for (Map.Entry<TileIndex, CanvasLayer> entry : canvasLayers.entrySet()) {
+      for (Map.Entry<TileIndex, Canvas> entry : canvasLayers.entrySet()) {
         context.write(entry.getKey(), entry.getValue());
       }
     }
@@ -578,7 +578,7 @@ public class MultilevelPlot {
       TileIndex key = new TileIndex();
       
       // All canvases in the pyramid, one per tile
-      Map<TileIndex, CanvasLayer> canvasLayers = new HashMap<TileIndex, CanvasLayer>();
+      Map<TileIndex, Canvas> canvases = new HashMap<TileIndex, Canvas>();
       for (InputSplit split : splits) {
         FileSplit fsplit = (FileSplit) split;
         RecordReader<Rectangle, Iterable<Shape>> reader =
@@ -609,18 +609,18 @@ public class MultilevelPlot {
             for (key.level = maxLevel; key.level >= minLevel; key.level--) {
               for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
                 for (key.y = overlappingCells.y; key.y < overlappingCells.y + overlappingCells.height; key.y++) {
-                  CanvasLayer canvasLayer = canvasLayers.get(key);
-                  if (canvasLayer == null) {
+                  Canvas canvas = canvases.get(key);
+                  if (canvas == null) {
                     Rectangle tileMBR = new Rectangle();
                     int gridSize = 1 << key.level;
                     tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
                     tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x+1)) / gridSize;
                     tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
                     tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y+1)) / gridSize;
-                    canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-                    canvasLayers.put(key.clone(), canvasLayer);
+                    canvas = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+                    canvases.put(key.clone(), canvas);
                   }
-                  plotter.plot(canvasLayer, shape);
+                  plotter.plot(canvas, shape);
                 }
               }
               // Update overlappingCells for the higher level
@@ -678,10 +678,10 @@ public class MultilevelPlot {
       htmlOut.close();
 
       // Write the tiles
-      final Entry<TileIndex, CanvasLayer>[] entries =
-          canvasLayers.entrySet().toArray(new Map.Entry[canvasLayers.size()]);
+      final Entry<TileIndex, Canvas>[] entries =
+          canvases.entrySet().toArray(new Map.Entry[canvases.size()]);
       // Clear the hash map to save memory as it is no longer needed
-      canvasLayers.clear();
+      canvases.clear();
       int parallelism = params.getInt("parallel",
           Runtime.getRuntime().availableProcessors());
       Parallel.forEach(entries.length, new RunnableRange<Object>() {
@@ -691,7 +691,7 @@ public class MultilevelPlot {
             Plotter plotter = plotterClass.newInstance();
             plotter.configure(params);
             for (int i = i1; i < i2; i++) {
-              Map.Entry<TileIndex, CanvasLayer> entry = entries[i];
+              Map.Entry<TileIndex, Canvas> entry = entries[i];
               TileIndex key = entry.getKey();
               if (vflip)
                 key.y = ((1 << key.level) - 1) - key.y;

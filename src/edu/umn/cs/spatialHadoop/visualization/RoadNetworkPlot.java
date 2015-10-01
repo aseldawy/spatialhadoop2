@@ -82,7 +82,7 @@ public class RoadNetworkPlot {
     }
 
     @Override
-    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
+    public Canvas createCanvas(int width, int height, Rectangle mbr) {
       if (!vector) {
         ImageCanvas imageCanvas = new ImageCanvas(mbr, width, height);
         imageCanvas.setColor(strokeColor);
@@ -93,7 +93,7 @@ public class RoadNetworkPlot {
     }
 
     @Override
-    public void plot(CanvasLayer canvasLayer, Shape shape) {
+    public void plot(Canvas canvasLayer, Shape shape) {
       if (!vector) {
         ImageCanvas imgLayer = (ImageCanvas) canvasLayer;
         imgLayer.drawShape(shape);
@@ -104,13 +104,13 @@ public class RoadNetworkPlot {
     }
 
     @Override
-    public Class<? extends CanvasLayer> getCanvasClass() {
+    public Class<? extends Canvas> getCanvasClass() {
       return vector? SVGCanvas.class : ImageCanvas.class;
     }
 
     @Override
-    public void merge(CanvasLayer finalLayer,
-        CanvasLayer intermediateLayer) {
+    public void merge(Canvas finalLayer,
+        Canvas intermediateLayer) {
       if (!vector ) {
         ((ImageCanvas)finalLayer).mergeWith((ImageCanvas) intermediateLayer);
       } else {
@@ -119,7 +119,7 @@ public class RoadNetworkPlot {
     }
     
     @Override
-    public void writeImage(CanvasLayer layer, DataOutputStream out,
+    public void writeImage(Canvas layer, DataOutputStream out,
         boolean vflip) throws IOException {
       if (!vector) {
         BufferedImage img =  ((ImageCanvas)layer).getImage();

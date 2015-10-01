@@ -71,7 +71,7 @@ public class HeatMapPlot {
     }
     
     @Override
-    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
+    public Canvas createCanvas(int width, int height, Rectangle mbr) {
       FrequencyMap rasterLayer = new FrequencyMap(mbr, width, height, radius, smoothType);
       rasterLayer.setGradientInfor(color1, color2, gradientType);
       if (this.minValue <= maxValue)
@@ -80,7 +80,7 @@ public class HeatMapPlot {
     }
 
     @Override
-    public void plot(CanvasLayer canvasLayer, Shape shape) {
+    public void plot(Canvas canvasLayer, Shape shape) {
       FrequencyMap frequencyMap = (FrequencyMap) canvasLayer;
       Point center;
       if (shape instanceof Point) {
@@ -101,18 +101,18 @@ public class HeatMapPlot {
     }
 
     @Override
-    public Class<? extends CanvasLayer> getCanvasClass() {
+    public Class<? extends Canvas> getCanvasClass() {
       return FrequencyMap.class;
     }
 
     @Override
-    public void merge(CanvasLayer finalLayer,
-        CanvasLayer intermediateLayer) {
+    public void merge(Canvas finalLayer,
+        Canvas intermediateLayer) {
       ((FrequencyMap)finalLayer).mergeWith((FrequencyMap) intermediateLayer);
     }
 
     @Override
-    public void writeImage(CanvasLayer layer, DataOutputStream out,
+    public void writeImage(Canvas layer, DataOutputStream out,
         boolean vflip) throws IOException {
       BufferedImage img =  ((FrequencyMap)layer).asImage();
       // Flip image vertically if needed

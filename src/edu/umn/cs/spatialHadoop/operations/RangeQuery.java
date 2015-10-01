@@ -132,7 +132,7 @@ public class RangeQuery {
     final List<InputSplit> splits = inputFormat.getSplits(job);
     
     // 2- Process splits in parallel
-    Vector<Long> results = Parallel.forEach(splits.size(), new RunnableRange<Long>() {
+    List<Long> results = Parallel.forEach(splits.size(), new RunnableRange<Long>() {
       @Override
       public Long run(int i1, int i2) {
         long results = 0;

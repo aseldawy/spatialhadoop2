@@ -28,7 +28,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
-public class SVGCanvas extends CanvasLayer {
+public class SVGCanvas extends Canvas {
 
   /**Underlying SVG Graphics*/
   protected SVGGraphics svgGraphics;

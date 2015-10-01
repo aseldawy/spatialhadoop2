@@ -35,9 +35,9 @@ import org.apache.hadoop.util.LineReader;
  * @author Ahmed Eldawy
  *
  */
-public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, CanvasLayer> {
+public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, Canvas> {
   
-  static class ImageRecordWriter extends RecordWriter<TileIndex, CanvasLayer> {
+  static class ImageRecordWriter extends RecordWriter<TileIndex, Canvas> {
 
     private Plotter plotter;
     private final FileSystem outFS;
@@ -56,7 +56,7 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, CanvasLaye
     }
 
     @Override
-    public void write(TileIndex tileIndex, CanvasLayer r) throws IOException {
+    public void write(TileIndex tileIndex, Canvas r) throws IOException {
       if (vflip)
         tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
       Path imagePath = new Path(outPath, tileIndex.getImageFileName());
@@ -74,7 +74,7 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, CanvasLaye
   }
   
   @Override
-  public RecordWriter<TileIndex, CanvasLayer> getRecordWriter(
+  public RecordWriter<TileIndex, Canvas> getRecordWriter(
       TaskAttemptContext task) throws IOException, InterruptedException {
     Path file = getDefaultWorkFile(task, "").getParent();
     FileSystem fs = file.getFileSystem(task.getConfiguration());
