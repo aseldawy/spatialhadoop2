@@ -35,8 +35,8 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
-import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
-import edu.umn.cs.spatialHadoop.visualization.Rasterizer;
+import edu.umn.cs.spatialHadoop.visualization.CanvasLayer;
+import edu.umn.cs.spatialHadoop.visualization.Plotter;
 import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
 
 /**
@@ -55,7 +55,7 @@ public class HDFPlot {
    * @author Ahmed Eldawy
    *
    */
-  public static class HDFRasterizer extends Rasterizer {
+  public static class HDFRasterizer extends Plotter {
 
     /**Color associated with minimum value*/
     private Color color1;
@@ -103,7 +103,7 @@ public class HDFPlot {
     }
     
     @Override
-    public RasterLayer createRaster(int width, int height, Rectangle mbr) {
+    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
       HDFRasterLayer rasterLayer = new HDFRasterLayer(mbr, width, height);
       rasterLayer.setGradientInfo(color1, color2, gradientType);
       if (this.minValue <= maxValue)
@@ -112,35 +112,35 @@ public class HDFPlot {
     }
     
     @Override
-    public void rasterize(RasterLayer layer, Iterable<? extends Shape> shapes) {
+    public void plot(CanvasLayer layer, Iterable<? extends Shape> shapes) {
       Iterator<? extends Shape> iShapes = shapes.iterator();
       if (!iShapes.hasNext())
         return;
       // Retrieve timestamp
       Shape s = iShapes.next();
       ((HDFRasterLayer)layer).setTimestamp(((NASAShape)s).getTimestamp());
-      this.rasterize(layer, s);
+      this.plot(layer, s);
       while (iShapes.hasNext()) {
-        this.rasterize(layer, iShapes.next());
+        this.plot(layer, iShapes.next());
       }
     }
     
     @Override
-    public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      HDFRasterLayer hdfMap = (HDFRasterLayer) rasterLayer;
+    public void plot(CanvasLayer canvasLayer, Shape shape) {
+      HDFRasterLayer hdfMap = (HDFRasterLayer) canvasLayer;
       int x1, y1, x2, y2;
-      Rectangle inputMBR = rasterLayer.getInputMBR();
+      Rectangle inputMBR = canvasLayer.getInputMBR();
       if (shape instanceof NASAPoint) {
         NASAPoint p = (NASAPoint) shape;
-        x1 = (int) Math.round((p.x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
-        y1 = (int) Math.round((p.y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+        x1 = (int) Math.round((p.x - inputMBR.x1) * canvasLayer.getWidth() / inputMBR.getWidth());
+        y1 = (int) Math.round((p.y - inputMBR.y1) * canvasLayer.getHeight() / inputMBR.getHeight());
         hdfMap.addPoints(x1, y1, 1, 1, p.getValue());
       } else if (shape instanceof NASARectangle) {
         NASARectangle r = (NASARectangle) shape;
-        x1 = (int) Math.round((r.x1 - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
-        y1 = (int) Math.round((r.y1 - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
-        x2 = (int) Math.ceil((r.x2 - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
-        y2 = (int) Math.ceil((r.y2 - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+        x1 = (int) Math.round((r.x1 - inputMBR.x1) * canvasLayer.getWidth() / inputMBR.getWidth());
+        y1 = (int) Math.round((r.y1 - inputMBR.y1) * canvasLayer.getHeight() / inputMBR.getHeight());
+        x2 = (int) Math.ceil((r.x2 - inputMBR.x1) * canvasLayer.getWidth() / inputMBR.getWidth());
+        y2 = (int) Math.ceil((r.y2 - inputMBR.y1) * canvasLayer.getHeight() / inputMBR.getHeight());
         hdfMap.addPoints(x1, y1, x2, y2, r.getValue());
       } else {
         throw new RuntimeException("Cannot parse shapes of type "+shape.getClass());
@@ -149,18 +149,18 @@ public class HDFPlot {
     }
 
     @Override
-    public Class<? extends RasterLayer> getRasterClass() {
+    public Class<? extends CanvasLayer> getCanvasClass() {
       return HDFRasterLayer.class;
     }
 
     @Override
-    public void merge(RasterLayer finalLayer,
-        RasterLayer intermediateLayer) {
+    public void merge(CanvasLayer finalLayer,
+        CanvasLayer intermediateLayer) {
       ((HDFRasterLayer)finalLayer).mergeWith((HDFRasterLayer) intermediateLayer);
     }
 
     @Override
-    public void writeImage(RasterLayer layer, DataOutputStream out,
+    public void writeImage(CanvasLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
       HDFRasterLayer hdfLayer = (HDFRasterLayer)layer;
       if (waterMaskPath != null) {
@@ -198,7 +198,7 @@ public class HDFPlot {
   
   public static class HDFRasterizeWaterMask extends HDFRasterizer {
     @Override
-    public void writeImage(RasterLayer layer, DataOutputStream out,
+    public void writeImage(CanvasLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
       HDFRasterLayer hdfLayer = ((HDFRasterLayer)layer);
       BitArray bits = new BitArray((long)hdfLayer.getWidth() * hdfLayer.getHeight());

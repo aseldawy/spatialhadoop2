@@ -35,11 +35,11 @@ import org.apache.hadoop.util.LineReader;
  * @author Ahmed Eldawy
  *
  */
-public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLayer> {
+public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, CanvasLayer> {
   
-  static class ImageRecordWriter extends RecordWriter<TileIndex, RasterLayer> {
+  static class ImageRecordWriter extends RecordWriter<TileIndex, CanvasLayer> {
 
-    private Rasterizer rasterizer;
+    private Plotter plotter;
     private final FileSystem outFS;
     private final Path outPath;
     private boolean vflip;
@@ -49,20 +49,20 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLaye
     ImageRecordWriter(FileSystem outFs, Path taskOutPath, TaskAttemptContext task) {
       this.task = task;
       System.setProperty("java.awt.headless", "true");
-      this.rasterizer = Rasterizer.getRasterizer(task.getConfiguration());
+      this.plotter = Plotter.getPlotter(task.getConfiguration());
       this.outPath = taskOutPath;
       this.outFS = outFs;
       this.vflip = task.getConfiguration().getBoolean("vflip", true);
     }
 
     @Override
-    public void write(TileIndex tileIndex, RasterLayer r) throws IOException {
+    public void write(TileIndex tileIndex, CanvasLayer r) throws IOException {
       if (vflip)
         tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
       Path imagePath = new Path(outPath, tileIndex.getImageFileName());
       // Write this tile to an image
       FSDataOutputStream outFile = outFS.create(imagePath);
-      rasterizer.writeImage(r, outFile, this.vflip);
+      plotter.writeImage(r, outFile, this.vflip);
       outFile.close();
       task.progress();
     }
@@ -74,7 +74,7 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, RasterLaye
   }
   
   @Override
-  public RecordWriter<TileIndex, RasterLayer> getRecordWriter(
+  public RecordWriter<TileIndex, CanvasLayer> getRecordWriter(
       TaskAttemptContext task) throws IOException, InterruptedException {
     Path file = getDefaultWorkFile(task, "").getParent();
     FileSystem fs = file.getFileSystem(task.getConfiguration());

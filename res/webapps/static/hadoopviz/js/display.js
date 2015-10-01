@@ -6,7 +6,10 @@ function display() {
 		document.getElementById("statistics").innerHTML = "<h3 class=\"dataset_title\"> Statistics </h3> <b>Input Size: </b>" 
 			+ response.inputSize + ".<br>" +
 		"<b>Intermediate Size: </b>" + response.intermediateSize + ".<br>" +
-		"<b>Intermediate Groups: </b>" + response.intermediateGroup;
+		"<b>Intermediate Groups: </b>" + response.intermediateGroup+ ".<br>" +
+		"<b>Job ID: </b>" + response.jobID+ ".<br>" +
+		"<b>Job URL: </b><a href='"+response.jobURL+"'>" + response.jobURL+ "</a>.<br>" +
+		;
 	}});
 	jQuery.ajax(requestURL, {success: function(response) {
 		document.getElementById("result").innerHTML = response;

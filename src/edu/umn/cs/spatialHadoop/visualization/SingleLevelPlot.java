@@ -64,15 +64,15 @@ public class SingleLevelPlot {
 
   /**
    * Visualizes a dataset using the existing partitioning of a file.
-   * The mapper creates a partial raster layer for each partition while the reducer
-   * merges the partial rasters together into the final raster layer.
-   * The final raster layer is then written to the output.
+   * The mapper creates a partial canvas for each partition while the reducer
+   * merges the partial canvases together into the final canvas.
+   * The final canvas is then written to the output.
    * 
    * @author Ahmed Eldawy
    *
    */
   public static class NoPartitionPlotMap<S extends Shape>
-    extends Mapper<Rectangle, Iterable<S>, IntWritable, RasterLayer> {
+    extends Mapper<Rectangle, Iterable<S>, IntWritable, CanvasLayer> {
     
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -80,15 +80,15 @@ public class SingleLevelPlot {
     private int imageWidth;
     /**Generated image height in pixels*/
     private int imageHeight;
-    /**The component that rasterizes the shapes*/
-    private Rasterizer rasterizer;
+    /**The component that plots the shapes*/
+    private Plotter plotter;
     /**Value for the output*/
     private IntWritable outputValue;
     /**Number of reduce jobs*/
     private int numReducers;
-    /**Random number generator to send the raster layer to a random reducer*/
+    /**Random number generator to send the canvas to a random reducer*/
     private Random random;
-    /**Whether the configured rasterizer defines a smooth function or not*/
+    /**Whether the configured canvas defines a smooth function or not*/
     private boolean smooth;
     
     @Override
@@ -101,8 +101,8 @@ public class SingleLevelPlot {
       this.imageHeight = conf.getInt("height", 1000);
       this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
       this.outputValue = new IntWritable(0);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
-      this.smooth = rasterizer.isSmooth();
+      this.plotter = Plotter.getPlotter(conf);
+      this.smooth = plotter.isSmooth();
       this.numReducers = Math.max(1, context.getNumReduceTasks());
       this.random = new Random();
     }
@@ -114,23 +114,23 @@ public class SingleLevelPlot {
       if (!partitionMBR.isValid())
         partitionMBR.set(inputMBR);
       
-      // Calculate the dimensions of the generated raster layer by calculating
+      // Calculate the dimensions of the generated canvas by calculating
       // the MBR in the image space
       // Note: Do not calculate from the width and height of partitionMBR
       // because it will cause round-off errors between adjacent partitions
       // which might leave gaps in the final generated image
-      int rasterLayerX1 = (int) Math.floor((partitionMBR.x1 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
-      int rasterLayerX2 = (int) Math.ceil((partitionMBR.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
-      int rasterLayerY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      int rasterLayerY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partitionMBR);
+      int canvasX1 = (int) Math.floor((partitionMBR.x1 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
+      int canvasX2 = (int) Math.ceil((partitionMBR.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
+      int canvasY1 = (int) Math.floor((partitionMBR.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
+      int canvasY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
+      CanvasLayer canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partitionMBR);
       if (smooth) {
-        shapes = rasterizer.smooth(shapes);
+        shapes = plotter.smooth(shapes);
         context.progress();
       }
       int i = 0;
       for (Shape shape : shapes) {
-        rasterizer.rasterize(rasterLayer, shape);
+        plotter.plot(canvasLayer, shape);
         if (((++i) & 0xff) == 0)
           context.progress();
       }
@@ -141,12 +141,12 @@ public class SingleLevelPlot {
       // on a single machine in the OutputCommitter function.
       outputValue.set(random.nextInt(numReducers));
       outputValue.set(0);
-      context.write(outputValue, rasterLayer);
+      context.write(outputValue, canvasLayer);
     }
   }
   
   public static class NoPartitionPlotCombine<S extends Shape>
-  extends Reducer<IntWritable, RasterLayer, IntWritable, RasterLayer> {
+  extends Reducer<IntWritable, CanvasLayer, IntWritable, CanvasLayer> {
     
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -154,11 +154,11 @@ public class SingleLevelPlot {
     private int imageWidth;
     /**Generated image height in pixels*/
     private int imageHeight;
-    /**The component that rasterizes the shapes*/
-    private Rasterizer rasterizer;
+    /**The component that plots the shapes*/
+    private Plotter plotter;
     /**Number of reduce jobs*/
     private int numReducers;
-    /**Random number generator to send the raster layer to a random reducer*/
+    /**Random number generator to send the canvas to a random reducer*/
     private Random random;
     
     @Override
@@ -170,28 +170,28 @@ public class SingleLevelPlot {
       this.imageWidth = conf.getInt("width", 1000);
       this.imageHeight = conf.getInt("height", 1000);
       this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.plotter = Plotter.getPlotter(conf);
       this.numReducers = Math.max(1, context.getNumReduceTasks());
       this.random = new Random();
     }
     
     @Override
     protected void reduce(IntWritable key,
-        Iterable<RasterLayer> intermediateLayers, Context context)
+        Iterable<CanvasLayer> intermediateLayers, Context context)
             throws IOException, InterruptedException {
-      Iterator<RasterLayer> iLayers = intermediateLayers.iterator();
+      Iterator<CanvasLayer> iLayers = intermediateLayers.iterator();
       if (iLayers.hasNext()) {
-        RasterLayer layer = iLayers.next();
+        CanvasLayer layer = iLayers.next();
         if (!iLayers.hasNext()) {
           // Only one layer in the input. Output it as-is
           key.set(random.nextInt(numReducers));
           context.write(key, layer);
         } else {
-          RasterLayer finalLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
-          rasterizer.merge(finalLayer, layer);
+          CanvasLayer finalLayer = plotter.createCanvas(imageWidth, imageHeight, inputMBR);
+          plotter.merge(finalLayer, layer);
           while (iLayers.hasNext()) {
             layer = iLayers.next();
-            rasterizer.merge(finalLayer, layer);
+            plotter.merge(finalLayer, layer);
           }
           key.set(random.nextInt(numReducers));
           context.write(key, finalLayer);
@@ -201,7 +201,7 @@ public class SingleLevelPlot {
   }
   
   public static class NoPartitionPlotReduce<S extends Shape>
-    extends Reducer<IntWritable, RasterLayer, NullWritable, RasterLayer> {
+    extends Reducer<IntWritable, CanvasLayer, NullWritable, CanvasLayer> {
 
     /**The MBR of the input file*/
     private Rectangle inputMBR;
@@ -209,8 +209,8 @@ public class SingleLevelPlot {
     private int imageWidth;
     /**Generated image height in pixels*/
     private int imageHeight;
-    /**The component that rasterizes the shapes*/
-    private Rasterizer rasterizer;
+    /**The component that plots the shapes*/
+    private Plotter plotter;
     
     @Override
     protected void setup(Context context)
@@ -221,18 +221,18 @@ public class SingleLevelPlot {
       this.imageWidth = conf.getInt("width", 1000);
       this.imageHeight = conf.getInt("height", 1000);
       this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.plotter = Plotter.getPlotter(conf);
     }
     
     @Override
     protected void reduce(IntWritable dummy,
-        Iterable<RasterLayer> intermediateLayers, Context context)
+        Iterable<CanvasLayer> intermediateLayers, Context context)
         throws IOException, InterruptedException {
       // TODO Auto-generated method stub
-      RasterLayer finalLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
+      CanvasLayer finalLayer = plotter.createCanvas(imageWidth, imageHeight, inputMBR);
       
-      for (RasterLayer intermediateLayer : intermediateLayers) {
-        rasterizer.merge(finalLayer, intermediateLayer);
+      for (CanvasLayer intermediateLayer : intermediateLayers) {
+        plotter.merge(finalLayer, intermediateLayer);
         context.progress();
       }
       
@@ -283,13 +283,13 @@ public class SingleLevelPlot {
   }
   
   public static class RepartitionPlotReduce
-      extends Reducer<IntWritable, Shape, NullWritable, RasterLayer> {
+      extends Reducer<IntWritable, Shape, NullWritable, CanvasLayer> {
     
     /**The partitioner used to partitioner the data across reducers*/
     private Partitioner partitioner;
     
-    /**The component that rasterizes the shapes*/
-    private Rasterizer rasterizer;
+    /**The component that plots the shapes*/
+    private Plotter plotter;
 
     /**MBR of the input file*/
     private Rectangle inputMBR;
@@ -299,7 +299,7 @@ public class SingleLevelPlot {
     /**Generated image height in pixels*/
     private int imageHeight;
 
-    /**Whether the configured rasterizer defines a smooth function or not*/
+    /**Whether the configured plotter defines a smooth function or not*/
     private boolean smooth;
     
     @Override
@@ -308,8 +308,8 @@ public class SingleLevelPlot {
       super.setup(context);
       Configuration conf = context.getConfiguration();
       this.partitioner = Partitioner.getPartitioner(conf);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
-      this.smooth = rasterizer.isSmooth();
+      this.plotter = Plotter.getPlotter(conf);
+      this.smooth = plotter.isSmooth();
       this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
       this.imageWidth = conf.getInt("width", 1000);
       this.imageHeight = conf.getInt("height", 1000);
@@ -319,24 +319,24 @@ public class SingleLevelPlot {
     protected void reduce(IntWritable partitionID, Iterable<Shape> shapes,
         Context context) throws IOException, InterruptedException {
       CellInfo partition = partitioner.getPartition(partitionID.get());
-      int rasterLayerX1 = (int) Math.floor((partition.x1 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
-      int rasterLayerX2 = (int) Math.ceil((partition.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
-      int rasterLayerY1 = (int) Math.floor((partition.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      int rasterLayerY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
-      RasterLayer rasterLayer = rasterizer.createRaster(rasterLayerX2 - rasterLayerX1, rasterLayerY2 - rasterLayerY1, partition);
+      int canvasX1 = (int) Math.floor((partition.x1 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
+      int canvasX2 = (int) Math.ceil((partition.x2 - inputMBR.x1) * imageWidth / inputMBR.getWidth());
+      int canvasY1 = (int) Math.floor((partition.y1 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
+      int canvasY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
+      CanvasLayer canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partition);
       if (smooth) {
-        shapes = rasterizer.smooth(shapes);
+        shapes = plotter.smooth(shapes);
         context.progress();
       }
 
       int i = 0;
       for (Shape shape : shapes) {
-        rasterizer.rasterize(rasterLayer, shape);
+        plotter.plot(canvasLayer, shape);
         if (((++i) & 0xff) == 0)
           context.progress();
       }
       
-      context.write(NullWritable.get(), rasterLayer);
+      context.write(NullWritable.get(), canvasLayer);
     }
   }
   
@@ -344,7 +344,7 @@ public class SingleLevelPlot {
    * Generates a single level using a MapReduce job and returns the created job.
    * @param inFiles
    * @param outFile
-   * @param rasterizerClass
+   * @param plotterClass
    * @param params
    * @return
    * @throws IOException
@@ -352,11 +352,11 @@ public class SingleLevelPlot {
    * @throws ClassNotFoundException 
    */
   public static Job plotMapReduce(Path[] inFiles, Path outFile,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params)
+      Class<? extends Plotter> plotterClass, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
-    Rasterizer rasterizer;
+    Plotter plotter;
     try {
-      rasterizer = rasterizerClass.newInstance();
+      plotter = plotterClass.newInstance();
     } catch (InstantiationException e) {
       throw new RuntimeException("Error creating rastierizer", e);
     } catch (IllegalAccessException e) {
@@ -366,9 +366,9 @@ public class SingleLevelPlot {
     Job job = new Job(params, "SingleLevelPlot");
     job.setJarByClass(SingleLevelPlot.class);
     job.setJobName("SingleLevelPlot");
-    // Set rasterizer
+    // Set plotter
     Configuration conf = job.getConfiguration();
-    Rasterizer.setRasterizer(conf, rasterizerClass);
+    Plotter.setPlotter(conf, plotterClass);
     // Set input file MBR
     Rectangle inputMBR = (Rectangle) params.getShape("mbr");
     Rectangle drawRect = (Rectangle) params.getShape("rect");
@@ -402,14 +402,14 @@ public class SingleLevelPlot {
     SpatialInputFormat3.setInputPaths(job, inFiles);
     if (conf.getBoolean("output", true)) {
       if (merge) {
-        job.setOutputFormatClass(RasterOutputFormat.class);
+        job.setOutputFormatClass(CanvasOutputFormat.class);
         conf.setClass("mapred.output.committer.class",
-            RasterOutputFormat.ImageWriterOld.class,
+            CanvasOutputFormat.ImageWriterOld.class,
             org.apache.hadoop.mapred.OutputCommitter.class);
       } else {
         job.setOutputFormatClass(ImageOutputFormat.class);
       }
-      RasterOutputFormat.setOutputPath(job, outFile);
+      CanvasOutputFormat.setOutputPath(job, outFile);
     } else {
       job.setOutputFormatClass(NullOutputFormat.class);
     }
@@ -422,7 +422,7 @@ public class SingleLevelPlot {
       job.setMapperClass(NoPartitionPlotMap.class);
       job.setCombinerClass(NoPartitionPlotCombine.class);
       job.setMapOutputKeyClass(IntWritable.class);
-      job.setMapOutputValueClass(rasterizer.getRasterClass());
+      job.setMapOutputValueClass(plotter.getCanvasClass());
       if (merge) {
         int numSplits = new SpatialInputFormat3().getSplits(job).size();
         job.setReducerClass(NoPartitionPlotReduce.class);
@@ -478,7 +478,7 @@ public class SingleLevelPlot {
   }
 
   public static void plotLocal(Path[] inFiles, Path outFile,
-      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params) throws IOException, InterruptedException {
+      final Class<? extends Plotter> plotterClass, final OperationsParams params) throws IOException, InterruptedException {
 
     boolean vflip = params.getBoolean("vflip", true);
     
@@ -537,20 +537,20 @@ public class SingleLevelPlot {
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
     int parallelism = params.getInt("parallel",
         Runtime.getRuntime().availableProcessors());
-    Vector<RasterLayer> partialRasters = Parallel.forEach(fsplits.length, new RunnableRange<RasterLayer>() {
+    Vector<CanvasLayer> partialCanvases = Parallel.forEach(fsplits.length, new RunnableRange<CanvasLayer>() {
       @Override
-      public RasterLayer run(int i1, int i2) {
-        Rasterizer rasterizer;
+      public CanvasLayer run(int i1, int i2) {
+        Plotter plotter;
         try {
-          rasterizer = rasterizerClass.newInstance();
+          plotter = plotterClass.newInstance();
         } catch (InstantiationException e) {
           throw new RuntimeException("Error creating rastierizer", e);
         } catch (IllegalAccessException e) {
           throw new RuntimeException("Error creating rastierizer", e);
         }
-        rasterizer.configure(params);
-        // Create the partial layer that will contain the rasterization of the assigned partitions
-        RasterLayer partialRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
+        plotter.configure(params);
+        // Create the partial layer that will contain the plot of the assigned partitions
+        CanvasLayer partialCanvas = plotter.createCanvas(fwidth, fheight, inputMBR);
         
         for (int i = i1; i < i2; i++) {
           try {
@@ -572,9 +572,9 @@ public class SingleLevelPlot {
                 partition.set(inputMBR);
 
               Iterable<Shape> shapes = reader.getCurrentValue();
-              // Run the rasterize step
-              rasterizer.rasterize(partialRaster,
-                  rasterizer.isSmooth() ? rasterizer.smooth(shapes) : shapes);
+              // Run the plot step
+              plotter.plot(partialCanvas,
+                  plotter.isSmooth() ? plotter.smooth(shapes) : shapes);
             }
             reader.close();
           } catch (IOException e) {
@@ -583,66 +583,66 @@ public class SingleLevelPlot {
             throw new RuntimeException("Interrupt error ", e);
           }
         }
-        return partialRaster;
+        return partialCanvas;
       }
     }, parallelism);
     boolean merge = params.getBoolean("merge", true);
-    Rasterizer rasterizer;
+    Plotter plotter;
     try {
-      rasterizer = rasterizerClass.newInstance();
-      rasterizer.configure(params);
+      plotter = plotterClass.newInstance();
+      plotter.configure(params);
     } catch (InstantiationException e) {
-      throw new RuntimeException("Error creating rastierizer", e);
+      throw new RuntimeException("Error creating plotter", e);
     } catch (IllegalAccessException e) {
-      throw new RuntimeException("Error creating rastierizer", e);
+      throw new RuntimeException("Error creating plotter", e);
     }
     if (merge) {
-      LOG.info("Merging "+partialRasters.size()+" partial rasters");
-      // Create the final raster layer that will contain the final image
-      RasterLayer finalRaster = rasterizer.createRaster(fwidth, fheight, inputMBR);
-      for (RasterLayer partialRaster : partialRasters)
-        rasterizer.merge(finalRaster, partialRaster);
+      LOG.info("Merging "+partialCanvases.size()+" partial canvases");
+      // Create the final canvas that will contain the final image
+      CanvasLayer finalCanvas = plotter.createCanvas(fwidth, fheight, inputMBR);
+      for (CanvasLayer partialCanvas : partialCanvases)
+        plotter.merge(finalCanvas, partialCanvas);
       
       // Finally, write the resulting image to the given output path
       LOG.info("Writing final image");
       FileSystem outFs = outFile.getFileSystem(params);
       FSDataOutputStream outputFile = outFs.create(outFile);
       
-      rasterizer.writeImage(finalRaster, outputFile, vflip);
+      plotter.writeImage(finalCanvas, outputFile, vflip);
       outputFile.close();
     } else {
       // No merge
       LOG.info("Writing partial images");
       FileSystem outFs = outFile.getFileSystem(params);
-      for (int i = 0; i < partialRasters.size(); i++) {
+      for (int i = 0; i < partialCanvases.size(); i++) {
         Path filename = new Path(outFile, String.format("part-%05d.png", i));
         FSDataOutputStream outputFile = outFs.create(filename);
         
-        rasterizer.writeImage(partialRasters.get(i), outputFile, vflip);
+        plotter.writeImage(partialCanvases.get(i), outputFile, vflip);
         outputFile.close();
       }
     }
   }
   
   /**
-   * Plots the given file using the provided rasterizer
+   * Plots the given file using the provided plotter
    * @param inFile
    * @param outFile
-   * @param rasterizerClass
+   * @param plotterClass
    * @param params
    * @throws IOException
    * @throws InterruptedException 
    * @throws ClassNotFoundException 
    */
   public static Job plot(Path[] inFiles, Path outFile,
-      final Class<? extends Rasterizer> rasterizerClass,
+      final Class<? extends Plotter> plotterClass,
       final OperationsParams params)
           throws IOException, InterruptedException, ClassNotFoundException {
     if (OperationsParams.isLocal(params, inFiles)) {
-      plotLocal(inFiles, outFile, rasterizerClass, params);
+      plotLocal(inFiles, outFile, plotterClass, params);
       return null;
     } else {
-      return plotMapReduce(inFiles, outFile, rasterizerClass, params);
+      return plotMapReduce(inFiles, outFile, plotterClass, params);
     }
   }
 }

@@ -30,9 +30,9 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  * @author Ahmed Eldawy
  *
  */
-public class FrequencyMapRasterLayer extends RasterLayer {
+public class FrequencyMap extends CanvasLayer {
   @SuppressWarnings("unused")
-  private static final Log LOG = LogFactory.getLog(FrequencyMapRasterLayer.class);
+  private static final Log LOG = LogFactory.getLog(FrequencyMap.class);
   
   public static enum SmoothType {Flat, Gaussian};
   
@@ -54,7 +54,7 @@ public class FrequencyMapRasterLayer extends RasterLayer {
   /**
    * Initialize an empty frequency map to be used to deserialize 
    */
-  public FrequencyMapRasterLayer() {
+  public FrequencyMap() {
     System.setProperty("java.awt.headless", "true");
   }
 
@@ -63,7 +63,7 @@ public class FrequencyMapRasterLayer extends RasterLayer {
    * @param width
    * @param height
    */
-  public FrequencyMapRasterLayer(Rectangle inputMBR, int width, int height, int radius, SmoothType smoothType) {
+  public FrequencyMap(Rectangle inputMBR, int width, int height, int radius, SmoothType smoothType) {
     System.setProperty("java.awt.headless", "true");
     this.inputMBR = inputMBR;
     this.width = width;
@@ -168,7 +168,7 @@ public class FrequencyMapRasterLayer extends RasterLayer {
     }
   }
   
-  public void mergeWith(FrequencyMapRasterLayer another) {
+  public void mergeWith(FrequencyMap another) {
     Point offset = projectToImageSpace(another.getInputMBR().x1, another.getInputMBR().y1);
     int xmin = Math.max(0, offset.x);
     int ymin = Math.max(0, offset.y);

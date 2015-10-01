@@ -24,11 +24,11 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
- * A raster layer that contains an image
+ * A canvas that contains an in-memory image
  * @author Ahmed Eldawy
  *
  */
-public class ImageRasterLayer extends RasterLayer {
+public class ImageCanvas extends CanvasLayer {
 
   /**
    * The underlying image
@@ -51,18 +51,18 @@ public class ImageRasterLayer extends RasterLayer {
   private Color color;
 
   /**Default constructor is necessary to be able to deserialize it*/
-  public ImageRasterLayer() {
+  public ImageCanvas() {
     System.setProperty("java.awt.headless", "true");
   }
 
   /**
-   * Creates a raster layer of the given size for a given (portion of) input
+   * Creates a canvas of the given size for a given (portion of) input
    * data.
-   * @param inputMBR - the MBR of the input area to rasterize
+   * @param inputMBR - the MBR of the input area to plot
    * @param width - width the of the image to generate in pixels
    * @param height - height of the image to generate in pixels
    */
-  public ImageRasterLayer(Rectangle inputMBR, int width, int height) {
+  public ImageCanvas(Rectangle inputMBR, int width, int height) {
     super(inputMBR, width, height);
     System.setProperty("java.awt.headless", "true");
     image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -98,7 +98,7 @@ public class ImageRasterLayer extends RasterLayer {
     yscale = image.getHeight() / getInputMBR().getHeight();
   }
 
-  public void mergeWith(ImageRasterLayer another) {
+  public void mergeWith(ImageCanvas another) {
     Point offset = projectToImageSpace(another.getInputMBR().x1, another.getInputMBR().y1);
     getOrCreateGrahics(false).drawImage(another.getImage(), offset.x, offset.y, null);
   }

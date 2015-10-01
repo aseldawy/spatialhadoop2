@@ -70,7 +70,7 @@ public class MultilevelPlot {
   private static final String FlatPartitioningLevelThreshold = "MultilevelPlot.FlatPartitioningLevelThreshold";
   
   public static class FlatPartitionMap extends
-      Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, RasterLayer> {
+      Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, CanvasLayer> {
     /**Minimum and maximum levels of the pyramid to plot (inclusive and zero-based)*/
     private int minLevel, maxLevel;
     
@@ -80,8 +80,8 @@ public class MultilevelPlot {
     /**The MBR of the input area to draw*/
     private Rectangle inputMBR;
 
-    /**The rasterizer associated with this job*/
-    private Rasterizer rasterizer;
+    /**The plotter associated with this job*/
+    private Plotter plotter;
 
     /**Fixed width for one tile*/
     private int tileWidth;
@@ -94,7 +94,7 @@ public class MultilevelPlot {
 
     private double bufferSizeYMaxLevel;
 
-    /**Whether the configured rasterize supports smooth or not*/
+    /**Whether the configured plotter supports smooth or not*/
     private boolean smooth;
 
     @Override
@@ -115,9 +115,9 @@ public class MultilevelPlot {
       this.bottomGrid.rows = bottomGrid.columns = 1 << maxLevel;
       this.tileWidth = conf.getInt("tilewidth", 256);
       this.tileHeight = conf.getInt("tileheight", 256);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
-      this.smooth = rasterizer.isSmooth();
-      int radius = rasterizer.getRadius();
+      this.plotter = Plotter.getPlotter(conf);
+      this.smooth = plotter.isSmooth();
+      int radius = plotter.getRadius();
       this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
     }
@@ -126,9 +126,9 @@ public class MultilevelPlot {
     protected void map(Rectangle partition, Iterable<? extends Shape> shapes,
         Context context) throws IOException, InterruptedException {
       if (smooth)
-        shapes = rasterizer.smooth(shapes);
+        shapes = plotter.smooth(shapes);
       TileIndex key = new TileIndex();
-      Map<TileIndex, RasterLayer> rasterLayers = new HashMap<TileIndex, RasterLayer>();
+      Map<TileIndex, CanvasLayer> canvasLayers = new HashMap<TileIndex, CanvasLayer>();
       int i = 0; // Counter to report progress often
       for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
@@ -140,18 +140,18 @@ public class MultilevelPlot {
         for (key.level = maxLevel; key.level >= minLevel; key.level--) {
           for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
             for (key.y = overlappingCells.y; key.y < overlappingCells.y + overlappingCells.height; key.y++) {
-              RasterLayer rasterLayer = rasterLayers.get(key);
-              if (rasterLayer == null) {
+              CanvasLayer canvasLayer = canvasLayers.get(key);
+              if (canvasLayer == null) {
                 Rectangle tileMBR = new Rectangle();
                 int gridSize = 1 << key.level;
                 tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
                 tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x+1)) / gridSize;
                 tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
                 tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y+1)) / gridSize;
-                rasterLayer = rasterizer.createRaster(tileWidth, tileHeight, tileMBR);
-                rasterLayers.put(key.clone(), rasterLayer);
+                canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+                canvasLayers.put(key.clone(), canvasLayer);
               }
-              rasterizer.rasterize(rasterLayer, shape);
+              plotter.plot(canvasLayer, shape);
             }
           }
           // Update overlappingCells for the higher level
@@ -168,14 +168,14 @@ public class MultilevelPlot {
           context.progress();
       }
       // Write all created layers to the output
-      for (Map.Entry<TileIndex, RasterLayer> entry : rasterLayers.entrySet()) {
+      for (Map.Entry<TileIndex, CanvasLayer> entry : canvasLayers.entrySet()) {
         context.write(entry.getKey(), entry.getValue());
       }
     }
   }
   
   public static class FlatPartitionReduce
-      extends Reducer<TileIndex, RasterLayer, TileIndex, RasterLayer> {
+      extends Reducer<TileIndex, CanvasLayer, TileIndex, CanvasLayer> {
     /**Minimum and maximum levels of the pyramid to plot (inclusive and zero-based)*/
     private int minLevel, maxLevel;
     
@@ -185,8 +185,8 @@ public class MultilevelPlot {
     /**The MBR of the input area to draw*/
     private Rectangle inputMBR;
 
-    /**The rasterizer associated with this job*/
-    private Rasterizer rasterizer;
+    /**The plotter associated with this job*/
+    private Plotter plotter;
 
     /**Fixed width for one tile*/
     private int tileWidth;
@@ -212,11 +212,11 @@ public class MultilevelPlot {
       this.bottomGrid.rows = bottomGrid.columns = 1 << maxLevel;
       this.tileWidth = conf.getInt("tilewidth", 256);
       this.tileHeight = conf.getInt("tileheight", 256);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.plotter = Plotter.getPlotter(conf);
     }
     
     @Override
-    protected void reduce(TileIndex tileID, Iterable<RasterLayer> interLayers,
+    protected void reduce(TileIndex tileID, Iterable<CanvasLayer> interLayers,
         Context context) throws IOException, InterruptedException {
       Rectangle tileMBR = new Rectangle();
       int gridSize = 1 << tileID.level;
@@ -225,9 +225,9 @@ public class MultilevelPlot {
       tileMBR.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
       tileMBR.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y+1)) / gridSize;
 
-      RasterLayer finalLayer = rasterizer.createRaster(tileWidth, tileHeight, tileMBR);
-      for (RasterLayer interLayer : interLayers) {
-        rasterizer.merge(finalLayer, interLayer);
+      CanvasLayer finalLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+      for (CanvasLayer interLayer : interLayers) {
+        plotter.merge(finalLayer, interLayer);
         context.progress();
       }
       
@@ -244,8 +244,8 @@ public class MultilevelPlot {
     private Rectangle inputMBR;
     /**The grid of the lowest (deepest) level of the pyramid*/
     private GridInfo bottomGrid;
-    /**The user-configured rasterizer*/
-    private Rasterizer rasterizer;
+    /**The user-configured plotter*/
+    private Plotter plotter;
     /**The radius of effect of each record in input coordinates*/
     private double bufferSizeXMaxLevel, bufferSizeYMaxLevel;
     /**Maximum levels to generate per reducer*/
@@ -274,8 +274,8 @@ public class MultilevelPlot {
       this.bottomGrid.rows = bottomGrid.columns = (1 << maxLevelToReplicate); // 2 ^ maxLevel
       int tileWidth = conf.getInt("tilewidth", 256);
       int tileHeight = conf.getInt("tileheight", 256);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
-      this.radius = rasterizer.getRadius();
+      this.plotter = Plotter.getPlotter(conf);
+      this.radius = plotter.getRadius();
       this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevelToReplicate));
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevelToReplicate));
     }
@@ -315,7 +315,7 @@ public class MultilevelPlot {
   }
   
   public static class PyramidPartitionReduce extends
-      Reducer<TileIndex, Shape, TileIndex, RasterLayer> {
+      Reducer<TileIndex, Shape, TileIndex, CanvasLayer> {
 
     private int minLevel, maxLevel;
     /**Maximum level to replicate to*/
@@ -323,8 +323,8 @@ public class MultilevelPlot {
     private Rectangle inputMBR;
     /**The grid of the lowest (deepest) level of the pyramid*/
     private GridInfo bottomGrid;
-    /**The user-configured rasterizer*/
-    private Rasterizer rasterizer;
+    /**The user-configured plotter*/
+    private Plotter plotter;
     /**The radius of effect of each record in input coordinates*/
     private double bufferSizeXMaxLevel, bufferSizeYMaxLevel;
     /**Maximum levels to generate per reducer*/
@@ -333,7 +333,7 @@ public class MultilevelPlot {
     private int tileWidth, tileHeight;
     /**Radius of effect of each shape*/
     private int radius;
-    /**Whether the configured rasterizer defines a smooth function or not*/
+    /**Whether the configured plotter defines a smooth function or not*/
     private boolean smooth;
     
     @Override
@@ -357,9 +357,9 @@ public class MultilevelPlot {
       this.bottomGrid.rows = bottomGrid.columns = (1 << maxLevelToReplicate); // 2 ^ maxLevel
       int tileWidth = conf.getInt("tilewidth", 256);
       int tileHeight = conf.getInt("tileheight", 256);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
-      this.smooth = rasterizer.isSmooth();
-      this.radius = rasterizer.getRadius();
+      this.plotter = Plotter.getPlotter(conf);
+      this.smooth = plotter.isSmooth();
+      this.radius = plotter.getRadius();
       this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevelToReplicate));
       this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevelToReplicate));
       this.tileWidth = conf.getInt("tilewidth", 256);
@@ -385,13 +385,13 @@ public class MultilevelPlot {
       bottomGrid.columns = bottomGrid.rows = (1 << (level2 - level1));
       double bufferSizeXLevel2 = radius * inputMBR.getWidth() / (tileWidth * (1 << level2));
       double bufferSizeYLevel2 = radius * inputMBR.getHeight() / (tileHeight * (1 << level2));
-      Map<TileIndex, RasterLayer> rasterLayers = new HashMap<TileIndex, RasterLayer>();
+      Map<TileIndex, CanvasLayer> canvasLayers = new HashMap<TileIndex, CanvasLayer>();
       
       TileIndex key = new TileIndex();
       
-      context.setStatus("Rasterizing");
+      context.setStatus("Plotting");
       if (smooth) {
-        shapes = rasterizer.smooth(shapes);
+        shapes = plotter.smooth(shapes);
         context.progress();
       }
       int i = 0;
@@ -409,18 +409,18 @@ public class MultilevelPlot {
         for (key.level = level2; key.level >= level1; key.level--) {
           for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
             for (key.y = overlappingCells.y; key.y < overlappingCells.y + overlappingCells.height; key.y++) {
-              RasterLayer rasterLayer = rasterLayers.get(key);
-              if (rasterLayer == null) {
+              CanvasLayer canvasLayer = canvasLayers.get(key);
+              if (canvasLayer == null) {
                 Rectangle tileMBR = new Rectangle();
                 gridSize = 1 << key.level;
                 tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
                 tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x+1)) / gridSize;
                 tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
                 tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y+1)) / gridSize;
-                rasterLayer = rasterizer.createRaster(tileWidth, tileHeight, tileMBR);
-                rasterLayers.put(key.clone(), rasterLayer);
+                canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+                canvasLayers.put(key.clone(), canvasLayer);
               }
-              rasterizer.rasterize(rasterLayer, shape);
+              plotter.plot(canvasLayer, shape);
             }
           }
           
@@ -438,20 +438,20 @@ public class MultilevelPlot {
         if (((++i) & 0xff) == 0)
           context.progress();
       }
-      context.setStatus("Writing "+rasterLayers.size()+" tiles");
+      context.setStatus("Writing "+canvasLayers.size()+" tiles");
       // Write all created layers to the output as images
-      for (Map.Entry<TileIndex, RasterLayer> entry : rasterLayers.entrySet()) {
+      for (Map.Entry<TileIndex, CanvasLayer> entry : canvasLayers.entrySet()) {
         context.write(entry.getKey(), entry.getValue());
       }
     }
   }
 
   private static Job plotMapReduce(Path[] inFiles, Path outFile,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params)
+      Class<? extends Plotter> plotterClass, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
-    Rasterizer rasterizer;
+    Plotter plotter;
     try {
-      rasterizer = rasterizerClass.newInstance();
+      plotter = plotterClass.newInstance();
     } catch (InstantiationException e) {
       throw new RuntimeException("Error creating rastierizer", e);
     } catch (IllegalAccessException e) {
@@ -460,9 +460,9 @@ public class MultilevelPlot {
     
     Job job = new Job(params, "MultilevelPlot");
     job.setJarByClass(SingleLevelPlot.class);
-    // Set rasterizer
+    // Set plotter
     Configuration conf = job.getConfiguration();
-    Rasterizer.setRasterizer(conf, rasterizerClass);
+    Plotter.setPlotter(conf, plotterClass);
     // Set input file MBR
     Rectangle inputMBR = (Rectangle) params.getShape("mbr");
     if (inputMBR == null)
@@ -498,7 +498,7 @@ public class MultilevelPlot {
       // Use flat partitioning
       job.setMapperClass(FlatPartitionMap.class);
       job.setMapOutputKeyClass(TileIndex.class);
-      job.setMapOutputValueClass(rasterizer.getRasterClass());
+      job.setMapOutputValueClass(plotter.getCanvasClass());
       job.setReducerClass(FlatPartitionReduce.class);
     } else if (partitionTechnique.equalsIgnoreCase("pyramid")) {
       // Use pyramid partitioning
@@ -526,7 +526,7 @@ public class MultilevelPlot {
   }
   
   private static void plotLocal(Path[] inFiles, final Path outPath,
-      final Class<? extends Rasterizer> rasterizerClass, final OperationsParams params)
+      final Class<? extends Plotter> plotterClass, final OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
     final boolean vflip = params.getBoolean("vflip", true);
     
@@ -580,8 +580,8 @@ public class MultilevelPlot {
     }
 
     try {
-      Rasterizer rasterizer = rasterizerClass.newInstance();
-      rasterizer.configure(params);
+      Plotter plotter = plotterClass.newInstance();
+      plotter.configure(params);
       
       String[] strLevels = params.get("levels", "7").split("\\.\\.");
       int minLevel, maxLevel;
@@ -593,7 +593,7 @@ public class MultilevelPlot {
         maxLevel = Integer.parseInt(strLevels[1]);
       }
       
-      int radius = rasterizer.getRadius();
+      int radius = plotter.getRadius();
       double bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
       double bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
       
@@ -602,8 +602,8 @@ public class MultilevelPlot {
       
       TileIndex key = new TileIndex();
       
-      // All raster layers in the pyramid, one per tile
-      Map<TileIndex, RasterLayer> rasterLayers = new HashMap<TileIndex, RasterLayer>();
+      // All canvases in the pyramid, one per tile
+      Map<TileIndex, CanvasLayer> canvasLayers = new HashMap<TileIndex, CanvasLayer>();
       for (InputSplit split : splits) {
         FileSplit fsplit = (FileSplit) split;
         RecordReader<Rectangle, Iterable<Shape>> reader =
@@ -635,18 +635,18 @@ public class MultilevelPlot {
             for (key.level = maxLevel; key.level >= minLevel; key.level--) {
               for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
                 for (key.y = overlappingCells.y; key.y < overlappingCells.y + overlappingCells.height; key.y++) {
-                  RasterLayer rasterLayer = rasterLayers.get(key);
-                  if (rasterLayer == null) {
+                  CanvasLayer canvasLayer = canvasLayers.get(key);
+                  if (canvasLayer == null) {
                     Rectangle tileMBR = new Rectangle();
                     int gridSize = 1 << key.level;
                     tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
                     tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x+1)) / gridSize;
                     tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
                     tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y+1)) / gridSize;
-                    rasterLayer = rasterizer.createRaster(tileWidth, tileHeight, tileMBR);
-                    rasterLayers.put(key.clone(), rasterLayer);
+                    canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+                    canvasLayers.put(key.clone(), canvasLayer);
                   }
-                  rasterizer.rasterize(rasterLayer, shape);
+                  plotter.plot(canvasLayer, shape);
                 }
               }
               // Update overlappingCells for the higher level
@@ -665,7 +665,7 @@ public class MultilevelPlot {
       }
       
       // Done with all splits. Write output to disk
-      LOG.info("Done with rasterization. Now writing the output");
+      LOG.info("Done with plotting. Now writing the output");
       final FileSystem outFS = outPath.getFileSystem(params);
       
       LOG.info("Writing default empty image");
@@ -704,20 +704,20 @@ public class MultilevelPlot {
       htmlOut.close();
 
       // Write the tiles
-      final Entry<TileIndex, RasterLayer>[] entries =
-          rasterLayers.entrySet().toArray(new Map.Entry[rasterLayers.size()]);
+      final Entry<TileIndex, CanvasLayer>[] entries =
+          canvasLayers.entrySet().toArray(new Map.Entry[canvasLayers.size()]);
       // Clear the hash map to save memory as it is no longer needed
-      rasterLayers.clear();
+      canvasLayers.clear();
       int parallelism = params.getInt("parallel",
           Runtime.getRuntime().availableProcessors());
       Parallel.forEach(entries.length, new RunnableRange<Object>() {
         @Override
         public Object run(int i1, int i2) {
           try {
-            Rasterizer rasterizer = rasterizerClass.newInstance();
-            rasterizer.configure(params);
+            Plotter plotter = plotterClass.newInstance();
+            plotter.configure(params);
             for (int i = i1; i < i2; i++) {
-              Map.Entry<TileIndex, RasterLayer> entry = entries[i];
+              Map.Entry<TileIndex, CanvasLayer> entry = entries[i];
               TileIndex key = entry.getKey();
               if (vflip)
                 key.y = ((1 << key.level) - 1) - key.y;
@@ -725,7 +725,7 @@ public class MultilevelPlot {
               Path imagePath = new Path(outPath, key.getImageFileName());
               // Write this tile to an image
               FSDataOutputStream outFile = outFS.create(imagePath);
-              rasterizer.writeImage(entry.getValue(), outFile, vflip);
+              plotter.writeImage(entry.getValue(), outFile, vflip);
               outFile.close();
               
               // Remove entry to allows GC to collect it
@@ -750,7 +750,7 @@ public class MultilevelPlot {
   }
   
   public static Job plot(Path[] inPaths, Path outPath,
-      Class<? extends Rasterizer> rasterizerClass, OperationsParams params)
+      Class<? extends Plotter> plotterClass, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
     if (params.getBoolean("showmem", false)) {
       // Run a thread that keeps track of used memory
@@ -791,7 +791,7 @@ public class MultilevelPlot {
     Job runningJob = null;
     if (OperationsParams.isLocal(params, inPaths)) {
       // Plot local
-      plotLocal(inPaths, outPath, rasterizerClass, params);
+      plotLocal(inPaths, outPath, plotterClass, params);
     } else {
       int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 4);
       if (minLevel <= maxLevelWithFlatPartitioning) {
@@ -799,14 +799,14 @@ public class MultilevelPlot {
         flatPartitioning.set("levels", minLevel+".."+Math.min(maxLevelWithFlatPartitioning, maxLevel));
         flatPartitioning.set("partition", "flat");
         LOG.info("Using flat partitioning in levels "+flatPartitioning.get("levels"));
-        runningJob = plotMapReduce(inPaths, new Path(outPath, "flat"), rasterizerClass, flatPartitioning);
+        runningJob = plotMapReduce(inPaths, new Path(outPath, "flat"), plotterClass, flatPartitioning);
       }
       if (maxLevel > maxLevelWithFlatPartitioning) {
         OperationsParams pyramidPartitioning = new OperationsParams(params);
         pyramidPartitioning.set("levels", Math.max(minLevel, maxLevelWithFlatPartitioning+1)+".."+maxLevel);
         pyramidPartitioning.set("partition", "pyramid");
         LOG.info("Using pyramid partitioning in levels "+pyramidPartitioning.get("levels"));
-        runningJob = plotMapReduce(inPaths, new Path(outPath, "pyramid"), rasterizerClass, pyramidPartitioning);
+        runningJob = plotMapReduce(inPaths, new Path(outPath, "pyramid"), plotterClass, pyramidPartitioning);
       }
       // Write a new HTML file that displays both parts of the pyramid
       // Add an HTML file that visualizes the result using Google Maps

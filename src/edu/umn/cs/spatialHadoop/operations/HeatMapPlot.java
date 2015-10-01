@@ -26,11 +26,11 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.visualization.FrequencyMapRasterLayer;
-import edu.umn.cs.spatialHadoop.visualization.FrequencyMapRasterLayer.GradientType;
+import edu.umn.cs.spatialHadoop.visualization.FrequencyMap;
+import edu.umn.cs.spatialHadoop.visualization.FrequencyMap.GradientType;
 import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
-import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
-import edu.umn.cs.spatialHadoop.visualization.Rasterizer;
+import edu.umn.cs.spatialHadoop.visualization.CanvasLayer;
+import edu.umn.cs.spatialHadoop.visualization.Plotter;
 import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
 
 /**
@@ -39,12 +39,12 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
  */
 public class HeatMapPlot {
 
-  public static class HeatMapRasterizer extends Rasterizer {
+  public static class HeatMapRasterizer extends Plotter {
 
     /**Radius of the heat map smooth in pixels*/
     private int radius;
     /**Type of smoothing to use in the frequency map*/
-    private FrequencyMapRasterLayer.SmoothType smoothType;
+    private FrequencyMap.SmoothType smoothType;
     /**Color associated with minimum value*/
     private Color color1;
     /**Color associated with maximum value*/
@@ -59,8 +59,8 @@ public class HeatMapPlot {
     public void configure(Configuration conf) {
       super.configure(conf);
       this.radius = conf.getInt("radius", 5);
-      this.smoothType = conf.getBoolean("smooth", true) ? FrequencyMapRasterLayer.SmoothType.Gaussian
-          : FrequencyMapRasterLayer.SmoothType.Flat;
+      this.smoothType = conf.getBoolean("smooth", true) ? FrequencyMap.SmoothType.Gaussian
+          : FrequencyMap.SmoothType.Flat;
       this.color1 = OperationsParams.getColor(conf, "color1", new Color(0, 0, 255, 0));
       this.color2 = OperationsParams.getColor(conf, "color2", new Color(255, 0, 0, 255));
       this.gradientType = conf.get("gradient", "hsb").equals("hsb") ? GradientType.GT_HSB : GradientType.GT_RGB;
@@ -76,8 +76,8 @@ public class HeatMapPlot {
     }
     
     @Override
-    public RasterLayer createRaster(int width, int height, Rectangle mbr) {
-      FrequencyMapRasterLayer rasterLayer = new FrequencyMapRasterLayer(mbr, width, height, radius, smoothType);
+    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
+      FrequencyMap rasterLayer = new FrequencyMap(mbr, width, height, radius, smoothType);
       rasterLayer.setGradientInfor(color1, color2, gradientType);
       if (this.minValue <= maxValue)
         rasterLayer.setValueRange(minValue, maxValue);
@@ -85,8 +85,8 @@ public class HeatMapPlot {
     }
 
     @Override
-    public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      FrequencyMapRasterLayer frequencyMap = (FrequencyMapRasterLayer) rasterLayer;
+    public void plot(CanvasLayer canvasLayer, Shape shape) {
+      FrequencyMap frequencyMap = (FrequencyMap) canvasLayer;
       Point center;
       if (shape instanceof Point) {
         center = (Point) shape;
@@ -98,28 +98,28 @@ public class HeatMapPlot {
           return;
         center = shapeMBR.getCenterPoint();
       }
-      Rectangle inputMBR = rasterLayer.getInputMBR();
-      int centerx = (int) Math.round((center.x - inputMBR.x1) * rasterLayer.getWidth() / inputMBR.getWidth());
-      int centery = (int) Math.round((center.y - inputMBR.y1) * rasterLayer.getHeight() / inputMBR.getHeight());
+      Rectangle inputMBR = canvasLayer.getInputMBR();
+      int centerx = (int) Math.round((center.x - inputMBR.x1) * canvasLayer.getWidth() / inputMBR.getWidth());
+      int centery = (int) Math.round((center.y - inputMBR.y1) * canvasLayer.getHeight() / inputMBR.getHeight());
 
       frequencyMap.addPoint(centerx, centery);
     }
 
     @Override
-    public Class<? extends RasterLayer> getRasterClass() {
-      return FrequencyMapRasterLayer.class;
+    public Class<? extends CanvasLayer> getCanvasClass() {
+      return FrequencyMap.class;
     }
 
     @Override
-    public void merge(RasterLayer finalLayer,
-        RasterLayer intermediateLayer) {
-      ((FrequencyMapRasterLayer)finalLayer).mergeWith((FrequencyMapRasterLayer) intermediateLayer);
+    public void merge(CanvasLayer finalLayer,
+        CanvasLayer intermediateLayer) {
+      ((FrequencyMap)finalLayer).mergeWith((FrequencyMap) intermediateLayer);
     }
 
     @Override
-    public void writeImage(RasterLayer layer, DataOutputStream out,
+    public void writeImage(CanvasLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
-      BufferedImage img =  ((FrequencyMapRasterLayer)layer).asImage();
+      BufferedImage img =  ((FrequencyMap)layer).asImage();
       // Flip image vertically if needed
       if (vflip) {
         AffineTransform tx = AffineTransform.getScaleInstance(1, -1);

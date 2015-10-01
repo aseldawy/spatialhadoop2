@@ -28,14 +28,14 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 public class SVGPlot {
   
   /**
-   * A rasterizer that draws the resulting image as SVG.
+   * A plotter that draws the resulting image as SVG.
    * It automatically down samples the data to match the resolution
    * of the generated image. This means that drawing to a small image
    * would reduce the level of details in the vector data.  
    * @author Ahmed Eldawy
    *
    */
-  public static class SVGRasterizer extends Rasterizer {
+  public static class SVGPlotter extends Plotter {
 
     @Override
     public void configure(Configuration conf) {
@@ -43,34 +43,34 @@ public class SVGPlot {
     }
 
     @Override
-    public RasterLayer createRaster(int width, int height, Rectangle mbr) {
-      SVGRasterLayer svgRasterLayer = new SVGRasterLayer(mbr, width, height);
-      return svgRasterLayer;
+    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
+      SVGCanvas svgCanvas = new SVGCanvas(mbr, width, height);
+      return svgCanvas;
     }
 
     @Override
-    public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      SVGRasterLayer svgLayer = (SVGRasterLayer) rasterLayer;
+    public void plot(CanvasLayer canvasLayer, Shape shape) {
+      SVGCanvas svgLayer = (SVGCanvas) canvasLayer;
       svgLayer.drawShape(shape);
     }
 
     @Override
-    public Class<? extends RasterLayer> getRasterClass() {
-      return SVGRasterLayer.class;
+    public Class<? extends CanvasLayer> getCanvasClass() {
+      return SVGCanvas.class;
     }
 
     @Override
-    public void merge(RasterLayer finalLayer,
-        RasterLayer intermediateLayer) {
-      ((SVGRasterLayer)finalLayer).mergeWith((SVGRasterLayer) intermediateLayer);
+    public void merge(CanvasLayer finalLayer,
+        CanvasLayer intermediateLayer) {
+      ((SVGCanvas)finalLayer).mergeWith((SVGCanvas) intermediateLayer);
     }
 
     @Override
-    public void writeImage(RasterLayer layer, DataOutputStream out,
+    public void writeImage(CanvasLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
       out.flush();
       PrintStream ps = new PrintStream(out);
-      ((SVGRasterLayer)layer).writeToFile(ps);
+      ((SVGCanvas)layer).writeToFile(ps);
       ps.flush();
     }
   }
@@ -111,9 +111,9 @@ public class SVGPlot {
 
     long t1 = System.currentTimeMillis();
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFiles, outFile, SVGRasterizer.class, params);
+      MultilevelPlot.plot(inFiles, outFile, SVGPlotter.class, params);
     } else {
-      SingleLevelPlot.plot(inFiles, outFile, SVGRasterizer.class, params);
+      SingleLevelPlot.plot(inFiles, outFile, SVGPlotter.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");

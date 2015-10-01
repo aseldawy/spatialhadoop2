@@ -319,7 +319,7 @@ public class MultiHDFPlot {
     // fix this part to work according to color1, color2 and gradient type
     HDFPlot.HDFRasterizer gradient = new HDFPlot.HDFRasterizer();
     gradient.configure(params);
-    HDFRasterLayer gradientLayer = (HDFRasterLayer) gradient.createRaster(0, 0, new Rectangle());
+    HDFRasterLayer gradientLayer = (HDFRasterLayer) gradient.createCanvas(0, 0, new Rectangle());
     for (int y = 0; y < height; y++) {
       Color color = gradientLayer.calculateColor(height - y, 0, height);
       g.setColor(color);
@@ -366,7 +366,7 @@ public class MultiHDFPlot {
     // fix this part to work according to color1, color2 and gradient type
     HDFPlot.HDFRasterizer gradient = new HDFPlot.HDFRasterizer();
     gradient.configure(params);
-    HDFRasterLayer gradientLayer = (HDFRasterLayer) gradient.createRaster(0, 0, new Rectangle());
+    HDFRasterLayer gradientLayer = (HDFRasterLayer) gradient.createCanvas(0, 0, new Rectangle());
     for (int x = 0; x < width; x++) {
       Color color = gradientLayer.calculateColor(x, 0, width);
       g.setColor(color);

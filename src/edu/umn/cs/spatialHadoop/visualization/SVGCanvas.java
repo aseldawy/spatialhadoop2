@@ -18,8 +18,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
- * A raster layer that contains a set of vector data.
- * It seems wrong because vector and raster are two different things.
+ * A canvas that contains a set of vector data.
  * Although this layer contains vector data, it keeps into consideration
  * that this data is drawn at a specific raster resolution. It automatically
  * simplifies objects drawn on it to match the configured resolution.
@@ -29,7 +28,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
-public class SVGRasterLayer extends RasterLayer {
+public class SVGCanvas extends CanvasLayer {
 
   /**Underlying SVG Graphics*/
   protected SVGGraphics svgGraphics;
@@ -41,18 +40,18 @@ public class SVGRasterLayer extends RasterLayer {
   protected double yscale;
 
   /**Default constructor is necessary to be able to deserialize it*/
-  public SVGRasterLayer() {
+  public SVGCanvas() {
     svgGraphics = new SVGGraphics();
   }
 
   /**
-   * Creates a raster layer of the given size for a given (portion of) input
+   * Creates a canvas of the given size for a given (portion of) input
    * data.
-   * @param inputMBR - the MBR of the input area to rasterize
+   * @param inputMBR - the MBR of the input area to plot
    * @param width - width the of the image to generate in pixels
    * @param height - height of the image to generate in pixels
    */
-  public SVGRasterLayer(Rectangle inputMBR, int width, int height) {
+  public SVGCanvas(Rectangle inputMBR, int width, int height) {
     super(inputMBR, width, height);
     xscale = width / getInputMBR().getWidth();
     yscale = height / getInputMBR().getHeight();
@@ -77,7 +76,7 @@ public class SVGRasterLayer extends RasterLayer {
     
   }
 
-  public void mergeWith(SVGRasterLayer intermediateLayer) {
+  public void mergeWith(SVGCanvas intermediateLayer) {
     Point offset = projectToImageSpace(intermediateLayer.getInputMBR().x1,
         intermediateLayer.getInputMBR().y1);
     this.svgGraphics.mergeWith(intermediateLayer.svgGraphics, offset.x, offset.y);

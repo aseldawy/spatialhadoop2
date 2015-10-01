@@ -41,7 +41,7 @@ import edu.umn.cs.spatialHadoop.util.Progressable;
  */
 public class RoadNetworkPlot {
   
-  public static class GeometricRasterizer extends Rasterizer {
+  public static class GeometricPlotter extends Plotter {
     
     private Color strokeColor;
     private double bufferPt;
@@ -82,39 +82,39 @@ public class RoadNetworkPlot {
     }
 
     @Override
-    public RasterLayer createRaster(int width, int height, Rectangle mbr) {
+    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
       if (!vector) {
-        ImageRasterLayer imageRasterLayer = new ImageRasterLayer(mbr, width, height);
-        imageRasterLayer.setColor(strokeColor);
-        return imageRasterLayer;
+        ImageCanvas imageCanvas = new ImageCanvas(mbr, width, height);
+        imageCanvas.setColor(strokeColor);
+        return imageCanvas;
       } else {
-        return new SVGRasterLayer(mbr,  width, height);
+        return new SVGCanvas(mbr,  width, height);
       }
     }
 
     @Override
-    public void rasterize(RasterLayer rasterLayer, Shape shape) {
+    public void plot(CanvasLayer canvasLayer, Shape shape) {
       if (!vector) {
-        ImageRasterLayer imgLayer = (ImageRasterLayer) rasterLayer;
+        ImageCanvas imgLayer = (ImageCanvas) canvasLayer;
         imgLayer.drawShape(shape);
       } else {
-        SVGRasterLayer svgLayer = (SVGRasterLayer) rasterLayer;
+        SVGCanvas svgLayer = (SVGCanvas) canvasLayer;
         svgLayer.drawShape(shape);
       }
     }
 
     @Override
-    public Class<? extends RasterLayer> getRasterClass() {
-      return vector? SVGRasterLayer.class : ImageRasterLayer.class;
+    public Class<? extends CanvasLayer> getCanvasClass() {
+      return vector? SVGCanvas.class : ImageCanvas.class;
     }
 
     @Override
-    public void merge(RasterLayer finalLayer,
-        RasterLayer intermediateLayer) {
+    public void merge(CanvasLayer finalLayer,
+        CanvasLayer intermediateLayer) {
       if (!vector ) {
-        ((ImageRasterLayer)finalLayer).mergeWith((ImageRasterLayer) intermediateLayer);
+        ((ImageCanvas)finalLayer).mergeWith((ImageCanvas) intermediateLayer);
       } else {
-        ((SVGRasterLayer)finalLayer).mergeWith((SVGRasterLayer) intermediateLayer);
+        ((SVGCanvas)finalLayer).mergeWith((SVGCanvas) intermediateLayer);
       }
     }
     
@@ -124,10 +124,10 @@ public class RoadNetworkPlot {
     }
 
     @Override
-    public void writeImage(RasterLayer layer, DataOutputStream out,
+    public void writeImage(CanvasLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
       if (!vector) {
-        BufferedImage img =  ((ImageRasterLayer)layer).getImage();
+        BufferedImage img =  ((ImageCanvas)layer).getImage();
         // Flip image vertically if needed
         if (vflip) {
           AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
@@ -140,7 +140,7 @@ public class RoadNetworkPlot {
       } else {
         out.flush();
         PrintStream ps = new PrintStream(out);
-        ((SVGRasterLayer)layer).writeToFile(ps);
+        ((SVGCanvas)layer).writeToFile(ps);
         ps.flush();
       }
     }
@@ -182,9 +182,9 @@ public class RoadNetworkPlot {
 
     long t1 = System.currentTimeMillis();
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+      MultilevelPlot.plot(inFiles, outFile, GeometricPlotter.class, params);
     } else {
-      SingleLevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+      SingleLevelPlot.plot(inFiles, outFile, GeometricPlotter.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");

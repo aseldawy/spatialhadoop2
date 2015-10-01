@@ -10,7 +10,6 @@ package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.Vector;
 
 import org.apache.hadoop.conf.Configuration;
@@ -18,73 +17,73 @@ import org.apache.hadoop.conf.Configuration;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
-/**An abstract interface for a component that rasterizes shapes*/
-public abstract class Rasterizer {
+/**An abstract interface for a component that draws shapes*/
+public abstract class Plotter {
   
-  /**Configuration line for the rasterizer class*/
-  private static final String RasterizerClass = "SingleLevelPlot.Rasterizer";
+  /**Configuration line for the Plotter class*/
+  private static final String PlotterClass = "SingleLevelPlot.Plotter";
   
-  public static void setRasterizer(Configuration job, Class<? extends Rasterizer> rasterizerClass) {
-    job.setClass(RasterizerClass, rasterizerClass, Rasterizer.class);
+  public static void setPlotter(Configuration job, Class<? extends Plotter> plotterClass) {
+    job.setClass(PlotterClass, plotterClass, Plotter.class);
   }
   
-  public static Rasterizer getRasterizer(Configuration job) {
+  public static Plotter getPlotter(Configuration job) {
     try {
-      Class<? extends Rasterizer> rasterizerClass =
-          job.getClass(RasterizerClass, null, Rasterizer.class);
-      if (rasterizerClass == null)
-        throw new RuntimeException("Rasterizer class not set in job");
-      Rasterizer rasterizer = rasterizerClass.newInstance();
-      rasterizer.configure(job);
-      return rasterizer;
+      Class<? extends Plotter> plotterClass =
+          job.getClass(PlotterClass, null, Plotter.class);
+      if (plotterClass == null)
+        throw new RuntimeException("Plotter class not set in job");
+      Plotter plotter = plotterClass.newInstance();
+      plotter.configure(job);
+      return plotter;
     } catch (InstantiationException e) {
-      throw new RuntimeException("Error creating rasterizer", e);
+      throw new RuntimeException("Error creating plotter", e);
     } catch (IllegalAccessException e) {
-      throw new RuntimeException("Error constructing rasterizer", e);
+      throw new RuntimeException("Error constructing plotter", e);
     }
   }
   
   /**
-   * Configures this rasterizer according to the MapReduce program.
+   * Configures this plotter according to the MapReduce program.
    * @param conf
    */
   public void configure(Configuration conf) {
   }
   
   /**
-   * Creates an empty raster layer of the given width and height.
+   * Creates an empty canvas of the given width and height.
    * @param width - Width of the created layer in pixels
    * @param height - Height of the created layer in pixels
    * @param mbr - The minimal bounding rectangle of the layer in the input
    * @return
    */
-  public abstract RasterLayer createRaster(int width, int height, Rectangle mbr);
+  public abstract CanvasLayer createCanvas(int width, int height, Rectangle mbr);
 
   /**
-   * Rasterizes a set of shapes to the given layer
-   * @param layer - the layer to rasterize to. This layer has to be created
-   * using the method {@link #createRaster(int, int, Rectangle)}.
-   * @param shapes - a set of shapes to rasterize
+   * Plots a set of shapes to the given layer
+   * @param layer - the canvas to plot to. This canvas has to be created
+   * using the method {@link #createCanvas(int, int, Rectangle)}.
+   * @param shapes - a set of shapes to plot
    */
-  public void rasterize(RasterLayer layer, Iterable<? extends Shape> shapes) {
+  public void plot(CanvasLayer layer, Iterable<? extends Shape> shapes) {
     for (Shape shape : shapes)
-      rasterize(layer, shape);
+      plot(layer, shape);
   }
 
   /**
-   * Rasterizes one shape to the given layer
-   * @param layer - the layer to rasterize to. This layer has to be created
-   * using the method {@link #createRaster(int, int, Rectangle)}.
-   * @param shape - the shape to rasterize
+   * Plots one shape to the given layer
+   * @param layer - the canvas to plot to. This canvas has to be created
+   * using the method {@link #createCanvas(int, int, Rectangle)}.
+   * @param shape - the shape to plot
    */
-  public abstract void rasterize(RasterLayer layer, Shape shape);
+  public abstract void plot(CanvasLayer layer, Shape shape);
 
   /**
    * Returns the raster class associated with this rasterizer
    * @return
    */
-  public Class<? extends RasterLayer> getRasterClass() {
-    return this.createRaster(0, 0, new Rectangle()).getClass();
+  public Class<? extends CanvasLayer> getCanvasClass() {
+    return this.createCanvas(0, 0, new Rectangle()).getClass();
   }
   
   /**
@@ -92,15 +91,15 @@ public abstract class Rasterizer {
    * @param finalLayer
    * @param intermediateLayer
    */
-  public abstract void merge(RasterLayer finalLayer, RasterLayer intermediateLayer);
+  public abstract void merge(CanvasLayer finalLayer, CanvasLayer intermediateLayer);
 
   /**
-   * Writes a raster layer as an image to the output.
+   * Writes a canvas as an image to the output.
    * @param layer - the layer to be written to the output as an image
    * @param out - the output stream to which the image will be written
    * @param vflip - if <code>true</code>, the image is vertically flipped before written
    */
-  public abstract void writeImage(RasterLayer layer, DataOutputStream out,
+  public abstract void writeImage(CanvasLayer layer, DataOutputStream out,
       boolean vflip) throws IOException;
   
   /**
@@ -126,7 +125,7 @@ public abstract class Rasterizer {
   }
   
   /**
-   * Tells whether this rasterizer supports a smooth function or not.
+   * Tells whether this plotter supports a smooth function or not.
    * @return
    */
   public boolean isSmooth() {

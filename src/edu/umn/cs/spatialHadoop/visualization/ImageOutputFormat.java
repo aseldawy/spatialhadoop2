@@ -31,48 +31,48 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.io.Text2;
 
 /**
- * Writes raster layers as images to the output file
+ * Writes canvases as images to the output file
  * @author Ahmed Eldawy
  *
  */
-public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
+public class ImageOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
 
   /**
-   * Writes raster layers to a file
+   * Writes canvases to a file
    * @author Ahmed Eldawy
    *
    */
-  class ImageRecordWriter extends RecordWriter<Object, RasterLayer> {
-    /**Rasterizer used to merge intermediate raster layers*/
-    private Rasterizer rasterizer;
+  class ImageRecordWriter extends RecordWriter<Object, CanvasLayer> {
+    /**Plotter used to merge intermediate canvases*/
+    private Plotter plotter;
     private Path outPath;
     private FileSystem outFS;
-    private int rasterLayersWritten;
+    private int canvasesWritten;
     private boolean vflip;
     /**The associated reduce task. Used to report progress*/
     private TaskAttemptContext task;
     /**PrintStream to write the master file*/
     private PrintStream masterFile;
-    /**The raster layer resulting of merging all written raster layers*/
-    private RasterLayer mergedRasterLayer;
+    /**The canvas resulting of merging all written canvases*/
+    private CanvasLayer mergedCanvas;
     private int imageHeight;
 
     public ImageRecordWriter(FileSystem fs, Path taskOutputPath,
         TaskAttemptContext task) throws IOException {
       Configuration conf = task.getConfiguration();
       this.task = task;
-      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.plotter = Plotter.getPlotter(conf);
       this.outPath = taskOutputPath;
       this.outFS = this.outPath.getFileSystem(conf);
-      this.rasterLayersWritten = 0;
+      this.canvasesWritten = 0;
       this.vflip = conf.getBoolean("vflip", true);
-      // Create a raster layer that should have been used to merge all images
+      // Create a canvas that should have been used to merge all images
       // This is used to calculate the position of each intermediate image
       // in the final image space to write the master file
       int imageWidth = conf.getInt("width", 1000);
       imageHeight = conf.getInt("height", 1000);
       Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
-      this.mergedRasterLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
+      this.mergedCanvas = plotter.createCanvas(imageWidth, imageHeight, inputMBR);
       // Create a master file that logs the location of each intermediate image
       String masterFileName = String.format("_master-%05d.heap", task.getTaskAttemptID().getTaskID().getId());
       Path masterFilePath = new Path(outPath.getParent(), masterFileName);
@@ -80,16 +80,16 @@ public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
     }
 
     @Override
-    public void write(Object dummy, RasterLayer r) throws IOException {
-      String suffix = String.format("-%05d.png", rasterLayersWritten++);
+    public void write(Object dummy, CanvasLayer r) throws IOException {
+      String suffix = String.format("-%05d.png", canvasesWritten++);
       Path p = new Path(outPath.getParent(), outPath.getName()+suffix);
       FSDataOutputStream outFile = outFS.create(p);
-      // Write the merged raster layer
-      rasterizer.writeImage(r, outFile, this.vflip);
+      // Write the merged canvas
+      plotter.writeImage(r, outFile, this.vflip);
       outFile.close();
       task.progress();
       
-      java.awt.Point imageLocation = mergedRasterLayer.projectToImageSpace(r.inputMBR.x1, r.inputMBR.y2);
+      java.awt.Point imageLocation = mergedCanvas.projectToImageSpace(r.inputMBR.x1, r.inputMBR.y2);
       masterFile.printf("%d,%d,%s\n", imageLocation.x, imageHeight - imageLocation.y, p.getName());
     }
     
@@ -101,7 +101,7 @@ public class ImageOutputFormat extends FileOutputFormat<Object, RasterLayer> {
   }
   
   @Override
-  public RecordWriter<Object, RasterLayer> getRecordWriter(
+  public RecordWriter<Object, CanvasLayer> getRecordWriter(
       TaskAttemptContext task) throws IOException, InterruptedException {
     Path file = getDefaultWorkFile(task, "");
     FileSystem fs = file.getFileSystem(task.getConfiguration());

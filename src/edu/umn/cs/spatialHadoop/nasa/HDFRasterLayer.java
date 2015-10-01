@@ -25,14 +25,14 @@ import org.apache.commons.logging.LogFactory;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.BitArray;
-import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
+import edu.umn.cs.spatialHadoop.visualization.CanvasLayer;
 
 /**
  * A frequency map that can be used to draw a weighted heat map for NASA data
  * @author Ahmed Eldawy
  *
  */
-public class HDFRasterLayer extends RasterLayer {
+public class HDFRasterLayer extends CanvasLayer {
   @SuppressWarnings("unused")
   private static final Log LOG = LogFactory.getLog(HDFRasterLayer.class);
   

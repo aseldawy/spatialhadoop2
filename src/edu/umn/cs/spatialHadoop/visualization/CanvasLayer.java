@@ -17,8 +17,8 @@ import org.apache.hadoop.io.Writable;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
-/**An abstract interface for any raster layer*/
-public abstract class RasterLayer implements Writable {
+/**An abstract interface for any canvas*/
+public abstract class CanvasLayer implements Writable {
   /**The MBR of the this layer in input coordinates*/
   protected Rectangle inputMBR;
   
@@ -28,9 +28,9 @@ public abstract class RasterLayer implements Writable {
   /**Height of this layer in pixels*/
   protected int height;
   
-  public RasterLayer() {}
+  public CanvasLayer() {}
   
-  public RasterLayer(Rectangle inputMBR, int width, int height) {
+  public CanvasLayer(Rectangle inputMBR, int width, int height) {
     super();
     this.inputMBR = inputMBR;
     this.width = width;
@@ -72,7 +72,7 @@ public abstract class RasterLayer implements Writable {
    * @return
    */
   public Point projectToImageSpace(double x, double y) {
-    // Calculate the offset of the intermediate layer in the final raster layer based on its MBR
+    // Calculate the offset of the intermediate layer in the final canvas based on its MBR
     Rectangle finalMBR = this.getInputMBR();
     int imageX = (int) Math.floor((x - finalMBR.x1) * this.getWidth() / finalMBR.getWidth());
     int imageY = (int) Math.floor((y - finalMBR.y1) * this.getHeight() / finalMBR.getHeight());

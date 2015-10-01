@@ -28,10 +28,10 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.visualization.ImageRasterLayer;
+import edu.umn.cs.spatialHadoop.visualization.ImageCanvas;
 import edu.umn.cs.spatialHadoop.visualization.MultilevelPlot;
-import edu.umn.cs.spatialHadoop.visualization.RasterLayer;
-import edu.umn.cs.spatialHadoop.visualization.Rasterizer;
+import edu.umn.cs.spatialHadoop.visualization.CanvasLayer;
+import edu.umn.cs.spatialHadoop.visualization.Plotter;
 import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
 
 /**
@@ -40,7 +40,7 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
  */
 public class GeometricPlot {
   
-  public static class GeometricRasterizer extends Rasterizer {
+  public static class GeometricRasterizer extends Plotter {
     
     private Color strokeColor;
 
@@ -51,33 +51,33 @@ public class GeometricPlot {
     }
 
     @Override
-    public RasterLayer createRaster(int width, int height, Rectangle mbr) {
-      ImageRasterLayer imageRasterLayer = new ImageRasterLayer(mbr, width, height);
-      imageRasterLayer.setColor(strokeColor);
-      return imageRasterLayer;
+    public CanvasLayer createCanvas(int width, int height, Rectangle mbr) {
+      ImageCanvas imageCanvas = new ImageCanvas(mbr, width, height);
+      imageCanvas.setColor(strokeColor);
+      return imageCanvas;
     }
 
     @Override
-    public void rasterize(RasterLayer rasterLayer, Shape shape) {
-      ImageRasterLayer imgLayer = (ImageRasterLayer) rasterLayer;
+    public void plot(CanvasLayer canvasLayer, Shape shape) {
+      ImageCanvas imgLayer = (ImageCanvas) canvasLayer;
       imgLayer.drawShape(shape);
     }
 
     @Override
-    public Class<? extends RasterLayer> getRasterClass() {
-      return ImageRasterLayer.class;
+    public Class<? extends CanvasLayer> getCanvasClass() {
+      return ImageCanvas.class;
     }
 
     @Override
-    public void merge(RasterLayer finalLayer,
-        RasterLayer intermediateLayer) {
-      ((ImageRasterLayer)finalLayer).mergeWith((ImageRasterLayer) intermediateLayer);
+    public void merge(CanvasLayer finalLayer,
+        CanvasLayer intermediateLayer) {
+      ((ImageCanvas)finalLayer).mergeWith((ImageCanvas) intermediateLayer);
     }
 
     @Override
-    public void writeImage(RasterLayer layer, DataOutputStream out,
+    public void writeImage(CanvasLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {
-      BufferedImage img =  ((ImageRasterLayer)layer).getImage();
+      BufferedImage img =  ((ImageCanvas)layer).getImage();
       // Flip image vertically if needed
       if (vflip) {
         AffineTransform tx = AffineTransform.getScaleInstance(1, -1);

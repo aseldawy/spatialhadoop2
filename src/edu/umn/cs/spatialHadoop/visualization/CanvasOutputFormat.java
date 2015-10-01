@@ -30,62 +30,62 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.Parallel;
 
 /**
- * Writes raster layers to a binary output file
+ * Writes canvases to a binary output file
  * @author Ahmed Eldawy
  *
  */
-public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
+public class CanvasOutputFormat extends FileOutputFormat<Object, CanvasLayer> {
   
   private static final String InputMBR = "mbr";
 
   /**
-   * Writes raster layers to a file
+   * Writes canvases to a file
    * @author Ahmed Eldawy
    *
    */
-  class RasterRecordWriter extends RecordWriter<Object, RasterLayer> {
-    /**The output file where all raster layers are written*/
+  class CanvasRecordWriter extends RecordWriter<Object, CanvasLayer> {
+    /**The output file where all canvases are written*/
     private FSDataOutputStream outFile;
-    /**Rasterizer used to merge intermediate raster layers*/
-    private Rasterizer rasterizer;
-    /**The raster layer resulting of merging all written raster layers*/
-    private RasterLayer mergedRasterLayer;
+    /**Plotter used to merge intermediate canvases*/
+    private Plotter plotter;
+    /**The canvas resulting of merging all written canvases*/
+    private CanvasLayer mergedCanvas;
     /**Associated task context to report progress*/
     private TaskAttemptContext task;
     
-    public RasterRecordWriter(FileSystem fs, Path taskOutputPath,
+    public CanvasRecordWriter(FileSystem fs, Path taskOutputPath,
         TaskAttemptContext task) throws IOException {
       Configuration conf = task.getConfiguration();
       this.task = task;
       this.outFile = fs.create(taskOutputPath);
-      this.rasterizer = Rasterizer.getRasterizer(conf);
+      this.plotter = Plotter.getPlotter(conf);
       int imageWidth = conf.getInt("width", 1000);
       int imageHeight = conf.getInt("height", 1000);
       Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
-      this.mergedRasterLayer = rasterizer.createRaster(imageWidth, imageHeight, inputMBR);
+      this.mergedCanvas = plotter.createCanvas(imageWidth, imageHeight, inputMBR);
     }
 
     @Override
-    public void write(Object dummy, RasterLayer r) throws IOException {
-      rasterizer.merge(mergedRasterLayer, r);
+    public void write(Object dummy, CanvasLayer r) throws IOException {
+      plotter.merge(mergedCanvas, r);
       task.progress();
     }
     
     @Override
     public void close(TaskAttemptContext context) throws IOException,
         InterruptedException {
-      // Write the merged raster layer
-      mergedRasterLayer.write(outFile);
+      // Write the merged canvas
+      mergedCanvas.write(outFile);
       outFile.close();
     }
   }
   
   @Override
-  public RecordWriter<Object, RasterLayer> getRecordWriter(
+  public RecordWriter<Object, CanvasLayer> getRecordWriter(
       TaskAttemptContext task) throws IOException, InterruptedException {
     Path file = getDefaultWorkFile(task, "");
     FileSystem fs = file.getFileSystem(task.getConfiguration());
-    return new RasterRecordWriter(fs, file, task);
+    return new CanvasRecordWriter(fs, file, task);
   }
 
   
@@ -111,13 +111,13 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
       return;
     }
     System.out.println(System.currentTimeMillis()+": Merging "+resultFiles.length+" layers into one");
-    Vector<RasterLayer> intermediateLayers = Parallel.forEach(resultFiles.length, new Parallel.RunnableRange<RasterLayer>() {
+    Vector<CanvasLayer> intermediateLayers = Parallel.forEach(resultFiles.length, new Parallel.RunnableRange<CanvasLayer>() {
       @Override
-      public RasterLayer run(int i1, int i2) {
-        Rasterizer rasterizer = Rasterizer.getRasterizer(conf);
-        // The raster layer that contains the merge of all assigned layers
-        RasterLayer finalLayer = null;
-        RasterLayer tempLayer = rasterizer.createRaster(1, 1, new Rectangle());
+      public CanvasLayer run(int i1, int i2) {
+        Plotter plotter = Plotter.getPlotter(conf);
+        // The canvas that contains the merge of all assigned layers
+        CanvasLayer finalLayer = null;
+        CanvasLayer tempLayer = plotter.createCanvas(1, 1, new Rectangle());
         for (int i = i1; i < i2; i++) {
           FileStatus resultFile = resultFiles[i];
           try {
@@ -125,8 +125,8 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
             while (inputStream.getPos() < resultFile.getLen()) {
               if (tempLayer == finalLayer) {
                 // More than one layer. Create a separate final layer to merge
-                finalLayer = rasterizer.createRaster(width, height, inputMBR);
-                rasterizer.merge(finalLayer, tempLayer);
+                finalLayer = plotter.createCanvas(width, height, inputMBR);
+                plotter.merge(finalLayer, tempLayer);
               }
               tempLayer.readFields(inputStream);
               
@@ -136,7 +136,7 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
                 finalLayer = tempLayer;
               } else {
                 // More than only layer. Merge into the final layer
-                rasterizer.merge(finalLayer, tempLayer);
+                plotter.merge(finalLayer, tempLayer);
               }
             }
             inputStream.close();
@@ -150,14 +150,14 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
     }, conf.getInt("parallel", Runtime.getRuntime().availableProcessors()));
     
     // Merge all intermediate layers into one final layer
-    Rasterizer rasterizer = Rasterizer.getRasterizer(conf);
-    RasterLayer finalLayer;
+    Plotter plotter = Plotter.getPlotter(conf);
+    CanvasLayer finalLayer;
     if (intermediateLayers.size() == 1) {
       finalLayer = intermediateLayers.elementAt(0);
     } else {
-      finalLayer = rasterizer.createRaster(width, height, inputMBR);
-      for (RasterLayer intermediateLayer : intermediateLayers) {
-        rasterizer.merge(finalLayer, intermediateLayer);
+      finalLayer = plotter.createCanvas(width, height, inputMBR);
+      for (CanvasLayer intermediateLayer : intermediateLayers) {
+        plotter.merge(finalLayer, intermediateLayer);
       }
     }
     
@@ -165,7 +165,7 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
     System.out.println(System.currentTimeMillis()+": Writing final image");
     outFs.delete(outPath, true); // Delete old (non-combined) images
     FSDataOutputStream outputFile = outFs.create(outPath);
-    rasterizer.writeImage(finalLayer, outputFile, vflip);
+    plotter.writeImage(finalLayer, outputFile, vflip);
     outputFile.close();
   }
   
@@ -214,7 +214,7 @@ public class RasterOutputFormat extends FileOutputFormat<Object, RasterLayer> {
     public void commitJob(org.apache.hadoop.mapred.JobContext context)
         throws IOException {
       super.commitJob(context);
-      Path outPath = RasterOutputFormat.getOutputPath(context);
+      Path outPath = CanvasOutputFormat.getOutputPath(context);
       try {
         mergeImages(context.getConfiguration(), outPath);
       } catch (InterruptedException e) {
