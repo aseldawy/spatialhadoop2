@@ -9,10 +9,10 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
-import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -126,7 +126,7 @@ public class SingleLevelPlot {
       int canvasY2 = (int) Math.ceil((partitionMBR.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       Canvas canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partitionMBR);
       if (smooth) {
-        shapes = plotter.smooth(shapes, partitionMBR, canvasX2 - canvasX1, canvasY2 - canvasY1);
+        shapes = plotter.smooth(shapes);
         context.progress();
       }
       int i = 0;
@@ -326,7 +326,7 @@ public class SingleLevelPlot {
       int canvasY2 = (int) Math.ceil((partition.y2 - inputMBR.y1) * imageHeight / inputMBR.getHeight());
       Canvas canvasLayer = plotter.createCanvas(canvasX2 - canvasX1, canvasY2 - canvasY1, partition);
       if (smooth) {
-        shapes = plotter.smooth(shapes, partition, canvasX1 - canvasX1, canvasY2 - canvasY1);
+        shapes = plotter.smooth(shapes);
         context.progress();
       }
 
@@ -503,7 +503,7 @@ public class SingleLevelPlot {
     final int fwidth = width, fheight = height;
 
     // Start reading input file
-    Vector<InputSplit> splits = new Vector<InputSplit>();
+    List<InputSplit> splits = new ArrayList<InputSplit>();
     final SpatialInputFormat3<Rectangle, Shape> inputFormat =
         new SpatialInputFormat3<Rectangle, Shape>();
     for (Path inFile : inFiles) {
@@ -571,7 +571,7 @@ public class SingleLevelPlot {
               Iterable<Shape> shapes = reader.getCurrentValue();
               // Run the plot step
               plotter.plot(partialCanvas,
-                  plotter.isSmooth() ? plotter.smooth(shapes, partition, fwidth, fheight) : shapes);
+                  plotter.isSmooth() ? plotter.smooth(shapes) : shapes);
             }
             reader.close();
           } catch (IOException e) {

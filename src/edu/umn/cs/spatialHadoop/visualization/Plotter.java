@@ -14,6 +14,7 @@ import java.util.Vector;
 
 import org.apache.hadoop.conf.Configuration;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 
@@ -22,6 +23,12 @@ public abstract class Plotter {
   
   /**Configuration line for the Plotter class*/
   private static final String PlotterClass = "SingleLevelPlot.Plotter";
+  
+  /**The MBR of the input rectangle*/
+  protected Rectangle inputMBR;
+  
+  /**Size of the desired image to generate*/
+  protected int imageWidth, imageHeight;
   
   public static void setPlotter(Configuration job, Class<? extends Plotter> plotterClass) {
     job.setClass(PlotterClass, plotterClass, Plotter.class);
@@ -48,6 +55,9 @@ public abstract class Plotter {
    * @param conf
    */
   public void configure(Configuration conf) {
+    this.inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
+    this.imageWidth = conf.getInt("width", 1000);
+    this.imageHeight = conf.getInt("height", 1000);
   }
   
   /**
@@ -58,8 +68,7 @@ public abstract class Plotter {
    * @param r
    * @return
    */
-  public <S extends Shape> Iterable<S> smooth(Iterable<S> r, Rectangle dataMBR,
-		  int canvasWidth, int canvasHeight) {
+  public <S extends Shape> Iterable<S> smooth(Iterable<S> r) {
     throw new RuntimeException("Not implemented");
   }
 
@@ -102,7 +111,7 @@ public abstract class Plotter {
    */
   public boolean isSmooth() {
     try {
-      smooth(new Vector<Shape>(), new Rectangle(), 0, 0);
+      smooth(new Vector<Shape>());
       return true;
     } catch (RuntimeException e) {
       return false;

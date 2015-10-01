@@ -123,7 +123,7 @@ public class MultilevelPlot {
     protected void map(Rectangle partition, Iterable<? extends Shape> shapes,
         Context context) throws IOException, InterruptedException {
       if (smooth)
-        shapes = plotter.smooth(shapes, partition, tileWidth, tileHeight);
+        shapes = plotter.smooth(shapes);
       TileIndex key = new TileIndex();
       Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
       int i = 0; // Counter to report progress often
@@ -371,7 +371,7 @@ public class MultilevelPlot {
       
       context.setStatus("Plotting");
       if (smooth) {
-        shapes = plotter.smooth(shapes, bottomGrid.getMBR(), tileWidth, tileHeight);
+        shapes = plotter.smooth(shapes);
         context.progress();
       }
       int i = 0;
