@@ -45,14 +45,13 @@ public class RoadNetworkPlot {
     
     private Color strokeColor;
     private double bufferPt;
-    private int bufferPx;
     private boolean vector;
 
     @Override
     public void configure(Configuration conf) {
       super.configure(conf);
       this.strokeColor = OperationsParams.getColor(conf, "color", Color.BLACK);
-      this.bufferPx = conf.getInt("buffer", 2);
+      int bufferPx = conf.getInt("buffer", 2);
       Rectangle inputMBR = OperationsParams.getShape(conf, "mbr").getMBR();
       this.bufferPt = bufferPx * inputMBR.getWidth() / conf.getInt("width", 1000);
       this.vector = conf.getBoolean("vector", true);
@@ -119,11 +118,6 @@ public class RoadNetworkPlot {
       }
     }
     
-    @Override
-    public int getRadius() {
-      return bufferPx;
-    }
-
     @Override
     public void writeImage(CanvasLayer layer, DataOutputStream out,
         boolean vflip) throws IOException {

@@ -125,11 +125,6 @@ public class HeatMapPlot {
       
       ImageIO.write(img, "png", out);
     }
-    
-    @Override
-    public int getRadius() {
-      return this.radius;
-    }
   }
   
   private static void printUsage() {

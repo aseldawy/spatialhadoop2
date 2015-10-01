@@ -117,9 +117,6 @@ public class MultilevelPlot {
       this.tileHeight = conf.getInt("tileheight", 256);
       this.plotter = Plotter.getPlotter(conf);
       this.smooth = plotter.isSmooth();
-      int radius = plotter.getRadius();
-      this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
-      this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
     }
     
     @Override
@@ -246,12 +243,8 @@ public class MultilevelPlot {
     private GridInfo bottomGrid;
     /**The user-configured plotter*/
     private Plotter plotter;
-    /**The radius of effect of each record in input coordinates*/
-    private double bufferSizeXMaxLevel, bufferSizeYMaxLevel;
     /**Maximum levels to generate per reducer*/
     private int maxLevelsPerReducer;
-    /**Radius of effect of each shape*/
-    private int radius;
     
     @Override
     protected void setup(Context context)
@@ -275,9 +268,6 @@ public class MultilevelPlot {
       int tileWidth = conf.getInt("tilewidth", 256);
       int tileHeight = conf.getInt("tileheight", 256);
       this.plotter = Plotter.getPlotter(conf);
-      this.radius = plotter.getRadius();
-      this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevelToReplicate));
-      this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevelToReplicate));
     }
     
     @Override
@@ -289,8 +279,7 @@ public class MultilevelPlot {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
           continue;
-        java.awt.Rectangle overlappingCells =
-            bottomGrid.getOverlappingCells(shapeMBR.buffer(bufferSizeXMaxLevel, bufferSizeYMaxLevel));
+        java.awt.Rectangle overlappingCells = bottomGrid.getOverlappingCells(shapeMBR);
         // Iterate over levels from bottom up
         for (outKey.level = maxLevelToReplicate; outKey.level >= minLevel; outKey.level -= maxLevelsPerReducer) {
           for (outKey.x = overlappingCells.x; outKey.x < overlappingCells.x + overlappingCells.width; outKey.x++) {
@@ -325,14 +314,10 @@ public class MultilevelPlot {
     private GridInfo bottomGrid;
     /**The user-configured plotter*/
     private Plotter plotter;
-    /**The radius of effect of each record in input coordinates*/
-    private double bufferSizeXMaxLevel, bufferSizeYMaxLevel;
     /**Maximum levels to generate per reducer*/
     private int maxLevelsPerReducer;
     /**Size of each tile in pixels*/
     private int tileWidth, tileHeight;
-    /**Radius of effect of each shape*/
-    private int radius;
     /**Whether the configured plotter defines a smooth function or not*/
     private boolean smooth;
     
@@ -359,9 +344,6 @@ public class MultilevelPlot {
       int tileHeight = conf.getInt("tileheight", 256);
       this.plotter = Plotter.getPlotter(conf);
       this.smooth = plotter.isSmooth();
-      this.radius = plotter.getRadius();
-      this.bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevelToReplicate));
-      this.bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevelToReplicate));
       this.tileWidth = conf.getInt("tilewidth", 256);
       this.tileHeight = conf.getInt("tileheight", 256);
     }
@@ -383,8 +365,6 @@ public class MultilevelPlot {
       bottomGrid.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
       bottomGrid.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y+1)) / gridSize;
       bottomGrid.columns = bottomGrid.rows = (1 << (level2 - level1));
-      double bufferSizeXLevel2 = radius * inputMBR.getWidth() / (tileWidth * (1 << level2));
-      double bufferSizeYLevel2 = radius * inputMBR.getHeight() / (tileHeight * (1 << level2));
       Map<TileIndex, CanvasLayer> canvasLayers = new HashMap<TileIndex, CanvasLayer>();
       
       TileIndex key = new TileIndex();
@@ -399,8 +379,7 @@ public class MultilevelPlot {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
           continue;
-        java.awt.Rectangle overlappingCells =
-            bottomGrid.getOverlappingCells(shapeMBR.buffer(bufferSizeXLevel2, bufferSizeYLevel2));
+        java.awt.Rectangle overlappingCells = bottomGrid.getOverlappingCells(shapeMBR);
         // Shift overlapping cells to be in the full pyramid rather than
         // the sub-pyramid rooted at tileID
         overlappingCells.x += tileOffsetX;
@@ -593,10 +572,6 @@ public class MultilevelPlot {
         maxLevel = Integer.parseInt(strLevels[1]);
       }
       
-      int radius = plotter.getRadius();
-      double bufferSizeXMaxLevel = radius * inputMBR.getWidth() / (tileWidth * (1 << maxLevel));
-      double bufferSizeYMaxLevel = radius * inputMBR.getHeight() / (tileHeight * (1 << maxLevel));
-      
       GridInfo bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
       bottomGrid.rows = bottomGrid.columns = 1 << maxLevel;
       
@@ -629,8 +604,7 @@ public class MultilevelPlot {
             Rectangle shapeMBR = shape.getMBR();
             if (shapeMBR == null)
               continue;
-            java.awt.Rectangle overlappingCells =
-                bottomGrid.getOverlappingCells(shapeMBR.buffer(bufferSizeXMaxLevel, bufferSizeYMaxLevel));
+            java.awt.Rectangle overlappingCells = bottomGrid.getOverlappingCells(shapeMBR);
             // Iterate over levels from bottom up
             for (key.level = maxLevel; key.level >= minLevel; key.level--) {
               for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {

@@ -51,6 +51,19 @@ public abstract class Plotter {
   }
   
   /**
+   * Smooth a set of records that are spatially close to each other and returns
+   * a new set of smoothed records. This method is called on the original
+   * raw data before it is visualized. The results of this function are the
+   * records that are visualized.
+   * @param r
+   * @return
+   */
+  public <S extends Shape> Iterable<S> smooth(Iterable<S> r, Rectangle dataMBR,
+		  int canvasWidth, int canvasHeight) {
+    throw new RuntimeException("Not implemented");
+  }
+
+/**
    * Creates an empty canvas of the given width and height.
    * @param width - Width of the created layer in pixels
    * @param height - Height of the created layer in pixels
@@ -60,17 +73,6 @@ public abstract class Plotter {
   public abstract CanvasLayer createCanvas(int width, int height, Rectangle mbr);
 
   /**
-   * Plots a set of shapes to the given layer
-   * @param layer - the canvas to plot to. This canvas has to be created
-   * using the method {@link #createCanvas(int, int, Rectangle)}.
-   * @param shapes - a set of shapes to plot
-   */
-  public void plot(CanvasLayer layer, Iterable<? extends Shape> shapes) {
-    for (Shape shape : shapes)
-      plot(layer, shape);
-  }
-
-  /**
    * Plots one shape to the given layer
    * @param layer - the canvas to plot to. This canvas has to be created
    * using the method {@link #createCanvas(int, int, Rectangle)}.
@@ -78,15 +80,7 @@ public abstract class Plotter {
    */
   public abstract void plot(CanvasLayer layer, Shape shape);
 
-  /**
-   * Returns the raster class associated with this rasterizer
-   * @return
-   */
-  public Class<? extends CanvasLayer> getCanvasClass() {
-    return this.createCanvas(0, 0, new Rectangle()).getClass();
-  }
-  
-  /**
+/**
    * Merges an intermediate layer into the final layer based on its location
    * @param finalLayer
    * @param intermediateLayer
@@ -103,29 +97,6 @@ public abstract class Plotter {
       boolean vflip) throws IOException;
   
   /**
-   * Returns the radius in pixels that one object might affect in the image.
-   * This is used to ensure that each image is generated correctly by using
-   * all records in the buffer area.
-   * @return
-   */
-  public int getRadius() {
-    return 0;
-  }
-  
-  /**
-   * Smooth a set of records that are spatially close to each other and returns
-   * a new set of smoothed records. This method is called on the original
-   * raw data before it is visualized. The results of this function are the
-   * records that are visualized.
-   * @param r
-   * @return
-   */
-  public <S extends Shape> Iterable<S> smooth(Iterable<S> r, Rectangle dataMBR,
-		  int canvasWidth, int canvasHeight) {
-    throw new RuntimeException("Not implemented");
-  }
-  
-  /**
    * Tells whether this plotter supports a smooth function or not.
    * @return
    */
@@ -136,5 +107,24 @@ public abstract class Plotter {
     } catch (RuntimeException e) {
       return false;
     }
+  }
+
+/**
+   * Returns the raster class associated with this rasterizer
+   * @return
+   */
+  public Class<? extends CanvasLayer> getCanvasClass() {
+    return this.createCanvas(0, 0, new Rectangle()).getClass();
+  }
+
+/**
+   * Plots a set of shapes to the given layer
+   * @param layer - the canvas to plot to. This canvas has to be created
+   * using the method {@link #createCanvas(int, int, Rectangle)}.
+   * @param shapes - a set of shapes to plot
+   */
+  public void plot(CanvasLayer layer, Iterable<? extends Shape> shapes) {
+    for (Shape shape : shapes)
+      plot(layer, shape);
   }
 }
