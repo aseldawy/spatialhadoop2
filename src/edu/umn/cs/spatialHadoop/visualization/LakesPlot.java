@@ -26,6 +26,7 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.log.Log;
 
 import com.vividsolutions.jts.geom.Geometry;
+import com.vividsolutions.jts.simplify.DouglasPeuckerSimplifier;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -36,70 +37,51 @@ import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
+ * Draws a vectorized map of lakes.
  * @author Ahmed Eldawy
  *
  */
-public class RoadNetworkPlot {
+public class LakesPlot {
   
-  public static class GeometricPlotter extends Plotter {
-    
-    private Color strokeColor;
-    private double bufferPt;
+  public static class LakePlotter extends Plotter {
     private boolean vector;
 
     @Override
     public void configure(Configuration conf) {
       super.configure(conf);
-      this.strokeColor = OperationsParams.getColor(conf, "color", Color.BLACK);
-      int bufferPx = conf.getInt("buffer", 2);
-      Rectangle inputMBR = OperationsParams.getShape(conf, "mbr").getMBR();
-      this.bufferPt = bufferPx * inputMBR.getWidth() / conf.getInt("width", 1000);
-      this.vector = conf.getBoolean("vector", true);
-      Log.info("Using a buffer of size: "+bufferPt);
     }
     
     @Override
     public <S extends Shape> Iterable<S> smooth(Iterable<S> r) {
-      List<Geometry> bufferedRoads = new ArrayList<Geometry>();
+      // Density in terms of points per pixel
+      double density = inputMBR.getWidth() * inputMBR.getHeight() /
+          ((double)imageWidth * imageHeight);
+      // Pass 1: Simplify each single lake and remove too small lakes
+      List<S> simpleLakes = new ArrayList<S>();
       for (S s : r) {
-        OSMPolygon poly = (OSMPolygon) s;
-        bufferedRoads.add(poly.geom.buffer(bufferPt));
+        OSMPolygon lake = (OSMPolygon) s;
+        Rectangle lakeMBR = lake.getMBR();
+        if (lakeMBR.getWidth() * lakeMBR.getHeight() / density > 1.0) {
+          //  Big enough to consider
+          DouglasPeuckerSimplifier simplifier = new DouglasPeuckerSimplifier(lake.geom);
+          simplifier.setDistanceTolerance(density);
+          lake.geom = simplifier.getResultGeometry();
+          simpleLakes.add((S) lake.clone());
+        }
       }
-      final List<S> finalResult = new ArrayList<S>();
-      try {
-        SpatialAlgorithms.unionGroup(bufferedRoads.toArray(new Geometry[bufferedRoads.size()]),
-            new Progressable.NullProgressable(), new ResultCollector<Geometry>() {
-          @Override
-          public void collect(Geometry r) {
-            finalResult.add((S) new OSMPolygon(r));
-          }
-        });
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-      return finalResult;
+      // TODO Pass 2: combine nearby small lakes
+      return simpleLakes;
     }
 
     @Override
     public Canvas createCanvas(int width, int height, Rectangle mbr) {
-      if (!vector) {
-        ImageCanvas imageCanvas = new ImageCanvas(mbr, width, height);
-        imageCanvas.setColor(strokeColor);
-        return imageCanvas;
-      } else {
-        return new SVGCanvas(mbr,  width, height);
-      }
+      return new SVGCanvas(mbr,  width, height);
     }
 
     @Override
     public void plot(Canvas canvasLayer, Shape shape) {
-      if (!vector) {
-        ImageCanvas imgLayer = (ImageCanvas) canvasLayer;
-        imgLayer.drawShape(shape);
-      } else {
-        SVGCanvas svgLayer = (SVGCanvas) canvasLayer;
-        svgLayer.drawShape(shape);
-      }
+      SVGCanvas svgLayer = (SVGCanvas) canvasLayer;
+      svgLayer.drawShape(shape);
     }
 
     @Override
@@ -110,33 +92,16 @@ public class RoadNetworkPlot {
     @Override
     public void merge(Canvas finalLayer,
         Canvas intermediateLayer) {
-      if (!vector ) {
-        ((ImageCanvas)finalLayer).mergeWith((ImageCanvas) intermediateLayer);
-      } else {
-        ((SVGCanvas)finalLayer).mergeWith((SVGCanvas) intermediateLayer);
-      }
+      ((SVGCanvas)finalLayer).mergeWith((SVGCanvas) intermediateLayer);
     }
     
     @Override
     public void writeImage(Canvas layer, DataOutputStream out,
         boolean vflip) throws IOException {
-      if (!vector) {
-        BufferedImage img =  ((ImageCanvas)layer).getImage();
-        // Flip image vertically if needed
-        if (vflip) {
-          AffineTransform tx = AffineTransform.getScaleInstance(1, -1);
-          tx.translate(0, -img.getHeight());
-          AffineTransformOp op = new AffineTransformOp(tx, AffineTransformOp.TYPE_NEAREST_NEIGHBOR);
-          img = op.filter(img, null);
-        }
-        
-        ImageIO.write(img, "png", out);
-      } else {
-        out.flush();
-        PrintStream ps = new PrintStream(out);
-        ((SVGCanvas)layer).writeToFile(ps);
-        ps.flush();
-      }
+      out.flush();
+      PrintStream ps = new PrintStream(out);
+      ((SVGCanvas)layer).writeToFile(ps);
+      ps.flush();
     }
   }
   
@@ -176,9 +141,9 @@ public class RoadNetworkPlot {
 
     long t1 = System.currentTimeMillis();
     if (params.getBoolean("pyramid", false)) {
-      MultilevelPlot.plot(inFiles, outFile, GeometricPlotter.class, params);
+      MultilevelPlot.plot(inFiles, outFile, LakePlotter.class, params);
     } else {
-      SingleLevelPlot.plot(inFiles, outFile, GeometricPlotter.class, params);
+      SingleLevelPlot.plot(inFiles, outFile, LakePlotter.class, params);
     }
     long t2 = System.currentTimeMillis();
     System.out.println("Plot finished in "+(t2-t1)+" millis");
