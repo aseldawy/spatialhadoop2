@@ -8,33 +8,23 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.awt.Color;
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
-import java.awt.image.BufferedImage;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.imageio.ImageIO;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.log.Log;
 
-import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.simplify.DouglasPeuckerSimplifier;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
-import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
  * Draws a vectorized map of lakes.
@@ -44,7 +34,6 @@ import edu.umn.cs.spatialHadoop.util.Progressable;
 public class LakesPlot {
   
   public static class LakePlotter extends Plotter {
-    private boolean vector;
 
     @Override
     public void configure(Configuration conf) {
@@ -69,6 +58,7 @@ public class LakesPlot {
           simpleLakes.add((S) lake.clone());
         }
       }
+      Log.info("Smoothed lakes are "+simpleLakes.size());
       // TODO Pass 2: combine nearby small lakes
       return simpleLakes;
     }
@@ -81,12 +71,12 @@ public class LakesPlot {
     @Override
     public void plot(Canvas canvasLayer, Shape shape) {
       SVGCanvas svgLayer = (SVGCanvas) canvasLayer;
-      svgLayer.drawShape(shape);
+      svgLayer.drawShape(((OSMPolygon)shape).geom);
     }
 
     @Override
     public Class<? extends Canvas> getCanvasClass() {
-      return vector? SVGCanvas.class : ImageCanvas.class;
+      return SVGCanvas.class;
     }
 
     @Override
