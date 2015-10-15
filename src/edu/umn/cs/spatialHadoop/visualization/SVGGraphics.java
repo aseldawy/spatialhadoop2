@@ -56,7 +56,7 @@ public class SVGGraphics extends Graphics2D implements Writable {
   /**All coordinates used in the file are stored here*/
   protected IntArray xs, ys;
   
-  // I use lots of arra primitives as opposed to vectors for memory efficiency
+  // I use lots of primitive arrays as opposed to vectors for memory efficiency
   /**The start index of each line*/
   protected IntArray linesStart;
   
