@@ -49,7 +49,11 @@ public class LakesPlot {
       List<S> simpleLakes = new ArrayList<S>();
       for (S s : r) {
         OSMPolygon lake = (OSMPolygon) s;
+        if (lake == null)
+          continue;
         Rectangle lakeMBR = lake.getMBR();
+        if (lakeMBR == null)
+          continue;
         if (lakeMBR.getWidth() * lakeMBR.getHeight() / density > 1.0) {
           //  Big enough to consider
           DouglasPeuckerSimplifier simplifier = new DouglasPeuckerSimplifier(lake.geom);
@@ -58,7 +62,7 @@ public class LakesPlot {
           simpleLakes.add((S) lake.clone());
         }
       }
-      Log.info("Smoothed lakes are "+simpleLakes.size());
+      //Log.info("Smoothed lakes are "+simpleLakes.size());
       // TODO Pass 2: combine nearby small lakes
       return simpleLakes;
     }
@@ -71,7 +75,8 @@ public class LakesPlot {
     @Override
     public void plot(Canvas canvasLayer, Shape shape) {
       SVGCanvas svgLayer = (SVGCanvas) canvasLayer;
-      svgLayer.drawShape(((OSMPolygon)shape).geom);
+      OSMPolygon shape2 = (OSMPolygon)shape;
+      svgLayer.drawShape((int) shape2.id, shape2.geom);
     }
 
     @Override
@@ -88,6 +93,7 @@ public class LakesPlot {
     @Override
     public void writeImage(Canvas layer, DataOutputStream out,
         boolean vflip) throws IOException {
+      // TODO handle vflip
       out.flush();
       PrintStream ps = new PrintStream(out);
       ((SVGCanvas)layer).writeToFile(ps);

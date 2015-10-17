@@ -23,6 +23,7 @@ import edu.umn.cs.spatialHadoop.nasa.SpatioAggregateQueries;
 import edu.umn.cs.spatialHadoop.visualization.GeometricPlot;
 import edu.umn.cs.spatialHadoop.visualization.HadoopvizServer;
 import edu.umn.cs.spatialHadoop.visualization.HeatMapPlot;
+import edu.umn.cs.spatialHadoop.visualization.LakesPlot;
 import edu.umn.cs.spatialHadoop.visualization.VisitPlot;
 import edu.umn.cs.spatialHadoop.delaunay.DelaunayTriangulation;
 
@@ -97,6 +98,9 @@ public class Main {
 
       pgd.addClass("hplot", HeatMapPlot.class,
           "Plots a heat map to an image");
+      
+      pgd.addClass("lakesplot", LakesPlot.class,
+          "Plots lakes to SVG image");
       
       pgd.addClass("hdfx", HDFToText.class,
           "Extracts data from a set of HDF files to text files");

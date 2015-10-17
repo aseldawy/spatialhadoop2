@@ -44,18 +44,21 @@ public class SVGCanvas extends Canvas {
   /**All coordinates used in the file are stored here*/
   protected FloatArray xs, ys;
 
-  /**The point start index and number of points in each polygon*/
-  protected IntArray polygonsStart, polygonsSize;
+  /**The point start index and number of points in each polyline*/
+  protected IntArray polylineStart, polylineSize;
 
   /**Translation of the origin*/
   protected float ox, oy;
+  
+  protected IntArray ids;
 
   /**Default constructor is necessary to be able to deserialize it*/
   public SVGCanvas() {
   	xs = new FloatArray();
   	ys = new FloatArray();
-  	polygonsStart = new IntArray();
-  	polygonsSize = new IntArray();
+  	polylineStart = new IntArray();
+  	polylineSize = new IntArray();
+  	ids = new IntArray();
   }
 
   /**
@@ -76,8 +79,9 @@ public class SVGCanvas extends Canvas {
     
     this.xs = new FloatArray();
     this.ys = new FloatArray();
-    this.polygonsStart = new IntArray();
-    this.polygonsSize = new IntArray();
+    this.polylineStart = new IntArray();
+    this.polylineSize = new IntArray();
+    this.ids = new IntArray();
   }
 
   @Override
@@ -85,8 +89,9 @@ public class SVGCanvas extends Canvas {
     super.write(out);
     xs.write(out);
     ys.write(out);
-    polygonsStart.write(out);
-    polygonsSize.write(out);
+    polylineStart.write(out);
+    polylineSize.write(out);
+    ids.write(out);
   }
   
   @Override
@@ -94,31 +99,32 @@ public class SVGCanvas extends Canvas {
     super.readFields(in);
     xs.readFields(in);
     ys.readFields(in);
-    polygonsStart.readFields(in);
-    polygonsSize.readFields(in);
+    polylineStart.readFields(in);
+    polylineSize.readFields(in);
+    ids.readFields(in);
   }
   
   /**
    * Draws a JTS geometry
    * @param geom
    */
-  public void drawShape(Geometry geom) {
+  public void drawShape(int id, Geometry geom) {
     if (geom instanceof GeometryCollection) {
       GeometryCollection geom_coll = (GeometryCollection) geom;
       for (int i = 0; i < geom_coll.getNumGeometries(); i++) {
         Geometry sub_geom = geom_coll.getGeometryN(i);
         // Recursive call to draw each geometry
-        drawShape(sub_geom);
+        drawShape(id, sub_geom);
       }
     } else if (geom instanceof com.vividsolutions.jts.geom.Polygon) {
       com.vividsolutions.jts.geom.Polygon poly = (com.vividsolutions.jts.geom.Polygon) geom;
 
       for (int i = 0; i < poly.getNumInteriorRing(); i++) {
         LineString ring = poly.getInteriorRingN(i);
-        drawShape(ring);
+        drawShape(id, ring);
       }
 
-      drawShape(poly.getExteriorRing());
+      drawShape(id, poly.getExteriorRing());
     } else if (geom instanceof LineString) {
       LineString line = (LineString) geom;
       double geom_alpha = line.getLength() * (xscale + yscale) / 2.0;
@@ -140,20 +146,23 @@ public class SVGCanvas extends Canvas {
 
       // Draw the polygon
       //graphics.setColor(new Color((shape_color.getRGB() & 0x00FFFFFF) | (color_alpha << 24), true));
-      polygonsStart.append(xs.size());
-      polygonsSize.append(xpoints.length);
+      polylineStart.append(xs.size());
+      polylineSize.append(xpoints.length);
       xs.append(xpoints, 0, xpoints.length, ox);
       ys.append(ypoints, 0, ypoints.length, oy);
+      ids.append(id);
     }
   }
 
   public void mergeWith(SVGCanvas intermediateLayer) {
     Point offset = projectToImageSpace(intermediateLayer.getInputMBR().x1,
         intermediateLayer.getInputMBR().y1);
+    int pointsShift = this.xs.size();
     this.xs.append(intermediateLayer.xs, offset.x);
     this.ys.append(intermediateLayer.ys, offset.y);
-    this.polygonsStart.append(intermediateLayer.polygonsStart, this.polygonsStart.size());
-    this.polygonsSize.append(intermediateLayer.polygonsSize);
+    this.polylineStart.append(intermediateLayer.polylineStart, pointsShift);
+    this.polylineSize.append(intermediateLayer.polylineSize);
+    this.ids.append(intermediateLayer.ids);
   }
 
   public void writeToFile(PrintStream p) {
@@ -170,17 +179,17 @@ public class SVGCanvas extends Canvas {
     float[] xs = this.xs.underlyingArray();
     float[] ys = this.ys.underlyingArray();
     
-    // Draw all polygons
-    if (polygonsStart.size() > 0) {
+    // Draw all polylines
+    if (polylineStart.size() > 0) {
       p.printf("<g style='stroke:rgb(0,0,0);'>\n");
-      for (int i = 0; i < polygonsStart.size(); i++) {
-        int polygonStart = polygonsStart.get(i);
-        int polygonSize = polygonsSize.get(i);
-        p.print("<polygon points='");
+      for (int i = 0; i < polylineStart.size(); i++) {
+        int polygonStart = polylineStart.get(i);
+        int polygonSize = polylineSize.get(i);
+        p.print("<polyline points='");
         for (int j = polygonStart; j < polygonStart + polygonSize; j++) {
           p.printf("%f,%f ", xs[j], ys[j]);
         }
-        p.println("'/>");
+        p.printf("' id='%d'/>\n", this.ids.get(i));
       }
       p.printf("</g>\n");
     }

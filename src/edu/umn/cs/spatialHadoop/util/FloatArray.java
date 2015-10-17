@@ -8,8 +8,12 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.util;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -120,7 +124,7 @@ public class FloatArray implements Writable, Iterable<Float> {
     bb.clear();
   }
   
-  public static float[] readIntArray(float[] array, DataInput in) throws IOException {
+  public static float[] readFloatArray(float[] array, DataInput in) throws IOException {
     int newSize = in.readInt();
     // Check if we need to allocate a new array
     if (array == null || newSize != array.length)
