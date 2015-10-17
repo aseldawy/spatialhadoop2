@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop.visualization;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -21,10 +22,10 @@ import java.util.Vector;
 
 import javax.imageio.ImageIO;
 
+import org.apache.commons.io.output.NullOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
@@ -687,6 +688,7 @@ public class MultilevelPlot {
       Parallel.forEach(entries.length, new RunnableRange<Object>() {
         @Override
         public Object run(int i1, int i2) {
+          boolean output = params.getBoolean("output", true);
           try {
             Plotter plotter = plotterClass.newInstance();
             plotter.configure(params);
@@ -698,7 +700,8 @@ public class MultilevelPlot {
               
               Path imagePath = new Path(outPath, key.getImageFileName());
               // Write this tile to an image
-              FSDataOutputStream outFile = outFS.create(imagePath);
+              DataOutputStream outFile = output? outFS.create(imagePath)
+                  : new DataOutputStream(new NullOutputStream());
               plotter.writeImage(entry.getValue(), outFile, vflip);
               outFile.close();
               
