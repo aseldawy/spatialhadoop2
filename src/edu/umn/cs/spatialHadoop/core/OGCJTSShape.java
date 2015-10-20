@@ -163,6 +163,8 @@ public class OGCJTSShape implements Shape {
 
   @Override
   public boolean isIntersected(Shape s) {
+    if (this.geom == null)
+      return false;
     if (s instanceof OGCJTSShape) {
       return geom.intersects(((OGCJTSShape)s).geom);
     }
