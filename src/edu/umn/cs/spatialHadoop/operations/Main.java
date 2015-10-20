@@ -24,7 +24,7 @@ import edu.umn.cs.spatialHadoop.visualization.GeometricPlot;
 import edu.umn.cs.spatialHadoop.visualization.HadoopvizServer;
 import edu.umn.cs.spatialHadoop.visualization.HeatMapPlot;
 import edu.umn.cs.spatialHadoop.visualization.LakesPlot;
-import edu.umn.cs.spatialHadoop.visualization.VisitPlot;
+import edu.umn.cs.spatialHadoop.visualization.MagickPlot;
 import edu.umn.cs.spatialHadoop.delaunay.DelaunayTriangulation;
 
 
@@ -132,7 +132,7 @@ public class Main {
       pgd.addClass("hadoopviz", HadoopvizServer.class,
           "Run Hadoopviz Server");
       
-      pgd.addClass("vplot", VisitPlot.class, "Plot using VisIt");
+      pgd.addClass("mplot", MagickPlot.class, "Plot using ImageMagick");
       
       pgd.driver(args);
       

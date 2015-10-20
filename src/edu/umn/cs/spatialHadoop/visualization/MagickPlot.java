@@ -40,9 +40,9 @@ import edu.umn.cs.spatialHadoop.osm.OSMEdge;
  * @author Ahmed Eldawy
  *
  */
-public class VisitPlot {
+public class MagickPlot {
 
-  public static class VisitRasterizer extends Plotter {
+  public static class MagickPlotter extends Plotter {
 
     private Color strokeColor;
 
@@ -186,10 +186,10 @@ public class VisitPlot {
   public static Job plot(Path[] inFiles, Path outFile, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
     if (params.getBoolean("pyramid", false)) {
-      return MultilevelPlot.plot(inFiles, outFile, VisitRasterizer.class,
+      return MultilevelPlot.plot(inFiles, outFile, MagickPlotter.class,
           params);
     } else {
-      return SingleLevelPlot.plot(inFiles, outFile, VisitRasterizer.class,
+      return SingleLevelPlot.plot(inFiles, outFile, MagickPlotter.class,
           params);
     }
   }
