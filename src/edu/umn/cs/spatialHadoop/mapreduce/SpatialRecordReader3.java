@@ -241,7 +241,7 @@ public class SpatialRecordReader3<V extends Shape> extends
   
   protected boolean isMatched(Shape shape) {
     // Match with the query
-    if (inputQueryRange != null && !shape.isIntersected(inputQueryRange))
+    if (inputQueryRange != null && (shape == null || !shape.isIntersected(inputQueryRange)))
       return false;
     // Check if we need to apply a duplicate avoidance step or not
     if (!cellMBR.isValid() || inputQueryMBR == null)
