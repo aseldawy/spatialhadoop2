@@ -45,6 +45,8 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, Canvas> {
     private boolean vflip;
     /**Used to indicate progress to Hadoop*/
     private TaskAttemptContext task;
+    /**Extension of output images*/
+    private String extension;
     
     ImageRecordWriter(FileSystem outFs, Path taskOutPath, TaskAttemptContext task) {
       this.task = task;
@@ -53,13 +55,17 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, Canvas> {
       this.outPath = taskOutPath;
       this.outFS = outFs;
       this.vflip = task.getConfiguration().getBoolean("vflip", true);
+      String outFName = outPath.getName();
+      int extensionStart = outFName.lastIndexOf('.');
+      extension = extensionStart == -1 ? ".png"
+          : outFName.substring(extensionStart);
     }
 
     @Override
     public void write(TileIndex tileIndex, Canvas r) throws IOException {
       if (vflip)
         tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
-      Path imagePath = new Path(outPath, tileIndex.getImageFileName());
+      Path imagePath = new Path(outPath, tileIndex.getImageFileName()+extension);
       // Write this tile to an image
       FSDataOutputStream outFile = outFS.create(imagePath);
       plotter.writeImage(r, outFile, this.vflip);
@@ -145,7 +151,7 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, Canvas> {
             Integer.toString(tileHeight));
         lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(maxLevel));
         lineStr = lineStr.replace("#{MIN_ZOOM}", Integer.toString(minLevel));
-        lineStr = lineStr.replace("#{TILE_URL}", "'tile_' + zoom + '_' + coord.x + '-' + coord.y + '.png'");
+        lineStr = lineStr.replace("#{TILE_URL}", "'tile-' + zoom + '-' + coord.x + '-' + coord.y + '.png'");
 
         htmlOut.println(lineStr);
       }

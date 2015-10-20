@@ -531,6 +531,11 @@ public class MultilevelPlot {
         inputMBR.x2 = inputMBR.x1 + inputMBR.getHeight();
       }
     }
+    
+    String outFName = outPath.getName();
+    int extensionStart = outFName.lastIndexOf('.');
+    final String extension = extensionStart == -1 ? ".png"
+        : outFName.substring(extensionStart);
 
     // Start reading input file
     Vector<InputSplit> splits = new Vector<InputSplit>();
@@ -671,7 +676,7 @@ public class MultilevelPlot {
             Integer.toString(tileHeight));
         lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(maxLevel));
         lineStr = lineStr.replace("#{MIN_ZOOM}", Integer.toString(minLevel));
-        lineStr = lineStr.replace("#{TILE_URL}", "'tile_' + zoom + '_' + coord.x + '-' + coord.y + '.png'");
+        lineStr = lineStr.replace("#{TILE_URL}", "'tile-' + zoom + '-' + coord.x + '-' + coord.y + '"+extension+"'");
 
         htmlOut.println(lineStr);
       }
@@ -698,7 +703,7 @@ public class MultilevelPlot {
               if (vflip)
                 key.y = ((1 << key.level) - 1) - key.y;
               
-              Path imagePath = new Path(outPath, key.getImageFileName());
+              Path imagePath = new Path(outPath, key.getImageFileName()+extension);
               // Write this tile to an image
               DataOutputStream outFile = output? outFS.create(imagePath)
                   : new DataOutputStream(new NullOutputStream());

@@ -181,7 +181,7 @@ public class SVGCanvas extends Canvas {
     
     // Draw all polylines
     if (polylineStart.size() > 0) {
-      p.printf("<g style='stroke:rgb(0,0,0);'>\n");
+      p.printf("<g style='stroke:rgb(0,0,0); '>\n");
       for (int i = 0; i < polylineStart.size(); i++) {
         int polygonStart = polylineStart.get(i);
         int polygonSize = polylineSize.get(i);

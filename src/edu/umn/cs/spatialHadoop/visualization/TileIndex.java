@@ -79,6 +79,6 @@ public class TileIndex implements WritableComparable<TileIndex> {
   }
 
   public String getImageFileName() {
-    return "tile_"+this.level+"_"+this.x+"-"+this.y+".png";
+    return "tile-"+this.level+"-"+this.x+"-"+this.y;
   }
 }
