@@ -11,13 +11,10 @@ package edu.umn.cs.spatialHadoop.visualization;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.mortbay.log.Log;
 
 import com.vividsolutions.jts.simplify.DouglasPeuckerSimplifier;
 
@@ -27,7 +24,10 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
- * Draws a vectorized map of lakes.
+ * Draws a vectorized map of lakes. Each lake is simplified to match the
+ * resolution of the generated vector image, so that it will look roughly the
+ * same when displayed on screen with that size. It can still be much faster
+ * and better looking when visualized as compared to raster images.
  * @author Ahmed Eldawy
  *
  */
@@ -43,6 +43,7 @@ public class LakesPlot {
     @Override
     public <S extends Shape> Iterable<S> smooth(Iterable<S> r) {
       // Density in terms of points per pixel
+      /*
       double density = inputMBR.getWidth() * inputMBR.getHeight() /
           ((double)imageWidth * imageHeight);
       // Pass 1: Simplify each single lake and remove too small lakes
@@ -61,10 +62,10 @@ public class LakesPlot {
           lake.geom = simplifier.getResultGeometry();
           simpleLakes.add((S) lake.clone());
         }
-      }
+      }*/
       //Log.info("Smoothed lakes are "+simpleLakes.size());
       // TODO Pass 2: combine nearby small lakes
-      return simpleLakes;
+      return r;
     }
 
     @Override
@@ -73,10 +74,22 @@ public class LakesPlot {
     }
 
     @Override
-    public void plot(Canvas canvasLayer, Shape shape) {
-      SVGCanvas svgLayer = (SVGCanvas) canvasLayer;
+    public void plot(Canvas canvas, Shape shape) {
+      double density = canvas.getInputMBR().getWidth()
+          * canvas.getInputMBR().getHeight()
+          / ((double) canvas.getWidth() * canvas.getHeight());
       OSMPolygon shape2 = (OSMPolygon)shape;
-      svgLayer.drawShape((int) shape2.id, shape2.geom);
+      Rectangle lakeMBR = shape2.getMBR();
+      if (lakeMBR.getWidth() * lakeMBR.getHeight() / density > 1.0) {
+        SVGCanvas svgLayer = (SVGCanvas) canvas;
+        try {
+          DouglasPeuckerSimplifier simplifier = new DouglasPeuckerSimplifier(shape2.geom);
+          simplifier.setDistanceTolerance(density);
+          svgLayer.drawShape((int) shape2.id, simplifier.getResultGeometry());
+        } catch (Exception e) {
+          // Skip
+        }
+      }
     }
 
     @Override

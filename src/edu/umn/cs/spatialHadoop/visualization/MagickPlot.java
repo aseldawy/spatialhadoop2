@@ -37,6 +37,8 @@ import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.osm.OSMEdge;
 
 /**
+ * A visualizer that uses ImageMagick as a plotter. It is used to seamlessly
+ * parallelize visualization work to distributed instances of ImageMagick.
  * @author Ahmed Eldawy
  *
  */
