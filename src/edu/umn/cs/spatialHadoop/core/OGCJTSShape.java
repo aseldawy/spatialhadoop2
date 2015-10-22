@@ -128,8 +128,10 @@ public class OGCJTSShape implements Shape {
     double xmin, ymin, xmax, ymax;
     if (envelope instanceof com.vividsolutions.jts.geom.Point) {
       com.vividsolutions.jts.geom.Point pt = (com.vividsolutions.jts.geom.Point) envelope;
-      xmin = xmax = pt.getX();
-      ymin = ymax = pt.getY();
+      xmin = pt.getX();
+      xmax = xmin + Math.ulp(xmin);
+      ymin = pt.getY();
+      ymax = ymin + Math.ulp(ymin);
     } else if (envelope instanceof com.vividsolutions.jts.geom.Polygon) {
       com.vividsolutions.jts.geom.Polygon mbr = (com.vividsolutions.jts.geom.Polygon) envelope;
       LineString mbrr = mbr.getExteriorRing();

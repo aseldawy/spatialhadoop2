@@ -21,6 +21,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Stack;
 import java.util.Vector;
@@ -39,7 +40,6 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.LineReader;
-import org.apache.hadoop.util.PriorityQueue;
 import org.apache.hadoop.util.QuickSort;
 
 import com.vividsolutions.jts.geom.TopologyException;
@@ -1205,19 +1205,10 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       final ResultCollector2<S1, S2> output,
       final Reporter reporter)
       throws IOException {
-    PriorityQueue<Long> nodesToJoin = new PriorityQueue<Long>() {
-      {
-        initialize(R.leafNodeCount + S.leafNodeCount);
-      }
-      
-      @Override
-      protected boolean lessThan(Object a, Object b) {
-        return ((Long)a) < ((Long)b);
-      }
-    };
+    PriorityQueue<Long> nodesToJoin = new PriorityQueue<Long>(R.nodeCount+S.nodeCount);
     
     // Start with the two roots
-    nodesToJoin.put(0L);
+    nodesToJoin.add(0L);
 
     // Caches to keep the retrieved data records. Helpful when it reaches the
     // leaves and starts to read objects from the two trees
@@ -1236,7 +1227,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     int s_last_offset = 0;
     
     while (nodesToJoin.size() > 0) {
-      long nodes_to_join = nodesToJoin.pop();
+      long nodes_to_join = nodesToJoin.remove();
       int r_node = (int) (nodes_to_join >>> 32);
       int s_node = (int) (nodes_to_join & 0xFFFFFFFF);
       
@@ -1255,7 +1246,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
             int new_s_node = s_node * S.degree + j + 1;
             if (R.nodes[new_r_node].isIntersected(S.nodes[new_s_node])) {
               long new_pair = (((long)new_r_node) << 32) | new_s_node;
-              nodesToJoin.put(new_pair);
+              nodesToJoin.add(new_pair);
             }
           }
         }
@@ -1266,7 +1257,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
           int new_s_node = s_node * S.degree + j + 1;
           if (R.nodes[r_node].isIntersected(S.nodes[new_s_node])) {
             long new_pair = (((long)r_node) << 32) | new_s_node;
-            nodesToJoin.put(new_pair);
+            nodesToJoin.add(new_pair);
           }
         }
       } else if (!r_leaf && s_leaf) {
@@ -1276,7 +1267,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
           int new_r_node = r_node * R.degree + i + 1;
           if (R.nodes[new_r_node].isIntersected(S.nodes[s_node])) {
             long new_pair = (((long)new_r_node) << 32) | s_node;
-            nodesToJoin.put(new_pair);
+            nodesToJoin.add(new_pair);
           }
         }
       } else if (r_leaf && s_leaf) {

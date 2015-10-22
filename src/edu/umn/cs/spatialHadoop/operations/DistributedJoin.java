@@ -150,16 +150,14 @@ public class DistributedJoin {
 				final OutputCollector<Shape, Shape> output, final Reporter reporter)
 				throws IOException {
 		
-			final Rectangle mapperMBR = !key.first.isValid()
-					&& !key.second.isValid() ? null // Both blocks are heap
-													// blocks
-					: (!key.first.isValid() ? key.second // Second block is
-															// indexed
-							: (!key.second.isValid() ? key.first // First block
-																	// is
-																	// indexed
-									: (key.first.getIntersection(key.second)))); // Both
-																					// indexed
+		  final Rectangle dupAvoidanceMBR = !key.first.isValid()
+					&& !key.second.isValid() ? null // Both blocks are heap blocks
+					: (!key.first.isValid() ? key.second // Second block is indexed
+							: (!key.second.isValid() ? key.first // First block is indexed
+									: (key.first.getIntersection(key.second)))); // Both indexed
+
+		  final Rectangle mapperMBR = dupAvoidanceMBR == null? null:
+		    dupAvoidanceMBR.buffer(dupAvoidanceMBR.getWidth()/1000, dupAvoidanceMBR.getHeight()/1000);
 
 			if (value.first instanceof ArrayWritable
 					&& value.second instanceof ArrayWritable) {
@@ -168,14 +166,12 @@ public class DistributedJoin {
 					// Only join shapes in the intersection rectangle
 					List<Shape> r = new Vector<Shape>();
 					List<Shape> s = new Vector<Shape>();
-					for (Shape shape : (Shape[]) ((ArrayWritable) value.first)
-							.get()) {
+					for (Shape shape : (Shape[]) ((ArrayWritable) value.first).get()) {
 						Rectangle mbr = shape.getMBR();
 						if (mbr != null && mapperMBR.isIntersected(mbr))
 							r.add(shape);
 					}
-					for (Shape shape : (Shape[]) ((ArrayWritable) value.second)
-							.get()) {
+					for (Shape shape : (Shape[]) ((ArrayWritable) value.second).get()) {
 						Rectangle mbr = shape.getMBR();
 						if (mbr != null && mapperMBR.isIntersected(mbr))
 							s.add(shape);
@@ -192,14 +188,14 @@ public class DistributedJoin {
 									    double intersectionY = Math.max(
 									        r.getMBR().y1, s.getMBR().y1);
 									    // Employ reference point duplicate avoidance technique
-                      if (mapperMBR.contains(intersectionX, intersectionY))
+                      if (dupAvoidanceMBR.contains(intersectionX, intersectionY))
 									      output.collect(r, s);
 									  } catch (IOException e) {
 									    e.printStackTrace();
 									  }	
 									}
 								}, reporter);	
-					}else{
+					} else {
 						SpatialAlgorithms.SpatialJoin_planeSweep(r, s,
 								new ResultCollector2<Shape, Shape>() {
 									@Override
@@ -210,7 +206,7 @@ public class DistributedJoin {
 									    double intersectionY = Math.max(
 									        r.getMBR().y1, s.getMBR().y1);
 									    // Employ reference point duplicate avoidance technique
-                      if (mapperMBR.contains(intersectionX, intersectionY))
+                      if (dupAvoidanceMBR.contains(intersectionX, intersectionY))
 									      output.collect(r, s);
 									  } catch (IOException e) {
 									    e.printStackTrace();
@@ -271,7 +267,7 @@ public class DistributedJoin {
 					@Override
 					public void collect(Shape r, Shape s) {
 						try {
-							if (mapperMBR == null) {
+							if (dupAvoidanceMBR == null) {
 								output.collect(r, s);
 							} else {
 								// Reference point duplicate avoidance technique
@@ -282,7 +278,7 @@ public class DistributedJoin {
 								// y in the intersection rectangle)
 								double intersectionX = Math.max(r.getMBR().x1, s.getMBR().x1);
 								double intersectionY = Math.max(r.getMBR().y1, s.getMBR().y1);
-                if (mapperMBR.contains(intersectionX, intersectionY))
+                if (dupAvoidanceMBR.contains(intersectionX, intersectionY))
 									output.collect(r, s);
 							}
 						} catch (IOException e) {
@@ -320,8 +316,10 @@ public class DistributedJoin {
 					&& !key.second.isValid() ? null // Both blocks are heap blocks
 					: (!key.first.isValid() ? key.second // Second block is indexed
 							: (!key.second.isValid() ? key.first // First block is indexed
-									: (key.first.getIntersection(key.second).buffer(key.first.getWidth()/1000, key.first.getHeight()/1000)))); // Both indexed
+									: (key.first.getIntersection(key.second)))); // Both indexed
 			// We add a small buffer to account for points which are very close to the edge
+	     if (mapperMBR != null)
+	       mapperMBR.set(mapperMBR.buffer(mapperMBR.getWidth()/1000, mapperMBR.getHeight()/1000));
 
 			if (value.first instanceof ArrayWritable
 					&& value.second instanceof ArrayWritable) {
