@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.Reporter;
@@ -97,9 +98,6 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
   /**Number of elements in the tree*/
   private int elementCount;
   
-  /**An input stream that is used to read node structure (i.e., nodes)*/
-  private FSDataInputStream structure;
-
   /**Input stream to tree data*/
   private FSDataInputStream data;
 
@@ -109,6 +107,12 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
   /**Total tree size (header + structure + data) used to read the data in
    * the last leaf node correctly*/
   private int treeSize;
+
+  /**A cached copy of all nodes (MBRs) in memory indexed by node ID*/
+  private Rectangle[] nodes;
+
+  /**A cached copy of data offset for each node.*/
+  private int[] dataOffset;
 
   public RTree() {
   }
@@ -492,8 +496,12 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
 
   @Override
   public void readFields(DataInput in) throws IOException {
+    // Read the whole tree structure and keep it in memory. Leave data on disk
     // Tree size (Header + structure + data)
     treeSize = in.readInt();
+    
+    if (in instanceof Seekable)
+      this.treeStartOffset = ((Seekable) in).getPos();
     if (treeSize == 0) {
       height = elementCount = 0;
       return;
@@ -509,22 +517,28 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     
     // Keep only tree structure in memory
     nodeCount = (int) ((powInt(degree, height) - 1) / (degree - 1));
-    int structureSize = nodeCount * NodeSize;
-    byte[] treeStructure = new byte[structureSize];
-    in.readFully(treeStructure, 0, structureSize);
-    structure = new FSDataInputStream(new MemoryInputStream(treeStructure));
+    this.nodes = new Rectangle[nodeCount];
+    this.dataOffset = new int[nodeCount + 1];
+    
+    for (int node_id = 0; node_id < nodeCount; node_id++) {
+      this.dataOffset[node_id] = in.readInt();
+      this.nodes[node_id] = new Rectangle();
+      this.nodes[node_id].readFields(in);
+    }
+    this.dataOffset[nodeCount] = treeSize;
+
     if (in instanceof FSDataInputStream) {
-      this.treeStartOffset = ((FSDataInputStream) in).getPos() - structureSize - TreeHeaderSize;
+      // A random input stream, can keep the data on disk
       this.data = (FSDataInputStream) in;
     } else {
-      // Load all tree data in memory
-      this.treeStartOffset = 0 - structureSize - TreeHeaderSize;
-      int treeDataSize = treeSize - TreeHeaderSize - structureSize;
+      // A sequential input stream, need to read all data now
+      int treeDataSize = this.dataOffset[nodeCount] - this.dataOffset[0];
+      // Adjust the offset of data to be zero
+      this.treeStartOffset = -this.dataOffset[0];
       byte[] treeData = new byte[treeDataSize];
       in.readFully(treeData, 0, treeDataSize);
       this.data = new FSDataInputStream(new MemoryInputStream(treeData));
     }
-    nodeCount = (int) ((Math.pow(degree, height) - 1) / (degree - 1));
     leafNodeCount = (int) Math.pow(degree, height - 1);
     nonLeafNodeCount = nodeCount - leafNodeCount;
   }
@@ -597,17 +611,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
    * @return
    */
   public Rectangle getMBR() {
-    Rectangle mbr = null;
-    try {
-      // MBR of the tree is the MBR of the root node
-      structure.seek(0);
-      mbr = new Rectangle();
-      /*int offset = */structure.readInt();
-      mbr.readFields(structure);
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-    return mbr;
+    return nodes[0];
   }
   
   /**
@@ -839,64 +843,43 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       toBeSearched.push(end);
     }
 
-    Rectangle node_mbr = new Rectangle();
-
     // Holds one data line from tree data
     Text line = new Text2();
     
     while (!toBeSearched.isEmpty()) {
       int searchNumber = toBeSearched.pop();
-      int mbrsToTest = searchNumber == 0 ? 1 : degree;
 
       if (searchNumber < nodeCount) {
-        long nodeOffset = NodeSize * searchNumber;
-        structure.seek(nodeOffset);
-        int dataOffset = structure.readInt();
-
-        for (int i = 0; i < mbrsToTest; i++) {
-          node_mbr.readFields(structure);
-          int lastOffset = (searchNumber+i) == nodeCount - 1 ?
-              treeSize : structure.readInt();
-          if (query_mbr.contains(node_mbr)) {
-            // The node is full contained in the query range.
-            // Save the time and do full scan for this node
-            toBeSearched.push(dataOffset);
-            // Checks if this node is the last node in its level
-            // This can be easily detected because the next node in the level
-            // order traversal will be the first node in the next level
-            // which means it will have an offset less than this node
-            if (lastOffset <= dataOffset)
-              lastOffset = treeSize;
-            toBeSearched.push(lastOffset);
-          } else if (query_mbr.isIntersected(node_mbr)) {
-            // Node partially overlaps with query. Go deep under this node
-            if (searchNumber < nonLeafNodeCount) {
-              // Search child nodes
-              toBeSearched.push((searchNumber + i) * degree + 1);
-            } else {
-              // Search all elements in this node
-              toBeSearched.push(dataOffset);
-              // Checks if this node is the last node in its level
-              // This can be easily detected because the next node in the level
-              // order traversal will be the first node in the next level
-              // which means it will have an offset less than this node
-              if (lastOffset <= dataOffset)
-                lastOffset = treeSize;
-              toBeSearched.push(lastOffset);
+        // Searching a node
+        int nodeID = searchNumber;
+        if (query_mbr.isIntersected(nodes[nodeID])) {
+          boolean is_leaf = nodeID >= nonLeafNodeCount;
+          if (is_leaf) {
+            // Check all objects under this node
+            int start_offset = this.dataOffset[nodeID];
+            int end_offset = this.dataOffset[nodeID + 1];
+            toBeSearched.add(start_offset);
+            toBeSearched.add(end_offset);
+          } else {
+            // Add all child nodes
+            for (int iChild = 0; iChild < this.degree; iChild++) {
+              toBeSearched.add(nodeID * this.degree + iChild + 1);
             }
           }
-          dataOffset = lastOffset;
         }
       } else {
-        int firstOffset, lastOffset;
-        // Search for data items (records)
-        lastOffset = searchNumber;
-        firstOffset = toBeSearched.pop();
-
-        data.seek(firstOffset + treeStartOffset);
+        // searchNumber is the end offset of data search. Start offset is next
+        // in stack
+        int end_offset = searchNumber;
+        int start_offset = toBeSearched.pop();
+        // All data offsets are relative to tree start (typically 4)
+        this.data.seek(start_offset + this.treeStartOffset);
+        // Should not close the line reader because we do not want to close
+        // the underlying data stream now. In case future searches are done
+        @SuppressWarnings("resource")
         LineReader lineReader = new LineReader(data);
-        while (firstOffset < lastOffset) {
-          firstOffset += lineReader.readLine(line);
+        while (start_offset < end_offset) {
+          start_offset += lineReader.readLine(line);
           stockObject.fromText(line);
           if (stockObject.isIntersected(query_shape)) {
             resultSize++;
@@ -977,7 +960,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     }
 
     /**
-     * Search for next item in result and store in in resultShape.
+     * Search for next item in result and store it in resultShape.
      * If no more results found, set resultShape to null
      */
     protected void prepareNextResult() {
@@ -992,65 +975,42 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
         }
         // Case 2: Searching in nodes
         while (!toBeSearched.isEmpty()) {
-
           int searchNumber = toBeSearched.pop();
-          int mbrsToTest = searchNumber == 0 ? 1 : degree;
 
           if (searchNumber < nodeCount) {
-            // Searching in nodes
-            long nodeOffset = NodeSize * searchNumber;
-            structure.seek(nodeOffset);
-            int dataOffset = structure.readInt();
-
-            for (int i = 0; i < mbrsToTest; i++) {
-              nodeMBR.readFields(structure);
-              int lastOffset = (searchNumber+i) == nodeCount - 1 ?
-                  treeSize : structure.readInt();
-              if (queryMBR.contains(nodeMBR)) {
-                // The node is full contained in the query range.
-                // Save the time and do full scan for this node
-                toBeSearched.push(dataOffset);
-                // Checks if this node is the last node in its level
-                // This can be easily detected because the next node in the level
-                // order traversal will be the first node in the next level
-                // which means it will have an offset less than this node
-                if (lastOffset <= dataOffset)
-                  lastOffset = treeSize;
-                toBeSearched.push(lastOffset);
-              } else if (queryMBR.isIntersected(nodeMBR)) {
-                // Node partially overlaps with query. Go deep under this node
-                if (searchNumber < nonLeafNodeCount) {
-                  // Search child nodes
-                  toBeSearched.push((searchNumber + i) * degree + 1);
-                } else {
-                  // Search all elements in this node
-                  toBeSearched.push(dataOffset);
-                  // Checks if this node is the last node in its level
-                  // This can be easily detected because the next node in the level
-                  // order traversal will be the first node in the next level
-                  // which means it will have an offset less than this node
-                  if (lastOffset <= dataOffset)
-                    lastOffset = treeSize;
-                  toBeSearched.push(lastOffset);
+            // Searching a node
+            int nodeID = searchNumber;
+            if (queryMBR.isIntersected(nodes[nodeID])) {
+              boolean is_leaf = nodeID >= nonLeafNodeCount;
+              if (is_leaf) {
+                // Check all objects under this node
+                int start_offset = RTree.this.dataOffset[nodeID];
+                int end_offset = RTree.this.dataOffset[nodeID + 1];
+                toBeSearched.add(start_offset);
+                toBeSearched.add(end_offset);
+              } else {
+                // Add all child nodes
+                for (int iChild = 0; iChild < RTree.this.degree; iChild++) {
+                  toBeSearched.add(nodeID * RTree.this.degree + iChild + 1);
                 }
               }
-              dataOffset = lastOffset;
-            }
-          } else {
-            // Search for data items (records)
-            lastOffset = searchNumber;
-            firstOffset = toBeSearched.pop();
+            } else {
+              // searchNumber is the end offset of data search. Start offset is next
+              // in stack
+              lastOffset = searchNumber;
+              firstOffset = toBeSearched.pop();
 
-            data.seek(firstOffset + treeStartOffset);
-            lineReader = new LineReader(data);
-            while (firstOffset < lastOffset) {
-              firstOffset += lineReader.readLine(line);
-              nextResultShape.fromText(line);
-              if (nextResultShape.isIntersected(queryShape)) {
-                return;
+              data.seek(firstOffset + treeStartOffset);
+              lineReader = new LineReader(data);
+              while (firstOffset < lastOffset) {
+                firstOffset += lineReader.readLine(line);
+                nextResultShape.fromText(line);
+                if (nextResultShape.isIntersected(queryShape)) {
+                  return;
+                }
               }
             }
-          }
+          }          
         }
         // No more results in the tree
         nextResultShape = null;
@@ -1245,17 +1205,6 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       final ResultCollector2<S1, S2> output,
       final Reporter reporter)
       throws IOException {
-    // Reserve locations for nodes MBRs and data offset [start, end)
-    final Rectangle[] r_nodes = new Rectangle[R.degree];
-    for (int i = 0; i < r_nodes.length; i++)
-      r_nodes[i] = new Rectangle();
-    final int[] r_data_offset = new int[R.degree+1];
-    
-    final Rectangle[] s_nodes = new Rectangle[S.degree];
-    for (int i = 0; i < s_nodes.length; i++)
-      s_nodes[i] = new Rectangle();
-    final int[] s_data_offset = new int[S.degree+1];
-    
     PriorityQueue<Long> nodesToJoin = new PriorityQueue<Long>() {
       {
         initialize(R.leafNodeCount + S.leafNodeCount);
@@ -1267,8 +1216,11 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       }
     };
     
+    // Start with the two roots
     nodesToJoin.put(0L);
-    
+
+    // Caches to keep the retrieved data records. Helpful when it reaches the
+    // leaves and starts to read objects from the two trees
     LruCache<Integer, Shape[]> r_records_cache = new LruCache<Integer, Shape[]>(
         R.degree * 2);
     LruCache<Integer, Shape[]> s_records_cache = new LruCache<Integer, Shape[]>(
@@ -1282,154 +1234,129 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     // Last offset read from r and s
     int r_last_offset = 0;
     int s_last_offset = 0;
-
+    
     while (nodesToJoin.size() > 0) {
       long nodes_to_join = nodesToJoin.pop();
       int r_node = (int) (nodes_to_join >>> 32);
       int s_node = (int) (nodes_to_join & 0xFFFFFFFF);
-      // Read all R nodes
-      int r_mbrsToTest = r_node == 0 ? 1 : R.degree;
-      boolean r_leaf = r_node * R.degree + 1 >= R.nodeCount;
       
-      long nodeOffset = NodeSize * r_node;
-      R.structure.seek(nodeOffset);
+      // Compute the overlap between the children of the two nodes
+      // If a node is non-leaf, its children are other nodes
+      // If a node is leaf, its children are data records
+      boolean r_leaf = r_node >= R.nonLeafNodeCount;
+      boolean s_leaf = s_node >= S.nonLeafNodeCount;
       
-      for (int i = 0; i < r_mbrsToTest; i++) {
-        r_data_offset[i] = R.structure.readInt();
-        r_nodes[i].readFields(R.structure);
-      }
-      r_data_offset[r_mbrsToTest] =
-          (r_node+r_mbrsToTest) == R.nodeCount ?
-          R.treeSize : R.structure.readInt();
-      
-      // Read all S nodes
-      int s_mbrsToTest = s_node == 0 ? 1 : S.degree; 
-      boolean s_leaf = s_node * S.degree + 1 >= S.nodeCount;
-
-      if (r_leaf != s_leaf) {
-        // This case happens when the two trees are of different heights
-        if (r_leaf)
-          r_mbrsToTest = 1;
-        else
-          s_mbrsToTest = 1;
-      }
-
-      nodeOffset = NodeSize * s_node;
-      S.structure.seek(nodeOffset);
-      
-      for (int i = 0; i < s_mbrsToTest; i++) {
-        s_data_offset[i] = S.structure.readInt();
-        s_nodes[i].readFields(S.structure);
-      }
-      s_data_offset[s_mbrsToTest] =
-          (s_node+s_mbrsToTest) == S.nodeCount ?
-          S.treeSize : S.structure.readInt();
-
-      // Find overlapping nodes by Cartesian product
-      for (int i = 0; i < r_mbrsToTest; i++) {
-        for (int j = 0; j < s_mbrsToTest; j++) {
-          if (r_nodes[i].isIntersected(s_nodes[j])) {
-            if (r_leaf && s_leaf) {
-              // Reached leaf nodes in both trees. Start comparing records
-              int r_start_offset = r_data_offset[i];
-              int r_end_offset = r_data_offset[i+1];
-
-              int s_start_offset = s_data_offset[j];
-              int s_end_offset = s_data_offset[j+1];
-
-              ///////////////////////////////////////////////////////////////////
-              // Read or retrieve r_records
-              Shape[] r_records = r_records_cache.get(r_start_offset);
-              if (r_records == null) {
-                int cache_key = r_start_offset;
-                r_records = r_records_cache.popUnusedEntry();
-                if (r_records == null) {
-                  r_records = new Shape[R.degree * 2];
-                }
-
-                // Need to read it from stream
-                if (r_last_offset != r_start_offset) {
-                  long seekTo = r_start_offset + R.treeStartOffset;
-                  R.data.seek(seekTo);
-                  r_lr = new LineReader(R.data);
-                }
-                int record_i = 0;
-                while (r_start_offset < r_end_offset) {
-                  r_start_offset += r_lr.readLine(line);
-                  if (r_records[record_i] == null)
-                    r_records[record_i] = R.stockObject.clone();
-                  r_records[record_i].fromText(line);
-                  record_i++;
-                }
-                r_last_offset = r_start_offset;
-                // Nullify other records
-                while (record_i < r_records.length)
-                  r_records[record_i++] = null;
-                r_records_cache.put(cache_key, r_records);
-              }
-
-              // Read or retrieve s_records
-              Shape[] s_records = s_records_cache.get(s_start_offset);
-              if (s_records == null) {
-                int cache_key = s_start_offset;
-
-                // Need to read it from stream
-                if (s_lr == null || s_last_offset != s_start_offset) {
-                  // Need to reposition s_lr (LineReader of S)
-                  long seekTo = s_start_offset + S.treeStartOffset;
-                  S.data.seek(seekTo);
-                  s_lr = new LineReader(S.data);
-                }
-                s_records = s_records_cache.popUnusedEntry();
-                if (s_records == null) {
-                  s_records = new Shape[S.degree * 2];
-                }
-                int record_i = 0;
-                while (s_start_offset < s_end_offset) {
-                  s_start_offset += s_lr.readLine(line);
-                  if (s_records[record_i] == null)
-                    s_records[record_i] = S.stockObject.clone();
-                  s_records[record_i].fromText(line);
-                  record_i++;
-                }
-                // Nullify other records
-                while (record_i < s_records.length)
-                  s_records[record_i++] = null;
-                // Put in cache
-                s_records_cache.put(cache_key, s_records);
-                s_last_offset = s_start_offset;
-              }
-
-              // Do Cartesian product between records to find overlapping pairs
-              for (int i_r = 0; i_r < r_records.length && r_records[i_r] != null; i_r++) {
-                for (int i_s = 0; i_s < s_records.length && s_records[i_s] != null; i_s++) {
-                  if (r_records[i_r].isIntersected(s_records[i_s]) &&
-                      !r_records[i_r].equals(s_records[i_s])) {
-                    result_count++;
-                    if (output != null) {
-                      output.collect((S1)r_records[i_r], (S2)s_records[i_s]);
-                    }
-                  }
-                }
-              }
-              ///////////////////////////////////////////////////////////////////
-
-            } else {
-              // Add a new pair to node pairs to be tested
-              // Go down one level if possible
-              int new_r_node, new_s_node;
-              if (!r_leaf) {
-                new_r_node = (r_node + i) * R.degree + 1;
-              } else {
-                new_r_node = r_node + i;
-              }
-              if (!s_leaf) {
-                new_s_node = (s_node + j) * S.degree + 1;
-              } else {
-                new_s_node = s_node + j;
-              }
+      if (!r_leaf && !s_leaf) {
+        // Both are internal nodes, read child nodes under them
+        // Find overlaps using a simple cross join (TODO: Use plane-sweep)
+        for (int i = 0; i < R.degree; i++) {
+          int new_r_node = r_node * R.degree + i + 1;
+          for (int j = 0; j < S.degree; j++) {
+            int new_s_node = s_node * S.degree + j + 1;
+            if (R.nodes[new_r_node].isIntersected(S.nodes[new_s_node])) {
               long new_pair = (((long)new_r_node) << 32) | new_s_node;
               nodesToJoin.put(new_pair);
+            }
+          }
+        }
+      } else if (r_leaf && !s_leaf) {
+        // R is a leaf node while S is an internal node
+        // Compare the leaf node in R against all child nodes of S
+        for (int j = 0; j < S.degree; j++) {
+          int new_s_node = s_node * S.degree + j + 1;
+          if (R.nodes[r_node].isIntersected(S.nodes[new_s_node])) {
+            long new_pair = (((long)r_node) << 32) | new_s_node;
+            nodesToJoin.put(new_pair);
+          }
+        }
+      } else if (!r_leaf && s_leaf) {
+        // R is an internal node while S is a leaf node
+        // Compare child nodes of R against the leaf node in S
+        for (int i = 0; i < R.degree; i++) {
+          int new_r_node = r_node * R.degree + i + 1;
+          if (R.nodes[new_r_node].isIntersected(S.nodes[s_node])) {
+            long new_pair = (((long)new_r_node) << 32) | s_node;
+            nodesToJoin.put(new_pair);
+          }
+        }
+      } else if (r_leaf && s_leaf) {
+        // Both are leaf nodes, join objects under them
+        int r_start_offset = R.dataOffset[r_node];
+        int r_end_offset = R.dataOffset[r_node+1];
+        int s_start_offset = S.dataOffset[s_node];
+        int s_end_offset = S.dataOffset[s_node+1];
+        
+        // Read or retrieve r_records
+        Shape[] r_records = r_records_cache.get(r_start_offset);
+        if (r_records == null) {
+          int cache_key = r_start_offset;
+          r_records = r_records_cache.popUnusedEntry();
+          if (r_records == null) {
+            r_records = new Shape[R.degree * 2];
+          }
+
+          // Need to read it from stream
+          if (r_last_offset != r_start_offset) {
+            long seekTo = r_start_offset + R.treeStartOffset;
+            R.data.seek(seekTo);
+            r_lr = new LineReader(R.data);
+          }
+          int record_i = 0;
+          while (r_start_offset < r_end_offset) {
+            r_start_offset += r_lr.readLine(line);
+            if (r_records[record_i] == null)
+              r_records[record_i] = R.stockObject.clone();
+            r_records[record_i].fromText(line);
+            record_i++;
+          }
+          r_last_offset = r_start_offset;
+          // Nullify other records
+          while (record_i < r_records.length)
+            r_records[record_i++] = null;
+          r_records_cache.put(cache_key, r_records);
+        }
+
+        // Read or retrieve s_records
+        Shape[] s_records = s_records_cache.get(s_start_offset);
+        if (s_records == null) {
+          int cache_key = s_start_offset;
+
+          // Need to read it from stream
+          if (s_lr == null || s_last_offset != s_start_offset) {
+            // Need to reposition s_lr (LineReader of S)
+            long seekTo = s_start_offset + S.treeStartOffset;
+            S.data.seek(seekTo);
+            s_lr = new LineReader(S.data);
+          }
+          s_records = s_records_cache.popUnusedEntry();
+          if (s_records == null) {
+            s_records = new Shape[S.degree * 2];
+          }
+          int record_i = 0;
+          while (s_start_offset < s_end_offset) {
+            s_start_offset += s_lr.readLine(line);
+            if (s_records[record_i] == null)
+              s_records[record_i] = S.stockObject.clone();
+            s_records[record_i].fromText(line);
+            record_i++;
+          }
+          // Nullify other records
+          while (record_i < s_records.length)
+            s_records[record_i++] = null;
+          // Put in cache
+          s_records_cache.put(cache_key, s_records);
+          s_last_offset = s_start_offset;
+        }
+
+        // Do Cartesian product between records to find overlapping pairs
+        for (int i_r = 0; i_r < r_records.length && r_records[i_r] != null; i_r++) {
+          for (int i_s = 0; i_s < s_records.length && s_records[i_s] != null; i_s++) {
+            if (r_records[i_r].isIntersected(s_records[i_s]) &&
+                !r_records[i_r].equals(s_records[i_s])) {
+              result_count++;
+              if (output != null) {
+                output.collect((S1)r_records[i_r], (S2)s_records[i_s]);
+              }
             }
           }
         }
@@ -1522,7 +1449,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
   }
   
   private static final double LogLookupTable[];
-  
+
   static {
     int count = 100;
     LogLookupTable = new double[count];
@@ -1600,11 +1527,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
   
   public void toWKT(PrintStream out) throws IOException {
     out.println("NodeID\tBoundaries");
-    Rectangle rect = new Rectangle();
     for (int nodeID = 0; nodeID < this.nodeCount; nodeID++) {
-      this.structure.seek(nodeID * NodeSize + 4);
-      rect.readFields(this.structure);
-      out.printf("%d\t%s\n", nodeID, rect.toWKT());
+      out.printf("%d\t%s\n", nodeID, nodes[nodeID].toWKT());
     }
   }
 
