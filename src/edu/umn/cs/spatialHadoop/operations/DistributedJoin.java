@@ -317,15 +317,11 @@ public class DistributedJoin {
 				throws IOException {
 			
 			final Rectangle mapperMBR = !key.first.isValid()
-					&& !key.second.isValid() ? null // Both blocks are heap
-													// blocks
-					: (!key.first.isValid() ? key.second // Second block is
-															// indexed
-							: (!key.second.isValid() ? key.first // First block
-																	// is
-																	// indexed
-									: (key.first.getIntersection(key.second)))); // Both
-																					// indexed
+					&& !key.second.isValid() ? null // Both blocks are heap blocks
+					: (!key.first.isValid() ? key.second // Second block is indexed
+							: (!key.second.isValid() ? key.first // First block is indexed
+									: (key.first.getIntersection(key.second).buffer(key.first.getWidth()/1000, key.first.getHeight()/1000)))); // Both indexed
+			// We add a small buffer to account for points which are very close to the edge
 
 			if (value.first instanceof ArrayWritable
 					&& value.second instanceof ArrayWritable) {

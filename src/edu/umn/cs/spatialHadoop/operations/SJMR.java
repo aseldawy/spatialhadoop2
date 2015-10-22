@@ -50,6 +50,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
+import edu.umn.cs.spatialHadoop.util.FileUtil;
 import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
@@ -385,9 +386,10 @@ public class SJMR {
     Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Path file : inFiles) {
+      FileSystem fs = file.getFileSystem(params);
       Rectangle file_mbr = FileMBR.fileMBR(file, params);
       mbr.expand(file_mbr);
-      total_size += FileMBR.sizeOfLastProcessedFile;
+      total_size += FileUtil.getPathSize(fs, file);
     }
     // If the largest file is globally indexed, use its partitions
     total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
