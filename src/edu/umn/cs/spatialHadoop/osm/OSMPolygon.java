@@ -105,4 +105,9 @@ public class OSMPolygon extends OGCJTSShape implements WritableComparable<OSMPol
   public int hashCode() {
     return (int) (this.id % Integer.MAX_VALUE);
   }
+  
+  @Override
+  public String toString() {
+    return this.id + "\t" + this.geom.toText();
+  }
 }

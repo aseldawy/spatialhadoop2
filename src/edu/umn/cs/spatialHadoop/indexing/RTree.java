@@ -8,12 +8,14 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.indexing;
 
+import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.lang.reflect.Array;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -27,9 +29,12 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.IndexedSorter;
 import org.apache.hadoop.util.LineReader;
@@ -38,6 +43,7 @@ import org.apache.hadoop.util.QuickSort;
 
 import com.vividsolutions.jts.geom.TopologyException;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -1428,7 +1434,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
           }
         }
       }
-      reporter.progress();
+      if (reporter != null)
+        reporter.progress();
     }
     return result_count;
   }
@@ -1591,4 +1598,46 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       data.close();
   }
   
+  public void toWKT(PrintStream out) throws IOException {
+    out.println("NodeID\tBoundaries");
+    Rectangle rect = new Rectangle();
+    for (int nodeID = 0; nodeID < this.nodeCount; nodeID++) {
+      this.structure.seek(nodeID * NodeSize + 4);
+      rect.readFields(this.structure);
+      out.printf("%d\t%s\n", nodeID, rect.toWKT());
+    }
+  }
+
+  /**
+   * A main method that creates a single R-tree out of a single file.
+   * @param args
+   * @throws IOException 
+   */
+  public static void main(String[] args) throws IOException {
+    final OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    if (!params.checkInputOutput())
+      throw new RuntimeException("Input-output combination not correct");
+    Path inPath = params.getInputPath();
+    Path outPath = params.getOutputPath();
+    Shape shape = params.getShape("shape");
+
+    // Read the whole input file as one byte array
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    byte[] buffer = new byte[1024*1024];
+    FileSystem inFS = inPath.getFileSystem(params);
+    FSDataInputStream in = inFS.open(inPath);
+    int bytesRead;
+    while ((bytesRead = in.read(buffer)) >= 0) {
+      baos.write(buffer, 0, bytesRead);
+    }
+    in.close();
+    baos.close();
+    
+    // Create the R-tree and write to output
+    byte[] inputData = baos.toByteArray();
+    FileSystem outFS = outPath.getFileSystem(params);
+    FSDataOutputStream out = outFS.create(outPath);
+    RTree.bulkLoadWrite(inputData, 0, inputData.length, 4, out, shape, true);
+    out.close();
+  }
 }
