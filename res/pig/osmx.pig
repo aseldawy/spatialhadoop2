@@ -32,7 +32,7 @@ parsed_nodes = FOREACH parsed_nodes
   GENERATE node.id, node.lon, node.lat, node.tags;
 
 /* Store the nodes to a CSV text file */
-STORE parsed_nodes into '$output/all_nodes.bz2' USING PigStorage(',');
+STORE parsed_nodes into '$output/all_nodes.bz2' USING PigStorage('\t');
 
 /******************************************************/
 /* Read and parse ways */
@@ -102,7 +102,7 @@ road_segments = FILTER way_segments BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
 road_segments = FOREACH road_segments GENERATE way_id, FLATTEN(segments), tags;
 road_segments = FOREACH road_segments GENERATE CONCAT((CHARARRAY)way_id, (CHARARRAY)position), id1, x1, y1, id2, x2, y2, way_id, edu.umn.cs.spatialHadoop.osm.MapToJson(tags);
 
-STORE road_segments into '$output/road_network.bz2' USING PigStorage(',');
+STORE road_segments into '$output/road_network.bz2' USING PigStorage('\t');
 
 /******************************************************/
 /* Read and parse relations */
