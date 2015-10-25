@@ -31,7 +31,7 @@ public class HasTag extends EvalFunc<Boolean> {
     if (input == null || input.size() == 0)
       return null;
 
-    if (input.size() != 2)
+    if (input.size() < 2)
       throw new IOException("HasTag takes at least two parameters");
     
     Map<String, String> tags = (Map<String, String>) input.get(0);

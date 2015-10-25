@@ -6,7 +6,12 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-IMPORT 'osmx.pig'
+REGISTER spatialhadoop-2.4.jar;
+REGISTER pigeon-0.2.1.jar;
+REGISTER esri-geometry-api-1.2.jar;
+REGISTER jts-1.8.jar;
+
+IMPORT 'osmx.pig';
 
 all_nodes = LoadOSMNodes('$input');
 pois = FILTER all_nodes BY edu.umn.cs.spatialHadoop.osm.HasTag(tags, CONCAT(
@@ -65,4 +70,3 @@ STORE sports INTO '$output/sports.bz2';
 postal_codes = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
   'admin_level', '8');
 STORE postal_codes INTO '$output/postal_codes.bz2';
-

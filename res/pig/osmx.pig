@@ -7,11 +7,6 @@
 *
 *************************************************************************/
 
-REGISTER spatialhadoop-2.4.jar;
-REGISTER pigeon-0.2.1.jar;
-REGISTER esri-geometry-api-1.2.jar;
-REGISTER jts-1.8.jar;
-
 IMPORT 'pigeon_import.pig';
 
 DEFINE OSMNode edu.umn.cs.spatialHadoop.osm.OSMNode;
@@ -30,7 +25,7 @@ DEFINE LoadOSMNodes(osm_file) RETURNS nodes {
   osm_nodes = FOREACH xml_nodes GENERATE OSMNode(node) AS node;
   $nodes = FOREACH osm_nodes
     GENERATE node.id AS osm_node_id, node.lon AS longitude, node.lat AS latitude, node.tags AS tags;
-}
+};
 
 /*
  * Loads all ways in an OSM XML file. Returns one dataset that conatins:
@@ -79,7 +74,7 @@ DEFINE LoadOSMWaysWithSegments(osm_file) RETURNS ways_with_segments {
     GENERATE CONCAT((CHARARRAY)way_id, (CHARARRAY)position) AS segment_id,
     id1, x1 AS longitude1, y1 AS latitude1,
     id2, x2 AS longitude2, y2 AS latitude2, way_id, tags;
-}
+};
 
 /*
  * Loads all ways in an OSM XML file. Returns one dataset that conatins:
@@ -122,7 +117,7 @@ DEFINE LoadOSMWaysWithGeoms(osm_file) RETURNS ways_with_geoms {
        ST_MakeLinePolygon(ordered_asc.osm_node_id, ordered_asc.location) AS geom,
        FLATTEN(TOP(1, 0, tags)) AS tags;
   };
-}
+};
 
 /*
  * Loads all objects in the osm_file which include:
@@ -175,4 +170,4 @@ DEFINE LoadOSMObjects(osm_file) RETURNS osm_objects {
     GENERATE way_id AS id, geom, tags;
   
   $osm_objects = UNION ONSCHEMA relation_objects, way_objects;
-}
+};
