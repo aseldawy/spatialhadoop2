@@ -12,6 +12,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.util.ArrayList;
@@ -454,7 +455,9 @@ public class SpatialSite {
     
     fs.deleteOnExit(tempFile);
 
+ // tqadah: for hadoop-2.2
     DistributedCache.addCacheFile(tempFile.toUri(), conf);
+    LOG.info("adding to distributedCache : "+tempFile.toString());
     conf.set(OUTPUT_CELLS, tempFile.getName());
     LOG.info("Partitioning file into "+cellsInfo.length+" cells");
   }
@@ -471,21 +474,44 @@ public class SpatialSite {
     CellInfo[] cells = null;
     String cells_file = conf.get(OUTPUT_CELLS);
     if (cells_file != null) {
+      
       Path[] cacheFiles = DistributedCache.getLocalCacheFiles(conf);
-      for (Path cacheFile : cacheFiles) {
-        if (cacheFile.getName().contains(cells_file)) {
-          FSDataInputStream in = FileSystem.getLocal(conf).open(cacheFile);
-          
-          int cellCount = in.readInt();
-          cells = new CellInfo[cellCount];
-          for (int i = 0; i < cellCount; i++) {
-            cells[i] = new CellInfo();
-            cells[i].readFields(in);
+      
+      if (cacheFiles == null){
+        URI[] uris = DistributedCache.getCacheFiles(conf);
+        for (URI uri : uris) {
+          LOG.info("found in distcache : " + uri.getPath());
+          if (uri.getPath().contains(cells_file)) {
+            FSDataInputStream in = FileSystem.getLocal(conf).open(new Path(uri));
+            
+            int cellCount = in.readInt();
+            cells = new CellInfo[cellCount];
+            for (int i = 0; i < cellCount; i++) {
+              cells[i] = new CellInfo();
+              cells[i].readFields(in);
+            }
+            
+            in.close();
           }
-          
-          in.close();
         }
       }
+      else {
+        for (Path cacheFile : cacheFiles) {
+          if (cacheFile.getName().contains(cells_file)) {
+            FSDataInputStream in = FileSystem.getLocal(conf).open(cacheFile);
+            
+            int cellCount = in.readInt();
+            cells = new CellInfo[cellCount];
+            for (int i = 0; i < cellCount; i++) {
+              cells[i] = new CellInfo();
+              cells[i].readFields(in);
+            }
+            
+            in.close();
+          }
+        }
+      }
+      
     }
     return cells;
   }

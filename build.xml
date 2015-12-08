@@ -86,7 +86,36 @@
         <include name="webapps/**/*"/>
       </fileset>
     </copy>
-  </target>	
+  </target>
+
+<!-- Group all dependencies into a big dependency-all.jar -->
+	<target name="copy-dependencies">
+	 
+		<mkdir dir="lib-dist" />
+		 
+		<jar jarfile="lib-dist/dependencies-all.jar">
+		<zipgroupfileset dir="lib/ivy/hadoop2">
+			<include name="**/*.jar" />
+		</zipgroupfileset>
+		<zipgroupfileset dir="lib/ivy/common">
+		         <include name="**/*.jar" />
+		</zipgroupfileset>
+		</jar>
+	</target>	
+
+<target name="copy-dependencies1">
+
+                <mkdir dir="lib-dist" />
+
+                <jar jarfile="lib-dist/dependencies-all.jar">
+                                <zipgroupfileset dir="lib/ivy/hadoop1">
+                                                        <include name="**/*.jar" />
+                                                                        </zipgroupfileset>
+                                                                                        <zipgroupfileset dir="lib/ivy/common">
+                                                                                                                 <include name="**/*.jar" />
+                                                                                                                                 </zipgroupfileset>
+                                                                                                                                                 </jar>
+                                                                                                                                                         </target>
 
 	<target name="doc" depends="init1"
       description="Generates JavaDoc for the source code">
@@ -94,7 +123,7 @@
     <javadoc sourcepath="${src}" destdir="${doc}"/>
   </target>
   
-  <target name="dist1" depends="compile1"
+  <target name="dist1" depends="compile1,copy-dependencies1"
         description="generate the distribution for Hadoop 1.x" >
     <!-- Create the distribution directory -->
     <mkdir dir="${dist1}"/>
@@ -105,6 +134,8 @@
         <attribute name="Manifest-Version" value="1.0"/>
         <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
       </manifest>
+      <zipfileset src="lib-dist/dependencies-all.jar" 
+                                            excludes="META-INF/*.SF" />
   	</jar>
 
   	<!-- For backward compatibility, provide a jar that contains just the main class-->
@@ -117,7 +148,7 @@
   	</jar>
   </target>
 
-  <target name="dist2" depends="compile2"
+  <target name="dist2" depends="compile2,copy-dependencies"
         description="generate the distribution for Hadoop 2.x" >
     <!-- Create the distribution directory -->
     <mkdir dir="${dist2}"/>
@@ -128,6 +159,8 @@
         <attribute name="Manifest-Version" value="1.0"/>
         <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
       </manifest>
+      <zipfileset src="lib-dist/dependencies-all.jar" 
+                                      excludes="META-INF/*.SF" />
     </jar>
 
     <!-- For backward compatibility, provide a jar that contains just the main class-->
