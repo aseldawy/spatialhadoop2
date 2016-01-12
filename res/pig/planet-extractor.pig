@@ -14,6 +14,8 @@ REGISTER jts-1.8.jar;
 IMPORT 'osmx.pig';
 
 all_nodes = LoadOSMNodes('$input');
+STORE all_nodes INTO '$output/all_nodes.bz2';
+
 pois = FILTER all_nodes BY edu.umn.cs.spatialHadoop.osm.HasTag(tags, CONCAT(
   'name,amenity,cuisine,highway,railway,barrier,power,noexit,man_name, manmade,',
   'light_rail,traffic_calming,turning_circle,natural,public_transport,entrane,',
@@ -55,7 +57,7 @@ STORE lakes INTO '$output/lakes.bz2';
 parks = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
   'leisure,boundary,landuse,natural',
   CONCAT('wood,tree_row,grassland,park,golf_course,national_park,',
-    'garden,nature_reserve,forest,grass,tree,orchard,farmland,protected_area');
+    'garden,nature_reserve,forest,grass,tree,orchard,farmland,protected_area'));
 STORE parks INTO '$output/parks.bz2';
 
 cemetery = FILTER all_objects BY edu.umn.cs.spatialHadoop.osm.HasTag(tags,
