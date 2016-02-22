@@ -994,23 +994,23 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
                   toBeSearched.add(nodeID * RTree.this.degree + iChild + 1);
                 }
               }
-            } else {
-              // searchNumber is the end offset of data search. Start offset is next
-              // in stack
-              lastOffset = searchNumber;
-              firstOffset = toBeSearched.pop();
+            }
+          } else {
+            // searchNumber is the end offset of data search. Start offset is next
+            // in stack
+            lastOffset = searchNumber;
+            firstOffset = toBeSearched.pop();
 
-              data.seek(firstOffset + treeStartOffset);
-              lineReader = new LineReader(data);
-              while (firstOffset < lastOffset) {
-                firstOffset += lineReader.readLine(line);
-                nextResultShape.fromText(line);
-                if (nextResultShape.isIntersected(queryShape)) {
-                  return;
-                }
+            data.seek(firstOffset + treeStartOffset);
+            lineReader = new LineReader(data);
+            while (firstOffset < lastOffset) {
+              firstOffset += lineReader.readLine(line);
+              nextResultShape.fromText(line);
+              if (nextResultShape.isIntersected(queryShape)) {
+                return;
               }
             }
-          }          
+          }
         }
         // No more results in the tree
         nextResultShape = null;
