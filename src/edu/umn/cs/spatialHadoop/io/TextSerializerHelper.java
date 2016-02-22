@@ -503,7 +503,7 @@ public final class TextSerializerHelper {
   private static final WKBReader wkbReader = new WKBReader(new GeometryFactory());
   
   public static void serializeGeometry(Text text, Geometry geom, char toAppend) {
-    String wkt = geom.toText();
+    String wkt = geom == null? "" : geom.toText();
     byte[] wkt_b = wkt.getBytes();
     text.append(wkt_b, 0, wkt_b.length);
     if (toAppend != '\0')
