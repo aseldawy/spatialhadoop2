@@ -9,121 +9,61 @@
 <project name="SpatialHadoop" default="compile1" basedir="." xmlns:ivy="antlib:org.apache.ivy.ant">
   <description>Compiles SpatialHadoop and builds packages to be installed on an existing Hadoop cluster</description>
   <!-- set global properties for this build -->
-  <property name="src" location="src"/>
-	<property name="res" location="res"/>
+  <property name="src" location="src/main/java"/>
+	<property name="res" location="src/main/resources"/>
   <property name="doc" location="doc"/>
-  <property name="bin1" location="bin1"/>
-  <property name="bin2" location="bin2"/>
-  <property name="build1" location="${bin1}/classes"/>
-  <property name="dist1"  location="${bin1}/dist"/>
-  <property name="build2" location="${bin2}/classes"/>
-  <property name="dist2"  location="${bin2}/dist"/>
+  <property name="bin" location="bin"/>
+  <property name="build" location="${bin}/classes"/>
+  <property name="dist"  location="${bin}/dist"/>
   <property name="version" value="2.4"/>
   
-  <path id="other.path.ref">
-  	<fileset dir="lib" includes="*.jar"/>
-  </path>
-
   <path id="common.lib.path.ref">
     <fileset dir="lib/ivy/common" includes="*.jar"/>
   </path>
 
-  <path id="hadoop1.lib.path.ref">
-    <fileset dir="lib/ivy/hadoop1" includes="*.jar"/>
-  </path>
-
-  <path id="hadoop2.lib.path.ref">
-    <fileset dir="lib/ivy/hadoop2" includes="*.jar"/>
+  <path id="hadoop.lib.path.ref">
+    <fileset dir="lib/ivy/hadoop" includes="*.jar"/>
   </path>
 
   <target name="resolve" depends="init-ivy" description="--> retrieve dependencies with ivy">
     <ivy:retrieve pattern="lib/ivy/[conf]/[artifact]-[revision].[ext]" />
   </target>
   
-  <target name="init1" depends="resolve">
+  <target name="init" depends="resolve">
     <!-- Create the time stamp -->
     <tstamp/>
     <!-- Create the build directory structure used by compile -->
-    <mkdir dir="${build1}"/>
-  </target>
-
-  <target name="init2" depends="resolve">
-    <!-- Create the time stamp -->
-    <tstamp/>
-    <!-- Create the build directory structure used by compile -->
-    <mkdir dir="${build2}"/>
+    <mkdir dir="${build}"/>
   </target>
 	
-  <target name="compile1" depends="init1"
+  <target name="compile" depends="init"
         description="compile the source " >
     <!-- Compile the java code from ${src} into ${build} -->
-    <javac srcdir="${src}" destdir="${build1}"
-    	  classpath="${toString:other.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop1.lib.path.ref}"
-    	  target="1.6" source="1.6" debug="true" debuglevel="lines,vars,source"/>
-    <copy todir="${build1}">
-    	<fileset dir="${res}">
-    		<include name="spatial-default.xml"/>
-    		<include name="zoom_view.html"/>
-        <include name="gistic_logo.png"/>
-        <include name="gistic_logo_license.txt"/>
-        <include name="webapps/**/*"/>
-    	</fileset>
-  	</copy>
-  </target>
-  
-  <target name="compile2" depends="init2"
-        description="compile the source " >
-    <!-- Compile the java code from ${src} into ${build} -->
-    <javac srcdir="${src}" destdir="${build2}"
-        classpath="${toString:other.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop2.lib.path.ref}"
+    <javac srcdir="${src}" destdir="${build}"
+        classpath="${toString:other.path.ref}:${toString:common.lib.path.ref}:${toString:hadoop.lib.path.ref}"
         target="1.6" source="1.6" debug="true" debuglevel="lines,vars,source"/>
-    <copy todir="${build2}">
+    <copy todir="${build}">
       <fileset dir="${res}">
         <include name="spatial-default.xml"/>
         <include name="zoom_view.html"/>
-        <include name="gistic_logo.png"/>
-        <include name="gistic_logo_license.txt"/>
         <include name="webapps/**/*"/>
       </fileset>
     </copy>
   </target>	
 
-	<target name="doc" depends="init1"
+	<target name="doc" depends="init"
       description="Generates JavaDoc for the source code">
     <mkdir dir="${doc}"/>
     <javadoc sourcepath="${src}" destdir="${doc}"/>
   </target>
   
-  <target name="dist1" depends="compile1"
-        description="generate the distribution for Hadoop 1.x" >
-    <!-- Create the distribution directory -->
-    <mkdir dir="${dist1}"/>
-
-    <!-- Put everything in ${build} into the spatialhadoop-${version}.jar file -->
-    <jar jarfile="${dist1}/spatialhadoop-${version}.jar" basedir="${build1}">
-      <manifest>
-        <attribute name="Manifest-Version" value="1.0"/>
-        <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
-      </manifest>
-  	</jar>
-
-  	<!-- For backward compatibility, provide a jar that contains just the main class-->
-    <jar jarfile="${dist1}/spatialhadoop-main.jar">
-    	<fileset dir="${build1}" includes="edu/umn/cs/spatialHadoop/operations/Main.class"/>
-    	<manifest>
-        <attribute name="Manifest-Version" value="1.0"/>
-        <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
-    	</manifest>
-  	</jar>
-  </target>
-
-  <target name="dist2" depends="compile2"
+  <target name="dist" depends="compile"
         description="generate the distribution for Hadoop 2.x" >
     <!-- Create the distribution directory -->
-    <mkdir dir="${dist2}"/>
+    <mkdir dir="${dist}"/>
 
     <!-- Put everything in ${build} into the spatialhadoop-${version}.jar file -->
-    <jar jarfile="${dist2}/spatialhadoop-${version}.jar" basedir="${build2}">
+    <jar jarfile="${dist}/spatialhadoop-${version}.jar" basedir="${build}">
       <manifest>
         <attribute name="Manifest-Version" value="1.0"/>
         <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
@@ -131,102 +71,46 @@
     </jar>
 
     <!-- For backward compatibility, provide a jar that contains just the main class-->
-    <jar jarfile="${dist2}/spatialhadoop-main.jar">
-      <fileset dir="${build2}" includes="edu/umn/cs/spatialHadoop/operations/Main.class"/>
+    <jar jarfile="${dist}/spatialhadoop-main.jar">
+      <fileset dir="${build}" includes="edu/umn/cs/spatialHadoop/operations/Main.class"/>
       <manifest>
         <attribute name="Manifest-Version" value="1.0"/>
         <attribute name="Main-Class" value="edu.umn.cs.spatialHadoop.operations.Main"/>
       </manifest>
     </jar>
   </target>
-  
 
-  <target name="emr-jar1" depends="dist1"
-      description="Creates a JAR file that can run on Amazon EMR for Hadoop 1.x">
-    <zip destfile="${dist1}/spatialhadoop-${version}-emr.jar">
+	 <target name="emr-jar" depends="dist"
+	      description="Creates a JAR file that can run on Amazon EMR for Hadoop 2.x">
+    <zip destfile="${dist}/spatialhadoop-${version}-emr.jar">
       <zipgroupfileset dir="lib/ivy/common">
         <include name="esri-geometry-api-*.jar"/>
         <exclude name="*sources.jar"/>
         <exclude name="*javadoc.jar"/>
         <include name="jts-*.jar"/>
       </zipgroupfileset>
-      <zipgroupfileset dir="${dist1}" includes="spatialhadoop-${version}.jar"/>
+      <zipgroupfileset dir="${dist}" includes="spatialhadoop-${version}.jar"/>
     </zip>
   </target>
 
-	 <target name="emr-jar2" depends="dist2"
-	      description="Creates a JAR file that can run on Amazon EMR for Hadoop 2.x">
-	    <zip destfile="${dist2}/spatialhadoop-${version}-emr.jar">
-	      <zipgroupfileset dir="lib/ivy/common">
-	        <include name="esri-geometry-api-*.jar"/>
-	        <exclude name="*sources.jar"/>
-	        <exclude name="*javadoc.jar"/>
-	        <include name="jts-*.jar"/>
-	      </zipgroupfileset>
-	      <zipgroupfileset dir="${dist2}" includes="spatialhadoop-${version}.jar"/>
-	    </zip>
-	  </target>
-
-  <target name="package1" depends="dist1"
-      description="create a package files for the distribution">
-    <!-- Create the package directory -->
-    <mkdir dir="${dist1}/package"/>
-    
-    <!-- Build the tar file -->
-    <tar destfile="${dist1}/package/spatialhadoop-${version}.tar.gz"
-         compression="gzip">
-      <tarfileset dir=".">
-        <include name="README.md"/>
-        <include name="LICENSE.txt"/>
-      </tarfileset>
-    	
-    	<tarfileset dir="${res}" filemode="755">
-        <include name="bin/shadoop"/>
-      </tarfileset>
-      
-    	<tarfileset dir="${res}">
-        <include name="webapps/**"/>
-    		<include name="conf/spatial-site.xml"/>
-    	</tarfileset>
-
-    	<tarfileset file="${toString:other.path.ref}" prefix="share/hadoop/common/lib/"/>
-
-    	<tarfileset dir="lib/ivy/common" prefix="lib/">
-        <include name="esri-geometry-api-*.jar"/>
-        <exclude name="*sources.jar"/>
-        <exclude name="*javadoc.jar"/>
-        <include name="jts-*.jar"/>
-      </tarfileset>
-
-      <tarfileset dir="${dist1}" prefix="lib/">
-        <include name="spatialhadoop-${version}.jar"/>
-      </tarfileset>
-
-      <tarfileset dir="${dist1}">
-        <include name="spatialhadoop-main.jar"/>
-      </tarfileset>
-    </tar>
-  </target>
-
-
 	<!-- Build targets for Hadoop 2 -->
 
-	<target name="package2" depends="dist2">
+	<target name="package" depends="dist">
     <!-- Build the tar file -->
-    <tar destfile="${dist2}/package/spatialhadoop-${version}-2.tar.gz"
+    <tar destfile="${dist}/package/spatialhadoop-${version}.tar.gz"
          compression="gzip">
       <tarfileset dir=".">
         <include name="README.md"/>
         <include name="LICENSE.txt"/>
       </tarfileset>
       
-      <tarfileset dir="${res}" filemode="755">
-        <include name="bin/shadoop"/>
-      </tarfileset>
-    	
-      <tarfileset dir="${res}" prefix="etc/hadoop">
-        <include name="conf/spatial-site.xml"/>
+      <tarfileset dir="src/main/package">
+        <include name="etc/**"/>
       </tarfileset>    	
+
+      <tarfileset dir="src/main/package" filemode="755">
+        <include name="bin/**"/>
+      </tarfileset>
     	
       <tarfileset dir="${res}" prefix="hadoop/hdfs/webapps/hdfs">
         <include name="webapps/**"/>
@@ -239,53 +123,30 @@
         <exclude name="*sources.jar"/>
         <exclude name="*javadoc.jar"/>
         <include name="jts-*.jar"/>
+        <include name="javax.mail*.jar"/>
       </tarfileset>
 
-      <tarfileset dir="${dist2}" prefix="share/hadoop/common/lib/">
+      <tarfileset dir="${dist}" prefix="share/hadoop/common/lib/">
         <include name="spatialhadoop-${version}.jar"/>
       </tarfileset>
 
-      <tarfileset dir="${dist2}">
+      <tarfileset dir="${dist}">
         <include name="spatialhadoop-main.jar"/>
       </tarfileset>
     </tar>
 	</target>
 	
-	<!-- Check whether the target hadoop.dir is of version 1 or 2 -->
-	<condition property="hadoop1">
-  	<available file="${hadoop.dir}/conf/hadoop-env.sh"/>
-	</condition>
-	
-	<condition property="hadoop2">
-	  <available file="${hadoop.dir}/etc/hadoop/hadoop-env.sh"/>
-	</condition>
-	
-	<target name="install1" depends="package1" if="hadoop1"
-	    description="Install SpatialHadoop on an existing Hadoop installation">
-		<echo message="Installing on a Hadoop 1.x installation"/>
-	  <!-- Extract the constructed package file (tar) in the destination directory -->
-		<untar src="${dist1}/package/spatialhadoop-${version}.tar.gz"
-           dest="${hadoop.dir}" compression="gzip"/>
-  </target>
-
-  <target name="install2" depends="package2" if="hadoop2"
+  <target name="install" depends="package"
     description="Install SpatialHadoop on an existing Hadoop 2 installation">
   	<echo message="Installing on a Hadoop 2.x installation"/>
     <!-- Extract the constructed package file (tar) in the destination directory -->
-    <untar src="${dist2}/package/spatialhadoop-${version}-2.tar.gz"
+    <untar src="${dist}/package/spatialhadoop-${version}.tar.gz"
            dest="${hadoop.dir}" compression="gzip"/>
   </target>
 	
-	<target name="install" depends="install1,install2">
-		<!-- Set executable permissions explicitly as untar does not support it -->
-    <!-- See https://issues.apache.org/bugzilla/show_bug.cgi?id=36361 -->
-    <chmod file="${hadoop.dir}/bin/shadoop" perm="755"/>
-	</target>
-
 	<target name="clean" description="clean up" >
     <!-- Delete the binary directory trees -->
-    <delete dir="${bin1}"/>
-    <delete dir="${bin2}"/>
+    <delete dir="${bin}"/>
     <delete dir="lib/ivy"/>
   </target>
 
