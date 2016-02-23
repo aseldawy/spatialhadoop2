@@ -51,7 +51,7 @@ Run a range query that selects rectangles overlapping the query area defined
 by the box with the two corners (10, 20) and (2000, 3000). Results are stored
 in the output file *rangequery.out*
 
-    shadoop rangequery test.grid rect:10,10,2000,3000 rangequery.out
+    shadoop rangequery test.grid rect:10,10,2000,3000 rangequery.out shape:rect
     
 Compile
 =======
@@ -72,13 +72,13 @@ and [Ivy](http://ant.apache.org/ivy/download.cgi) if you do not have them instal
 
 To compile SpatialHadoop, navigate to the source code and run the command:
 
-    ant
+    mvn compile
 
 This will automatically retrieve all dependencies and compile the source code.
 
 To build a redistribution package, run the command:
 
-    ant package1
+    mvn package
 
 This Ant task will package all classes of SpatialHadoop along with the dependent jars
 not included in Hadoop into an archive. This archive can be used to install SpatialHadoop
