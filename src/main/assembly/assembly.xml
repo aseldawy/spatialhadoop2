@@ -8,16 +8,27 @@
   <includeBaseDirectory>false</includeBaseDirectory>
   
   <fileSets>
-    <fileSet>
-      <directory>src/main/package</directory>
-      <outputDirectory></outputDirectory>
-    </fileSet>
+    <!-- Include the main JAR file of SpatialHadoop -->
     <fileSet>
       <directory>${project.build.directory}</directory>
       <outputDirectory>lib</outputDirectory>
       <includes>
         <include>*.jar</include>
       </includes>
+    </fileSet>
+    <!-- Include README and LICENSE files -->
+    <fileSet>
+      <directory>${project.basedir}</directory>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>README*</include>
+        <include>LICENSE*</include>
+      </includes>
+    </fileSet>
+    <!-- Include package files (binaries and configuration) -->
+    <fileSet>
+      <directory>src/main/package</directory>
+      <outputDirectory></outputDirectory>
     </fileSet>
   </fileSets>
   
