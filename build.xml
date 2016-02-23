@@ -116,8 +116,6 @@
         <include name="webapps/**"/>
       </tarfileset>
     	
-      <tarfileset file="${toString:other.path.ref}" prefix="share/hadoop/common/lib/"/>
-      
       <tarfileset dir="lib/ivy/common" prefix="share/hadoop/common/lib/">
         <include name="esri-geometry-api-*.jar"/>
         <exclude name="*sources.jar"/>
