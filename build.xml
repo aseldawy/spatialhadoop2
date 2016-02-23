@@ -58,7 +58,7 @@
   </target>
   
   <target name="dist" depends="compile"
-        description="generate the distribution for Hadoop 2.x" >
+        description="generate the distribution for Hadoop 1.x" >
     <!-- Create the distribution directory -->
     <mkdir dir="${dist}"/>
 
@@ -81,7 +81,7 @@
   </target>
 
 	 <target name="emr-jar" depends="dist"
-	      description="Creates a JAR file that can run on Amazon EMR for Hadoop 2.x">
+	      description="Creates a JAR file that can run on Amazon EMR for Hadoop 1.x">
     <zip destfile="${dist}/spatialhadoop-${version}-emr.jar">
       <zipgroupfileset dir="lib/ivy/common">
         <include name="esri-geometry-api-*.jar"/>
@@ -93,7 +93,7 @@
     </zip>
   </target>
 
-	<!-- Build targets for Hadoop 2 -->
+	<!-- Build targets for Hadoop 1 -->
 
 	<target name="package" depends="dist">
     <!-- Build the tar file -->
@@ -105,20 +105,18 @@
       </tarfileset>
       
       <tarfileset dir="src/main/package">
-        <include name="etc/**"/>
+        <include name="conf/**"/>
       </tarfileset>    	
 
       <tarfileset dir="src/main/package" filemode="755">
         <include name="bin/**"/>
       </tarfileset>
     	
-      <tarfileset dir="${res}" prefix="hadoop/hdfs/webapps/hdfs">
+      <tarfileset dir="${res}">
         <include name="webapps/**"/>
       </tarfileset>
     	
-      <tarfileset file="${toString:other.path.ref}" prefix="share/hadoop/common/lib/"/>
-      
-      <tarfileset dir="lib/ivy/common" prefix="share/hadoop/common/lib/">
+      <tarfileset dir="lib/ivy/common" prefix="lib/">
         <include name="esri-geometry-api-*.jar"/>
         <exclude name="*sources.jar"/>
         <exclude name="*javadoc.jar"/>
@@ -126,7 +124,7 @@
         <include name="javax.mail*.jar"/>
       </tarfileset>
 
-      <tarfileset dir="${dist}" prefix="share/hadoop/common/lib/">
+      <tarfileset dir="${dist}" prefix="lib/">
         <include name="spatialhadoop-${version}.jar"/>
       </tarfileset>
 
@@ -137,8 +135,8 @@
 	</target>
 	
   <target name="install" depends="package"
-    description="Install SpatialHadoop on an existing Hadoop 2 installation">
-  	<echo message="Installing on a Hadoop 2.x installation"/>
+    description="Install SpatialHadoop on an existing Hadoop 1 installation">
+  	<echo message="Installing on a Hadoop 1.x installation"/>
     <!-- Extract the constructed package file (tar) in the destination directory -->
     <untar src="${dist}/package/spatialhadoop-${version}.tar.gz"
            dest="${hadoop.dir}" compression="gzip"/>

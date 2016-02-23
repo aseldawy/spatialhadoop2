@@ -30,29 +30,11 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- Hadoop 2.x -->
+    <!-- Hadoop 1.x -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
-      <version>2.6.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
-      <version>2.6.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-common</artifactId>
-      <version>2.6.0</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-core</artifactId>
-      <version>2.6.0</version>
+      <artifactId>hadoop-core</artifactId>
+      <version>1.2.1</version>
     </dependency>
 
     <!-- Common spatial and other libraries -->

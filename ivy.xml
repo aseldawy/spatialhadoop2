@@ -10,14 +10,11 @@
     <info organisation="org.apache" module="dependee"/>
 	<configurations>
   	<conf name="common" description="Common libraries to all versions"/>
-  	<conf name="hadoop" description="Hadoop 2.x libraries"/>
+  	<conf name="hadoop" description="Hadoop 1.x libraries"/>
 	</configurations>
     
   <dependencies>
-    <dependency org="org.apache.hadoop" name="hadoop-common" rev="2.6.0" conf="hadoop->default"/>
-    <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="2.6.0" conf="hadoop->default"/>
-    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-common" rev="2.6.0" conf="hadoop->default"/>
-    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-core" rev="2.6.0" conf="hadoop->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-core" rev="1.2.1" conf="hadoop->default"/>
         
     <dependency org="com.vividsolutions" name="jts" rev="1.8" conf="common->default"/>
     <dependency org="com.esri.geometry" name="esri-geometry-api" rev="1.2" conf="common->default"/>
