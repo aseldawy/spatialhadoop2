@@ -1,0 +1,9 @@
+set_width 3600
+set_height 1800
+$stdin.each_line do |line|
+  parts = line.split ','
+  if parts[0] != 'NaN' && parts[2] != 'NaN'
+    x1, y1, x2, y2 = parts[0,4].map{|d| d.to_f * 10}
+    line(x1, y1, x2, y2)
+  end
+end
