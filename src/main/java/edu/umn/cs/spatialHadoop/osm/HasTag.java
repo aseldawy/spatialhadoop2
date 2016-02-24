@@ -31,20 +31,26 @@ public class HasTag extends EvalFunc<Boolean> {
     if (input == null || input.size() == 0)
       return null;
 
-    if (input.size() != 3)
-      throw new IOException("HasTag takes three parameters");
+    if (input.size() < 2)
+      throw new IOException("HasTag takes at least two parameters");
     
     Map<String, String> tags = (Map<String, String>) input.get(0);
     String keys = (String)input.get(1);
-    String values = (String)input.get(2);
+    String values = input.size() > 2 ? (String)input.get(2) : null;
 
     return hasTag(tags, keys, values);
   }
 
   public static boolean hasTag(Map<String, String> tags, String keys, String values) {
-    for (Map.Entry<String, String> entry : tags.entrySet())
-      if (keys.contains(entry.getKey()) && values.contains(entry.getValue()))
-        return true;
+    if (values == null) {
+      for (Map.Entry<String, String> entry : tags.entrySet())
+        if (keys.contains(entry.getKey()))
+          return true;
+    } else {
+      for (Map.Entry<String, String> entry : tags.entrySet())
+        if (keys.contains(entry.getKey()) && values.contains(entry.getValue()))
+          return true;
+    }
     return false;
   }
 }

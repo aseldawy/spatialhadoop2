@@ -296,6 +296,7 @@ public class FileMBR {
       
       Text text = new Text2();
       for (FileStatus file : files) {
+        text.clear();
         Partition p = mbrs.get(file.getPath().getName());
         gout.println(p.toText(text).toString());
         wktout.println(p.toWKT());
