@@ -11,7 +11,7 @@ package edu.umn.cs.spatialHadoop;
 /**
  * Estimates a given value by taking a random sample from sample space until
  * the confidence interval of the calculated value is acceptable
- * @author eldawy
+ * @author Ahmed Eldawy
  *
  */
 public class Estimator<Y> {
@@ -20,9 +20,8 @@ public class Estimator<Y> {
   /**
    * An interface implemented by the user to provide a source of values to
    * be used in the estimate
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
-   * @param <T>
    */
   public static interface RandomSample {
     double next();
@@ -31,10 +30,9 @@ public class Estimator<Y> {
   /**
    * An interface implemented by the user to provide a calculated value given
    * an estimate for the random variable X.
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
-   * @param <X>
-   * @param <Y>
+   * @param <Y> The type of objects to sample
    */
   public static interface UserFunction<Y> {
     Y calculate(double x);
@@ -43,9 +41,9 @@ public class Estimator<Y> {
   /**
    * Given a confidence interval for the calculated value, determine whether
    * this is good enough or we need to sample more data.
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
-   * @param <Y>
+   * @param <Y> The type of objects to sample
    */
   public static interface QualityControl<Y> {
     boolean isAcceptable(Y y1, Y y2);
@@ -53,9 +51,9 @@ public class Estimator<Y> {
   
   /**
    * Stores a range of calculated values
-   * @author eldawy
+   * @author Ahmed Eldawy
    *
-   * @param <Y>
+   * @param <Y> The type of objects to sample
    */
   public static class Range<Y> {
     public Y limit1, limit2;

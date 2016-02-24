@@ -202,10 +202,14 @@ public class HDFRasterLayer extends Canvas {
       count[x][y]++;
     }
   }
+
   /**
-   * Adds a point to the frequency map
-   * @param cx
-   * @param cy
+   * Adds a range of points, defined by a rectangle, to the frequency map
+   * @param x1
+   * @param y1
+   * @param x2
+   * @param y2
+   * @param weight
    */
   public void addPoints(int x1, int y1, int x2, int y2, int weight) {
     if (x1 < 0)

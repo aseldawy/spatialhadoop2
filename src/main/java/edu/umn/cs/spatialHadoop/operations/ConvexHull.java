@@ -119,9 +119,9 @@ public class ConvexHull {
    * output is just thrown away.
    * @param inFile
    * @param outFile
-   * @param overwrite
+   * @param params
    * @throws IOException
-   * @throws InterruptedException 
+   * @throws InterruptedException
    */
   public static void convexHullLocal(Path inFile, Path outFile,
       final OperationsParams params) throws IOException, InterruptedException {

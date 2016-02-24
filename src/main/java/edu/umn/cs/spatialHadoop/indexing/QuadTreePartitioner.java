@@ -68,10 +68,8 @@ public class QuadTreePartitioner extends Partitioner {
   
   /**
    * Create a ZCurvePartitioner from a list of points
-   * @param vsample
-   * @param inMBR
+   * @param zValues
    * @param capacity
-   * @return
    */
   protected void createFromZValues(final long[] zValues, int capacity) {
     Arrays.sort(zValues);

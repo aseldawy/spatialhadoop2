@@ -82,7 +82,7 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   
   /**
    * Comparison is done by lexicographic ordering of attributes
-   * < x1, y1, x2, y2>
+   * &lt; x1, y1, x2, y2&gt;
    */
   public int compareTo(Shape s) {
     Rectangle rect2 = (Rectangle) s;

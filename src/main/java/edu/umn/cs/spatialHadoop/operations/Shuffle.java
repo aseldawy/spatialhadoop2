@@ -94,11 +94,10 @@ public class Shuffle {
   /**
    * Counts the exact number of lines in a file by issuing a MapReduce job
    * that does the thing
-   * @param conf
-   * @param infs
    * @param infile
-   * @return
-   * @throws IOException 
+   * @param outfile
+   * @param params
+   * @throws IOException
    */
   public static void randomizerMapReduce(Path infile, Path outfile,
       OperationsParams params) throws IOException {

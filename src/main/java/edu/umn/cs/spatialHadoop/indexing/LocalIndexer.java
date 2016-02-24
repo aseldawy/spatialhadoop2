@@ -28,7 +28,7 @@ public interface LocalIndexer {
   
   /**
    * Setup this instance of LocalIndexer for the specified job.
-   * @param context
+   * @param conf
    * @throws IOException
    * @throws InterruptedException
    */

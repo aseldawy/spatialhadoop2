@@ -237,9 +237,9 @@ public class Indexer {
     return createPartitioner(new Path[] {in}, out, job, partitionerName);
   }
 
-  /***
+  /**
    * Create a partitioner for a particular job
-   * @param in
+   * @param ins
    * @param out
    * @param job
    * @param partitionerName

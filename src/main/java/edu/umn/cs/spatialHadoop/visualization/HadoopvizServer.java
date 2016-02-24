@@ -35,7 +35,6 @@ import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobID;
-import org.apache.hadoop.mapred.JobTracker;
 import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.mapreduce.Job;
@@ -67,9 +66,10 @@ public class HadoopvizServer extends AbstractHandler {
 
   /**
    * A constructor that starts the Jetty server
-   * 
-   * @param dataPath
-   * @param indexPath
+   * @param datasetPath
+   * @param outputPath
+   * @param shapePath
+   * @param watermaskPath
    * @param params
    */
   public HadoopvizServer(Path datasetPath, Path outputPath, Path shapePath, Path watermaskPath,

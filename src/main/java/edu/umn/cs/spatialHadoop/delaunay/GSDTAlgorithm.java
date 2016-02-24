@@ -17,9 +17,7 @@ import org.apache.hadoop.util.QuickSort;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
-import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.LinearRing;
-import com.vividsolutions.jts.geom.Polygon;
 
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -151,8 +149,8 @@ public class GSDTAlgorithm {
 
   /**
    * Constructs a triangulation that merges two existing triangulations.
-   * @param L
-   * @param R
+   * @param points
+   * @param progress
    */
   public <P extends Point> GSDTAlgorithm(P[] points, Progressable progress) {
     this.progress = progress;
@@ -773,15 +771,11 @@ public class GSDTAlgorithm {
    * written to the output as they are not going to be affected by a future
    * merge step. Non-final parts cannot be written to the output yet as they
    * might be affected (i.e., some edges are pruned) by a future merge step.
-   * 
-   * @param mbr
-   *          The MBR used to check for final and non-final edges. It is assumed
+   * @param mbr The MBR used to check for final and non-final edges. It is assumed
    *          that no more points can be introduced in this MBR but more points
    *          can appear later outside that MBR.
-   * @param safe
-   *          The set of safe edges
-   * @param unsafe
-   *          The set of unsafe edges
+   * @param finalGraph The set of final edges
+   * @param nonfinalGraph The set of non-final edges
    */
   public void splitIntoFinalAndNonFinalGraphs(Rectangle mbr,
       SimpleGraph finalGraph, SimpleGraph nonfinalGraph) {

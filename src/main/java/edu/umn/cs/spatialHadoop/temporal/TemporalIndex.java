@@ -82,8 +82,9 @@ public class TemporalIndex {
 		 * Returns true if and only if the given time is inside the range of
 		 * this partition.
 		 * 
-		 * @param time
-		 * @return
+		 * @param time The time point to check against
+		 * @return <code>true</code> if the given time point lies in the range covered by this index;
+		 *  <code>false</code> otherwise.
 		 */
 		public boolean contains(long time) {
 			return time >= start && time < end;
@@ -123,9 +124,10 @@ public class TemporalIndex {
 	 * a whole month, the name is 'yyyy.mm'. For a partitions which spans a
 	 * whole year, the name is 'yyyy'.
 	 * 
-	 * @param path
-	 * @throws IOException
-	 * @throws ParseException
+	 * @param fs The file system that contains the index
+	 * @param path The path to the directory that contains the index
+	 * @throws IOException If an error happens while retrieving index files.
+	 * @throws ParseException If an error happens while parsing file names as dates.
 	 */
 	public TemporalIndex(FileSystem fs, Path path) throws IOException,
 			ParseException {
@@ -186,9 +188,10 @@ public class TemporalIndex {
 	 * Select all partitions that overlap a temporal query range given as start
 	 * and end times.
 	 * 
-	 * @param start
-	 * @param end
-	 * @return
+	 * @param start The start time of the interval (inclusive)
+	 * @param end The end time of the interval (exclusive)
+	 * @return An array of all the partitions that overlap the given time interval
+	 *  or <code>null</code> if no matches.
 	 */
 	public TemporalPartition[] selectOverlap(long start, long end) {
 		// Perform a binary search to find the matching range of partitions
@@ -211,9 +214,9 @@ public class TemporalIndex {
 	/**
 	 * Select all partitions that are totally contained in a given time range
 	 * 
-	 * @param start
-	 * @param end
-	 * @return - All matching partitions or <code>null</code> if non are matched
+   * @param start The start time of the interval (inclusive)
+   * @param end The end time of the interval (exclusive)
+	 * @return All matching partitions or <code>null</code> if non are matched
 	 */
 	public TemporalPartition[] selectContained(long start, long end) {
 		// Perform a binary search to find the matching range of partitions
@@ -246,7 +249,7 @@ public class TemporalIndex {
 	 * partition is returned. If it does not overlap with any partition, the
 	 * index of the first partition that follows the given time is returned.
 	 * 
-	 * @param end
+	 * @param time The time point to search for
 	 * @return
 	 */
 	private int binarySearch(long time) {

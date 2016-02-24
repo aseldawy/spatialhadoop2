@@ -62,7 +62,7 @@ public final class TextSerializerHelper {
    * If append is set to true, a comma is also appended to the text.
    * @param i
    * @param t
-   * @param appendComma
+   * @param toAppend
    */
   public static void serializeHexLong(long i, Text t, char toAppend) {
     // Calculate number of bytes needed to serialize the given long
@@ -190,9 +190,9 @@ public final class TextSerializerHelper {
   /**
    * Appends hex representation of the given number to the given string.
    * If append is set to true, a comma is also appended to the text.
-   * @param i
+   * @param d
    * @param t
-   * @param appendComma
+   * @param toAppend
    */
   public static void serializeDouble(double d, Text t, char toAppend) {
     byte[] bytes = Double.toString(d).getBytes();

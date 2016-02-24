@@ -49,7 +49,6 @@ public abstract class Partitioner implements Writable {
    * partition.
    * @param shape
    * @param matcher
-   * @return
    */
   public abstract void overlapPartitions(Shape shape, ResultCollector<Integer> matcher);
   
@@ -72,9 +71,9 @@ public abstract class Partitioner implements Writable {
   public abstract CellInfo getPartition(int partitionID);
   
   /**
-   * Returns the detail of a partition given its position starting from zero
+   * Returns the detail of a partition given its index starting at zero
    * and ending at partitionCount() - 1
-   * @param partitionID
+   * @param index
    * @return
    */
   public abstract CellInfo getPartitionAt(int index);

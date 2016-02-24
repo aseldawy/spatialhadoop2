@@ -270,8 +270,8 @@ public abstract class DataDescriptor {
   
   /**
    * Reads information of this data descriptor from the input.
-   * @param in - data input from where to read information
-   * @param length - total number of data bytes
+   * @param input data input from where to read information
+   * @throws IOException
    */
   protected abstract void readFields(DataInput input) throws IOException;
 

@@ -30,7 +30,7 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
   
   /**
    * Whether to use the fast mode for building RTree or not.
-   * @see RTree#bulkLoadWrite(byte[], int, int, int, java.io.DataOutput, boolean)
+   * {@link RTree#bulkLoadWrite(byte[], int, int, int, java.io.DataOutput, Shape, boolean)}
    */
   protected boolean fastRTree;
   
@@ -39,10 +39,10 @@ public class RTreeGridRecordWriter<S extends Shape> extends GridRecordWriter<S> 
 
   /**
    * Initializes a new RTreeGridRecordWriter.
-   * @param fileSystem - of output file
-   * @param outDir - output file path
-   * @param cells - the cells used to partition the input
-   * @param overwrite - whether to overwrite existing files or not
+   * @param outDir Output path for the job
+   * @param job The corresponding job
+   * @param prefix A prefix to use for output files for uniqueness
+   * @param cells The cells used to partition the written shapes
    * @throws IOException
    */
   public RTreeGridRecordWriter(Path outDir, JobConf job, String prefix,

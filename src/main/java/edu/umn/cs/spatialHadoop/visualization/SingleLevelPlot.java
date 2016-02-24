@@ -626,13 +626,14 @@ public class SingleLevelPlot {
   
   /**
    * Plots the given file using the provided plotter
-   * @param inFile
+   * @param inFiles
    * @param outFile
    * @param plotterClass
    * @param params
+   * @return
    * @throws IOException
-   * @throws InterruptedException 
-   * @throws ClassNotFoundException 
+   * @throws InterruptedException
+   * @throws ClassNotFoundException
    */
   public static Job plot(Path[] inFiles, Path outFile,
       final Class<? extends Plotter> plotterClass,

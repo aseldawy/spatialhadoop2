@@ -350,11 +350,11 @@ public class AggregateQuadTree {
   /**
    * Constructs an aggregate quad tree for an input HDF file on a selected
    * dataset identified by its name in the file.
-   * @param inFile
-   * @param datasetIndex
-   * @param outFile
-   * @throws IOException 
-   * @throws Exception 
+   * @param conf The system configuration which can contain user-defined parameters.
+   * @param inFile The path of the input HDF file to read
+   * @param datasetName The name of the dataset to index in the HDF file
+   * @param outFile The path to the index file to write
+   * @throws IOException If an error happens while reading the input or writing the output
    */
   public static void build(Configuration conf, Path inFile, String datasetName,
       Path outFile) throws IOException {
@@ -641,9 +641,10 @@ public class AggregateQuadTree {
    * Perform a selection query that retrieves all points in the given range.
    * The range is specified in the two-dimensional array positions.
    * @param in
-   * @param r
+   * @param query_mbr
+   * @param output
    * @return number of matched records
-   * @throws IOException 
+   * @throws IOException
    */
   public static int selectionQuery(FSDataInputStream in, Rectangle query_mbr,
       ResultCollector<PointValue> output) throws IOException {
@@ -755,11 +756,11 @@ public class AggregateQuadTree {
   
   /**
    * Perform a selection query that retrieves all points in the given range.
-   * The range is specified in the two-dimensional array positions.
+   * The range is specified in the two-dimensional array positions. 
    * @param in
-   * @param r
-   * @return number of matched records
-   * @throws IOException 
+   * @param query_mbr
+   * @return
+   * @throws IOException
    */
   public static Node aggregateQuery(FSDataInputStream in, Rectangle query_mbr) throws IOException {
     long treeStartPosition = in.getPos();

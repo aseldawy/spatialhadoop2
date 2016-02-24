@@ -57,9 +57,8 @@ public class RangeQuery {
   
   /**
    * The map function used for range query
+   * 
    * @author Ahmed Eldawy
-   *
-   * @param <T>
    */
   public static class RangeQueryMap extends
       Mapper<Rectangle, Iterable<Shape>, NullWritable, Shape> {
@@ -112,12 +111,14 @@ public class RangeQuery {
    * calls to the method {@link ResultCollector#collect(Object)}.
    * You can use {@link ResultCollectorSynchronizer} to synchronize calls to
    * your ResultCollector if you cannot design yours to be thread safe.
-   * @param inFile
+   * @param inPath
+   * @param queryRange
+   * @param shape
    * @param params
    * @param output
    * @return
    * @throws IOException
-   * @throws InterruptedException 
+   * @throws InterruptedException
    */
   public static <S extends Shape> long rangeQueryLocal(Path inPath,
       final Shape queryRange, final S shape,

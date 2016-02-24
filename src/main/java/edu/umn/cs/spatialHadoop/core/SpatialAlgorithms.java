@@ -930,6 +930,7 @@ public class SpatialAlgorithms {
    *   can compute the answer of each group separately</li>
    *  <li>The union of each group is computed using the {@link #unionGroup(Geometry[], Progressable, ResultCollector)}
    *   function</li>
+   * </ol>
    * @param geoms
    * @param prog
    * @param output

@@ -213,8 +213,8 @@ public class RandomSpatialGenerator {
   }
   
   /**
-   * @param args
-   * @throws IOException 
+   * @param args Command line arguments
+   * @throws IOException If an exception happens during the undlerying MapReduce job 
    */
   public static void main(String[] args) throws IOException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));

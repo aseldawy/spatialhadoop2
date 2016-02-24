@@ -90,14 +90,6 @@ public class Repartition {
       }
     }
     
-    /**
-     * Map function
-     * @param dummy
-     * @param shape
-     * @param output
-     * @param reporter
-     * @throws IOException
-     */
     public void map(Rectangle cellMbr, T shape,
         OutputCollector<IntWritable, T> output, Reporter reporter)
         throws IOException {
@@ -140,15 +132,7 @@ public class Repartition {
         throw new RuntimeException("Error loading cells", e);
       }
     }
-    
-    /**
-     * Map function
-     * @param dummy
-     * @param shape
-     * @param output
-     * @param reporter
-     * @throws IOException
-     */
+
     public void map(Rectangle cellMbr, T shape,
         OutputCollector<IntWritable, T> output, Reporter reporter)
         throws IOException {
@@ -252,39 +236,35 @@ public class Repartition {
     }
 
   /**
-   * Calculates number of partitions required to index the given file
-   * @param inFs
-   * @param inFile
-   * @param rtree
-   * @return
-   * @throws IOException 
+   * Calculates number of partitions required to index the given file.
+   * @param conf The current configuration which can contain user-defined parameters
+   * @param inFileSize The size of the input file in bytes
+   * @param outFs The output file system where the index will be written
+   * @param outFile The path of the output file which is used to get the output block size.
+   * @param blockSize If set, this will override the default output block size.
+   * @return The number of blocks needed to write the index file
    */
-@SuppressWarnings("deprecation")
-public static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
-      FileSystem outFs, Path outFile, long blockSize) throws IOException {
+  public static int calculateNumberOfPartitions(Configuration conf, long inFileSize,
+      FileSystem outFs, Path outFile, long blockSize) {
     final float IndexingOverhead =
         conf.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f);
     long indexedFileSize = (long) (inFileSize * (1 + IndexingOverhead));
     if (blockSize == 0)
-      blockSize = outFs.getDefaultBlockSize();
+      blockSize = outFs.getDefaultBlockSize(outFile);
     return (int)Math.ceil((float)indexedFileSize / blockSize);
   }
 	
-	/**
+  /**
    * Repartitions a file that is already in HDFS. It runs a MapReduce job
    * that partitions the file into cells, and writes each cell separately.
-   * @param conf
-   * @param inFile
-   * @param outPath
-   * @param gridInfo
-	 * @param stockShape 
-   * @param pack
-   * @param rtree
-   * @param overwrite
-   * @throws IOException
-	 * @throws InterruptedException 
-   * @deprecated this method is replaced with
-   *   {@link #repartitionMapReduce(Path, Path, OperationsParams)}
+   * @param inFile The input raw file that needs to be indexed.
+   * @param outPath The output path where the index will be written.
+   * @param stockShape An instance of the shapes stored in the input file.
+   * @param blockSize The block size for the constructed index.
+   * @param sindex The type of index to build.
+   * @param overwrite Whether to overwrite the output or not.
+   * @throws IOException If an exception happens while preparing the job.
+   * @throws InterruptedException If the underlying MapReduce job was interrupted.
    */
   @Deprecated
   public static void repartitionMapReduce(Path inFile, Path outPath,
@@ -389,14 +369,14 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
   
   /**
    * Repartitions an input file according to the given list of cells.
-   * @param inFile
-   * @param outPath
-   * @param cellInfos
-   * @param pack
-   * @param rtree
-   * @param overwrite
-   * @throws IOException
-   * {@link #repartitionMapReduce(Path, Path, OperationsParams)} instead.
+   * @param inFile The input raw file that needs to be indexed.
+   * @param outPath The output path where the index will be written.
+   * @param stockShape An instance of the shapes stored in the input file.
+   * @param blockSize The block size for the constructed index.
+   * @param cellInfos A predefined set of cells to use as a global index
+   * @param sindex The type of index to build.
+   * @param overwrite Whether to overwrite the output or not.
+   * @throws IOException If an exception happens while preparing the job.
    */
   public static void repartitionMapReduce(Path inFile, Path outPath,
       Shape stockShape, long blockSize, CellInfo[] cellInfos, String sindex,
@@ -530,14 +510,15 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
   }
   
   /**
-   * @param inFile
-   * @param outFile
-   * @param stockShape
-   * @param blockSize
-   * @param sindex
-   * @param overwrite
-   * @throws IOException
-   * @throws InterruptedException 
+   * 
+   * @param inFile The input raw file that needs to be indexed.
+   * @param outFile The output path where the index will be written.
+   * @param stockShape An instance of the shapes stored in the input file.
+   * @param blockSize The block size for the constructed index.
+   * @param sindex The type of index to build.
+   * @param overwrite Whether to overwrite the output or not.
+   * @throws IOException If an exception happens while preparing the job.
+   * @throws InterruptedException If the underlying MapReduce job was interrupted.
    * @deprecated this method is replaced with
    *   {@link #repartitionLocal(Path, Path, OperationsParams)}
    */
@@ -556,7 +537,7 @@ public static int calculateNumberOfPartitions(Configuration conf, long inFileSiz
   }
   
   @SuppressWarnings("deprecation")
-public static <S extends Shape> void repartitionLocal(Path inFile,
+  public static <S extends Shape> void repartitionLocal(Path inFile,
       Path outFile, OperationsParams params) throws IOException, InterruptedException {
     String sindex = params.get("sindex");
     long blockSize = params.getSize("blocksize");
@@ -600,15 +581,14 @@ public static <S extends Shape> void repartitionLocal(Path inFile,
 
   /**
    * Repartitions a file on local machine without MapReduce jobs.
-   * @param inFs
-   * @param in
-   * @param outFs
-   * @param out
-   * @param cells
-   * @param stockShape
-   * @param rtree
-   * @param overwrite
-   * @throws IOException
+   * @param in The input raw file that needs to be indexed.
+   * @param out The output path where the index will be written.
+   * @param stockShape An instance of the shapes stored in the input file.
+   * @param blockSize The block size for the constructed index.
+   * @param cells A predefined set of cells to use as a global index
+   * @param sindex The type of index to build.
+   * @param overwrite Whether to overwrite the output or not.
+   * @throws IOException If an exception happens while preparing the job.
    * This method is @deprecated. Please use the method
    * {@link #repartitionLocal(Path, Path, CellInfo[], OperationsParams)}
    */
@@ -660,11 +640,11 @@ public static <S extends Shape> void repartitionLocal(Path inFile,
 
   
   /**
-   * @param inFile
-   * @param outputPath
-   * @param params
-   * @throws IOException
-   * @throws InterruptedException 
+   * @param inFile The input raw file that needs to be indexed.
+   * @param outputPath The output path where the index will be written.
+   * @param params The parameters and configuration of the underlying job
+   * @throws IOException If an exception happens while preparing the job.
+   * @throws InterruptedException If the underlying MapReduce job was interrupted.
    */
   public static void repartition(Path inFile, Path outputPath,
       OperationsParams params) throws IOException, InterruptedException {
@@ -694,15 +674,15 @@ public static <S extends Shape> void repartitionLocal(Path inFile,
 
   /**
 	 * Entry point to the operation.
-	 * shape:<s> the shape to use. Automatically inferred from input file if not set.
-	 * sindex<index> Type of spatial index to build
-	 * cells-of:<filename> Use the cells of the given file for the global index.
-	 * blocksize:<size> Size of each block in indexed file in bytes.
+	 * shape:&lt;s&gt; the shape to use. Automatically inferred from input file if not set.
+	 * sindex&lt;index&gt; Type of spatial index to build
+	 * cells-of:&lt;filename&gt; Use the cells of the given file for the global index.
+	 * blocksize:&lt;size&gt; Size of each block in indexed file in bytes.
 	 * -local: If set, the index is built on the local machine.
 	 * input filename: Input file in HDFS
 	 * output filename: Output file in HDFS
-	 * @param args
-	 * @throws Exception
+	 * @param args The command line arguments
+	 * @throws Exception If any exception happens while the job is running
 	 */
 	public static void main(String[] args) throws Exception {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
