@@ -41,15 +41,21 @@
   
   <build>
     <plugins>
-	    <plugin>
-	      <artifactId>maven-assembly-plugin</artifactId>
-	      <version>2.6</version>
-	      <configuration>
-	        <descriptors>
-	          <descriptor>src/main/assembly/assembly.xml</descriptor>
-	        </descriptors>
-	      </configuration>
-	    </plugin>
+      <plugin>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <version>2.6</version>
+        <configuration>
+          <descriptors>
+            <descriptor>src/main/assembly/assembly.xml</descriptor>
+            <descriptor>src/main/assembly/emr-jar.xml</descriptor>
+          </descriptors>
+          <archive>
+            <manifest>
+              <mainClass>edu.umn.cs.spatialHadoop.operations.Main</mainClass>
+            </manifest>
+          </archive>
+        </configuration>
+      </plugin>
 	    <plugin>
 	     <groupId>org.sonatype.plugins</groupId>
 	     <artifactId>nexus-staging-maven-plugin</artifactId>
@@ -85,6 +91,7 @@
         </execution>
       </executions>
     </plugin>
+<!--
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>
       <artifactId>maven-javadoc-plugin</artifactId>
@@ -98,7 +105,7 @@
         </execution>
       </executions>
     </plugin>
-    
+-->
     <plugin>
       <groupId>org.apache.maven.plugins</groupId>
       <artifactId>maven-gpg-plugin</artifactId>
