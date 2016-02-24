@@ -41,26 +41,36 @@
   
   <build>
     <plugins>
-    <plugin>
-      <artifactId>maven-assembly-plugin</artifactId>
-      <version>2.6</version>
-      <configuration>
-        <descriptors>
-          <descriptor>src/main/assembly/assembly.xml</descriptor>
-        </descriptors>
-      </configuration>
-    </plugin>
-    <plugin>
-     <groupId>org.sonatype.plugins</groupId>
-     <artifactId>nexus-staging-maven-plugin</artifactId>
-     <version>1.6.3</version>
-     <extensions>true</extensions>
-     <configuration>
-       <serverId>ossrh</serverId>
-       <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-       <autoReleaseAfterClose>false</autoReleaseAfterClose>
-     </configuration>
-    </plugin>
+	    <plugin>
+	      <artifactId>maven-assembly-plugin</artifactId>
+	      <version>2.6</version>
+	      <configuration>
+	        <descriptors>
+	          <descriptor>src/main/assembly/assembly.xml</descriptor>
+	        </descriptors>
+	      </configuration>
+	    </plugin>
+	    <plugin>
+	     <groupId>org.sonatype.plugins</groupId>
+	     <artifactId>nexus-staging-maven-plugin</artifactId>
+	     <version>1.6.3</version>
+	     <extensions>true</extensions>
+	     <configuration>
+	       <serverId>ossrh</serverId>
+	       <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+	       <autoReleaseAfterClose>false</autoReleaseAfterClose>
+	     </configuration>
+	    </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.5.1</version>
+        <configuration>
+          <source>1.6</source>
+          <target>1.6</target>
+        </configuration>
+      </plugin>
     
      <plugin>
       <groupId>org.apache.maven.plugins</groupId>
@@ -116,6 +126,18 @@
 		  </configuration>
 		</plugin>
 
+
+    <plugin>
+			<groupId>org.apache.maven.plugins</groupId>
+			<artifactId>maven-jar-plugin</artifactId>
+			<configuration>
+				<archive>
+					<manifest>
+						<mainClass>edu.umn.cs.spatialHadoop.operations.Main</mainClass>
+					</manifest>
+				</archive>
+			</configuration>
+		</plugin>
     </plugins>
   </build>
   
