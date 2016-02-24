@@ -1,10 +1,10 @@
 package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
-import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Arrays;
+import java.util.List;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.Path;
@@ -35,7 +35,7 @@ public class MultilevelPlotTest extends TestCase {
         return new TestSuite(MultilevelPlotTest.class);
     }
 
-    public void testMultilevelPlotLocal() {
+    public void testOneLevelLocal() {
         try {
             String inFileName = "test.rect";
             String outFileName = "test_pyramid";
@@ -68,7 +68,7 @@ public class MultilevelPlotTest extends TestCase {
         }
     }
 
-    public void testMultilevelPlotMapReduce() {
+    public void testOneLevelMapReduce() {
         try {
             String inFileName = "test.rect";
             String outFileName = "test_pyramid";
@@ -96,6 +96,45 @@ public class MultilevelPlotTest extends TestCase {
             });
             assertEquals(1, list.length);
             assertEquals("tile-11-0-0.png", list[0]);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void testMultipleLevelsMapReducePyramidPartitioning() {
+        try {
+            String inFileName = "test.rect";
+            String outFileName = "test_pyramid";
+            PrintWriter inTest = new PrintWriter(inFileName);
+            inTest.println("0,0,0.5,0.5");
+            inTest.close();
+            int levels = 5;
+
+            OperationsParams params = new OperationsParams();
+            params.setBoolean("local", false);
+            params.setInt("levels", levels);
+            params.set("mbr", "0,0,2048,2048");
+            params.set("shape", "rect");
+            params.setBoolean("overwrite", true);
+            params.setBoolean("vflip", false);
+            // Enforce the use of pyramid partitioning only
+            params.setInt(MultilevelPlot.FlatPartitioningLevelThreshold, -1);
+            FileUtils.deleteDirectory(new File(outFileName));
+            MultilevelPlot.plot(new Path[] { new Path(inFileName) }, new Path(outFileName),
+                    GeometricPlot.GeometricRasterizer.class, params);
+
+            File outPath = new File(outFileName + "/pyramid");
+            List<String> list = Arrays.asList(outPath.list(new FilenameFilter() {
+                @Override
+                public boolean accept(File dir, String name) {
+                    return name.startsWith("tile");
+                }
+            }));
+            assertEquals(levels, list.size());
+            for (int level = 0; level < levels; level++) {
+                String fileName = String.format("tile-%d-0-0.png", level);
+                list.indexOf(fileName);
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
