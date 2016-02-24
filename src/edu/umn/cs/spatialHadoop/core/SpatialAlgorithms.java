@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.core;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -22,15 +23,27 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
+import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.Progressable;
 
@@ -939,4 +952,61 @@ public class SpatialAlgorithms {
     
     return resultSize;
   }
+  
+  public static long spatialJoinLocal(Path[] inFiles, Path outFile, OperationsParams params) throws IOException, InterruptedException {
+      // Read the inputs and store them in memory
+      List<Shape>[] datasets = new List[inFiles.length];
+      final SpatialInputFormat3<Rectangle, Shape> inputFormat =
+          new SpatialInputFormat3<Rectangle, Shape>();
+      for (int i = 0; i < inFiles.length; i++) {
+          datasets[i] = new ArrayList<Shape>();
+          FileSystem inFs = inFiles[i].getFileSystem(params);
+          Job job = Job.getInstance(params);
+          SpatialInputFormat3.addInputPath(job, inFiles[i]);
+          for (InputSplit split : inputFormat.getSplits(job)) {
+              FileSplit fsplit = (FileSplit) split;
+              RecordReader<Rectangle, Iterable<Shape>> reader =
+                      inputFormat.createRecordReader(fsplit, null);
+              if (reader instanceof SpatialRecordReader3) {
+                  ((SpatialRecordReader3)reader).initialize(fsplit, params);
+              } else if (reader instanceof RTreeRecordReader3) {
+                  ((RTreeRecordReader3)reader).initialize(fsplit, params);
+              } else if (reader instanceof HDFRecordReader) {
+                  ((HDFRecordReader)reader).initialize(fsplit, params);
+              } else {
+                  throw new RuntimeException("Unknown record reader");
+              }
+
+              while (reader.nextKeyValue()) {
+                  Iterable<Shape> shapes = reader.getCurrentValue();
+                  for (Shape shape : shapes) {
+                      datasets[i].add(shape.clone());
+                  }
+              }
+              reader.close();
+          }
+      }
+
+      // Apply the spatial join algorithm
+      ResultCollector2<Shape, Shape> output = null;
+      PrintStream out = null;
+      if (outFile != null) {
+          FileSystem outFS = outFile.getFileSystem(params);
+          out = new PrintStream(outFS.create(outFile));
+          final PrintStream outout = out;
+          output = new ResultCollector2<Shape, Shape>() {
+              @Override
+              public void collect(Shape r, Shape s) {
+                  outout.println(r.toText(new Text())+","+s.toText(new Text()));
+              }
+          };
+      }
+      long resultCount = SpatialJoin_planeSweep(datasets[0], datasets[1], output, null);
+      
+      if (out != null)
+          out.close();
+      
+      return resultCount;
+  }
+
 }
