@@ -47,7 +47,7 @@
         <configuration>
           <descriptors>
             <descriptor>src/main/assembly/assembly.xml</descriptor>
-            <descriptor>src/main/assembly/emr-jar.xml</descriptor>
+            <descriptor>src/main/assembly/uber-jar.xml</descriptor>
           </descriptors>
           <archive>
             <manifest>
