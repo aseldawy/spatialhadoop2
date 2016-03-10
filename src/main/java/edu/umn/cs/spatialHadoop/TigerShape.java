@@ -19,7 +19,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * A shape from tiger file.
- * @author aseldawy
+ * @author Ahmed Eldawy
  *
  */
 public class TigerShape extends OGCJTSShape {

@@ -214,10 +214,10 @@ public class RandomSpatialGenerator {
   
   /**
    * @param args Command line arguments
-   * @throws IOException If an exception happens during the undlerying MapReduce job 
+   * @throws IOException If an exception happens during the underlying MapReduce job 
    */
   public static void main(String[] args) throws IOException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     if (params.get("mbr") == null) {
       System.err.println("Set MBR of the generated file using rect:<x1,y1,x2,y2>");
       printUsage();
@@ -243,10 +243,6 @@ public class RandomSpatialGenerator {
       generateFileLocal(outputFile, params);
     else
       generateMapReduce(outputFile, params);
-//    if (gindex == null && lindex == null)
-//      generateHeapFile(fs, outputFile, stockShape, totalSize, mbr, type, rectSize, seed, blocksize, overwrite);
-//    else
-//      generateGridFile(fs, outputFile, stockShape, totalSize, mbr, type, rectSize, seed, blocksize, gindex, lindex, overwrite);
   }
 
 }
