@@ -15,14 +15,6 @@
   <includeBaseDirectory>false</includeBaseDirectory>
   
   <fileSets>
-    <!-- Include the main JAR file of SpatialHadoop -->
-    <fileSet>
-      <directory>${project.build.directory}</directory>
-      <outputDirectory>share/hadoop/common/lib</outputDirectory>
-      <includes>
-        <include>${artifactId}-${version}.jar</include>
-      </includes>
-    </fileSet>
     <!-- Include README and LICENSE files -->
     <fileSet>
       <directory>${project.basedir}</directory>
@@ -36,6 +28,14 @@
     <fileSet>
       <directory>src/main/package</directory>
       <outputDirectory></outputDirectory>
+    </fileSet>
+    <!-- Include the main JAR file of SpatialHadoop -->
+    <fileSet>
+      <directory>${project.build.directory}</directory>
+      <outputDirectory>share/hadoop/common/lib</outputDirectory>
+      <includes>
+        <include>${artifactId}-${version}.jar</include>
+      </includes>
     </fileSet>
   </fileSets>
   
