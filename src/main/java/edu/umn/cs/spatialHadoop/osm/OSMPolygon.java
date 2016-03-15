@@ -89,6 +89,8 @@ public class OSMPolygon extends OGCJTSShape implements WritableComparable<OSMPol
   
   @Override
   public boolean equals(Object obj) {
+    if (obj == null)
+      return false;
     return ((OSMPolygon)obj).id == this.id;
   }
 

@@ -66,6 +66,8 @@ public class GridInfo extends Rectangle {
 
   @Override
   public boolean equals(Object obj) {
+    if (obj == null)
+      return false;
     GridInfo gi = (GridInfo) obj;
     return super.equals(obj)
         && this.columns == gi.columns && this.rows == gi.rows;
