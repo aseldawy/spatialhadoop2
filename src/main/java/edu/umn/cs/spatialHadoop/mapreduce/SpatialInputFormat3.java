@@ -240,9 +240,9 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
        * split, and each edge is weighted with number of shared hosts between
        * the two splits
        */
-      Vector<Vector<FileSplit>> openSplits = new Vector<Vector<FileSplit>>();
+      List<Vector<FileSplit>> openSplits = new ArrayList<Vector<FileSplit>>();
       int maxNumberOfSplits = (int) Math.ceil((float)splits.size() / combine);
-      List<InputSplit> combinedSplits = new Vector<InputSplit>();
+      List<InputSplit> combinedSplits = new ArrayList<InputSplit>();
       for (InputSplit split : splits) {
         FileSplit fsplit = (FileSplit) split;
         int maxSimilarity = -1; // Best similarity found so far

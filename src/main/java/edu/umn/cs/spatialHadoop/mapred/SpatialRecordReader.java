@@ -12,8 +12,10 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.commons.logging.Log;
@@ -449,7 +451,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
    */
   protected boolean nextShapes(ArrayWritable shapes) throws IOException {
     // Prepare a vector that will hold all objects in this 
-    Vector<Shape> vshapes = new Vector<Shape>();
+    List<Shape> vshapes = new ArrayList<Shape>();
     try {
       Shape stockObject = (Shape) shapes.getValueClass().newInstance();
       // Reached the end of this split
