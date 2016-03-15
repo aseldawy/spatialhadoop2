@@ -83,6 +83,9 @@ public class FileMBR {
   /**Last submitted MBR MapReduce job*/
   public static RunningJob lastSubmittedJob;
 
+  private FileMBR() {
+  }
+
   public static class FileMBRMapper extends MapReduceBase implements
       Mapper<Rectangle, Text, Text, Partition> {
     

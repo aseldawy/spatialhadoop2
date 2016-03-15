@@ -42,6 +42,9 @@ import edu.umn.cs.spatialHadoop.nasa.HTTPFileSystem;
  */
 public final class FileUtil {
 
+	private FileUtil() {
+	}
+
 	public static String copyFile(Configuration job, FileStatus fileStatus)
 			throws IOException {
 		return FileUtil.copyFileSplit(job, new FileSplit(fileStatus.getPath(),
