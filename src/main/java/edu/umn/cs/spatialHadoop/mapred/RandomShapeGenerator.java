@@ -164,7 +164,7 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   }
   // The standard deviation is 0.2
   public static double nextGaussian(Random rand) {
-    double res = 0;
+    double res;
     do {
       res = rand.nextGaussian() / 5.0;
     } while(res < -1 || res > 1);

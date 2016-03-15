@@ -546,7 +546,7 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
    * @throws IOException
    */
   protected Path getFinalCellPath(int cellIndex) throws IOException {
-    Path path = null;
+    Path path;
     do {
       String filename = counter == 0 ? String.format("data_%05d", cellIndex)
           : String.format("data_%05d_%d", cellIndex, counter);
