@@ -76,7 +76,18 @@ public class Point implements Shape, Comparable<Point> {
 		Point r2 = (Point) obj;
 		return this.x == r2.x && this.y == r2.y;
 	}
-	
+
+	@Override
+	public int hashCode() {
+		int result;
+		long temp;
+		temp = Double.doubleToLongBits(this.x);
+		result = (int) (temp ^ temp >>> 32);
+		temp = Double.doubleToLongBits(this.y);
+		result = 31 * result + (int) (temp ^ temp >>> 32);
+		return result;
+	}
+
 	public double distanceTo(Point s) {
 		double dx = s.x - this.x;
 		double dy = s.y - this.y;

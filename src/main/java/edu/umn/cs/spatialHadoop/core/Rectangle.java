@@ -116,6 +116,21 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   }
 
   @Override
+  public int hashCode() {
+    int result;
+    long temp;
+    temp = Double.doubleToLongBits(this.x1);
+    result = (int) (temp ^ temp >>> 32);
+    temp = Double.doubleToLongBits(this.y1);
+    result = 31 * result + (int) (temp ^ temp >>> 32);
+    temp = Double.doubleToLongBits(this.x2);
+    result = 31 * result + (int) (temp ^ temp >>> 32);
+    temp = Double.doubleToLongBits(this.y2);
+    result = 31 * result + (int) (temp ^ temp >>> 32);
+    return result;
+  }
+
+  @Override
   public double distanceTo(double px, double py) {
     return this.getMaxDistanceTo(px, py);
   }

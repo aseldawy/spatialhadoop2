@@ -70,7 +70,14 @@ public class GridInfo extends Rectangle {
     return super.equals(obj)
         && this.columns == gi.columns && this.rows == gi.rows;
   }
-  
+
+  @Override
+  public int hashCode() {
+    int result = this.columns;
+    result = 31 * result + this.rows;
+    return result;
+  }
+
   public void calculateCellDimensions(long totalFileSize, long blockSize) {
     // An empirical number for the expected overhead in grid file due to
     // replication
