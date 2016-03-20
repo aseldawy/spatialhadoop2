@@ -514,70 +514,94 @@ public final class TextSerializerHelper {
     // Check whether this text is a Well Known Text (WKT) or a hexed string
     boolean wkt = false;
     byte[] bytes = text.getBytes();
-    int i_shape = 0;
-    while (!wkt && i_shape < ShapeNames.length) {
-      byte[] shapeName = ShapeNames[i_shape];
-      if (text.getLength() > shapeName.length) {
-        int i = 0;
-        while (i < shapeName.length && shapeName[i] == bytes[i])
-          i++;
-        if (i == shapeName.length) {
-          wkt = true;
-          break;
-        }
-      }
-      i_shape++;
-    }
-    
-    int i_end;
+    int length = text.getLength();
     Geometry geom;
-    if (i_shape < ShapeNames.length) {
-      // Look for the terminator of the shape text
-      i_end = 0;
-      while (i_end < text.getLength() && bytes[i_end] != '(')
-        i_end++;
-      if (i_end < text.getLength())
-        i_end++;
-      int nesting = 1;
-      while (i_end < text.getLength() && nesting > 0) {
-        if (bytes[i_end] == '(')
-          nesting++;
-        else if (bytes[i_end] == ')')
-          nesting--;
-        i_end++;
-      }
-      String wkt_text = new String(bytes, 0, i_end);
-      
-      try {
-        geom = wktReader.read(wkt_text);
-      } catch (ParseException e) {
-        throw new RuntimeException("Error parsing WKT '"+wkt_text+"'", e);
-      }
+    int i1, i2; // Start and end offset of the geometry being parsed
+    int i_next; // Beginning of the next field
+    boolean isWKT = false;
+    boolean isHex = false;
+    if (bytes[0] == '\'' || bytes[0] == '\"') {
+      // A quoted string. Find terminating quote and trim the quotes
+      i1 = 1;
+      i2 = 2;
+      while (i2 < length && bytes[i2] != bytes[0])
+        i2++;
+      if (i2 == length)
+        throw new RuntimeException("Unterminated quoted string");
+      i_next = i2 + 1;
+      i2--; // Back one step to remove the terminating quote
+      isWKT = true; // Assume any quoted string to be WKT
     } else {
-      i_end = 0;
-      while (i_end < text.getLength() && IsHex[bytes[i_end]])
-        i_end++;
-      if (i_end > 1) {
-        String hex_string = new String(bytes, 0, i_end);
-        byte[] binary = hexToBytes(hex_string);
-        try {
-          geom = wkbReader.read(binary);
-        } catch (ParseException e) {
-          throw new RuntimeException("Error parsing Hex seting '"+hex_string+"'", e);
+      // Not a quoted string, check if the type is WKT
+      int i_shape = 0;
+      while (!wkt && i_shape < ShapeNames.length) {
+        byte[] shapeName = ShapeNames[i_shape];
+        if (length > shapeName.length) {
+          int i = 0;
+          while (i < shapeName.length && shapeName[i] == bytes[i])
+            i++;
+          if (i == shapeName.length) {
+            wkt = true;
+            break;
+          }
         }
+        i_shape++;
+      }
+
+      if (i_shape < ShapeNames.length) {
+        isWKT = true;
+        // Look for the terminator of the shape text
+        i1 = 0;
+        i2 = 1;
+        // Search for the first open parenthesis
+        while (i2 < length && bytes[i2] != '(')
+          i2++;
+        if (i2 < length)
+          i2++; // Skip the open parenthesis itself
+        int nesting = 1;
+        while (i2 < length && nesting > 0) {
+          if (bytes[i2] == '(')
+            nesting++;
+          else if (bytes[i2] == ')')
+            nesting--;
+          i2++;
+        }
+        i_next = i2 + 1;
       } else {
-        geom = null; // Cannot parse
+        // Check if the type is hex-encoded WKB
+        i1 = 0;
+        i2 = 0;
+        while (i2 < length && IsHex[bytes[i2]])
+          i2++;
+        isHex = i2 > 1;
+        i_next = i2;
       }
     }
+
+    String geom_text = new String(bytes, i1, i2);
     
+    try {
+      if (isWKT) {
+        geom = wktReader.read(geom_text);
+      } else if (isHex) {
+        byte[] binary = hexToBytes(geom_text);
+        geom = wkbReader.read(binary);
+      } else {
+        geom = null;
+      }
+    } catch (ParseException e) {
+      throw new RuntimeException(String.format("Error parsing '%s'",geom_text), e);
+    }
+
     // Remove consumed bytes from the text
-    if (i_end < text.getLength() && bytes[i_end] == separator)
-      i_end++;
-    if (i_end >= text.getLength())
+    if (i_next >= text.getLength())
       text.clear();
-    else
-      text.set(bytes, i_end, text.getLength() - i_end);
-    
+    else {
+      if (bytes[i_next] == separator)
+        i_next++;
+      text.set(bytes, i_next, length - i_next);
+    }
+
     return geom;
   }
   
