@@ -86,6 +86,8 @@ public class CellInfo extends Rectangle {
   
   @Override
   public boolean equals(Object obj) {
+    if (obj == null)
+      return false;
     return ((CellInfo)obj).cellId == this.cellId;
   }
   

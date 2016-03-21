@@ -43,6 +43,8 @@ class IndexedRectangle extends Rectangle {
   
   @Override
   public boolean equals(Object obj) {
+    if (obj == null)
+      return false;
     return index == ((IndexedRectangle)obj).index;
   }
 }

@@ -73,6 +73,8 @@ public class Point implements Shape, Comparable<Point> {
 	}
 	
 	public boolean equals(Object obj) {
+		if (obj == null) 
+			return false;
 		Point r2 = (Point) obj;
 		return this.x == r2.x && this.y == r2.y;
 	}
