@@ -200,7 +200,7 @@ public final class FileUtil {
 		FSDataOutputStream out = hdfsFS.create(hdfsPath);
 		FileInputStream localInputStream = new FileInputStream(new File(
 				localPath.toString()));
-		int bytesRead = 0;
+		int bytesRead;
 		byte[] localBuffer = new byte[1024];
 		while ((bytesRead = localInputStream.read(localBuffer)) > 0) {
 			out.write(localBuffer, 0, bytesRead);

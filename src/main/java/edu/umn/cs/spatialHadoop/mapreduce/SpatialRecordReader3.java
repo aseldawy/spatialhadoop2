@@ -220,7 +220,7 @@ public class SpatialRecordReader3<V extends Shape> extends
     while (getPos() <= end) {
       value.clear();
 
-      int lineLength = 0;
+      int lineLength;
       // Read the first line from stream
       if ((lineLength = lineReader.readLine(value)) <= 0) {
         // Indicates an end of stream

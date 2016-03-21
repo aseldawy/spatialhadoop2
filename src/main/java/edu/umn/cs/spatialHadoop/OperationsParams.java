@@ -497,7 +497,7 @@ public class OperationsParams extends Configuration {
 
 	public static void setJoiningThresholdPerOnce(Configuration conf,
 			String param, int joiningThresholdPerOnce) {
-		String str = null;
+		String str;
 		if (joiningThresholdPerOnce < 0){
 			str = "50000";				
 		}else{
@@ -508,7 +508,7 @@ public class OperationsParams extends Configuration {
 	
 	public static void setFilterOnlyModeFlag(Configuration conf,
 			String param, boolean filterOnlyMode) {
-		String str = null;
+		String str;
 		if (filterOnlyMode){
 			str = "true";	
 		}else{
@@ -535,7 +535,7 @@ public class OperationsParams extends Configuration {
 	
 	public static void setInactiveModeFlag(Configuration conf,
 			String param, boolean inactiveModeFlag) {
-		String str = null;
+		String str;
 		if (inactiveModeFlag){
 			str = "true";	
 		}else{
