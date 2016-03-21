@@ -228,7 +228,7 @@ public class ConvexHull {
         ResultCollector<Partition> output) {
       Set<Partition> non_dominated_partitions_all = new HashSet<Partition>();
       for (OperationsParams.Direction dir : OperationsParams.Direction.values()) {
-        List<Partition> non_dominated_partitions = new ArrayList<Partition>();
+        Vector<Partition> non_dominated_partitions = new Vector<Partition>();
         for (Partition p : gIndex) {
           boolean dominated = false;
           int i = 0;
@@ -284,7 +284,7 @@ public class ConvexHull {
     public void reduce(NullWritable dummy, Iterator<Point> points,
         OutputCollector<NullWritable, Point> output, Reporter reporter)
         throws IOException {
-      List<Point> vpoints = new ArrayList<Point>();
+      Vector<Point> vpoints = new Vector<Point>();
       while (points.hasNext()) {
         vpoints.add(points.next().clone());
       }

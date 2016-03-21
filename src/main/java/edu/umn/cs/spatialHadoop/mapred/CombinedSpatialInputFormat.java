@@ -58,7 +58,7 @@ public class CombinedSpatialInputFormat<S extends Shape> extends
 			throws IOException {
 
 		final Path[] inputFiles = getInputPaths(job);
-		final List<InputSplit> combinedSplits = new ArrayList<InputSplit>();
+		final Vector<InputSplit> combinedSplits = new Vector<InputSplit>();
 		InputSplit[][] inputSplits = new InputSplit[inputFiles.length][];
 
 		@SuppressWarnings("unchecked")

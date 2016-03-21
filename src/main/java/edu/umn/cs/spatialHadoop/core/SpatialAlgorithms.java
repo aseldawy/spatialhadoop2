@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 import java.util.TreeSet;
-import java.util.ArrayList;
+import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -718,7 +718,7 @@ public class SpatialAlgorithms {
       }
       List<Geometry> group = groups.get(root);
       if (group == null) {
-        group = new ArrayList<Geometry>();
+        group = new Vector<Geometry>();
         groups.put(root, group);
       }
       group.add(polygons[i]);

@@ -9,7 +9,6 @@
 package edu.umn.cs.spatialHadoop.mapred;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -58,7 +57,7 @@ public class FileSplitUtil {
       Path[] paths = new Path[count];
       long[] starts = new long[count];
       long[] lengths = new long[count];
-      List<String> vlocations = new ArrayList<String>();
+      Vector<String> vlocations = new Vector<String>();
       while (count > 0) {
         paths[count - 1] = splits.get(startIndex).getPath();
         starts[count - 1] = splits.get(startIndex).getStart();
@@ -96,7 +95,7 @@ public class FileSplitUtil {
       Path[] paths = new Path[count];
       long[] starts = new long[count];
       long[] lengths = new long[count];
-      List<String> vlocations = new ArrayList<String>();
+      Vector<String> vlocations = new Vector<String>();
       while (count > 0) {
         paths[count - 1] = splits.get(startIndex).getPath();
         starts[count - 1] = splits.get(startIndex).getStart();
@@ -128,7 +127,7 @@ public class FileSplitUtil {
     Path[] paths = new Path[2];
     long[] starts = new long[2];
     long[] lengths = new long[2];
-    List<String> vlocations = new ArrayList<String>();
+    Vector<String> vlocations = new Vector<String>();
     paths[0] = split1.getPath();
     starts[0] = split1.getStart();
     lengths[0] = split1.getLength();
@@ -227,7 +226,7 @@ public class FileSplitUtil {
     for (int i = 0; i < numSplits; i++) {
       // Decide how many splits to combine
       int numSplitsToCombine = splitsAvailable / (numSplits - i);
-      List<FileSplit> splitsToCombine = new ArrayList<FileSplit>();
+      Vector<FileSplit> splitsToCombine = new Vector<FileSplit>();
       while (numSplitsToCombine > 0) {
         // Choose the host with minimum number of splits
         Map.Entry<String, Vector<FileSplit>> minEntry = null;

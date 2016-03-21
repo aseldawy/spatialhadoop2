@@ -19,11 +19,9 @@ import java.lang.reflect.Array;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Random;
@@ -109,7 +107,7 @@ class StockQuadTree {
     this.r = new int[resolution * resolution];
     final int[] z = new int[resolution * resolution];
     // The list of all nodes
-    List<Node> nodes = new ArrayList<Node>();
+    Vector<Node> nodes = new Vector<Node>();
     
     // Compute the Z-order of all values
     for (int i = 0; i < z.length; i++) {
@@ -771,9 +769,9 @@ public class AggregateQuadTree {
     int resolution = in.readInt();
     short fillValue = in.readShort();
     int cardinality = in.readInt();
-    final List<Integer> selectedNodesPos = new ArrayList<Integer>();
-    final List<Integer> selectedStarts = new ArrayList<Integer>();
-    final List<Integer> selectedEnds = new ArrayList<Integer>();
+    final Vector<Integer> selectedNodesPos = new Vector<Integer>();
+    final Vector<Integer> selectedStarts = new Vector<Integer>();
+    final Vector<Integer> selectedEnds = new Vector<Integer>();
     StockQuadTree stockQuadTree = getOrCreateStockQuadTree(resolution);
     // Nodes to be searched. Contains node positions in the array of nodes
     Stack<Integer> nodes_2b_searched = new Stack<Integer>();
@@ -934,7 +932,7 @@ public class AggregateQuadTree {
     FileStatus[] mathcingDays = timeRange == null?
         sourceFs.listStatus(inputDir) :
           sourceFs.listStatus(inputDir, timeRange);
-    final List<Path> sourceFiles = new ArrayList<Path>();
+    final Vector<Path> sourceFiles = new Vector<Path>();
     for (FileStatus matchingDay : mathcingDays) {
       for (FileStatus matchingTile : sourceFs.listStatus(matchingDay.getPath())) {
         sourceFiles.add(matchingTile.getPath());
@@ -1075,7 +1073,7 @@ public class AggregateQuadTree {
               };
 
               // Find matching tiles in all source indexes to merge
-              List<Path> filesToMerge = new ArrayList<Path>(lastIndex - firstIndex);
+              Vector<Path> filesToMerge = new Vector<Path>(lastIndex - firstIndex);
               filesToMerge.add(tileInFirstDay.getPath());
               for (int iDailyIndex = firstIndex + 1; iDailyIndex < lastIndex; iDailyIndex++) {
                 FileStatus[] matchedTileFile = fs.listStatus(sourceIndexes[iDailyIndex].getPath(), tileFilter);

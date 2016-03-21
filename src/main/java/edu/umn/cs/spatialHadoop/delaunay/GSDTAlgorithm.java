@@ -921,8 +921,8 @@ public class GSDTAlgorithm {
 
   public boolean test() {
     final double threshold = 1E-6;
-    List<Point> starts = new ArrayList<Point>();
-    List<Point> ends = new ArrayList<Point>();
+    List<Point> starts = new Vector<Point>();
+    List<Point> ends = new Vector<Point>();
     for (int s1 = 0; s1 < points.length; s1++) {
       for (int s2 : neighbors[s1]) {
         if (s1 < s2) {

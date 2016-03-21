@@ -17,11 +17,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Array;
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -364,7 +362,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
       }
       
       // All nodes stored in level-order traversal
-      List<SplitStruct> nodes = new ArrayList<SplitStruct>();
+      Vector<SplitStruct> nodes = new Vector<SplitStruct>();
       final Queue<SplitStruct> toBePartitioned = new LinkedList<SplitStruct>();
       toBePartitioned.add(new SplitStruct(0, elementCount, SplitStruct.DIRECTION_X));
       
@@ -1065,8 +1063,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     double query_radius = Math.sqrt(query_area / Math.PI);
 
     boolean result_correct;
-    final List<Double> distances = new ArrayList<Double>();
-    final List<T> shapes = new ArrayList<T>();
+    final Vector<Double> distances = new Vector<Double>();
+    final Vector<T> shapes = new Vector<T>();
     // Find results in the range and increase this range if needed to ensure
     // correctness of the answer
     do {

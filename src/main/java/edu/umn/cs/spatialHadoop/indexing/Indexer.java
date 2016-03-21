@@ -15,7 +15,6 @@ import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
-import java.util.ArrayList;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -279,7 +278,7 @@ public class Indexer {
       FileSystem outFS = out.getFileSystem(job);
       long outBlockSize = outFS.getDefaultBlockSize(out);
 
-      final List<Point> sample = new ArrayList<Point>();
+      final Vector<Point> sample = new Vector<Point>();
       float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
       long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
 
@@ -327,7 +326,7 @@ public class Indexer {
     final String sindex = conf.get("sindex");
     
     // Start reading input file
-    List<InputSplit> splits = new ArrayList<InputSplit>();
+    Vector<InputSplit> splits = new Vector<InputSplit>();
     final SpatialInputFormat3<Rectangle, Shape> inputFormat = new SpatialInputFormat3<Rectangle, Shape>();
     FileSystem inFs = inPath.getFileSystem(conf);
     FileStatus inFStatus = inFs.getFileStatus(inPath);

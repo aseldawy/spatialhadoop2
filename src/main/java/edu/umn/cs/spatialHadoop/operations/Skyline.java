@@ -284,7 +284,7 @@ public class Skyline {
     @Override
     public void selectCells(GlobalIndex<Partition> gIndex,
         ResultCollector<Partition> output) {
-      List<Partition> non_dominated_partitions = new ArrayList<Partition>();
+      Vector<Partition> non_dominated_partitions = new Vector<Partition>();
       
       for (Partition p : gIndex) {
         boolean dominated = false;
@@ -349,7 +349,7 @@ public class Skyline {
     public void reduce(NullWritable dummy, Iterator<Point> points,
         OutputCollector<NullWritable, Point> output, Reporter reporter)
         throws IOException {
-      List<Point> vpoints = new ArrayList<Point>();
+      Vector<Point> vpoints = new Vector<Point>();
       while (points.hasNext()) {
         vpoints.add(points.next().clone());
       }
