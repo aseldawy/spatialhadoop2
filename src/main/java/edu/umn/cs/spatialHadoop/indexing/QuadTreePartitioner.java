@@ -15,6 +15,8 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Queue;
 import java.util.Vector;
+import java.util.List;
+import java.util.ArrayList;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapred.FileSplit;
@@ -96,7 +98,7 @@ public class QuadTreePartitioner extends Partitioner {
     Queue<QuadTreeNode> nodesToSplit = new ArrayDeque<QuadTreeNode>();
     nodesToSplit.add(root);
 
-    Vector<Integer> leafNodeIDs = new Vector<Integer>();
+    List<Integer> leafNodeIDs = new ArrayList<Integer>();
     int maxNodeID = 0;
     
     while (!nodesToSplit.isEmpty()) {
@@ -263,7 +265,7 @@ public class QuadTreePartitioner extends Partitioner {
         new FileSplit(inPath, 0, length, new String[0]));
     Rectangle key = reader.createKey();
     ShapeIterator shapes = reader.createValue();
-    final Vector<Point> points = new Vector<Point>();
+    final List<Point> points = new ArrayList<Point>();
     while (reader.next(key, shapes)) {
       for (Shape s : shapes) {
         points.add(s.getMBR().getCenterPoint());

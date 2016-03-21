@@ -93,7 +93,7 @@ public abstract class BinarySpatialInputFormat<K extends Writable, V extends Wri
       }
     }
     
-    final Vector<CombineFileSplit> matchedSplits = new Vector<CombineFileSplit>();
+    final List<CombineFileSplit> matchedSplits = new ArrayList<CombineFileSplit>();
     if (gIndexes[0] == null || gIndexes[1] == null) {
       // Join every possible pair (Cartesian product)
       InputSplit[][] inputSplits = new InputSplit[inputFiles.length][];

@@ -8,6 +8,8 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.mapred;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Vector;
 
 import org.apache.hadoop.conf.Configuration;
@@ -42,7 +44,7 @@ public class CombineBlockFilter extends DefaultBlockFilter {
   @Override
   public void selectCells(GlobalIndex<Partition> gIndex,
       ResultCollector<Partition> output) {
-    final Vector<Partition> selectedSoFar = new Vector<Partition>();
+    final List<Partition> selectedSoFar = new ArrayList<Partition>();
     // First block filter is applied directly to the global index
     blockFilters[0].selectCells(gIndex, new ResultCollector<Partition>() {
       @Override

@@ -11,8 +11,8 @@ package edu.umn.cs.spatialHadoop;
 import java.awt.Color;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -116,7 +116,7 @@ public class OperationsParams extends Configuration {
 		// TODO if the argument shape is set to a class in a third party jar
 		// file
 		// add that jar file to the archives
-		Vector<Path> paths = new Vector<Path>();
+		List<Path> paths = new ArrayList<Path>();
 		for (String arg : args) {
 			String argl = arg.toLowerCase();
 			if (arg.startsWith("-no-")) {
@@ -603,7 +603,7 @@ public class OperationsParams extends Configuration {
 	 */
 	public boolean autoDetectShape() {
 		String autoDetectedShape = null;
-		final Vector<String> sampleLines = new Vector<String>();
+		final List<String> sampleLines = new ArrayList<String>();
 		if (this.get("shape") != null)
 			return true; // A shape is already configured
 		if (this.getInputPaths().length == 0)
