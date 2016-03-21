@@ -109,8 +109,9 @@ public class SpatioAggregateQueries {
         allMatchingFiles.add(matchingFile.getPath());
       }
     }
-    
-    if (allMatchingFiles.size() == 0)
+
+    //noinspection SizeReplaceableByIsEmpty
+    if (allMatchingFiles.isEmpty())
       return null;
     
     final int resolution = AggregateQuadTree.getResolution(fs, allMatchingFiles.get(0));

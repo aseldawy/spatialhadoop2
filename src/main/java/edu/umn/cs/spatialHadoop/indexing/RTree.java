@@ -1226,7 +1226,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     int r_last_offset = 0;
     int s_last_offset = 0;
     
-    while (nodesToJoin.size() > 0) {
+    while (!nodesToJoin.isEmpty()) {
       long nodes_to_join = nodesToJoin.remove();
       int r_node = (int) (nodes_to_join >>> 32);
       int s_node = (int) (nodes_to_join & 0xFFFFFFFF);
