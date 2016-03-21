@@ -530,7 +530,7 @@ public class SVGGraphics extends Graphics2D implements Writable {
     int[] xs = this.xs.underlyingArray();
     int[] ys = this.ys.underlyingArray();
     // 1- Draw all lines
-    if (linesStart.size() > 0) {
+    if (!linesStart.isEmpty()) {
       p.printf("<g style='stroke:rgb(0,0,0);'>\n");
       for (int i = 0; i < linesStart.size(); i++) {
         int lineStart = linesStart.get(i);
@@ -541,7 +541,7 @@ public class SVGGraphics extends Graphics2D implements Writable {
     }
     
     // 2- Draw all polygons
-    if (polygonsStart.size() > 0) {
+    if (!polygonsStart.isEmpty()) {
       p.printf("<g style='stroke:rgb(0,0,0);'>\n");
       for (int i = 0; i < polygonsStart.size(); i++) {
         int polygonStart = polygonsStart.get(i);
@@ -556,7 +556,7 @@ public class SVGGraphics extends Graphics2D implements Writable {
     }
     
     // 3- Draw all polylines
-    if (polylinesStart.size() > 0) {
+    if (!polylinesStart.isEmpty()) {
       p.printf("<g style='stroke:rgb(0,0,0); fill:none;'>\n");
       for (int i = 0; i < polylinesStart.size(); i++) {
         int polylineStart = polylinesStart.get(i);
@@ -571,7 +571,7 @@ public class SVGGraphics extends Graphics2D implements Writable {
       
     }
     // 4- Draw all rectangles
-    if (rectanglesStart.size() > 0) {
+    if (!rectanglesStart.isEmpty()) {
       p.printf("<g style='stroke:rgb(0,0,0); fill:none;'>\n");
       for (int i = 0; i < rectanglesStart.size(); i++) {
         int rectStart = rectanglesStart.get(i);

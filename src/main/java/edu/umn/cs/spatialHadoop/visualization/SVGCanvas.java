@@ -180,7 +180,7 @@ public class SVGCanvas extends Canvas {
     float[] ys = this.ys.underlyingArray();
     
     // Draw all polylines
-    if (polylineStart.size() > 0) {
+    if (!polylineStart.isEmpty()) {
       p.printf("<g style='stroke:rgb(0,0,0); '>\n");
       for (int i = 0; i < polylineStart.size(); i++) {
         int polygonStart = polylineStart.get(i);

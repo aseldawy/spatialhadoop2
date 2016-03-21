@@ -116,7 +116,7 @@ public class MultiHDFPlot {
       for (FileStatus matchingDir : matchingDirs)
         matchingPathsV.add(new Path(matchingDir.getPath(), "*.hdf"));
     }
-    if (matchingPathsV.size() == 0) {
+    if (matchingPathsV.isEmpty()) {
       LOG.warn("No matching directories to given input");
       return false;
     }
