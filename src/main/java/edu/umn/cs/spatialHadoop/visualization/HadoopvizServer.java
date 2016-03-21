@@ -109,7 +109,7 @@ public class HadoopvizServer extends AbstractHandler {
       BufferedReader br = new BufferedReader(new InputStreamReader(
           fs.open(shapePath)));
 
-      String line = "";
+      String line;
       while ((line = br.readLine()) != null) {
         shapeMap.put(line.split(":")[0], line.split(":")[1]);
       }
@@ -504,7 +504,7 @@ public class HadoopvizServer extends AbstractHandler {
 
       LOG.info("Fetching from " + path);
 
-      FSDataInputStream resource = null;
+      FSDataInputStream resource;
 
       resource = fs.open(filePath);
 
@@ -591,7 +591,7 @@ public class HadoopvizServer extends AbstractHandler {
       BufferedReader br = new BufferedReader(new InputStreamReader(
           fs.open(masterHeap)));
 
-      String line = "";
+      String line;
       while ((line = br.readLine()) != null) {
         if (!line.split(",")[0].equals("0") || !line.split(",")[1].equals("0")) {
           spacePartitioning = true;

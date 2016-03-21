@@ -94,7 +94,7 @@ public class FarthestPair {
   
   public static PairDistance rotatingCallipers(Point[] a) {
     PairDistance farthest_pair = new PairDistance();
-    int i = 0, j = 1, j_plus_one = 2 % a.length;
+    int i, j = 1, j_plus_one = 2 % a.length;
     for (i = 0; i < a.length; i++) {
       int i_plus_one = (i + 1) % a.length;
       while(cross(a[i], a[i_plus_one], a[j_plus_one]) > cross(a[i], a[i_plus_one], a[j])) {

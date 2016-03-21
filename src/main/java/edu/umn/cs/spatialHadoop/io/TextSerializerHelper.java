@@ -450,7 +450,7 @@ public final class TextSerializerHelper {
   }
   
   public static OGCGeometry parseText(String str) {
-    OGCGeometry geom = null;
+    OGCGeometry geom;
     try {
       // Parse string as well known text (WKT)
       geom = OGCGeometry.fromText(str);

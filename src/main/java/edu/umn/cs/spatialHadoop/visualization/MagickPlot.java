@@ -104,7 +104,7 @@ public class MagickPlot {
         System.out.println("Reading InputStream.");
         byte[] buffer = new byte[4096];
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        int readBytes = 0;
+        int readBytes;
         while ((readBytes = in.read(buffer)) >= 0) {
           baos.write(buffer, 0, readBytes);
         }
@@ -212,7 +212,7 @@ public class MagickPlot {
   public static BufferedImage combineImages(Configuration conf, Path[] files,
       boolean includeBoundaries, int width, int height) throws IOException,
       InterruptedException {
-    BufferedImage result = null;
+    BufferedImage result;
     // Retrieve the MBRs of all datasets
     Rectangle allMbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
