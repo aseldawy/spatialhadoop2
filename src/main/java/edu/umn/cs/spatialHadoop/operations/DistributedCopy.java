@@ -99,6 +99,8 @@ public class DistributedCopy {
     
     @Override
     public boolean equals(Object obj) {
+      if (obj == null)
+        return false;
       FileBlockIndex other = (FileBlockIndex) obj;
       return this.path.equals(other.path) && this.index == other.index;
     }
