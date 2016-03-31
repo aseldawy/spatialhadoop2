@@ -146,4 +146,38 @@ public class MultilevelPlotTest extends TestCase {
       throw new RuntimeException(e);
     }
   }
+  
+  public void testMultilevelMapReducePyramidPartitioningWithMultipleTiles() {
+    try {
+      String levels = "5..5";
+      OperationsParams params = new OperationsParams();
+      params.setBoolean("local", false);
+      params.set("levels", levels);
+      params.set("mbr", "0,0,8,8");
+      params.set("shape", "rect");
+      params.setBoolean("overwrite", true);
+      params.setBoolean("vflip", false);
+      params.setInt(MultilevelPlot.FlatPartitioningLevelThreshold, 4);
+      
+      MultilevelPlot.plot(new Path[] { new Path(inFileName) },
+          new Path(outFileName), GeometricPlot.GeometricRasterizer.class,
+          params);
+
+      File outPath = new File(outFileName + "/pyramid");
+      List<String> list = Arrays.asList(outPath.list(new FilenameFilter() {
+        @Override
+        public boolean accept(File dir, String name) {
+          return name.startsWith("tile");
+        }
+      }));
+      // The object spans four tiles
+      assertEquals(4, list.size());
+      assertTrue(list.contains("tile-5-0-0.png"));
+      assertTrue(list.contains("tile-5-1-0.png"));
+      assertTrue(list.contains("tile-5-0-1.png"));
+      assertTrue(list.contains("tile-5-1-1.png"));
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
 }

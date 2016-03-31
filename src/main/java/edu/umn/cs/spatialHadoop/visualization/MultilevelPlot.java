@@ -351,15 +351,25 @@ public class MultilevelPlot {
                 tileID.level = 0;
 
             // Portion of the bottom grid that falls under the given tile
-            int tileOffsetX = tileID.x << (level2 - tileID.level);
-            int tileOffsetY = tileID.y << (level2 - tileID.level);
+            // The bottom grid is the deepest level of the sub-pyramid that
+            // falls under the given tile and will be plotted by this reducer
+            
+            // First, calculate the MBR of the given tile in the input space
+            // This only depends on the tile ID (level and position) and the MBR of the input space
             GridInfo bottomGrid = new GridInfo();
             int gridSize = 1 << tileID.level;
             bottomGrid.x1 = (inputMBR.x1 * (gridSize - tileID.x) + inputMBR.x2 * tileID.x) / gridSize;
             bottomGrid.x2 = (inputMBR.x1 * (gridSize - (tileID.x + 1)) + inputMBR.x2 * (tileID.x + 1)) / gridSize;
             bottomGrid.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
             bottomGrid.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y + 1)) / gridSize;
-            bottomGrid.columns = bottomGrid.rows = (1 << (level2 - level1));
+            // Second, calculate number of rows and columns of the bottom grid
+            bottomGrid.columns = bottomGrid.rows = (1 << (level2 - tileID.level));
+
+            // The offset in terms of tiles of the bottom grid according to
+            // the grid of this level for the whole input file
+            int tileOffsetX = tileID.x << (level2 - tileID.level);
+            int tileOffsetY = tileID.y << (level2 - tileID.level);
+            
             Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
 
             TileIndex key = new TileIndex();
