@@ -41,7 +41,7 @@ public abstract class Partitioner implements Writable {
    * @param mbr - the minimal bounding rectangle of the input space
    * @param points - the points to be partitioned
    * @param capacity - maximum number of points per partition
-   * @throws IllegalArgumentExcpetion if points are empty 
+   * @throws IllegalArgumentException if points are empty 
    */
   public abstract void createFromPoints(Rectangle mbr, Point[] points,
       int capacity) throws IllegalArgumentException;
