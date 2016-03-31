@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop.indexing;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.lang.IllegalArgumentException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -62,18 +63,24 @@ public class GridPartitioner extends Partitioner {
   }
   
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
+  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) throws IllegalArgumentException {
+    if(points.length == 0)
+	throw new IllegalArgumentException("Amount of points must be > 0");
+
     x = mbr.x1;
     y = mbr.y1;
     
     // Start with a rough estimate for number of cells assuming uniformity
     numTiles = (int) Math.ceil(points.length / capacity);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
+
     int maxCellSize;
     int maxIterations = 1000;
     
     do {
-      this.numColumns = gridInfo.columns = (int) Math.round(Math.sqrt(numTiles));
+      int cols = (int)Math.round(Math.sqrt(numTiles));    
+
+      this.numColumns = gridInfo.columns = Math.max(1, cols);
       this.numRows = gridInfo.rows = (int) Math.ceil(numTiles / gridInfo.columns);
       
       maxCellSize = 0;
