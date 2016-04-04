@@ -13,8 +13,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Vector;
+import java.util.ArrayList;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -237,9 +239,9 @@ public class Indexer {
     return createPartitioner(new Path[] {in}, out, job, partitionerName);
   }
 
-  /***
+  /**
    * Create a partitioner for a particular job
-   * @param in
+   * @param ins
    * @param out
    * @param job
    * @param partitionerName
@@ -249,7 +251,7 @@ public class Indexer {
   public static Partitioner createPartitioner(Path[] ins, Path out,
       Configuration job, String partitionerName) throws IOException {
     try {
-      Partitioner partitioner = null;
+      Partitioner partitioner;
       Class<? extends Partitioner> partitionerClass =
           PartitionerClasses.get(partitionerName.toLowerCase());
       if (partitionerClass == null) {
@@ -278,7 +280,7 @@ public class Indexer {
       FileSystem outFS = out.getFileSystem(job);
       long outBlockSize = outFS.getDefaultBlockSize(out);
 
-      final Vector<Point> sample = new Vector<Point>();
+      final List<Point> sample = new ArrayList<Point>();
       float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
       long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
 
@@ -326,7 +328,7 @@ public class Indexer {
     final String sindex = conf.get("sindex");
     
     // Start reading input file
-    Vector<InputSplit> splits = new Vector<InputSplit>();
+    List<InputSplit> splits = new ArrayList<InputSplit>();
     final SpatialInputFormat3<Rectangle, Shape> inputFormat = new SpatialInputFormat3<Rectangle, Shape>();
     FileSystem inFs = inPath.getFileSystem(conf);
     FileStatus inFStatus = inFs.getFileStatus(inPath);

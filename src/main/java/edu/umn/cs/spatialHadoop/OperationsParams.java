@@ -98,11 +98,11 @@ public class OperationsParams extends Configuration {
 	 * Initialize the command line arguments from an existing configuration and
 	 * a list of additional arguments.
 	 * 
-	 * @param params
-	 * @param additionalArgs
+	 * @param conf A set of configuration parameters to initialize to
+	 * @param additionalArgs Any additional command line arguments given by the user.
 	 */
-	public OperationsParams(Configuration params, String... additionalArgs) {
-		super(params);
+	public OperationsParams(Configuration conf, String... additionalArgs) {
+		super(conf);
 		initialize(additionalArgs);
 	}
 
@@ -178,14 +178,16 @@ public class OperationsParams extends Configuration {
 	 * e.printStackTrace(); } return null; }
 	 */
 
-	/**
-	 * Checks that there is at least one input path and that all input paths
-	 * exist. It treats all passed paths as input. This is useful for input-only
-	 * operations which do not take any output path (e.g., MBR and Aggregate).
-	 * 
-	 * @return
-	 * @throws IOException
-	 */
+  /**
+   * Checks that there is at least one input path and that all input paths
+   * exist. It treats all user-provided paths as input. This is useful for
+   * input-only operations which do not take any output path (e.g., MBR and
+   * Aggregate).
+   * 
+   * @return <code>true</code> if there is at least one input path and all input
+   *         paths exist.
+   * @throws IOException
+   */
 	public boolean checkInput() throws IOException {
 		Path[] inputPaths = getPaths();
 		if (inputPaths.length == 0) {
@@ -220,7 +222,7 @@ public class OperationsParams extends Configuration {
 	 * 
 	 * @return <code>true</code> if all checks pass. <code>false</code>
 	 *         otherwise.
-	 * @throws IOException
+	 * @throws IOException If the method could not get the information of the input
 	 */
 	public boolean checkInputOutput(boolean outputRequired) throws IOException {
 		Path[] inputPaths = getInputPaths();
@@ -455,9 +457,9 @@ public class OperationsParams extends Configuration {
 	 * as the value of the configuration parameter. The shape can be retrieved
 	 * later using {@link SpatialSite#getShape(Configuration, String)}.
 	 * 
-	 * @param conf
-	 * @param param
-	 * @param shape
+	 * @param conf The configuration to update
+	 * @param param The name of the configuration line to set
+	 * @param shape An object to set in the configuration
 	 */
 	public static void setShape(Configuration conf, String param, Shape shape) {
 		String str = shape.getClass().getName() + ShapeValueSeparator;
@@ -495,7 +497,7 @@ public class OperationsParams extends Configuration {
 
 	public static void setJoiningThresholdPerOnce(Configuration conf,
 			String param, int joiningThresholdPerOnce) {
-		String str = null;
+		String str;
 		if (joiningThresholdPerOnce < 0){
 			str = "50000";				
 		}else{
@@ -506,7 +508,7 @@ public class OperationsParams extends Configuration {
 	
 	public static void setFilterOnlyModeFlag(Configuration conf,
 			String param, boolean filterOnlyMode) {
-		String str = null;
+		String str;
 		if (filterOnlyMode){
 			str = "true";	
 		}else{
@@ -533,7 +535,7 @@ public class OperationsParams extends Configuration {
 	
 	public static void setInactiveModeFlag(Configuration conf,
 			String param, boolean inactiveModeFlag) {
-		String str = null;
+		String str;
 		if (inactiveModeFlag){
 			str = "true";	
 		}else{
@@ -720,8 +722,8 @@ public class OperationsParams extends Configuration {
 	 * 
 	 * @return <code>true</code> to run in local mode, <code>false</code> to run
 	 *         in MapReduce mode.
-	 * @throws IOException 
-	 * @throws InterruptedException 
+	 * @throws IOException If the underlying job fails with an IOException 
+	 * @throws InterruptedException If the underlying job was interrupted
 	 */
 	public static boolean isLocal(Configuration jobConf, Path... input) throws IOException, InterruptedException {
 		final boolean LocalProcessing = true;

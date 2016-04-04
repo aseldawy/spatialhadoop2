@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
+import java.lang.IllegalArgumentException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.filecache.DistributedCache;
@@ -40,16 +41,16 @@ public abstract class Partitioner implements Writable {
    * @param mbr - the minimal bounding rectangle of the input space
    * @param points - the points to be partitioned
    * @param capacity - maximum number of points per partition
+   * @throws IllegalArgumentException if points are empty 
    */
   public abstract void createFromPoints(Rectangle mbr, Point[] points,
-      int capacity);
+      int capacity) throws IllegalArgumentException;
   
   /**
    * Overlap a shape with partitions and calls a matcher for each overlapping
    * partition.
    * @param shape
    * @param matcher
-   * @return
    */
   public abstract void overlapPartitions(Shape shape, ResultCollector<Integer> matcher);
   
@@ -72,9 +73,9 @@ public abstract class Partitioner implements Writable {
   public abstract CellInfo getPartition(int partitionID);
   
   /**
-   * Returns the detail of a partition given its position starting from zero
+   * Returns the detail of a partition given its index starting at zero
    * and ending at partitionCount() - 1
-   * @param partitionID
+   * @param index
    * @return
    */
   public abstract CellInfo getPartitionAt(int index);

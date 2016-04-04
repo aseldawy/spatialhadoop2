@@ -38,7 +38,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * The shape is always the first column in that CSV. The text representation of
  * the shape could be either a WTK (Well Known Text) or a binary representation.
  * The WKT can be generated with PostGIS using the function ST_AsText(geom). An
- * example may look like this:<br/>
+ * example may look like this:<br>
  * <code>
  * POLYGON ((-89 43,-89 50,-97 50,-97 43,-89 43))
  * </code> The binary representation can be generated from PostGIS by selecting
@@ -122,35 +122,39 @@ public class OGCJTSShape implements Shape {
 
   @Override
   public Rectangle getMBR() {
-    if (geom == null || geom.isEmpty())
+    if (geom == null)
       return null;
-    Geometry envelope = geom.getEnvelope();
+    Coordinate[] coords = geom.getEnvelope().getCoordinates();
+    if (coords.length == 0)
+      return null;
     double xmin, ymin, xmax, ymax;
-    if (envelope instanceof com.vividsolutions.jts.geom.Point) {
-      com.vividsolutions.jts.geom.Point pt = (com.vividsolutions.jts.geom.Point) envelope;
-      xmin = pt.getX();
+    if (coords.length == 1) {
+      // A point
+      xmin = coords[0].x;
+      ymin = coords[0].y;
       xmax = xmin + Math.ulp(xmin);
-      ymin = pt.getY();
       ymax = ymin + Math.ulp(ymin);
-    } else if (envelope instanceof com.vividsolutions.jts.geom.Polygon) {
-      com.vividsolutions.jts.geom.Polygon mbr = (com.vividsolutions.jts.geom.Polygon) envelope;
-      LineString mbrr = mbr.getExteriorRing();
-      int pointCount = mbrr.getNumPoints();
-      xmin = mbrr.getPointN(0).getX();
-      ymin = mbrr.getPointN(0).getY();
-      xmax = xmin;
-      ymax = ymin;
-      for (int i = 1; i < pointCount; i++) {
-        com.vividsolutions.jts.geom.Point point = mbrr.getPointN(i);
-        if (point.getX() < xmin)
-          xmin = point.getX();
-        if (point.getX() > xmax)
-          xmax = point.getX();
-        if (point.getY() < ymin)
-          ymin = point.getY();
-        if (point.getY() > ymax)
-          ymax = point.getY();
+    } else if (coords.length == 2) {
+      // An orthogonal line
+      if (coords[0].x == coords[1].x) {
+        // A vertical line
+        xmin = coords[0].x;
+        xmax = xmin + Math.ulp(xmin);
+        ymin = Math.min(coords[0].y, coords[1].y);
+        ymax = Math.max(coords[0].y, coords[1].y);
+      } else {
+        // A horizontal line
+        xmin = Math.min(coords[0].x, coords[1].x);
+        xmax = Math.max(coords[0].x, coords[1].x);
+        ymin = coords[0].y;
+        ymax = ymin + Math.ulp(ymin);
       }
+    } else if (coords.length == 4 || coords.length == 5) {
+      // A rectangle
+      xmin = Math.min(coords[0].x, coords[2].x);
+      ymin = Math.min(coords[0].y, coords[2].y);
+      xmax = Math.max(coords[0].x, coords[2].x);
+      ymax = Math.max(coords[0].y, coords[2].y);
     } else {
       throw new RuntimeException("Cannot get MBR of "+geom);
     }
@@ -209,10 +213,11 @@ public class OGCJTSShape implements Shape {
 
   /**
    * Draw the given JTS Geometry to the graphics using specific scales in x and y
-   * @param g - Graphics to draw to
-   * @param geom - The geometry to draw
-   * @param xscale - The scale of the x-axis in terms in pixels/units
-   * @param yscale - The scale of the y-axis in terms of pixels/units
+   * @param g Graphics to draw to
+   * @param geom The geometry to draw
+   * @param xscale The scale of the x-axis in terms in pixels/units
+   * @param yscale The scale of the y-axis in terms of pixels/units
+   * @param fill Whether to fill the shape or just draw an outline
    */
   public static void drawJTSGeom(Graphics g, Geometry geom, double xscale,
       double yscale, boolean fill) {

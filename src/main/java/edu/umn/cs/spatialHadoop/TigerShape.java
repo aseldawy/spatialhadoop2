@@ -19,21 +19,16 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * A shape from tiger file.
- * @author aseldawy
+ * @author Ahmed Eldawy
  *
  */
 public class TigerShape extends OGCJTSShape {
+  /** Full text line of the input */
   private String originalText;
   
   @Override
   public void fromText(Text text) {
     originalText = text.toString();
-    byte[] bytes = text.getBytes();
-    int i = 0;
-    while (i < text.getLength() && bytes[i] != ',') {
-      i++;
-    }
-    text.set(bytes, 0, i);
     super.fromText(text);
   }
   

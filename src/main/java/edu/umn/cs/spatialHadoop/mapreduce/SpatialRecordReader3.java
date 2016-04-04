@@ -212,15 +212,15 @@ public class SpatialRecordReader3<V extends Shape> extends
   /**
    * Reads the next line from input and return true if a line was read.
    * If no more lines are available in this split, a false is returned.
-   * @param value
-   * @return
-   * @throws IOException
+   * @param value The text object to fill with the next line
+   * @return <code>true</code> if a line was read; <code>false</code> otherwise.
+   * @throws IOException If an error occurs while reading from disk.
    */
   protected boolean nextLine(Text value) throws IOException {
     while (getPos() <= end) {
       value.clear();
 
-      int lineLength = 0;
+      int lineLength;
       // Read the first line from stream
       if ((lineLength = lineReader.readLine(value)) <= 0) {
         // Indicates an end of stream
@@ -259,9 +259,9 @@ public class SpatialRecordReader3<V extends Shape> extends
    * by calling the method {@link #nextLine(Text)} then parses the returned
    * line by calling {@link Shape#fromText(Text)} on that line. If no stock
    * shape is set, a {@link NullPointerException} is thrown.
-   * @param s
-   * @return
-   * @throws IOException 
+   * @param s A mutable shape object to update with the next value
+   * @return <code>true</code> if an object was read; <code>false</code> if end-of-file was reached.
+   * @throws IOException If an error happens while reading from disk
    */
   protected boolean nextShape(V s) throws IOException {
     do {

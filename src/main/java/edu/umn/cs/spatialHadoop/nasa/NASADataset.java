@@ -51,16 +51,21 @@ public class NASADataset extends Rectangle {
   /**Resolution of the dataset in terms of number of rows/columns*/
   public int resolution;
   
-  /**Minimum and maximum values for this dataset as stored in its metadata*/
+  /**Minimum and maximum values for this dataset as stored in its meta-data*/
   public int minValue, maxValue;
   
   public NASADataset() {}
   
   /**
-   * Inititalizes the dataset from the metadata stored at the root of an HDF
-   * file.
+   * 
    * @param root
    * @throws ParseException 
+   */
+  /**
+   * Initializes the dataset from the meta-data stored at the root of an HDF
+   * file.
+   * @param coreMetadata
+   * @param archiveMetadata
    */
   public NASADataset(String coreMetadata, String archiveMetadata) {
     // Retrieve the h value

@@ -59,13 +59,14 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 /**
  * A disk-based R-tree that can be loaded using a bulk loading method and
  * never changed afterwards. It works with any shape given in the generic
- * parameter. To load the tree, use the {@link #bulkLoadWrite(byte[], int, int, int, DataOutput, boolean)}
+ * parameter. To load the tree, use the {@link #bulkLoadWrite(byte[], int, int, int, DataOutput, Shape, boolean)}
  * method. To restore the tree from disk, use the {@link #readFields(DataInput)}
  * methods. To do queries against the tree, use the {@link #search(Shape, ResultCollector)},
  *  {@link #knn(double, double, int, ResultCollector2)} or
- *  {@link #spatialJoin(RTree, RTree, ResultCollector2)} methods.
+ *  {@link #spatialJoin(RTree, RTree, ResultCollector2, Reporter)}
  * @author Ahmed Eldawy
  *
+ * @param <T>
  */
 public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable {
   /**Logger*/
@@ -618,7 +619,6 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
    * Reads and returns the element with the given index
    * @param i
    * @return
-   * @throws IOException 
    */
   public T readElement(int i) {
     Iterator<T> iter = iterator();
@@ -638,8 +638,8 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
    * it tries to balance number of points in each rectangle.
    * Works similar to the logic of bulkLoad but does only one level of
    * rectangles.
-   * @param samples
-   * @param gridInfo - Used as a hint for number of rectangles per row or column
+   * @param gridInfo Used as a hint for number of rectangles per row or column
+   * @param sample
    * @return
    */
   public static Rectangle[] packInRectangles(GridInfo gridInfo, final Point[] sample) {
@@ -819,13 +819,13 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
    * it searches only the object found there.
    * It is assumed that the openQuery() has been called before this function
    * and that endQuery() will be called afterwards.
-   * @param query_mbr
+   * @param query_shape
    * @param output
-   * @param start - where to start searching
-   * @param end - where to end searching. Only used when start is an offset of
+   * @param start where to start searching
+   * @param end where to end searching. Only used when start is an offset of
    *   an object.
    * @return
-   * @throws IOException 
+   * @throws IOException
    */
   protected int search(Shape query_shape, ResultCollector<T> output, int start,
       int end)
@@ -1226,7 +1226,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     int r_last_offset = 0;
     int s_last_offset = 0;
     
-    while (nodesToJoin.size() > 0) {
+    while (!nodesToJoin.isEmpty()) {
       long nodes_to_join = nodesToJoin.remove();
       int r_node = (int) (nodes_to_join >>> 32);
       int s_node = (int) (nodes_to_join & 0xFFFFFFFF);

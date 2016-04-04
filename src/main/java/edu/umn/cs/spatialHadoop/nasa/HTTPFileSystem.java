@@ -288,29 +288,4 @@ public class HTTPFileSystem extends FileSystem {
         connection.disconnect();
     }
   }
-  
-  public static void main(String[] args) throws IOException {
-    Path in = new Path("http://e4ftl01.cr.usgs.gov/MOLT/MOD11A1.005/2013.12.24/");
-    Configuration conf = new Configuration();
-    conf.setClass("fs.http.impl", HTTPFileSystem.class, FileSystem.class);
-    FileSystem fs = in.getFileSystem(conf);
-    FileStatus[] hdfFiles = fs.listStatus(in, new PathFilter() {
-      @Override
-      public boolean accept(Path path) {
-        return path.getName().matches("(?i:([^*\\?])*\\.hdf$)");
-      }
-    });
-    FileSystem localFS = FileSystem.getLocal(conf);
-    int count = 0;
-    for (FileStatus hdfFile : hdfFiles) {
-      count++;
-      Path localCopy = new Path(".", hdfFile.getPath().getName());
-      if (!localFS.exists(localCopy)) {
-        LOG.info("Copying "+hdfFile.getPath().getName()+" with size "+hdfFile.getLen());
-        String copiedFile = FileUtil.copyFileSplit(conf, new FileSplit(hdfFile.getPath(), 0, hdfFile.getLen(), new String[0]));
-        localFS.rename(new Path(copiedFile), localCopy);
-        LOG.info(" ... done ("+count+"/"+hdfFiles.length+")!");
-      }
-    }
-  }
 }

@@ -230,8 +230,8 @@ public class CatUnion {
   /**
    * Calculates the union of a set of shapes categorized by some user defined
    * category.
-   * @param fs
-   * @param file
+   * @param shapeFile
+   * @param categoryFile
    * @return
    * @throws IOException
    */

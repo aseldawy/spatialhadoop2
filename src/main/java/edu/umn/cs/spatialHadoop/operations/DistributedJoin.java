@@ -520,15 +520,16 @@ public class DistributedJoin {
 	}
 
 	/**
-	 * @modified Ibrahim Sabek
-	 * 
-	 *           Select a file to repartition based on some heuristics. If only
-	 *           one file is indexed, the non-indexed file is repartitioned. If
-	 *           both files are indexed, the smaller file is repartitioned.
-	 * @return the index in the given array of the file to be repartitioned. -1
-	 *         if all files are non-indexed
-	 * @throws IOException
-	 */
+   * Select a file to repartition based on some heuristics. If only one file is
+   * indexed, the non-indexed file is repartitioned. If both files are indexed,
+   * the smaller file is repartitioned.
+   * 
+   * @param files
+   * @param params
+   * @return the index in the given array of the file to be repartitioned. -1 if
+   *         all files are non-indexed
+   * @throws IOException
+   */
 	protected static int selectRepartition(final Path[] files,
 			OperationsParams params) throws IOException {
 		int largest_partitioned_file = -1;
@@ -557,14 +558,11 @@ public class DistributedJoin {
 
 	/**
 	 * Repartition a file to match the partitioning of the other file.
-	 * 
-	 * @param fs
-	 * @param files
-	 * @param stockShape
-	 * @param fStatus
-	 * @param gIndexes
+	 * @param files Input files to partition
+	 * @param file_to_repartition
+	 * @param params
 	 * @throws IOException
-	 * @throws InterruptedException 
+	 * @throws InterruptedException
 	 */
 	protected static void repartitionStep(final Path[] files,
 			int file_to_repartition, OperationsParams params)
@@ -632,11 +630,10 @@ public class DistributedJoin {
 
 	/**
 	 * Performs a redistribute join between the given files using the
-	 * redistribute join algorithm. Currently, we only support a pair of files.
-	 * 
-	 * @param fs
+   * redistribute join algorithm. Currently, we only support a pair of files.
 	 * @param inFiles
-	 * @param output
+	 * @param userOutputPath
+	 * @param params
 	 * @return
 	 * @throws IOException
 	 */
@@ -996,14 +993,12 @@ public class DistributedJoin {
 
 	/**
 	 * Spatially joins two files.
-	 * 
-	 * @param fs
 	 * @param inputFiles
-	 * @param stockShape
-	 * @param output
+	 * @param userOutputPath
+	 * @param params
 	 * @return
 	 * @throws IOException
-	 * @throws InterruptedException 
+	 * @throws InterruptedException
 	 */
 	@SuppressWarnings("unchecked")
 	public static long distributedJoinSmart(final Path[] inputFiles,

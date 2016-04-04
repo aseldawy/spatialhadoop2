@@ -118,12 +118,10 @@ public class TemporalIndexManager {
 
 	/**
 	 * Based on a certain time range, this method filters all directories and
-	 * determines which files need to be indexed on daily, monthly and yearly
-	 * levels. After calling this method, you need to call the daily, monthly
-	 * and yearly getters to return paths required to be indexed.
-	 * 
+   * determines which files need to be indexed on daily, monthly and yearly
+   * levels. After calling this method, you need to call the daily, monthly
+   * and yearly getters to return paths required to be indexed.
 	 * @param timeRange
-	 * @return`
 	 * @throws IOException
 	 * @throws ParseException
 	 */

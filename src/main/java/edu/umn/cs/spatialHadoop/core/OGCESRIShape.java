@@ -39,7 +39,7 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
  * The shape is always the first column in that CSV. The text representation of
  * the shape could be either a WTK (Well Known Text) or a binary representation.
  * The WKT can be generated with PostGIS using the function ST_AsText(geom). An
- * example may look like this:<br/>
+ * example may look like this:<br>
  * <code>
  * POLYGON ((-89 43,-89 50,-97 50,-97 43,-89 43))
  * </code> The binary representation can be generated from PostGIS by selecting

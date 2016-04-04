@@ -23,12 +23,19 @@ import org.apache.hadoop.io.compress.GzipCodec;
 import org.apache.hadoop.mapreduce.RecordWriter;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.ReflectionUtils;
 
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 
-/** An {@link OutputFormat} that writes plain text files. 
+/**
+ * A slightly modified version of {@link TextOutputFormat} that performs special
+ * conversion to text for objects of type {@link TextSerializable}.
+ * @author Ahmed Eldawy
+ *
+ * @param <K> The type of key
+ * @param <V> The type of value
  */
 public class TextOutputFormat3<K, V> extends FileOutputFormat<K, V> {
 

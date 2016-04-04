@@ -91,6 +91,8 @@ public class Partition extends CellInfo {
   
   @Override
   public boolean equals(Object obj) {
+    if (obj == null)
+      return false;
     return this.filename.equals(((Partition)obj).filename);
   }
   

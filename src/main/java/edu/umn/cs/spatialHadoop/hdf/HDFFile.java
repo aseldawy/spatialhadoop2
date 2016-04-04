@@ -61,9 +61,8 @@ public class HDFFile implements Closeable {
 
   /**
    * Reads block information from the HDF file.
-   * @param in - data input from the HDF file
-   * @param numDD - number of data descriptors in this block
-   * @throws IOException 
+   * @param numDD number of data descriptors in this block
+   * @throws IOException
    */
   public void readBlock(int numDD) throws IOException {
     for (int iDD = 0; iDD < numDD; iDD++) {

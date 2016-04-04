@@ -175,10 +175,9 @@ public class Skyline {
    * output is just thrown away.
    * @param inFile
    * @param outFile
-   * @param dir
-   * @param overwrite
+   * @param params
    * @throws IOException
-   * @throws InterruptedException 
+   * @throws InterruptedException
    */
   public static void skylineLocal(Path inFile, Path outFile,
       final OperationsParams params) throws IOException, InterruptedException {

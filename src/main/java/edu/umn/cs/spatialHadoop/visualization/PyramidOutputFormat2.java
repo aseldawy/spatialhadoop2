@@ -111,7 +111,6 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, Canvas> {
       Configuration conf = context.getConfiguration();
       FileSystem outFs = outPath.getFileSystem(conf);
 
-      System.out.println("Writing default empty image");
       // Write a default empty image to be displayed for non-generated tiles
       int tileWidth = conf.getInt("tilewidth", 256);
       int tileHeight = conf.getInt("tileheight", 256);
@@ -138,7 +137,6 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, Canvas> {
       }
 
       // Add an HTML file that visualizes the result using Google Maps
-      System.out.println("Writing the HTML viewer file");
       LineReader templateFileReader = new LineReader(getClass()
           .getResourceAsStream("/zoom_view.html"));
       PrintStream htmlOut = new PrintStream(outFs.create(new Path(outPath,

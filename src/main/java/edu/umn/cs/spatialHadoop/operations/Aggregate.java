@@ -156,11 +156,10 @@ public class Aggregate {
   /**
    * Counts the exact number of lines in a file by issuing a MapReduce job
    * that does the thing
-   * @param conf
-   * @param fs
-   * @param file
+   * @param files
+   * @param params
    * @return
-   * @throws IOException 
+   * @throws IOException
    */
   public static MinMax aggregateMapReduce(Path[] files, OperationsParams params)
       throws IOException {
@@ -221,10 +220,8 @@ public class Aggregate {
   /**
    * Computes the minimum and maximum values of readings in input. Useful as
    * a preparatory step before drawing.
-   * @param inFiles - A list of input files.
-   * @param plotRange - The spatial range to plot
-   * @param forceCompute - Ignore any preset values and force computation of
-   *   the aggregate functions.
+   * @param inFiles A list of input files.
+   * @param params
    * @return
    * @throws IOException
    */

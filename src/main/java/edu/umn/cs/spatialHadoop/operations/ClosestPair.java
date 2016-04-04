@@ -85,7 +85,7 @@ public class ClosestPair {
   /**
    * Finds the closest pair using an in-memory divide and conquer algorithm.
    * @param points
-   * @param params
+   * @param threshold
    * @return
    */
   public static Pair closestPairInMemory(final Point[] points, int threshold) {

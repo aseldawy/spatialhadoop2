@@ -144,12 +144,9 @@ public class SpatialSite {
   
 
   /**
-   * Similar to {@link Configuration#setClass(String, Class, Class)}, this
-   * method sets the given key to the provided class in the configuration.
-   * In addition, it ensures that the jar file that contains that class is in
-   * the class path of the provided configuration. This is ensured by copying
-   * the jar file and adding it to the distributed cache using the method
-   * {@link DistributedCache#addArchiveToClassPath(Path, Configuration, Path)}.
+   * It sets the given class in the configuration and, in addition, it sets
+   * the jar of that class to the class path of this job which allows it to
+   * run correctly in a distributed mode.
    * @param conf - Configuration to set the key
    * @param key - the key to set
    * @param klass - the class to use as a value
@@ -229,10 +226,9 @@ public class SpatialSite {
   }
   
   /**
-   * Creates a stock shape according to the given configuration. It retrieves
-   * the shape class using {@link #getShapeClass(Configuration)} then
-   * creates an instance of this shape using {@link Class#newInstance()}.
-   * This requires the shape class to have a default empty constructor.
+   * Creates a stock shape according to the given configuration.
+   * It is a shortcut to {@link #getShape(Configuration, String)}
+   * called for this configuration and with the given parameter name.
    * @param job
    * @return
    */
@@ -277,7 +273,6 @@ public class SpatialSite {
    * @param fs
    * @param dir
    * @return
-   * @throws IOException
    */
   public static GlobalIndex<Partition> getGlobalIndex(FileSystem fs, Path dir) {
     try {
@@ -433,7 +428,7 @@ public class SpatialSite {
    * very large to store as one value, an alternative approach is used.
    * The cells are all written to a temporary file, and that file is added
    * to the DistributedCache of the job. Later on, a call to
-   * {@link #getCells(JobConf)} will open the corresponding file from
+   * {@link #getCells(Configuration)} will open the corresponding file from
    * DistributedCache and parse cells from that file.
    * @param conf
    * @param cellsInfo
@@ -461,7 +456,8 @@ public class SpatialSite {
   
   /**
    * Retrieves cells that were stored earlier using
-   * {@link #setCells(JobConf, CellInfo[])}. This function opens the corresponding
+   * {@link #setCells(Configuration, CellInfo[])}
+   * This function opens the corresponding
    * file from DistributedCache and parses jobs from it.
    * @param conf
    * @return

@@ -16,8 +16,8 @@ import org.apache.hadoop.util.Progressable;
 public interface ShapeRecordWriter<S extends Shape> {
   /**
    * Writes the given shape to the file to all cells it overlaps with
-   * @param dummyId
-   * @param shape
+   * @param dummy A null key that is never used
+   * @param shape The shape to write to the output
    * @throws IOException
    */
   public void write(NullWritable dummy, S shape) throws IOException;
@@ -49,7 +49,8 @@ public interface ShapeRecordWriter<S extends Shape> {
   
   /**
    * Closes this writer
-   * @param reporter
+   * @param progressable To report the progress if the closing process takes
+   *  a very long time.
    * @throws IOException
    */
   public void close(Progressable progressable) throws IOException;

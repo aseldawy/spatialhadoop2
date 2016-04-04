@@ -104,7 +104,7 @@ public class MagickPlot {
         System.out.println("Reading InputStream.");
         byte[] buffer = new byte[4096];
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        int readBytes = 0;
+        int readBytes;
         while ((readBytes = in.read(buffer)) >= 0) {
           baos.write(buffer, 0, readBytes);
         }
@@ -200,13 +200,11 @@ public class MagickPlot {
    * Combines images of different datasets into one image that is displayed to
    * users. This method is called from the web interface to display one image
    * for multiple selected datasets.
-   * 
-   * @param fs
-   *          The file system that contains the datasets and images
-   * @param files
-   *          Paths to directories which contains the datasets
-   * @param includeBoundaries
-   *          Also plot the indexing boundaries of datasets
+   * @param conf
+   * @param files Paths to directories which contains the datasets
+   * @param includeBoundaries Also plot the indexing boundaries of datasets
+   * @param width
+   * @param height
    * @return An image that is the combination of all datasets images
    * @throws IOException
    * @throws InterruptedException
@@ -214,7 +212,7 @@ public class MagickPlot {
   public static BufferedImage combineImages(Configuration conf, Path[] files,
       boolean includeBoundaries, int width, int height) throws IOException,
       InterruptedException {
-    BufferedImage result = null;
+    BufferedImage result;
     // Retrieve the MBRs of all datasets
     Rectangle allMbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);

@@ -69,6 +69,8 @@ public class TileIndex implements WritableComparable<TileIndex> {
   
   @Override
   public boolean equals(Object obj) {
+    if (obj == null)
+      return false;
     TileIndex b = (TileIndex) obj;
     return this.level == b.level && this.x == b.x && this.y == b.y;
   }

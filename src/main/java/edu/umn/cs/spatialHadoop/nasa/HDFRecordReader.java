@@ -237,7 +237,7 @@ public class HDFRecordReader<S extends NASAShape>
   /**
    * Sets the geometry information for the given object according to its
    * position in the array
-   * @param p
+   * @param s
    * @param position
    */
   protected void setShapeGeometry(Shape s, int position) {

@@ -52,12 +52,11 @@ public class HilbertCurvePartitioner extends Partitioner {
       hValues[i] = computeHValue(mbr, points[i].x, points[i].y);
     createFromHValues(hValues, capacity);
   }
-  
+
   /**
-   * Create a ZCurvePartitioner from a list of points
-   * @param vsample
+   * Create a HilbertCurvePartitioner from a list of points
+   * @param hValues
    * @param capacity
-   * @return
    */
   protected void createFromHValues(final int[] hValues, int capacity) {
     Arrays.sort(hValues);

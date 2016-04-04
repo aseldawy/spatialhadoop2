@@ -82,7 +82,7 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   
   /**
    * Comparison is done by lexicographic ordering of attributes
-   * < x1, y1, x2, y2>
+   * &lt; x1, y1, x2, y2&gt;
    */
   public int compareTo(Shape s) {
     Rectangle rect2 = (Rectangle) s;
@@ -109,9 +109,26 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   }
 
   public boolean equals(Object obj) {
+    if (obj == null)
+      return false;
     Rectangle r2 = (Rectangle) obj;
     boolean result = this.x1 == r2.x1 && this.y1 == r2.y1
         && this.x2 == r2.x2 && this.y2 == r2.y2;
+    return result;
+  }
+
+  @Override
+  public int hashCode() {
+    int result;
+    long temp;
+    temp = Double.doubleToLongBits(this.x1);
+    result = (int) (temp ^ temp >>> 32);
+    temp = Double.doubleToLongBits(this.y1);
+    result = 31 * result + (int) (temp ^ temp >>> 32);
+    temp = Double.doubleToLongBits(this.x2);
+    result = 31 * result + (int) (temp ^ temp >>> 32);
+    temp = Double.doubleToLongBits(this.y2);
+    result = 31 * result + (int) (temp ^ temp >>> 32);
     return result;
   }
 

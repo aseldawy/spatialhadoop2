@@ -18,7 +18,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 public interface GeoProjector {
   /**
    * Converts the given point (in-place) provided in latitude/longitude space.
-   * @param pt
+   * @param shape
    */
   public void project(Shape shape);
 }

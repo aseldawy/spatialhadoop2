@@ -470,7 +470,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       // Store them in the return value
       shapes.set(vshapes.toArray(new Shape[vshapes.size()]));
       
-      return vshapes.size() > 0;
+      return !vshapes.isEmpty();
     } catch (InstantiationException e1) {
       e1.printStackTrace();
     } catch (IllegalAccessException e1) {

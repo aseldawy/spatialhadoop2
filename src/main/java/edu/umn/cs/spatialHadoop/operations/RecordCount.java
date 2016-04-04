@@ -77,12 +77,11 @@ public class RecordCount {
   /**
    * Counts the exact number of lines in a file by issuing a MapReduce job
    * that does the thing
-   * @param conf
    * @param fs
    * @param inFile
    * @return
-   * @throws IOException 
-   * @throws InterruptedException 
+   * @throws IOException
+   * @throws InterruptedException
    */
   public static long recordCountMapReduce(FileSystem fs, Path inFile) throws IOException, InterruptedException {
     JobConf job = new JobConf(RecordCount.class);

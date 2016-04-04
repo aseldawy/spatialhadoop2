@@ -114,7 +114,6 @@ public class DistributedAggregateSpatioTemporalIndexer {
 	 * 
 	 * @param inputPathsDictionaryPath
 	 * @param params
-	 * @return
 	 * @throws IOException
 	 */
 	public static void aggregateQuadTreeMapReduce(

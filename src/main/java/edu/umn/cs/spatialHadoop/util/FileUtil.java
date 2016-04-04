@@ -18,6 +18,7 @@ import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -155,21 +156,19 @@ public final class FileUtil {
 	public static Path writePathsToFile(OperationsParams params, Path[] paths) {
 		String tmpFileName = "pathsDictionary.txt";
 		File tempFile;
+		BufferedWriter buffWriter = null;
 		try {
 			// store the dictionary of paths in a local file
 			tempFile = new File(tmpFileName);
 			Path localFilePath = new Path(tempFile.getAbsolutePath());
 			FileOutputStream outStream = new FileOutputStream(tempFile);
-			BufferedWriter buffWriter = new BufferedWriter(
+			buffWriter = new BufferedWriter(
 					new OutputStreamWriter(outStream));
 
 			for (int i = 0; i < paths.length; i++) {
 				buffWriter.write(paths[i].toString());
 				buffWriter.newLine();
 			}
-			buffWriter.close();
-			outStream.close();
-
 			// copy the local dictionary into an hdfs file
 			Configuration conf = new Configuration();
 			FileSystem fs = params.getPaths()[0].getFileSystem(conf);
@@ -182,6 +181,8 @@ public final class FileUtil {
 		} catch (IOException e) {
 			e.printStackTrace();
 			return null;
+		} finally {
+			IOUtils.closeQuietly(buffWriter);
 		}
 
 	}
@@ -199,7 +200,7 @@ public final class FileUtil {
 		FSDataOutputStream out = hdfsFS.create(hdfsPath);
 		FileInputStream localInputStream = new FileInputStream(new File(
 				localPath.toString()));
-		int bytesRead = 0;
+		int bytesRead;
 		byte[] localBuffer = new byte[1024];
 		while ((bytesRead = localInputStream.read(localBuffer)) > 0) {
 			out.write(localBuffer, 0, bytesRead);

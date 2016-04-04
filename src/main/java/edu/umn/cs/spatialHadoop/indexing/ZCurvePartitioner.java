@@ -56,10 +56,8 @@ public class ZCurvePartitioner extends Partitioner {
 
   /**
    * Create a ZCurvePartitioner from a list of points
-   * @param vsample
-   * @param inMBR
+   * @param zValues
    * @param capacity
-   * @return
    */
   protected void createFromZValues(final long[] zValues, int capacity) {
     Arrays.sort(zValues);
@@ -88,8 +86,8 @@ public class ZCurvePartitioner extends Partitioner {
   /**
    * Reverse the computation of the Z-value and returns x and y dimensions
    * @param mbr
-   * @param x
-   * @param y
+   * @param z
+   * @param outPoint
    */
   public static void uncomputeZ(Rectangle mbr, long z, Point outPoint) {
     long ixy = unComputeZOrder(z);

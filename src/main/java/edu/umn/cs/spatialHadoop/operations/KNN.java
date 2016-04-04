@@ -116,6 +116,8 @@ public class KNN {
     
     @Override
     public boolean equals(Object obj) {
+      if (obj == null)
+        return false;
       return this.text.equals(((TextWithDistance)obj).text);
     }
     

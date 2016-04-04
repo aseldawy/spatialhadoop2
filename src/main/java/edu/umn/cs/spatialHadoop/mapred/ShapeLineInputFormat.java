@@ -22,9 +22,8 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 /**
  * An input format used with spatial data. It filters generated splits before
  * creating record readers.
- * @author eldawy
+ * @author Ahmed Eldawy
  *
- * @param <S>
  */
 public class ShapeLineInputFormat extends SpatialInputFormat<Rectangle, Text> {
   

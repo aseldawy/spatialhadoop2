@@ -162,11 +162,10 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   /**
    * Creates a new GridRecordWriter that will write all data files to the
    * given directory
-   * @param outDir - The directory in which all files will be stored
-   * @param job - The MapReduce job associated with this output
-   * @param prefix - A unique prefix to be associated with files of this writer
-   * @param cells - Cells to partition the file
-   * @param pack - After writing each cell, pack its MBR around contents
+   * @param outDir The directory in which all files will be stored
+   * @param job The MapReduce job associated with this output
+   * @param prefix A unique prefix to be associated with files of this writer
+   * @param cells Cells to partition the file
    * @throws IOException
    */
   public GridRecordWriter(Path outDir, JobConf job, String prefix,
@@ -438,7 +437,13 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   /**
    * Close the given cell freeing all memory reserved by it.
    * Once a cell is closed, we should not write more data to it.
-   * @param cellInfo
+   * @param intermediateCellPath
+   * @param finalCellPath
+   * @param intermediateCellStream
+   * @param masterFile
+   * @param cellMbr
+   * @param recordCount
+   * @param cellSize
    * @throws IOException
    */
   protected void closeCellBackground(final Path intermediateCellPath,
@@ -483,7 +488,9 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
   /**
    * Flushes all shapes that were written to one cell to the final file.
    * It returns a path to a (closed) file that contains all entries written.
-   * @param cellIndex
+   * @param intermediateCellPath
+   * @param intermediateCellStream
+   * @param finalCellPath
    * @return
    * @throws IOException
    */
@@ -534,13 +541,12 @@ public class GridRecordWriter<S extends Shape> implements ShapeRecordWriter<S> {
 
   /**
    * Returns path to a file in which the final cell will be written.
-   * @param column
-   * @param row
+   * @param cellIndex The index of the cell to retrieve its output path.
    * @return
-   * @throws IOException 
+   * @throws IOException
    */
   protected Path getFinalCellPath(int cellIndex) throws IOException {
-    Path path = null;
+    Path path;
     do {
       String filename = counter == 0 ? String.format("data_%05d", cellIndex)
           : String.format("data_%05d_%d", cellIndex, counter);

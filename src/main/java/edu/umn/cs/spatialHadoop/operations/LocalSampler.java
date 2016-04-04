@@ -45,12 +45,12 @@ public class LocalSampler {
   /**
    * Read a random sample of up-to count from the input files.
    * @param files
-   * @param count
+   * @param ratioOrCount
    * @param output
    * @param conf
    * @return
    * @throws IOException
-   * @throws InterruptedException 
+   * @throws InterruptedException
    */
   public static long sampleLocal(Path[] files, float ratioOrCount,
       ResultCollector<Text> output, OperationsParams conf) throws IOException, InterruptedException {
@@ -74,13 +74,13 @@ public class LocalSampler {
   
   /**
    * Reads a random sample of up-to count from the given set of file splits.
-   * @param paths
-   * @param count
+   * @param files
+   * @param ratioOrCount
    * @param output
    * @param conf
-   * @return - the actual number of lines read from the file
+   * @return the actual number of lines read from the file
    * @throws IOException
-   * @throws InterruptedException 
+   * @throws InterruptedException
    */
   public static long sampleLocal(final FileSplit[] files, final float ratioOrCount,
       final ResultCollector<Text> output, final OperationsParams conf) throws IOException, InterruptedException {

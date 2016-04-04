@@ -123,16 +123,18 @@ public class GeometricPlot {
    * to users.
    * This method is called from the web interface to display one image for
    * multiple selected datasets.
-   * @param fs The file system that contains the datasets and images
+   * @param conf
    * @param files Paths to directories which contains the datasets
    * @param includeBoundaries Also plot the indexing boundaries of datasets
+   * @param width
+   * @param height
    * @return An image that is the combination of all datasets images
    * @throws IOException
-   * @throws InterruptedException 
+   * @throws InterruptedException
    */
   public static BufferedImage combineImages(Configuration conf, Path[] files,
       boolean includeBoundaries, int width, int height) throws IOException, InterruptedException {
-    BufferedImage result = null;
+    BufferedImage result;
     // Retrieve the MBRs of all datasets
     Rectangle allMbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
