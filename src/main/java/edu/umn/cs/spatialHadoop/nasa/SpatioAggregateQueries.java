@@ -121,7 +121,6 @@ public class SpatioAggregateQueries {
       @Override
       public Node run(int i1, int i2) {
         Node threadResult = new AggregateQuadTree.Node();
-        if (i1 == 0)
         for (int i_file = i1; i_file < i2; i_file++) {
           Path matchingFile = allMatchingFiles.get(i_file);
           try {
