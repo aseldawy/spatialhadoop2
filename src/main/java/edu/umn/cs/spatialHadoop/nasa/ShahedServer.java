@@ -421,8 +421,8 @@ public class ShahedServer extends AbstractHandler {
       });
       
       Message message = new MimeMessage(mailSession);
+      message.setFrom(new InternetAddress(from, "SHAHED Team"));
       InternetAddress requesterAddress = new InternetAddress(email, requesterName);
-      message.setFrom(new InternetAddress(username));
       message.addRecipient(RecipientType.TO, requesterAddress);
       InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
       message.addRecipient(RecipientType.BCC, adminAddress);
@@ -437,10 +437,7 @@ public class ShahedServer extends AbstractHandler {
           " Start date: "+dateFormat.format(startDate)+"\n"+
           " end date: "+dateFormat.format(endDate)+"\n"+
           "Thank you for using Shahed. \n\n Shahed team");
-      InternetAddress shahedAddress = new InternetAddress(from, "SHAHED Team");
-      
-      message.setFrom(shahedAddress);
-      message.setReplyTo(new InternetAddress[] {shahedAddress});
+      message.setReplyTo(new InternetAddress[] {new InternetAddress(from, "SHAHED Team")});
       
       Transport.send(message, message.getAllRecipients());
       LOG.info("Message sent successfully to '"+requesterAddress+"'");
@@ -489,7 +486,7 @@ public class ShahedServer extends AbstractHandler {
       });
       
       Message message = new MimeMessage(mailSession);
-      message.setFrom(new InternetAddress(username));
+      message.setFrom(new InternetAddress(from, "SHAHED Team"));
       String toLine = requesterName+'<'+email+'>';
       message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
       InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
@@ -550,7 +547,7 @@ public class ShahedServer extends AbstractHandler {
       
       Message message = new MimeMessage(mailSession);
       InternetAddress requesterAddress = new InternetAddress(email, requesterName);
-      message.setFrom(new InternetAddress(username));
+      message.setFrom(new InternetAddress(from, "SHAHED Team"));
       message.addRecipient(RecipientType.TO, requesterAddress);
       InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
       message.addRecipient(RecipientType.BCC, adminAddress);
@@ -559,10 +556,7 @@ public class ShahedServer extends AbstractHandler {
           "Unfortunately there was an internal error while processing your request.\n"+
           e.getMessage() + "\n" +
           "Sorry for inconvenience. \n\n Shahed team");
-      InternetAddress shahedAddress = new InternetAddress(from, "SHAHED Team");
-      
-      message.setFrom(shahedAddress);
-      message.setReplyTo(new InternetAddress[] {shahedAddress});
+      message.setReplyTo(new InternetAddress[] {new InternetAddress(from, "SHAHED Team")});
       
       Transport.send(message, message.getAllRecipients());
       LOG.info("Message sent successfully to '"+requesterAddress+"'");
