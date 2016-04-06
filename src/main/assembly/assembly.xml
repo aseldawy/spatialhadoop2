@@ -45,6 +45,7 @@
       <includes>
         <include>com.vividsolutions:jts</include>
         <include>com.esri.geometry:esri-geometry-api</include>
+        <include>com.sun.mail:javax.mail</include>
         <include>javax.mail:javax.mail-api</include>
       </includes>
       <useTransitiveDependencies>false</useTransitiveDependencies>
