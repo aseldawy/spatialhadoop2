@@ -85,22 +85,16 @@ public class ShahedServer extends AbstractHandler {
   private Path indexPath;
   
   static {
-    MAIL_HOST = "mail.cs.umn.edu";
+    MAIL_HOST = "smtp.gmail.com";
     
     // Mail properties that work with mail.cs.umn.edu
     MAIL_PROPERTIES = new Properties();
- 
-    MAIL_PROPERTIES.put("mail.smtp.starttls.enable", "true");
-    MAIL_PROPERTIES.put("mail.smtp.auth", "true");
-    
-    // Use the following if you need SSL
-    MAIL_PROPERTIES.put("mail.smtp.socketFactory.port", 465);
-    MAIL_PROPERTIES.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-    MAIL_PROPERTIES.put("mail.smtp.socketFactory.fallback", "false");
 
-    
+    MAIL_PROPERTIES.put("mail.smtp.auth", "true");
+    MAIL_PROPERTIES.put("mail.smtp.starttls.enable", "true");
+    MAIL_PROPERTIES.put("mail.smtp.port", "587");
+
     MAIL_PROPERTIES.put("mail.smtp.host", MAIL_HOST);
-    MAIL_PROPERTIES.put("mail.smtp.port", "465");
   }
 
   /**
@@ -497,6 +491,8 @@ public class ShahedServer extends AbstractHandler {
       message.setFrom(new InternetAddress(username));
       String toLine = requesterName+'<'+email+'>';
       message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
+      InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
+      message.addRecipient(RecipientType.BCC, adminAddress);
       message.setSubject("Your request is complete");
       
       Multipart multipart = new MimeMultipart();
