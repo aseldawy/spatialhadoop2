@@ -28,6 +28,7 @@ import javax.mail.Message;
 import javax.mail.Message.RecipientType;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
+import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.AddressException;
@@ -412,10 +413,12 @@ public class ShahedServer extends AbstractHandler {
     private void sendConfirmEmail() throws AddressException, MessagingException, UnsupportedEncodingException {
       Properties props = new Properties(MAIL_PROPERTIES);
       
-      props.put("mail.smtp.user", from);
-      props.put("mail.smtp.password", password);
-
-      Session mailSession = Session.getDefaultInstance(props);
+      Session mailSession = Session.getInstance(props,
+          new javax.mail.Authenticator() {
+        protected PasswordAuthentication getPasswordAuthentication() {
+          return new PasswordAuthentication(username, password);
+        }
+      });
       
       Message message = new MimeMessage(mailSession);
       InternetAddress requesterAddress = new InternetAddress(email, requesterName);
@@ -439,11 +442,7 @@ public class ShahedServer extends AbstractHandler {
       message.setFrom(shahedAddress);
       message.setReplyTo(new InternetAddress[] {shahedAddress});
       
-      Transport transport = mailSession.getTransport();
-      transport.connect(MAIL_HOST, username, password);
-      
-      transport.sendMessage(message, message.getAllRecipients());
-      transport.close();
+      Transport.send(message, message.getAllRecipients());
       LOG.info("Message sent successfully to '"+requesterAddress+"'");
     }
 
@@ -482,11 +481,13 @@ public class ShahedServer extends AbstractHandler {
     private void sendSuccessEmail() throws AddressException, MessagingException, IOException {
       Properties props = new Properties(MAIL_PROPERTIES);
       
-      props.put("mail.smtp.user", from);
-      props.put("mail.smtp.password", password);
-    
-      Session mailSession = Session.getInstance(props);
-    
+      Session mailSession = Session.getInstance(props,
+          new javax.mail.Authenticator() {
+        protected PasswordAuthentication getPasswordAuthentication() {
+          return new PasswordAuthentication(username, password);
+        }
+      });
+      
       Message message = new MimeMessage(mailSession);
       message.setFrom(new InternetAddress(username));
       String toLine = requesterName+'<'+email+'>';
@@ -532,22 +533,20 @@ public class ShahedServer extends AbstractHandler {
       multipart.addBodyPart(kmzPart);
       
       message.setContent(multipart);
-
-      Transport transport = mailSession.getTransport();
-      transport.connect(MAIL_HOST, username, password);
+      Transport.send(message, message.getAllRecipients());
       
-      transport.sendMessage(message, message.getAllRecipients());
-      transport.close();
       LOG.info("Request finished successfully");
     }
     
     private void sendFailureEmail(Exception e) throws AddressException, MessagingException, UnsupportedEncodingException {
       Properties props = new Properties(MAIL_PROPERTIES);
-      
-      props.put("mail.smtp.user", from);
-      props.put("mail.smtp.password", password);
 
-      Session mailSession = Session.getDefaultInstance(props);
+      Session mailSession = Session.getInstance(props,
+          new javax.mail.Authenticator() {
+        protected PasswordAuthentication getPasswordAuthentication() {
+          return new PasswordAuthentication(username, password);
+        }
+      });
       
       Message message = new MimeMessage(mailSession);
       InternetAddress requesterAddress = new InternetAddress(email, requesterName);
@@ -565,11 +564,7 @@ public class ShahedServer extends AbstractHandler {
       message.setFrom(shahedAddress);
       message.setReplyTo(new InternetAddress[] {shahedAddress});
       
-      Transport transport = mailSession.getTransport();
-      transport.connect(MAIL_HOST, username, password);
-      
-      transport.sendMessage(message, message.getAllRecipients());
-      transport.close();
+      Transport.send(message, message.getAllRecipients());
       LOG.info("Message sent successfully to '"+requesterAddress+"'");
     }
 
