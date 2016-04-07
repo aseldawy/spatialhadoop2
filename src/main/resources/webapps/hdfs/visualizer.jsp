@@ -1,7 +1,7 @@
 <%@ page
   contentType="text/html; charset=UTF-8"
   import="org.apache.hadoop.http.HtmlQuoting"
-  import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
+  import="org.apache.hadoop.hdfs.server.common.JspHelper"
   import="org.apache.hadoop.conf.Configuration"
   import="org.apache.hadoop.security.UserGroupInformation"
   import="org.apache.hadoop.fs.*"
@@ -10,7 +10,6 @@
 %>
 
 <%! private static final long serialVersionUID = 1L;%>
-<%! static JspHelper jspHelper = new JspHelper(); %>
 
 <%!
 private void listDirectory(HttpServletRequest request, JspWriter out,
