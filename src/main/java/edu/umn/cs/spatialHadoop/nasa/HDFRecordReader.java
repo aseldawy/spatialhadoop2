@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Vector;
 
@@ -35,7 +36,9 @@ import edu.umn.cs.spatialHadoop.hdf.DDVGroup;
 import edu.umn.cs.spatialHadoop.hdf.DataDescriptor;
 import edu.umn.cs.spatialHadoop.hdf.HDFConstants;
 import edu.umn.cs.spatialHadoop.hdf.HDFFile;
+import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
+import edu.umn.cs.spatialHadoop.util.ShortArray;
 
 /**
  * A record reader for HDF files with the new mapreduce interface
@@ -408,6 +411,97 @@ public class HDFRecordReader<S extends NASAShape>
       if (waterMaskFile != null)
         waterMaskFile.close();
     }
+  }
+  
+  /**
+   * Recovers all missing entries using a two-dimensional interpolation technique.
+   * @param values The dataset that need to be recovered
+   * @param fillValue The marker that marks missing values
+   * @param waterMask A bit-mask with <code>true</code> values in water areas
+   * and <code>false</code> values for land areas.
+   */
+  public static void recoverXYShorts(ByteBuffer values, short fillValue, BitArray waterMask) {
+    // Resolution of the dataset which is the size of each of its two dimensions
+    // e.g., 1200x1200, 2400x2400, or 4800x4800
+    int resolution = (int) Math.sqrt(values.limit() / 2);
+    // This array stores all the runs of true (non-fill) values. The size is
+    // always even where the two values point to the first and last positions
+    // of the run, respectively
+    ShortArray[] trueRuns = findTrueRuns(values, fillValue);
+
+    // This array keeps track of empty columns that will need further handling
+    ShortArray emptyColumns = new ShortArray();
+    // Now, scan the dataset column by column to recover missing values
+    for (short col = 0; col < resolution; col++) {
+      // Find runs of fillValues and recover all of them
+      short row1 = 0;
+      while (row1 < resolution) {
+        // Skip as many true values as we can
+        while (row1 < resolution && values.getShort(2*(row1 * resolution + col)) != fillValue)
+          row1++;
+        // Now, row1 points to the first fillValue
+        if (row1 == resolution) {
+          // All entries in the column have true values. No processing needed
+          continue;
+        }
+        short row2 = (short) (row1 + 1);
+        // Skip as many fillValues as we can
+        while (row2 < resolution && values.getShort(2*(row2 * resolution + col)) == fillValue)
+          row2++;
+        // Now, row2 points to a true value
+        if (row1 == 0 && row2 == resolution) {
+          // Case 0: The whole column is empty. Interpolate only the true
+          // values in the same row
+          for (short row = row1; row < row2; row++) {
+            // Recover point at position (row, col)
+            if (trueRuns[row].isEmpty()) {
+              // Case 0.0: The whole row and column of the entry are empty
+              emptyColumns.add(col);
+            } else {
+              // Since the entry (col, row) points to a fillValue, the returned
+              // position has to be outside the array (i.e., negative)
+              int position = -trueRuns[row].binarySearch(col) - 1;
+              if (position == 0) {
+                // case 0.1: The column is empty and the row is empty from the left
+                // Copy the value in the same row to the right
+                short colToCopy = trueRuns[row].get(position);
+                values.putShort(2*(row * resolution + col), values.getShort(2*(row * resolution + colToCopy)));
+              }
+            }
+          }
+        }
+        row1 = row2;
+      }
+    }
+  }
+
+  /**
+   * Find runs of true values in each row of the given 2D array of value.
+   * @param values All the short values stored in a {@link ByteBuffer}
+   * @param fillValue The marker that marks fillValue
+   * @return An array of runs as one for each row in the given array.
+   */
+  static ShortArray[] findTrueRuns(ByteBuffer values, short fillValue) {
+    int resolution = (int) Math.sqrt(values.limit() / 2);
+    ShortArray[] trueRuns = new ShortArray[resolution];
+    for (short row = 0; row < resolution; row++) {
+      trueRuns[row] = new ShortArray();
+      // A flag that is set to true if currently inside a run of fillValues.
+      boolean insideFillValue = true;
+      for (short col = 0; col < resolution; col++) {
+        if ((values.getShort((row * resolution + col) *2) == fillValue) ^ insideFillValue) {
+          // Found a flip between true and fill values.
+          if (!insideFillValue && col != 0)
+            trueRuns[row].append((short)(col - 1));
+          else
+            trueRuns[row].append(col);
+          insideFillValue = !insideFillValue;
+        }
+      }
+      if (!insideFillValue)
+        trueRuns[row].append((short) (resolution - 1));
+    }
+    return trueRuns;
   }
 
   /***
