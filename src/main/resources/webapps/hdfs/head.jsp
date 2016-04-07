@@ -6,14 +6,13 @@
   import="edu.umn.cs.spatialHadoop.core.SpatialSite"
   import="java.io.BufferedReader"
   import="org.apache.hadoop.http.HtmlQuoting"
-  import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
+  import="org.apache.hadoop.hdfs.server.common.JspHelper"
   import="org.apache.hadoop.conf.Configuration"
   import="org.apache.hadoop.mapred.LineRecordReader"
   import="org.apache.hadoop.mapred.FileSplit"
 %>
 
 <%! private static final long serialVersionUID = 1L;%>
-<%! static JspHelper jspHelper = new JspHelper(); %>
 
 <%
   Configuration conf = (Configuration) getServletContext().getAttribute(JspHelper.CURRENT_CONF);
