@@ -67,7 +67,7 @@ public class HDFRecordReaderTest extends TestCase {
     };
     byte[] waterMask = {
       0, 1, 1, 0,
-      1, 0, 1, 1,
+      1, 0, 0, 1,
       1, 1, 0, 1,
       0, 1, 1, 0,
     };
@@ -83,6 +83,7 @@ public class HDFRecordReaderTest extends TestCase {
     HDFRecordReader.recoverXYShorts(valuesBytes, fillValue, waterMaskBits);
     
     assertEquals(70, valuesBytes.getShort(2*10));
+    assertEquals(50, valuesBytes.getShort(2*6));
     
     assertEquals(25, valuesBytes.getShort(2*0));
     assertEquals(47, valuesBytes.getShort(2*3));

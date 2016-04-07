@@ -450,8 +450,8 @@ public class HDFRecordReader<S extends NASAShape>
           row2++;
         // Now, row2 points to a true value
         if (row1 == 0 && row2 == resolution) {
-          // Case 0: The whole column is empty. Interpolate only the true
-          // values in the same row
+          // Case 0: The whole column is empty. Interpolate only the true values
+          // in the same row
           for (short row = row1; row < row2; row++) {
             // Recover point at position (row, col)
             if (trueRuns[row].isEmpty()) {
@@ -461,14 +461,31 @@ public class HDFRecordReader<S extends NASAShape>
               // Since the entry (col, row) points to a fillValue, the returned
               // position has to be outside the array (i.e., negative)
               int position = -trueRuns[row].binarySearch(col) - 1;
+              short estimatedValue;
               if (position == 0) {
                 // case 0.1: The column is empty and the row is empty from the left
                 // Copy the value in the same row to the right
                 short colToCopy = trueRuns[row].get(position);
-                values.putShort(2*(row * resolution + col), values.getShort(2*(row * resolution + colToCopy)));
+                estimatedValue = values.getShort(2*(row * resolution + colToCopy));
+              } else if (position == trueRuns[row].size()) {
+                // Case 0.2: The column is empty and the row is empty from the right
+                // Copy the value in the same row to the left
+                short colToCopy = trueRuns[row].get(position-1);
+                estimatedValue = values.getShort(2*(row * resolution + colToCopy));
+              } else {
+                // Case 0.3: The column is empty and the row has two different
+                // true values from the two sides. Interpolate the two values
+                short col1 = trueRuns[row].get(position-1);
+                short val1 = values.getShort(2*(row * resolution + col1));
+                short col2 = trueRuns[row].get(position);
+                short val2 = values.getShort(2*(row * resolution + col2));
+                estimatedValue = (short) ((val1 * (col2 - col) + val2 * (col - col1)) / (col2 - col1));
               }
+              values.putShort(2*(row * resolution + col), estimatedValue);
             }
           }
+        } else if (row1 == 0) {
+          // Case 1: 
         }
         row1 = row2;
       }
