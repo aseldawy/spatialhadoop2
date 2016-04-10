@@ -92,4 +92,50 @@ public class HDFRecordReaderTest extends TestCase {
     assertEquals(73, valuesBytes.getShort(2*15));
   }
 
+  /**
+   * Tests that values which cannot be recovered should be specified as fillValue.
+   */
+  public void testRecoverXYEmpty() {
+    short[] values = {
+       0,20, 0, 0,
+      30, 0, 0, 0,
+       0, 0, 0, 0,
+       0, 0, 0, 0,
+    };
+    byte[] waterMask = {
+      1, 1, 1, 1,
+      1, 1, 1, 1,
+      1, 1, 1, 1,
+      1, 1, 1, 0,
+    };
+    // Convert the data above to formats compatible with the calee
+    ByteBuffer valuesBytes = ByteBuffer.allocate(values.length * 2);
+    BitArray waterMaskBits = new BitArray(waterMask.length);
+    for (int i = 0; i < values.length; i++) {
+      valuesBytes.putShort(2*i, values[i]);
+      waterMaskBits.set(i, waterMask[i] == 1);
+    }
+    
+    short fillValue = 0;
+    HDFRecordReader.recoverXYShorts(valuesBytes, fillValue, waterMaskBits);
+    
+    assertEquals(fillValue, valuesBytes.getShort(2*15));
+  }
+  
+  public void testConvertWaterMaskToBits() {
+    byte[] waterMask = {
+        0, 0, 0, 0,
+        0, 0, 0, 1,
+        0, 1, 1, 1,
+        0, 1, 1, 0,
+      };
+    
+    BitArray wmBits = HDFRecordReader.convertWaterMaskToBits(ByteBuffer.wrap(waterMask), 2);
+    assertEquals(4L, wmBits.size());
+    assertFalse(wmBits.get(0));
+    assertFalse(wmBits.get(1));
+    assertFalse(wmBits.get(2));
+    assertTrue(wmBits.get(3));
+  }
+
 }
