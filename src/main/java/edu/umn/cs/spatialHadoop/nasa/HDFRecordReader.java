@@ -449,47 +449,98 @@ public class HDFRecordReader<S extends NASAShape>
         while (row2 < resolution && values.getShort(2*(row2 * resolution + col)) == fillValue)
           row2++;
         // Now, row2 points to a true value
-        if (row1 == 0 && row2 == resolution) {
-          // Case 0: The whole column is empty. Interpolate only the true values
-          // in the same row
-          for (short row = row1; row < row2; row++) {
-            // Recover point at position (row, col)
-            if (trueRuns[row].isEmpty()) {
-              // Case 0.0: The whole row and column of the entry are empty
-              emptyColumns.add(col);
-            } else {
-              // Since the entry (col, row) points to a fillValue, the returned
-              // position has to be outside the array (i.e., negative)
-              int position = -trueRuns[row].binarySearch(col) - 1;
-              short estimatedValue;
-              if (position == 0) {
-                // case 0.1: The column is empty and the row is empty from the left
-                // Copy the value in the same row to the right
-                short colToCopy = trueRuns[row].get(position);
-                estimatedValue = values.getShort(2*(row * resolution + colToCopy));
-              } else if (position == trueRuns[row].size()) {
-                // Case 0.2: The column is empty and the row is empty from the right
-                // Copy the value in the same row to the left
-                short colToCopy = trueRuns[row].get(position-1);
-                estimatedValue = values.getShort(2*(row * resolution + colToCopy));
-              } else {
-                // Case 0.3: The column is empty and the row has two different
-                // true values from the two sides. Interpolate the two values
-                short col1 = trueRuns[row].get(position-1);
-                short val1 = values.getShort(2*(row * resolution + col1));
-                short col2 = trueRuns[row].get(position);
-                short val2 = values.getShort(2*(row * resolution + col2));
-                estimatedValue = (short) ((val1 * (col2 - col) + val2 * (col - col1)) / (col2 - col1));
-              }
-              values.putShort(2*(row * resolution + col), estimatedValue);
-            }
-          }
-        } else if (row1 == 0) {
-          // Case 1: 
+        
+        // Offsets of the four true values to the (top, bottom, left, right)
+        short[] offsetsToInterpolate = {-1, -1, -1, -1};
+        short[] valuesToInterpolate = new short[4];
+        if (row1 > 0) {
+          offsetsToInterpolate[0] = (short) (row1 - 1);
+          valuesToInterpolate[0] = values.getShort(2*(offsetsToInterpolate[0] * resolution + col));
         }
+        if (row2 < resolution) {
+          offsetsToInterpolate[1] = row2;
+          valuesToInterpolate[1] = values.getShort(2*(offsetsToInterpolate[1] * resolution + col));
+        }
+        
+        for (int row = row1; row < row2; row++) {
+          if (values.getShort(2*(row * resolution + col)) == fillValue &&
+              !waterMask.get((row * resolution + col))) {
+            // The point at (row, col) is on land and has a fill (empty) value
+            // Find the position of the run in this row to find points to the left and right
+            int position = -trueRuns[row].binarySearch(col) - 1;
+            if (position > 0) {
+              // There's a true value to the left
+              offsetsToInterpolate[2] = trueRuns[row].get(position-1);
+              valuesToInterpolate[2] = values.getShort(2*(row * resolution + offsetsToInterpolate[2]));
+            } else {
+              offsetsToInterpolate[2] = -1;
+            }
+            if (position < trueRuns[row].size()) {
+              // There's a true value to the right
+              offsetsToInterpolate[3] = trueRuns[row].get(position);
+              valuesToInterpolate[3] = values.getShort(2*(row * resolution + offsetsToInterpolate[3]));
+            } else {
+              offsetsToInterpolate[3] = -1;
+            }
+            short interpolatedValue = interpolatePoint(row, col, offsetsToInterpolate, valuesToInterpolate);
+            values.putShort(2*(row * resolution + col), interpolatedValue);
+          }
+        }
+        
+        // Skip the current empty run and go to the next one
         row1 = row2;
       }
     }
+  }
+
+  private static short interpolatePoint(int row, short col,
+      short[] offsetsToInterpolate, short[] valuesToInterpolate) {
+    // First interpolation value along the row
+    int vr, dr;
+    int d0 = row - offsetsToInterpolate[0];
+    int d1 = offsetsToInterpolate[1] - row;
+    if (offsetsToInterpolate[0] != -1 && offsetsToInterpolate[1] != -1) {
+      // Interpolate the two values based on their distances.
+      vr = (valuesToInterpolate[0] * d1 + valuesToInterpolate[1] * d0) / (d0 + d1);
+      dr = (d0 + d1 + 1) / 2;
+    } else if (offsetsToInterpolate[0] != -1) {
+      vr = valuesToInterpolate[0];
+      dr = d0;
+    } else if (offsetsToInterpolate[1] != -1) {
+      vr = valuesToInterpolate[1];
+      dr = d1;
+    } else {
+      vr = 0;
+      dr = 0;
+    }
+    // Second interpolation value along the column
+    int vc, dc;
+    int d2 = col - offsetsToInterpolate[2];
+    int d3 = offsetsToInterpolate[3] - col;
+    if (offsetsToInterpolate[2] != -1 && offsetsToInterpolate[3] != -1) {
+      // Interpolate the two values based on their distances.
+      vc = (valuesToInterpolate[2] * d3 + valuesToInterpolate[3] * d2) / (d2 + d3);
+      dc = (d2 + d2 + 1) / 2;
+    } else if (offsetsToInterpolate[2] != -1) {
+      vc = valuesToInterpolate[2];
+      dc = d2;
+    } else if (offsetsToInterpolate[3] != -1) {
+      vc = valuesToInterpolate[3];
+      dc = d3;
+    } else {
+      vc = 0;
+      dc = 0;
+    }
+    
+    if (dr != 0 && dc != 0) {
+      // Interpolate the two values based on their distances
+      return (short) ((((vr * dc + vc * dr) *2) + (dr + dc)) / (2*(dr + dc)));
+    }
+    if (dr != 0)
+      return (short) vr;
+    if (dc != 0)
+      return (short) vc;
+    return -1;
   }
 
   /**

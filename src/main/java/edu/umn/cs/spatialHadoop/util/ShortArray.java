@@ -242,4 +242,20 @@ public class ShortArray implements Writable, Iterable<Short> {
     array[i] = array[j];
     array[j] = t;
   }
+  
+  @Override
+  public String toString() {
+    int iMax = size - 1;
+    if (iMax == -1)
+      return "[]";
+
+    StringBuilder b = new StringBuilder();
+    b.append('[');
+    for (int i = 0; ; i++) {
+      b.append(array[i]);
+      if (i == iMax)
+        return b.append(']').toString();
+      b.append(", ");
+    }
+  }
 }

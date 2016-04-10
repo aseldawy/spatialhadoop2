@@ -89,7 +89,7 @@ public class HDFRecordReaderTest extends TestCase {
     assertEquals(47, valuesBytes.getShort(2*3));
     assertEquals(40, valuesBytes.getShort(2*5));
     assertEquals(63, valuesBytes.getShort(2*12));
-    assertEquals(70, valuesBytes.getShort(2*15));
+    assertEquals(73, valuesBytes.getShort(2*15));
   }
 
 }
