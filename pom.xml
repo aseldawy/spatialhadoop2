@@ -11,7 +11,7 @@
   <groupId>edu.umn.cs.spatialhadoop</groupId>
   <artifactId>spatialhadoop</artifactId>
   <packaging>jar</packaging>
-  <version>2.4</version>
+  <version>2.4.1-SNAPSHOT</version>
   
   <name>SpatialHadoop</name>
   <description>An extension to Apache Hadoop for better support of spatial data</description>
@@ -24,11 +24,11 @@
     </license>
   </licenses>
   
-	<scm>
-	  <connection>scm:git:git@github.com:aseldawy/spatialhadoop2.git</connection>
-	  <developerConnection>scm:git:git@github.com:aseldawy/spatialhadoop2.git</developerConnection>
-	  <url>git@github.com:aseldawy/spatialhadoop2.git</url>
-	</scm>
+  <scm>
+    <connection>scm:git:git@github.com:aseldawy/spatialhadoop2.git</connection>
+    <developerConnection>scm:git:git@github.com:aseldawy/spatialhadoop2.git</developerConnection>
+    <url>git@github.com:aseldawy/spatialhadoop2.git</url>
+  </scm>
 
  <developers>
     <developer>
@@ -56,27 +56,28 @@
           </archive>
         </configuration>
       </plugin>
-	    <plugin>
-	     <groupId>org.sonatype.plugins</groupId>
-	     <artifactId>nexus-staging-maven-plugin</artifactId>
-	     <version>1.6.3</version>
-	     <extensions>true</extensions>
-	     <configuration>
-	       <serverId>ossrh</serverId>
-	       <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-	       <autoReleaseAfterClose>false</autoReleaseAfterClose>
-	     </configuration>
-	    </plugin>
 
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.5.1</version>
-        <configuration>
-          <source>1.6</source>
-          <target>1.6</target>
-        </configuration>
+       <groupId>org.sonatype.plugins</groupId>
+       <artifactId>nexus-staging-maven-plugin</artifactId>
+       <version>1.6.3</version>
+       <extensions>true</extensions>
+       <configuration>
+         <serverId>ossrh</serverId>
+         <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+         <autoReleaseAfterClose>false</autoReleaseAfterClose>
+       </configuration>
       </plugin>
+
+     <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-compiler-plugin</artifactId>
+       <version>3.5.1</version>
+       <configuration>
+         <source>1.6</source>
+         <target>1.6</target>
+       </configuration>
+     </plugin>
     
      <plugin>
       <groupId>org.apache.maven.plugins</groupId>
@@ -119,32 +120,32 @@
       </executions>
     </plugin>    
     
-		<plugin>
-		  <groupId>org.sonatype.plugins</groupId>
-		  <artifactId>nexus-staging-maven-plugin</artifactId>
-		  <version>1.6.3</version>
-		  <extensions>true</extensions>
-		  <configuration>
-		     <serverId>ossrh</serverId>
-		     <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-		     <autoReleaseAfterClose>true</autoReleaseAfterClose>
-		  </configuration>
-		</plugin>
+    <plugin>
+      <groupId>org.sonatype.plugins</groupId>
+      <artifactId>nexus-staging-maven-plugin</artifactId>
+      <version>1.6.3</version>
+      <extensions>true</extensions>
+      <configuration>
+         <serverId>ossrh</serverId>
+         <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+         <autoReleaseAfterClose>true</autoReleaseAfterClose>
+      </configuration>
+    </plugin>
 
 
     <plugin>
-			<groupId>org.apache.maven.plugins</groupId>
-			<artifactId>maven-jar-plugin</artifactId>
-			<version>2.6</version>
-			<configuration>
-				<archive>
-					<manifest>
-						<mainClass>edu.umn.cs.spatialHadoop.operations.Main</mainClass>
-					</manifest>
-				</archive>
-			</configuration>
-		</plugin>
-    </plugins>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-jar-plugin</artifactId>
+      <version>2.6</version>
+      <configuration>
+        <archive>
+          <manifest>
+            <mainClass>edu.umn.cs.spatialHadoop.operations.Main</mainClass>
+          </manifest>
+        </archive>
+      </configuration>
+    </plugin>
+  </plugins>
   </build>
   
   <dependencies>
@@ -206,23 +207,22 @@
     </dependency>
 
     <dependency>
-	    <groupId>org.apache.pig</groupId>
-	    <artifactId>pig</artifactId>
-	    <version>0.15.0</version>
+      <groupId>org.apache.pig</groupId>
+      <artifactId>pig</artifactId>
+      <version>0.15.0</version>
     </dependency>
 
   </dependencies>
   
   <distributionManagement>
-	  <snapshotRepository>
-	    <id>ossrh</id>
-	    <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-	  </snapshotRepository>
-	  <repository>
-	    <id>ossrh</id>
-	    <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-	  </repository>
+    <snapshotRepository>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+    </snapshotRepository>
+    <repository>
+      <id>ossrh</id>
+      <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+    </repository>
   </distributionManagement>
-	
 	
 </project>
