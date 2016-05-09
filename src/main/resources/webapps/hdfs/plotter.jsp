@@ -6,7 +6,7 @@
   import="edu.umn.cs.spatialHadoop.core.SpatialSite"
   import="java.io.BufferedReader"
   import="org.apache.hadoop.http.HtmlQuoting"
-  import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
+  import="org.apache.hadoop.hdfs.server.common.JspHelper"
   import="org.apache.hadoop.conf.Configuration"
   import="java.util.Arrays"
   import="java.io.ByteArrayOutputStream"
@@ -15,7 +15,6 @@
 %>
 
 <%! private static final long serialVersionUID = 1L;%>
-<%! static JspHelper jspHelper = new JspHelper(); %>
 
 <%! private BufferedImage mergePhotos(Path[] imageFiles) {
   return null;

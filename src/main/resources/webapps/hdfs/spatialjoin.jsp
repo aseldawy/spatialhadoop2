@@ -4,7 +4,7 @@
   import="org.apache.hadoop.conf.Configuration"
   import="edu.umn.cs.spatialHadoop.OperationsParams"
   import="org.apache.hadoop.fs.*"
-  import="org.apache.hadoop.hdfs.server.namenode.JspHelper"
+  import="org.apache.hadoop.hdfs.server.common.JspHelper"
   import="edu.umn.cs.spatialHadoop.core.OSMPolygon"
   import="edu.umn.cs.spatialHadoop.core.Shape"
   import="org.apache.hadoop.mapred.RunningJob"
@@ -25,7 +25,6 @@
 %>
 
 <%! private static final long serialVersionUID = 1L;%>
-<%! static JspHelper jspHelper = new JspHelper(); %>
 
 <%
   if (request.getParameter("input1") == null ||
