@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
@@ -151,7 +152,24 @@ public class HadoopvizServer extends AbstractHandler {
             fileStatus.getReplication(), 0,
             fileStatus.isDirectory()? "DIRECTORY" : "FILE");
       }
-      out.print("]}}");
+      out.print("]}");
+      // Check if there is an image or master file
+      FileStatus[] metaFiles = fs.listStatus(path, new PathFilter() {
+        @Override
+        public boolean accept(Path path) {
+          return path.getName().startsWith("_master") ||
+              path.getName().equals("_data.png");
+        }
+      });
+      for (FileStatus metaFile : metaFiles) {
+        String metaFileName = metaFile.getPath().getName();
+        if (metaFileName.startsWith("_master"))
+          out.printf(",\"master\":\"%s\"", metaFileName);
+        else if (metaFileName.equals("_data.png"))
+          out.printf(",\"image\":\"%s\"", metaFileName);
+      }
+      out.print("}");
+      
       out.close();
     } catch (Exception e) {
       System.out.println("error happened");

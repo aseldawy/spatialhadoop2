@@ -14,6 +14,7 @@
     <script type="text/javascript" src="/js/dust-full-2.0.0.min.js"></script>
     <script type="text/javascript" src="/js/dust-helpers-1.1.1.min.js"></script>
     <script type="text/javascript" src="/js/hadoopviz.js"> </script>
+    <link rel="stylesheet" href="/css/hadoopviz.css">
     
     <script type="text/x-dust-template" id="file-list-template">
     {?ParentDir}
@@ -54,9 +55,17 @@
     </script>
     
     <script type="text/x-dust-template" id="global-index-template">
-    <svg width="{width}" height="{height}" class="gindex">
+    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" 
+      xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" 
+      x="{minx}" y="{miny}" 
+      viewBox="{minx},{miny},{@math key=maxx method="subtract" operand=minx/},{@math key=maxy method="subtract" operand=miny/}"
+      width="{@math key=maxx method="subtract" operand=minx/}" 
+      height="{@math key=maxy method="subtract" operand=miny/}" class="gindex">
     {#Partitions}
-    <rect x="{x}" y="{y}" width="{width}" height="{height}"/>
+    <rect x="{x1}" 
+      y="{y1}" 
+      width="{@math key=x2 method="subtract" operand=x1/}" 
+      height="{@math key=y2 method="subtract" operand=y1/}"/>
     {/Partitions}
     </svg>
     </script>
@@ -68,6 +77,8 @@
       </form>
       <div id="listed-files">
       </div>
+    </div>
+    <div id="global-index">
     </div>
   </body>
 </html>
