@@ -41,6 +41,8 @@ $(function() {
             jQuery("#global-index").html(out);
           });
         });
+      } else {
+        jQuery("#global-index").html("");
       }
     }).error(function(xhr, data) {alert(data);});
   }
