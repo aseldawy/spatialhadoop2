@@ -8,17 +8,10 @@
  *************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.URLConnection;
-import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.HashMap;
 
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
@@ -31,57 +24,35 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.Counters;
-import org.apache.hadoop.mapred.JobClient;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.JobID;
-import org.apache.hadoop.mapred.RunningJob;
-import org.apache.hadoop.mapred.Task;
-import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
-import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 
+/**
+ * A class that starts a web service that can visualize spatial data
+ * @author Chrisopher Jonathan, Ahmed Eldawy
+ *
+ */
 public class HadoopvizServer extends AbstractHandler {
 
   private static final Log LOG = LogFactory.getLog(HadoopvizServer.class);
 
+  /**The name of the configuration line that stores the HTTP port*/
+  private static final String HadoopVizWebServerPort =
+      "spatialhadoop.hadoopviz.http_port";
+
   /** Common parameters for all queries */
   private OperationsParams commonParams;
-  private Path datasetPath;
-  private Path outputPath;
-  private Path shapePath;
-  private Path watermaskPath;
-  
-  /** Job Number **/
-  private int jobNumber;
-
-  /** Shape Map **/
-  private HashMap<String, String> shapeMap;
 
   /**
    * A constructor that starts the Jetty server
-   * @param datasetPath
-   * @param outputPath
-   * @param shapePath
-   * @param watermaskPath
    * @param params
    */
-  public HadoopvizServer(Path datasetPath, Path outputPath, Path shapePath, Path watermaskPath,
-      OperationsParams params) {
+  public HadoopvizServer(OperationsParams params) {
     this.commonParams = new OperationsParams(params);
-    this.datasetPath = datasetPath;
-    this.outputPath = outputPath;
-    this.jobNumber = Integer.MAX_VALUE;
-    this.shapeMap = new HashMap<String, String>();
-    this.shapePath = shapePath;
-    this.watermaskPath = watermaskPath;
-    readShapeFile();
   }
 
   /**
@@ -90,34 +61,13 @@ public class HadoopvizServer extends AbstractHandler {
    * 
    * @throws Exception
    */
-  private static void startServer(Path datasetPath, Path outputPath, Path shapePath, Path watermaskPath,
-      OperationsParams params) throws Exception {
-    int port = params.getInt("port", 8889);
+  private static void startServer(OperationsParams params) throws Exception {
+    int port = params.getInt(HadoopVizWebServerPort, 8889);
     Server server = new Server(port);
-    server.setHandler(new HadoopvizServer(datasetPath, outputPath, shapePath, watermaskPath, params));
+    server.setHandler(new HadoopvizServer(params));
     server.start();
+    LOG.info("HadoopViz server is running port: "+port);
     server.join();
-  }
-
-  /**
-   * Read the shape file from dataset path + shape.txt
-   */
-  private void readShapeFile() {
-    try {
-      LOG.info("Reading Shape File");
-      FileSystem fs = datasetPath.getFileSystem(commonParams);
-      BufferedReader br = new BufferedReader(new InputStreamReader(
-          fs.open(shapePath)));
-
-      String line;
-      while ((line = br.readLine()) != null) {
-        shapeMap.put(line.split(":")[0], line.split(":")[1]);
-      }
-      br.close();
-      LOG.info(shapeMap.size() + " shapes available.");
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
   }
 
   /**
@@ -128,25 +78,18 @@ public class HadoopvizServer extends AbstractHandler {
       HttpServletResponse response, int dispatch) throws IOException,
       ServletException {
     // Bypass cross-site scripting (XSS)
-    response.addHeader("Access-Control-Allow-Origin", "*");
-    response.addHeader("Access-Control-Allow-Credentials", "true");
+    //response.addHeader("Access-Control-Allow-Origin", "*");
+    //response.addHeader("Access-Control-Allow-Credentials", "true");
     ((Request) request).setHandled(true);
 
     try {
       LOG.info("Received request: '" + request.getRequestURL() + "'");
-      if (target.endsWith("/generate_dataset.cgi")) {
-        handleGenerateDataset(request, response);
-      } else if (target.endsWith("/visualize.cgi")) {
-        handlePlot(request, response);
-      } else if (target.endsWith("/generate_output_list.cgi")) {
-        handleGenerateOutputList(request, response);
-      } else if (target.endsWith("/fetch_result.cgi")) {
-        handleOutput(request, response);
-      } else if (target.startsWith("/hdfs/")) {
+      if (target.startsWith("/hdfs/")) {
         handleHDFSFetch(request, response);
-      } else if (target.endsWith("/get_output_info.cgi")) {
-        handleOutputInfo(request, response);
+      } else if (target.endsWith("/LISTSTATUS.cgi")){
+        handleListFiles(request, response);
       } else {
+        // Doesn't match any of the dynamic content, assume it's a static file
         if (target.equals("/"))
           target = "/index.html";
         tryToLoadStaticResource(target, response);
@@ -156,334 +99,49 @@ public class HadoopvizServer extends AbstractHandler {
       reportError(response, "Error placing the request", e);
     }
   }
-
+  
   /**
-   * This will be called when the index.html loaded. It will return the
-   * avialable datasets.
-   * 
-   * @param request
-   * @param response
-   * @throws ParseException
-   * @throws IOException
-   */
-  private void handleGenerateDataset(HttpServletRequest request,
-      HttpServletResponse response) throws ParseException, IOException {
-
-    try {
-      FileSystem fs = datasetPath.getFileSystem(commonParams);
-      ArrayList<String> datasetList = new ArrayList<String>();
-      // Get the file list.
-      for (FileStatus fileStatus : fs.listStatus(datasetPath)) {
-        if (fileStatus.isDir()) {
-          String fileName = fileStatus.getPath().getName();
-          datasetList.add(fileName);
-        }
-      }
-
-      // Report the answer.
-      LOG.info("Reporting the answer.");
-      response.setContentType("application/json;charset=utf-8");
-      PrintWriter writer = response.getWriter();
-      writer.print("[");
-      for (int i = 0; i < datasetList.size(); i++) {
-        if (i == datasetList.size() - 1) {
-          writer.print("\"" + datasetList.get(i) + "\"");
-        } else {
-          writer.print("\"" + datasetList.get(i) + "\",");
-        }
-      }
-      writer.print("]");
-      writer.close();
-      response.setStatus(HttpServletResponse.SC_OK);
-    } catch (Exception e) {
-      System.out.println("error happened");
-      response.setContentType("text/plain;charset=utf-8");
-      PrintWriter writer = response.getWriter();
-      e.printStackTrace(writer);
-      writer.close();
-      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  /**
-   * Handle all plotting requests.
-   * 
-   * @param request
-   * @param response
-   * @throws ParseException
-   * @throws IOException
-   */
-  private void handlePlot(HttpServletRequest request,
-      HttpServletResponse response) throws ParseException, IOException {
-
-    try {
-      LOG.info(request.getQueryString());
-      // Get the parameter.
-      String dataset = request.getParameter("dataset");
-      String width = request.getParameter("width");
-      String height = request.getParameter("height");
-      String partition = request.getParameter("partition");
-      String vizType = request.getParameter("viztype");
-      String plotType = request.getParameter("plottype");
-      String noMerge = request.getParameter("no-merge");
-
-      // Check the dataset and get the shape.
-      String shape = "";
-      if (shapeMap.get(dataset) != null) {
-        shape = shapeMap.get(dataset);
-      }
-
-      // Create the path.
-      Path[] inputPath = new Path[1];
-      inputPath[0] = new Path(datasetPath.toString() + "/" + dataset);
-      // First run. Need to check the next available output path.
-      if (jobNumber == Integer.MAX_VALUE) {
-        jobNumber = 0;
-        FileSystem fs = outputPath.getFileSystem(commonParams);
-        // Get the file list.
-        for (FileStatus fileStatus : fs.listStatus(outputPath)) {
-          if (fileStatus.isDir()) {
-            jobNumber++;
-          }
-        }
-      }
-      Path outputFolder = new Path(outputPath.toString() + "/" + jobNumber);
-      Path outputRoot = new Path(outputFolder.toString());
-      // Create the query parameters
-      OperationsParams params = new OperationsParams(commonParams);
-      if (plotType.equals("gplot")) {
-        params.set("color", "red");
-      }
-      if (!shape.isEmpty()) {
-        params.set("shape", shape);
-      }
-
-      if (vizType.equals("single_level")) {
-        params.set("width", width);
-        params.set("height", height);
-        params.set("partition", partition);
-        if (noMerge.equals("true")) {
-          params.setBoolean("merge", false);
-        }
-
-        if (noMerge.equals("false")) {
-          outputFolder = new Path(outputFolder.toString() + "/result.png");
-        } else {
-          outputFolder = new Path(outputFolder.toString() + "_no-merge");
-          outputRoot = new Path(outputFolder.toString());
-        }
-      } else {
-        params.setBoolean("pyramid", true);
-        params.set("tileWidth", width);
-        params.set("tileHeight", height);
-
-        String min_zoom = request.getParameter("min_zoom");
-        String max_zoom = request.getParameter("max_zoom");
-
-        if (min_zoom.equals("null") && !max_zoom.equals("null")) {
-          params.set("levels", "" + (Integer.parseInt(max_zoom) + 1));
-        } else if (!min_zoom.equals("null") && max_zoom.equals("null")) {
-          params.set("levels", min_zoom + ".." + min_zoom);
-        } else {
-          params.set("levels", min_zoom + ".." + max_zoom);
-        }
-
-        // Checked the partition. If null, use default.
-        if (!partition.equals("null")) {
-          params.set("partition", partition);
-        }
-      }
-
-      params.setBoolean("background", true);
-
-      Job job = null;
-      if (plotType.equals("gplot")) {
-        job = GeometricPlot.plot(inputPath, outputFolder, params);
-      } else if (plotType.equals("hplot")) {
-        job = HeatMapPlot.plot(inputPath, outputFolder, params);
-      } else if (plotType.equals("hdfplot")) {
-        params.set("mbr", "-180,-90,180,90");
-        params.set("dataset", "LST_Day_1km");
-        params.set(HDFRecordReader.WATER_MASK_PATH, watermaskPath.toString());
-        params.set("recover", request.getParameter("recover"));
-        params.set("valuerange", "12000..17000");
-        job = HDFPlot.plotHeatMap(inputPath, outputFolder, params);
-      }
-      // Report the answer and time
-      response.setContentType("application/json;charset=utf-8");
-      PrintWriter writer = response.getWriter();
-      writer.print("{\"job\":\"" + job.getJobID() + "\",");
-      writer.print("\"url\":\"" + job.getTrackingURL() + "\",");
-      if (noMerge.equals("true")) {
-        writer.print("\"output\":" + "\"" + jobNumber + "_no-merge\"}");
-      } else {
-        writer.print("\"output\":" + "\"" + jobNumber + "\"}");
-      }
-      writer.close();
-      response.setStatus(HttpServletResponse.SC_OK);
-      jobNumber++;
-      // Write the job id.
-      writeJobInfo(outputRoot, job.getJobID().toString());
-    } catch (Exception e) {
-      response.setContentType("text/plain;charset=utf-8");
-      PrintWriter writer = response.getWriter();
-      e.printStackTrace(writer);
-      writer.close();
-      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  /**
-   * This method will be called when display.html loaded. It will show the
-   * available output to be shown.
-   * 
-   * @param request
-   * @param response
-   * @throws ParseException
-   * @throws IOException
-   */
-  private void handleGenerateOutputList(HttpServletRequest request,
-      HttpServletResponse response) throws ParseException, IOException {
-
-    try {
-      FileSystem fs = outputPath.getFileSystem(commonParams);
-      ArrayList<String> outputList = new ArrayList<String>();
-      // Get the file list.
-      for (FileStatus fileStatus : fs.listStatus(outputPath)) {
-        if (fileStatus.isDir()) {
-          String fileName = fileStatus.getPath().getName();
-          outputList.add(fileName);
-        }
-      }
-      // Report the answer.
-      LOG.info("Reporting the answer.");
-      response.setContentType("application/json;charset=utf-8");
-      PrintWriter writer = response.getWriter();
-      writer.print("[");
-      for (int i = 0; i < outputList.size(); i++) {
-        if (i == outputList.size() - 1) {
-          writer.print("\"" + outputList.get(i) + "\"");
-        } else {
-          writer.print("\"" + outputList.get(i) + "\",");
-        }
-      }
-      writer.print("]");
-      writer.close();
-      response.setStatus(HttpServletResponse.SC_OK);
-    } catch (Exception e) {
-      System.out.println("error happened");
-      response.setContentType("text/plain;charset=utf-8");
-      PrintWriter writer = response.getWriter();
-      e.printStackTrace(writer);
-      writer.close();
-      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  /**
-   * This method will handle the output result.
-   * 
+   * Lists the contents of a directory
    * @param request
    * @param response
    */
-  private void handleOutput(HttpServletRequest request,
+  private void handleListFiles(HttpServletRequest request,
       HttpServletResponse response) {
     try {
-      FileSystem fs = outputPath.getFileSystem(commonParams);
-      Path directoryPath = new Path(outputPath.toString() + "/"
-          + request.getParameter("path"));
-
-      PrintWriter writer = response.getWriter();
-      response.setContentType("text/html");
-      // Get the file list.
-      Path fileName = null;
-      if (request.getParameter("path").contains("no-merge")) {
-        boolean isSpacePartitioning = isSpacePartitioning(directoryPath);
-        if (isSpacePartitioning) {
-          fileName = new Path(directoryPath.toString() + "/_master.html");
-          writer.print("<iframe src=\"/hdfs" + fileName.toUri().getPath()
-              + "\" width=\"99%\" height=\"99%\">");
-        } else {
-          int count = 0;
-          for (FileStatus fileStatus : fs.listStatus(directoryPath)) {
-            if (count >= 10) {
-              break;
-            }
-            if (fileStatus.getPath().getName().endsWith("png")) {
-              fileName = fileStatus.getPath();
-              writer.print("<img src=\"/hdfs" + fileName.toUri().getPath()
-                  + "\" width=\"99%\" height=\"99%\"> <br>\n");
-              count++;
-            }
-          }
-        }
-      } else {
-        for (FileStatus fileStatus : fs.listStatus(directoryPath)) {
-          if (fileStatus.getPath().getName().endsWith("png")
-              || fileStatus.getPath().getName().endsWith("html")) {
-            fileName = fileStatus.getPath();
-            break;
-          }
-        }
-        // Single Level.
-        if (fileName.getName().endsWith("png")) {
-          writer.print("<img src=\"/hdfs" + fileName.toUri().getPath() + "\">");
-          // Multi Level.
-        } else {
-          writer.print("<iframe src=\"/hdfs" + fileName.toUri().getPath()
-              + "\" width=\"99%\" height=\"99%\">");
-        }
+      String pathStr = request.getParameter("path");
+      Path path = new Path(pathStr == null? "/" : pathStr);
+      FileSystem fs = path.getFileSystem(commonParams);
+      FileStatus[] fileStatuses = fs.listStatus(path);
+      PrintWriter out = response.getWriter();
+      out.print("{\"FileStatuses\":{");
+      out.printf("\"BaseDir\":\"%s\",", path);
+      if (path.getParent() != null)
+        out.printf("\"ParentDir\":\"%s\",", path.getParent());
+      out.print("\"FileStatus\":[");
+      for (FileStatus fileStatus : fileStatuses) {
+        out.printf("{\"accessTime:%d,\"blockSize\":%d,\"childrenNum\":%d,\"fileId\":%d,"
+            + "\"group\":\"%s\",\"length\":%d,\"modificationTime\":%d,"
+            + "\"owner\":\"%s\",\"pathSuffix\":\"%s\",\"permission\":\"%s\","
+            + "\"replication\":%d,\"storagePolicy\":%d,\"type\":\"%s\"},",
+            fileStatus.getAccessTime(), fileStatus.getBlockSize(),
+            0, 0, fileStatus.getGroup(), fileStatus.getLen(),
+            fileStatus.getModificationTime(), fileStatus.getOwner(),
+            fileStatus.getPath().getName(), fileStatus.getPermission(),
+            fileStatus.getReplication(), 0,
+            fileStatus.isDirectory()? "DIRECTORY" : "FILE");
       }
-
-      writer.close();
-      response.setStatus(HttpServletResponse.SC_OK);
-    } catch (Exception e) {
-      System.out.println("error happened");
-      e.printStackTrace();
-      response.setContentType("text/plain;charset=utf-8");
-      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  /**
-   * This method will handle the output result.
-   * 
-   * @param request
-   * @param response
-   */
-  private void handleOutputInfo(HttpServletRequest request,
-      HttpServletResponse response) {
-    try {
-      FileSystem fs = outputPath.getFileSystem(commonParams);
-      Path infoPath = new Path(outputPath.toString() + "/"
-          + request.getParameter("path") + "/info.txt");
-      BufferedReader br = new BufferedReader(new InputStreamReader(
-          fs.open(infoPath)));
-      JobID jobID = JobID.forName(br.readLine());
-      br.close();
-
-      JobClient jobClient = new JobClient(new JobConf(commonParams));
-      RunningJob runningJob = jobClient.getJob(jobID);
-      Counters counters = runningJob.getCounters();
-
+      out.print("]}}");
+      out.close();
       response.setContentType("application/json;charset=utf-8");
-      PrintWriter writer = response.getWriter();
-      writer.print("{\"inputSize\":\""
-          + humanReadable(runningJob.getCounters()
-              .findCounter("FileSystemCounters", "HDFS_BYTES_READ")
-              .getCounter()) + "\",");
-      writer.print("\"intermediateSize\":\""
-          + humanReadable(counters.getCounter(Task.Counter.MAP_OUTPUT_BYTES))
-          + "\",");
-      writer.printf("\"jobID\":\"%s\",\n", jobID);
-      writer.printf("\"jobURL\":\"%s\",\n", runningJob.getTrackingURL());
-      writer.print("\"intermediateGroup\":" + "\""
-          + counters.getCounter(Task.Counter.REDUCE_INPUT_GROUPS) + "\"}");
-      writer.close();
       response.setStatus(HttpServletResponse.SC_OK);
     } catch (Exception e) {
       System.out.println("error happened");
-      e.printStackTrace();
+      try {
+        e.printStackTrace(response.getWriter());
+      } catch (IOException ioe) {
+        ioe.printStackTrace();
+        e.printStackTrace();
+      }
       response.setContentType("text/plain;charset=utf-8");
       response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
@@ -498,9 +156,9 @@ public class HadoopvizServer extends AbstractHandler {
   private void handleHDFSFetch(HttpServletRequest request,
       HttpServletResponse response) {
     try {
-      FileSystem fs = outputPath.getFileSystem(commonParams);
       String path = request.getRequestURI().replace("/hdfs", "");
       Path filePath = new Path(path);
+      FileSystem fs = filePath.getFileSystem(commonParams);
 
       LOG.info("Fetching from " + path);
 
@@ -526,14 +184,19 @@ public class HadoopvizServer extends AbstractHandler {
       }
     } catch (Exception e) {
       System.out.println("error happened");
-      e.printStackTrace();
+      try {
+        e.printStackTrace(response.getWriter());
+      } catch (IOException ioe) {
+        ioe.printStackTrace();
+        e.printStackTrace();
+      }
       response.setContentType("text/plain;charset=utf-8");
       response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
     }
   }
 
   /**
-   * Tries to load the given resource name frmo class path if it exists. Used to
+   * Tries to load the given resource name from class path if it exists. Used to
    * serve static files such as HTML pages, images and JavaScript files.
    * 
    * @param target
@@ -566,43 +229,6 @@ public class HadoopvizServer extends AbstractHandler {
     } else {
       response.setContentType(URLConnection.guessContentTypeFromName(target));
     }
-  }
-
-  private void writeJobInfo(Path path, String jobId) {
-    try {
-      Path infoFile = new Path(path.toString() + "/info.txt");
-      FileSystem fs = outputPath.getFileSystem(commonParams);
-      BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fs.create(
-          infoFile, true)));
-
-      bw.write(jobId);
-      bw.close();
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-  }
-
-  private boolean isSpacePartitioning(Path path) {
-    boolean spacePartitioning = false;
-
-    try {
-      Path masterHeap = new Path(path.toString() + "/_master.heap");
-      FileSystem fs = outputPath.getFileSystem(commonParams);
-      BufferedReader br = new BufferedReader(new InputStreamReader(
-          fs.open(masterHeap)));
-
-      String line;
-      while ((line = br.readLine()) != null) {
-        if (!line.split(",")[0].equals("0") || !line.split(",")[1].equals("0")) {
-          spacePartitioning = true;
-          break;
-        }
-      }
-      br.close();
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-    return spacePartitioning;
   }
 
   private void reportError(HttpServletResponse response, String msg, Exception e)
@@ -639,13 +265,6 @@ public class HadoopvizServer extends AbstractHandler {
   public static void printUsage() {
     System.out
         .println("Starts a server which will handle visualization requests");
-    System.out.println("Parameters: (* marks required parameters)");
-    System.out.println("<dataset> - (*) The path of the dataset.");
-    System.out.println("<output> - (*) The output path.");
-    System.out.println("<shape> - (*) The shape file.");
-    System.out.println("<watermask> - (*) The watermask folder.");
-    System.out
-        .println("port:<p> - The port to start listening to. Default: 8889");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
@@ -656,16 +275,6 @@ public class HadoopvizServer extends AbstractHandler {
   public static void main(String[] args) throws Exception {
     final OperationsParams params = new OperationsParams(
         new GenericOptionsParser(args), false);
-
-    if (params.getPaths().length < 4) {
-      System.err.println("Please specify the path of the dataset.");
-      printUsage();
-      System.exit(1);
-    }
-    Path datasetPath = params.getPaths()[0];
-    Path outputPath = params.getPaths()[1];
-    Path shapePath = params.getPaths()[2];
-    Path watermaskPath = params.getPaths()[3];
-    startServer(datasetPath, outputPath, shapePath, watermaskPath, params);
+    startServer(params);
   }
 }
