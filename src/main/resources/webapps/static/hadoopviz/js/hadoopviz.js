@@ -1,121 +1,63 @@
-function multiSetting() {
-	$('input:radio[name="options_partitioning"]')[0].checked = false;
-	$('input:radio[name="options_partitioning"]')[1].checked = false;
-	$('input:radio[name="options_partitioning"]')[2].checked = false;
-	$(".options_content_column_partitioning_1").hide();
-	$(".options_content_column_partitioning_1").hide();
-	$(".options_content_column_partitioning_1").hide();
-	
-	$('input:radio[name="options_partitioning"]')[3].checked = true;
-	$(".options_content_column_partitioning_2").show();
-	$(".options_content_column_partitioning_2").show();
-	$(".options_content_column_partitioning_2").show();
-	
-	$('input[name="width"]').val("256");
-	$('input[name="height"]').val("256");
-	
-	$('input[name="min_zoom"]').prop('disabled', false);
-	$('input[name="min_zoom"]').val("0");
-	$('input[name="max_zoom"]').prop('disabled', false);
-	$('input[name="max_zoom"]').val("6");
-}
+/**
+ Copyright (c) 2015 by Regents of the University of Minnesota.
+ All rights reserved. This program and the accompanying materials
+ are made available under the terms of the Apache License, Version 2.0 which 
+ accompanies this distribution and is available at
+ http://www.opensource.org/licenses/apache2.0.php.
+ */
+$(function() {
 
-function singleSetting() {
-	$('input:radio[name="options_partitioning"]')[3].checked = false;
-	$('input:radio[name="options_partitioning"]')[4].checked = false;
-	$('input:radio[name="options_partitioning"]')[5].checked = false;
-	$(".options_content_column_partitioning_2").hide();
-	$(".options_content_column_partitioning_2").hide();
-	$(".options_content_column_partitioning_2").hide();
-	
-	$('input:radio[name="options_partitioning"]')[0].checked = true;
-	$(".options_content_column_partitioning_1").show();
-	$(".options_content_column_partitioning_1").show();
-	$(".options_content_column_partitioning_1").show();
-	
-	$('input[name="width"]').val("2000");
-	$('input[name="height"]').val("1000");
-	
-	$('input[name="min_zoom"]').prop('disabled', true);
-	$('input[name="min_zoom"]').val("");
-	$('input[name="max_zoom"]').prop('disabled', true);
-	$('input[name="max_zoom"]').val("");
-}
+  // List the contents of a directory
+  function listFiles(path) {
+    var url = '/LISTSTATUS.cgi';
+    url += '?path='+encodeURIComponent(path);
+    jQuery.get(url, function(data) {
+      if (jQuery("#current-path").val() != path)
+        jQuery("#current-path").val(path);
 
-function hdfSetting() {
-	$('input[name="smooth"]').prop('disabled', false);
-}
+      fileStatuses = data["FileStatuses"];
+      
+      // Display the content of the current directory
+      dust.render("file-list-template", fileStatuses, function(err, out) {
+        jQuery("#listed-files").html(out);
+      });
+    }).error(function(xhr, data) {alert(data);});
+  }
 
-function regularSetting() {
-	$('input[name="smooth"]').prop('checked', false);
-	$('input[name="smooth"]').prop('disabled', true);
-}
+  dust.loadSource(dust.compile($('#file-list-template').html(), 'file-list-template'));
+  
+  function updateFromHash() {
+    var path = window.location.hash.slice(1);
+    if (path.length == 0)
+      path = '/';
 
-function visualize() {
-	$(".job_id").empty();
-	var plotType = $('input[name="options_plot_type"]:checked').val();
-	var vizType = $('input[name="options_type"]:checked').val();
-	var dataset = $('input[name="dataset"]:checked').val();
-	var noMerge = $('input[name="merge"]:checked').length > 0;
+    listFiles(path);
+  }
+  
+  function humanReadableSize(size) {
+    var units = [ "", "KB", "MB", "GB", "TB", "PB" ];
+    var unit = 0;
+    while (unit < units.length && size > 1024) {
+      size /= 1024;
+      unit++;
+    }
+    return size.toFixed(2) + " "+ units[unit];
+  }
+  
+  function formatDate(date) {
+    return new Date(date).toLocaleFormat('%Y-%M-%d %H:%m');
+  }
+  
+  dust.helpers.formatDateHelper = function (chunk, context, bodies, params) {
+    var value = dust.helpers.tap(params.value, chunk, context);
+    return chunk.write(formatDate(parseInt(value)));
+  };
 
-	if(!dataset || !vizType || !plotType) {
-		alert("Please select a dataset, visualization type, and plot type.");
-		return;
-	}
-	var width = $('input[name="width"]').val();
-	var height = $('input[name="height"]').val();
-	
-	var partition = $('input[name="options_partitioning"]:checked').val();
-	var requestURL = "cgi-bin/visualize.cgi?"
-		+ "dataset=" + dataset + "&width=" + width
-		+ "&height=" + height + "&partition=" + partition
-		+ "&viztype=" + vizType + "&plottype=" + plotType;
-	
-	if(vizType == "multi_level") {
-		var min_zoom = $('input[name="min_zoom"]').val();
-		var max_zoom = $('input[name="max_zoom"]').val();
-		if(min_zoom && max_zoom) {
-			if(parseInt(max_zoom) < parseInt(min_zoom)) {
-				alert("max_zoom cannot be lower than min_zoom");
-				return;
-			}
-		}
-		if(!min_zoom) {
-			min_zoom = "null";
-		}
-		if(!max_zoom) {
-			max_zoom = "null";
-		}
-		requestURL += "&min_zoom=" + min_zoom + "&max_zoom=" + max_zoom;
-	}
-	if(noMerge) {
-		requestURL += "&no-merge=true";
-	} else {
-		requestURL += "&no-merge=false";
-	}
-	if(plotType == "hdfplot") {
-		var smooth = $('input[name="smooth"]:checked').length > 0;
-		if(smooth) {
-			requestURL += "&recover=read";
-		} else {
-			requestURL += "&recover=none";
-		}
-	}
-	jQuery.ajax(requestURL, {success: function(response) {
-		document.getElementById("job_id").innerHTML = "&nbsp Hadoop Job ID: " + response.job + "<br> " +
-				"&nbsp Output Path: " + response.output+ "<br>" +
-				"&nbsp Job URL: <a target=\"_blank\" href=\"" + response.url + "\">" + response.url + "</a>";
-	}});
-}
- 
-$(function () {
-	var requestURL = "cgi-bin/generate_dataset.cgi";
-	jQuery.ajax(requestURL, {success: function(response) {
-		var index;
-		var text = "";
-		for	(index = 0; index < response.length; index++) {
-			text += "<input type=radio name=dataset value=" + response[index] + ">" + response[index] + "<br>";
-		}
-	    document.getElementById("dataset").innerHTML = text;
-	}});
-})
+  dust.helpers.formatSizeHelper = function (chunk, context, bodies, params) {
+    var value = dust.helpers.tap(params.value, chunk, context);
+    return chunk.write(humanReadableSize(parseInt(value)));
+  };
+  
+  jQuery(window).bind('hashchange', updateFromHash);
+  updateFromHash();
+});

@@ -112,17 +112,25 @@ public class HadoopvizServer extends AbstractHandler {
       Path path = new Path(pathStr == null? "/" : pathStr);
       FileSystem fs = path.getFileSystem(commonParams);
       FileStatus[] fileStatuses = fs.listStatus(path);
+      response.setContentType("application/json;charset=utf-8");
+      response.setStatus(HttpServletResponse.SC_OK);
       PrintWriter out = response.getWriter();
       out.print("{\"FileStatuses\":{");
-      out.printf("\"BaseDir\":\"%s\",", path);
+      if (pathStr.endsWith("/")) {
+        pathStr = pathStr.substring(0, pathStr.length() - 1);
+      }
+      out.printf("\"BaseDir\":\"%s\",", pathStr);
       if (path.getParent() != null)
         out.printf("\"ParentDir\":\"%s\",", path.getParent());
       out.print("\"FileStatus\":[");
-      for (FileStatus fileStatus : fileStatuses) {
-        out.printf("{\"accessTime:%d,\"blockSize\":%d,\"childrenNum\":%d,\"fileId\":%d,"
+      for (int i = 0; i < fileStatuses.length; i++) {
+        FileStatus fileStatus = fileStatuses[i];
+        if (i != 0)
+          out.print(',');
+        out.printf("{\"accessTime\":%d,\"blockSize\":%d,\"childrenNum\":%d,\"fileId\":%d,"
             + "\"group\":\"%s\",\"length\":%d,\"modificationTime\":%d,"
             + "\"owner\":\"%s\",\"pathSuffix\":\"%s\",\"permission\":\"%s\","
-            + "\"replication\":%d,\"storagePolicy\":%d,\"type\":\"%s\"},",
+            + "\"replication\":%d,\"storagePolicy\":%d,\"type\":\"%s\"}",
             fileStatus.getAccessTime(), fileStatus.getBlockSize(),
             0, 0, fileStatus.getGroup(), fileStatus.getLen(),
             fileStatus.getModificationTime(), fileStatus.getOwner(),
@@ -132,10 +140,9 @@ public class HadoopvizServer extends AbstractHandler {
       }
       out.print("]}}");
       out.close();
-      response.setContentType("application/json;charset=utf-8");
-      response.setStatus(HttpServletResponse.SC_OK);
     } catch (Exception e) {
       System.out.println("error happened");
+      e.printStackTrace();
       try {
         e.printStackTrace(response.getWriter());
       } catch (IOException ioe) {
