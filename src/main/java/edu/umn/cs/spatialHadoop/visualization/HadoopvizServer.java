@@ -12,6 +12,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.URLConnection;
+import java.util.Arrays;
+import java.util.Comparator;
 
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
@@ -30,6 +32,7 @@ import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 /**
  * A class that starts a web service that can visualize spatial data
@@ -111,7 +114,17 @@ public class HadoopvizServer extends AbstractHandler {
       String pathStr = request.getParameter("path");
       Path path = new Path(pathStr == null? "/" : pathStr);
       FileSystem fs = path.getFileSystem(commonParams);
-      FileStatus[] fileStatuses = fs.listStatus(path);
+      FileStatus[] fileStatuses = fs.listStatus(path, SpatialSite.NonHiddenFileFilter);
+      Arrays.sort(fileStatuses, new Comparator<FileStatus>() {
+        @Override
+        public int compare(FileStatus o1, FileStatus o2) {
+          if (o1.isDirectory() && o2.isFile())
+            return -1;
+          if (o1.isFile() && o2.isDirectory())
+            return 1;
+          return o1.getPath().getName().toLowerCase().compareTo(o2.getPath().getName().toLowerCase());
+        }
+      });
       response.setContentType("application/json;charset=utf-8");
       response.setStatus(HttpServletResponse.SC_OK);
       PrintWriter out = response.getWriter();
@@ -254,16 +267,6 @@ public class HadoopvizServer extends AbstractHandler {
       response.getWriter().println("]");
     }
     response.getWriter().println("}");
-  }
-
-  private String humanReadable(double size) {
-    final String[] units = { "", "KB", "MB", "GB", "TB", "PB" };
-    int unit = 0;
-    while (unit < units.length && size > 1024) {
-      size /= 1024;
-      unit++;
-    }
-    return String.format("%.2f %s", size, units[unit]);
   }
 
   /**
