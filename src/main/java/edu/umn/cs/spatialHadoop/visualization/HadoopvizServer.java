@@ -149,16 +149,19 @@ public class HadoopvizServer extends AbstractHandler {
         FileStatus fileStatus = fileStatuses[i];
         if (i != 0)
           out.print(',');
+        String filename = fileStatus.getPath().getName();
+        int idot = filename.lastIndexOf('.');
+        String extension = idot == -1? "" : filename.substring(idot+1);
         out.printf("{\"accessTime\":%d,\"blockSize\":%d,\"childrenNum\":%d,\"fileId\":%d,"
             + "\"group\":\"%s\",\"length\":%d,\"modificationTime\":%d,"
             + "\"owner\":\"%s\",\"pathSuffix\":\"%s\",\"permission\":\"%s\","
-            + "\"replication\":%d,\"storagePolicy\":%d,\"type\":\"%s\"}",
+            + "\"replication\":%d,\"storagePolicy\":%d,\"type\":\"%s\",\"extension\":\"%s\"}",
             fileStatus.getAccessTime(), fileStatus.getBlockSize(),
             0, 0, fileStatus.getGroup(), fileStatus.getLen(),
             fileStatus.getModificationTime(), fileStatus.getOwner(),
             fileStatus.getPath().getName(), fileStatus.getPermission(),
             fileStatus.getReplication(), 0,
-            fileStatus.isDirectory()? "DIRECTORY" : "FILE");
+            fileStatus.isDirectory()? "DIRECTORY" : "FILE", extension.toLowerCase());
       }
       out.print("]}");
       // Check if there is an image or master file

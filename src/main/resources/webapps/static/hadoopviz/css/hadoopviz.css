@@ -2,3 +2,20 @@
 
 #global-index svg {}
 #global-index svg rect {fill: none; stroke: black; stroke-width: 0.5px;}
+
+.ext {color: darkred;}
+
+.ext.txt:before
+{ content: "\f0f6"}
+
+.ext.png:before, .ext.gif:before, .ext.jpg:before, .ext.svg:before
+{ content: "\f1c5"}
+
+.ext.bz2:before, .ext.gz:before, .ext.zip:before, .ext.jar:before
+{ content: "\f1c6"}
+
+.ext.xml:before, .ext.md:before, .ext.html:before
+{ content: "\f121"}
+
+.ext:before
+{ content: "\f016"}

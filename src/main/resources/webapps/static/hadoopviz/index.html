@@ -15,12 +15,17 @@
     <script type="text/javascript" src="/js/dust-helpers-1.1.1.min.js"></script>
     <script type="text/javascript" src="/js/hadoopviz.js"> </script>
     <link rel="stylesheet" href="/css/hadoopviz.css">
+    <link rel="stylesheet" href="/css/responstable.css">
+    <link rel="stylesheet" href="/css/font-awesome.min.css">
     
     <script type="text/x-dust-template" id="file-list-template">
     {?ParentDir}
+    <i class="fa fa-level-up fa-flip-horizontal fa-2x"></i>&nbsp;&nbsp;
     <a href="#{ParentDir}">Parent Directory</a>
+    {:else}
+    /
     {/ParentDir}
-    <table>
+    <table class="responstable">
     <thead>
       <tr>
         <th>permission</th>
@@ -37,12 +42,14 @@
         <td>{@eq key=type value="DIRECTORY"}d{/eq}{permission}</td>
         <td>{owner}</td>
         <td>{group}</td>
-        <td align="right">{@formatSizeHelper value=length/}</td>
+        <td>{@formatSizeHelper value=length/}</td>
         <td>{@formatDateHelper value=modificationTime/}</td>
         <td>
           {@eq key=type value="DIRECTORY"}
+          <i class="ext fa fa-folder-o"></i>&nbsp;
           <a href="#{BaseDir}/{pathSuffix}">{pathSuffix}</a>
           {:else}
+          <i class="ext fa {extension}"></i>&nbsp;
           {pathSuffix}
           {/eq}
         </td>
@@ -77,6 +84,7 @@
     </svg>
     </script>
   </head>
+
   <body>
     <div id="file-list">
       <form>
