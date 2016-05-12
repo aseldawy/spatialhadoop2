@@ -22,40 +22,40 @@
     {?ParentDir}
     <i class="fa fa-level-up fa-flip-horizontal fa-2x"></i>&nbsp;&nbsp;
     <a href="#{ParentDir}">Parent Directory</a>
-    {:else}
-    /
     {/ParentDir}
     <table class="responstable">
     <thead>
       <tr>
         <th>permission</th>
-        <th>Owner</th>
-        <th>Group</th>
+        <th>Owner:Group</th>
         <th>Size</th>
+        <th>Block Size</th>
+        <th>Replication</th>
         <th>Modification Time</th>
-        <th>Name</th>
+        <th style="width: 40%;">Name</th>
       </tr>
     </thead>
     <tbody>
     {#FileStatus}
       <tr class="{type}">
         <td>{@eq key=type value="DIRECTORY"}d{/eq}{permission}</td>
-        <td>{owner}</td>
-        <td>{group}</td>
+        <td>{owner}:{group}</td>
         <td>{@formatSizeHelper value=length/}</td>
+        <td>{@formatSizeHelper value=blockSize/}</td>
+        <td>{replication}</td>
         <td>{@formatDateHelper value=modificationTime/}</td>
         <td>
           {@eq key=type value="DIRECTORY"}
-          <i class="ext fa fa-folder-o"></i>&nbsp;
+          <i class="ext fa fa-fw fa-folder-o"></i>&nbsp;&nbsp;&nbsp;
           <a href="#{BaseDir}/{pathSuffix}">{pathSuffix}</a>
           {:else}
-          <i class="ext fa {extension}"></i>&nbsp;
+          <i class="ext fa fa-fw {extension}"></i>&nbsp;&nbsp;&nbsp;
           {pathSuffix}
           {/eq}
         </td>
       </tr>
     {:else}
-      <tr><td>The current path is empty</td></tr>
+      <tr><td colspan="6">The current path is empty</td></tr>
     {/FileStatus}
     </tbody>
     </table>
@@ -63,7 +63,7 @@
     
     <script type="text/x-dust-template" id="global-index-template">
     {^Image}
-    <form action="VISUALIZE.cgi">
+    <form action="VISUALIZE.cgi" method="POST">
       <input type="hidden" name="path" value="{BaseDir}" />
       <input type="hidden" name="shape" value="osm" />
       <input type="submit" value="Plot" />
@@ -87,13 +87,18 @@
 
   <body>
     <div id="file-list">
-      <form>
-        <input type="text" id="current-path" value="/"/>
+      <form id="navigate">
+        <label for="current-path">Current path</label>
+        <input type="text" name="path" id="current-path" value="/"/>
+        <input type="submit" value="Go"/>
       </form>
       <div id="global-index">
       </div>
       <div id="listed-files">
       </div>
+    </div>
+    <div id="copyright">
+    SpatialHadoop, 2016
     </div>
   </body>
 </html>

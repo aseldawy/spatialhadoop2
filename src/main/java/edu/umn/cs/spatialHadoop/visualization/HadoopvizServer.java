@@ -121,7 +121,7 @@ public class HadoopvizServer extends AbstractHandler {
       HttpServletResponse response) {
     try {
       String pathStr = request.getParameter("path");
-      Path path = new Path(pathStr == null? "/" : pathStr);
+      Path path = new Path(pathStr == null || pathStr.isEmpty()? "/" : pathStr);
       FileSystem fs = path.getFileSystem(commonParams);
       FileStatus[] fileStatuses = fs.listStatus(path, SpatialSite.NonHiddenFileFilter);
       Arrays.sort(fileStatuses, new Comparator<FileStatus>() {

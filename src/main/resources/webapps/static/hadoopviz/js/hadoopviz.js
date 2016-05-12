@@ -14,6 +14,9 @@ $(function() {
     jQuery.get(url, function(data) {
       if (jQuery("#current-path").val() != path)
         jQuery("#current-path").val(path);
+      var window_hash = "#"+path;
+      if (window.location.hash != window_hash)
+        window.location.hash = window_hash;
 
       fileStatuses = data["FileStatuses"];
       
@@ -186,6 +189,11 @@ $(function() {
   
   // Register address change of the URL
   jQuery(window).bind('hashchange', updateFromHash);
+  
+  jQuery("form#navigate").submit( function(e) {
+    listFiles(jQuery("#current-path").val());
+    e.preventDefault();
+  });
   
   // Initially, use the URL to initially list the files
   updateFromHash();
