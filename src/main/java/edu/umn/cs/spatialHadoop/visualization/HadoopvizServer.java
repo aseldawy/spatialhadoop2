@@ -8,14 +8,11 @@
  *************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.URLConnection;
+import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
 import java.util.Comparator;
 
@@ -32,7 +29,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.JobID;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
@@ -206,10 +203,10 @@ public class HadoopvizServer extends AbstractHandler {
       HttpServletResponse response) {
     try {
       String pathStr = request.getParameter("path");
-      Path path = new Path(pathStr);
+      final Path path = new Path(pathStr);
       FileSystem fs = path.getFileSystem(commonParams);
       // Check if the input is already visualized
-      Path imagePath = new Path(path, "_data.png");
+      final Path imagePath = new Path(path, "_data.png");
       if (fs.exists(imagePath)) {
         // Image is already visualized
         response.setStatus(HttpServletResponse.SC_MOVED_PERMANENTLY);
@@ -217,12 +214,20 @@ public class HadoopvizServer extends AbstractHandler {
       } else {
         // This dataset has never been visualized before
         String shapeName = request.getParameter("shape");
-        OperationsParams vizParams = new OperationsParams(commonParams);
+        final OperationsParams vizParams = new OperationsParams(commonParams);
         vizParams.set("shape", shapeName);
         vizParams.setBoolean("background", true);
         vizParams.setInt("width", 2000);
         vizParams.setInt("height", 2000);
-        Job vizJob = GeometricPlot.plot(new Path[] {path}, imagePath, vizParams);
+        
+        // Retrieve the owner of the data directory
+        String owner = fs.getFileStatus(path).getOwner();
+        UserGroupInformation ugi = UserGroupInformation.createRemoteUser(owner);
+        Job vizJob = ugi.doAs(new PrivilegedExceptionAction<Job>() {
+          public Job run() throws Exception {
+            return GeometricPlot.plot(new Path[] {path}, imagePath, vizParams);
+          }
+        });
         
         // Write the response
         response.setStatus(HttpServletResponse.SC_OK);
