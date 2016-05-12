@@ -34,7 +34,10 @@ $(function() {
           processData: false
         }).success(function(gindex_csv) {
           var gindex_json = convertCSVToJSON(gindex_csv);
-          gindex_json["Image"] = path+"/"+data["image"];
+          if (data["image"] != null)
+            gindex_json["Image"] = path+"/"+data["image"];
+          else
+            gindex_json["BaseDir"] = path;
           dust.render("global-index-template", gindex_json, function(err, out) {
             jQuery("#global-index").html(out);
           });

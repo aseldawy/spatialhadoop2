@@ -55,6 +55,13 @@
     </script>
     
     <script type="text/x-dust-template" id="global-index-template">
+    {^Image}
+    <form action="VISUALIZE.cgi">
+      <input type="hidden" name="path" value="{BaseDir}" />
+      <input type="hidden" name="shape" value="osm" />
+      <input type="submit" value="Plot" />
+    </form>
+    {/Image}    
     <svg xmlns="http://www.w3.org/2000/svg" version="1.1" 
       xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" 
       class="gindex" width="{ImageWidth}"

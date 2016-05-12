@@ -8,6 +8,10 @@
  *************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -27,6 +31,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
@@ -50,7 +56,7 @@ public class HadoopvizServer extends AbstractHandler {
 
   /** Common parameters for all queries */
   private OperationsParams commonParams;
-
+  
   /**
    * A constructor that starts the Jetty server
    * @param params
@@ -88,11 +94,13 @@ public class HadoopvizServer extends AbstractHandler {
 
     try {
       LOG.info("Received request: '" + request.getRequestURL() + "'");
-      if (target.startsWith("/hdfs/")) {
+      if (target.startsWith("/hdfs/") && request.getMethod().equals("GET")) {
         handleHDFSFetch(request, response);
-      } else if (target.endsWith("/LISTSTATUS.cgi")){
+      } else if (target.endsWith("/LISTSTATUS.cgi") && request.getMethod().equals("GET")){
         handleListFiles(request, response);
-      } else {
+      } else if (target.endsWith("/VISUALIZE.cgi") /*&& request.getMethod().equals("POST")*/){
+        handleVisualize(request, response);
+      } else if (request.getMethod().equals("GET")) {
         // Doesn't match any of the dynamic content, assume it's a static file
         if (target.equals("/"))
           target = "/index.html";
@@ -171,6 +179,56 @@ public class HadoopvizServer extends AbstractHandler {
       out.print("}");
       
       out.close();
+    } catch (Exception e) {
+      System.out.println("error happened");
+      e.printStackTrace();
+      try {
+        e.printStackTrace(response.getWriter());
+      } catch (IOException ioe) {
+        ioe.printStackTrace();
+        e.printStackTrace();
+      }
+      response.setContentType("text/plain;charset=utf-8");
+      response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
+  }
+  
+  /**
+   * Visualizes a dataset.
+   * If the 
+   * @param request
+   * @param response
+   */
+  private void handleVisualize(HttpServletRequest request,
+      HttpServletResponse response) {
+    try {
+      String pathStr = request.getParameter("path");
+      Path path = new Path(pathStr);
+      FileSystem fs = path.getFileSystem(commonParams);
+      // Check if the input is already visualized
+      Path imagePath = new Path(path, "_data.png");
+      if (fs.exists(imagePath)) {
+        // Image is already visualized
+        response.setStatus(HttpServletResponse.SC_MOVED_PERMANENTLY);
+        response.setHeader("Location", "/hdfs"+imagePath);
+      } else {
+        // This dataset has never been visualized before
+        String shapeName = request.getParameter("shape");
+        OperationsParams vizParams = new OperationsParams(commonParams);
+        vizParams.set("shape", shapeName);
+        vizParams.setBoolean("background", true);
+        vizParams.setInt("width", 2000);
+        vizParams.setInt("height", 2000);
+        Job vizJob = GeometricPlot.plot(new Path[] {path}, imagePath, vizParams);
+        
+        // Write the response
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.setContentType("application/json;charset=utf-8");
+        PrintWriter out = response.getWriter();
+        out.printf("{\"JobID\":\"%s\", \"TrackURL\": \"%s\"",
+            vizJob.getJobID().toString(), vizJob.getTrackingURL());
+        out.close();
+      }
     } catch (Exception e) {
       System.out.println("error happened");
       e.printStackTrace();

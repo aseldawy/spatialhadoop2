@@ -114,8 +114,7 @@ public class OperationsParams extends Configuration {
 
 	public void initialize(String... args) {
 		// TODO if the argument shape is set to a class in a third party jar
-		// file
-		// add that jar file to the archives
+		// file add that jar file to the archives
 		Vector<Path> paths = new Vector<Path>();
 		for (String arg : args) {
 			String argl = arg.toLowerCase();
