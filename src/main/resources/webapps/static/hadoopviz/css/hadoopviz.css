@@ -1,2 +1,4 @@
-#global-index svg {width: 500px; height: 500px;}
-#global-index svg rect {fill: none; stroke: black;}
+#current-path {width: 100%;}
+
+#global-index svg {}
+#global-index svg rect {fill: none; stroke: black; stroke-width: 0.5px;}

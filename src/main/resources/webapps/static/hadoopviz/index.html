@@ -57,16 +57,16 @@
     <script type="text/x-dust-template" id="global-index-template">
     <svg xmlns="http://www.w3.org/2000/svg" version="1.1" 
       xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" 
-      x="{minx}" y="{miny}" 
-      viewBox="{minx},{miny},{@math key=maxx method="subtract" operand=minx/},{@math key=maxy method="subtract" operand=miny/}"
-      width="{@math key=maxx method="subtract" operand=minx/}" 
-      height="{@math key=maxy method="subtract" operand=miny/}" class="gindex">
+      class="gindex" width="{ImageWidth}"
+      height="{@math key=ImageHeight method="add" operand="1"/}">
     {#Partitions}
-    <rect x="{x1}" 
-      y="{y1}" 
-      width="{@math key=x2 method="subtract" operand=x1/}" 
-      height="{@math key=y2 method="subtract" operand=y1/}"/>
+    <rect x="{x1}" width="{@math key=x2 method="subtract" operand=x1/}" 
+      y="{y1}" height="{@math key=y2 method="subtract" operand=y1/}"/>
     {/Partitions}
+    {?Image}
+    <image x="0" width="{ImageWidth}" y="0" height="{ImageHeight}" 
+         xlink:href="/hdfs{Image}"/>
+    {/Image}
     </svg>
     </script>
   </head>
@@ -75,10 +75,10 @@
       <form>
         <input type="text" id="current-path" value="/"/>
       </form>
+      <div id="global-index">
+      </div>
       <div id="listed-files">
       </div>
-    </div>
-    <div id="global-index">
     </div>
   </body>
 </html>
