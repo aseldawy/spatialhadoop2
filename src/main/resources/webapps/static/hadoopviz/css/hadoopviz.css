@@ -5,7 +5,7 @@
 
 .ext {color: darkred;}
 
-.ext.txt:before
+.ext.txt:before, .ext.log:before
 { content: "\f0f6"}
 
 .ext.png:before, .ext.gif:before, .ext.jpg:before, .ext.svg:before
@@ -14,8 +14,29 @@
 .ext.bz2:before, .ext.gz:before, .ext.zip:before, .ext.jar:before
 { content: "\f1c6"}
 
-.ext.xml:before, .ext.md:before, .ext.html:before
-{ content: "\f121"}
+.ext.xml:before, .ext.md:before, .ext.ini:before
+{ content: "\f1c9"}
+
+.ext.html:before
+{ content: "\f0ac"}
+
+.ext.exe:before
+{ content: "\f085"}
+
+.ext.csv:before
+{ content: "\f0ce"}
+
+.ext.sh:before, .ext.cmd:before, .ext.bat:before
+{ content: "\f120"}
+
+.ext.pdf:before
+{ content: "\f1c1"}
+
+.ext.doc:before, .ext.docx:before
+{ content: "\f1c2"}
+
+.ext.xls:before, .ext.xlsx:before
+{ content: "\f1c3"}
 
 .ext:before
 { content: "\f016"}
