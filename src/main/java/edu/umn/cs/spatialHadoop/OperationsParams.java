@@ -11,7 +11,6 @@ package edu.umn.cs.spatialHadoop;
 import java.awt.Color;
 import java.io.IOException;
 import java.lang.reflect.Array;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 import java.util.regex.Pattern;
@@ -42,8 +41,8 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
+import edu.umn.cs.spatialHadoop.operations.Head;
 import edu.umn.cs.spatialHadoop.operations.LocalSampler;
-import edu.umn.cs.spatialHadoop.operations.Sampler2;
 import edu.umn.cs.spatialHadoop.osm.OSMEdge;
 import edu.umn.cs.spatialHadoop.osm.OSMPoint;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
@@ -724,23 +723,16 @@ public class OperationsParams extends Configuration {
 	 * {@link #detectShape(String[])} method to detect the shape of this
 	 * sample set of lines.
 	 * 
-	 * @param paths Input paths to read data from
+	 * @param path Input path to read data from
 	 * @param conf The configuration parameters of the environment
 	 * @return The detected type of the shape or <code>null</code> if failed.
 	 * @throws IOException
 	 * @throws InterruptedException
 	 */
-	public static String detectShape(Path[] paths, Configuration conf)
+	public static String detectShape(Path path, Configuration conf)
 	    throws IOException, InterruptedException {
-	  final List<String> sample = new ArrayList<String>();
-	  LocalSampler.sampleLocal(paths, 10f, new ResultCollector<Text>() {
-      @Override
-      public void collect(Text r) {
-        sample.add(r.toString());
-      }
-    }, conf);
-	  
-	  return detectShape(sample.toArray(new String[sample.size()]));
+	  String[] lines = Head.head(path.getFileSystem(conf), path, 10);
+	  return detectShape(lines);
 	}
 	
 	/**
