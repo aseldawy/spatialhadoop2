@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop;
 import java.awt.Color;
 import java.io.IOException;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 import java.util.regex.Pattern;
@@ -42,7 +43,9 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.LocalSampler;
+import edu.umn.cs.spatialHadoop.operations.Sampler2;
 import edu.umn.cs.spatialHadoop.osm.OSMEdge;
+import edu.umn.cs.spatialHadoop.osm.OSMPoint;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -716,6 +719,31 @@ public class OperationsParams extends Configuration {
 	}
 	
 	/**
+	 * Detects the shape of the given set of files assuming all of them hold
+	 * data of the same shape. It reads a random set of lines and uses the
+	 * {@link #detectShape(String[])} method to detect the shape of this
+	 * sample set of lines.
+	 * 
+	 * @param paths Input paths to read data from
+	 * @param conf The configuration parameters of the environment
+	 * @return The detected type of the shape or <code>null</code> if failed.
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
+	public static String detectShape(Path[] paths, Configuration conf)
+	    throws IOException, InterruptedException {
+	  final List<String> sample = new ArrayList<String>();
+	  LocalSampler.sampleLocal(paths, 10f, new ResultCollector<Text>() {
+      @Override
+      public void collect(Text r) {
+        sample.add(r.toString());
+      }
+    }, conf);
+	  
+	  return detectShape(sample.toArray(new String[sample.size()]));
+	}
+	
+	/**
 	 * Detects the shape from a sample set of lines
 	 * @param lines
 	 * @return
@@ -751,7 +779,8 @@ public class OperationsParams extends Configuration {
         Pattern.compile("(POINT|MULTIPOINT|POLYGON|MULTIPOLYGON|LINESTRING|"
             + "MULTILINESTRING|GEOMETRYCOLLECTION|EMPTY|GEOMETRY)"
             + "[\\(\\),\\d\\-\\+E\\.\\s]*"), // Well-Known Text
-        Pattern.compile("(\\{\"[^\"]+\"=\"[^\"]+\"\\})*")
+        Pattern.compile("(\\{\"[^\"]+\"=\"[^\"]+\"\\})*"), // JSON map
+        Pattern.compile("\\[(\\w+\\#\\w+,)*(\\w+\\#\\w+)?\\]"), // Pig Map
     };
     
     for (int iSep = 0; iSep < Separators.length; iSep++) {
@@ -804,19 +833,30 @@ public class OperationsParams extends Configuration {
           fieldTypes[0] == 1 && // Integer EdgeID
           fieldTypes[1] == 1 && // Integer StartNodeID
           (fieldTypes[2] == 1 || fieldTypes[2] == 2) && // Longitude
-          (fieldTypes[3] == 1 || fieldTypes[2] == 3) && // Latitude
+          (fieldTypes[3] == 1 || fieldTypes[3] == 2) && // Latitude
           fieldTypes[4] == 1 && // Integer EndNodeID
           (fieldTypes[5] == 1 || fieldTypes[5] == 2) && // Longitude
-          (fieldTypes[6] == 1 || fieldTypes[6] == 3) && // Latitude
+          (fieldTypes[6] == 1 || fieldTypes[6] == 2) && // Latitude
           fieldTypes[7] == 1 && // IntegerWayID
-          fieldTypes[8] == 4) { // Map
+          fieldTypes[8] == 4) { // JSON Map
         return OSMEdge.class.getName();
+      } else if (iSep == 1 && // Tab separated
+          numOfFields[iSep] == 3 && // Three fields
+          fieldTypes[0] == 1 && // Integer OSM Polygon ID
+          fieldTypes[1] == 3 && // WKT
+          fieldTypes[2] == 5) { // Pig Map
+        return "osm";
+      } else if (iSep == 1 && // Tab separated
+          numOfFields[iSep] == 4 && // Four fields
+          fieldTypes[0] == 1 && // Integer OSM Node ID
+          (fieldTypes[1] == 1 || fieldTypes[1] == 2) && // Numeric longitude
+          (fieldTypes[2] == 1 || fieldTypes[2] == 2) && // Numeric latitude
+          fieldTypes[3] == 5) { // Pig Map
+        return OSMPoint.class.getName();
       }
-          
     }
     
-    
-    // Now, check number of columns for detection
+    // Could not detect shape type. Return null.
 	  return null;
 	}
 

@@ -26,9 +26,9 @@ $(function() {
       });
       
       // If it is a dataset, further visualize its contents
-      if (data["master"] != null) {
+      if (data["MasterPath"] != null) {
         // There is a master file, display it
-        var masterFilePath = path+"/"+data["master"];
+        var masterFilePath = path+"/"+data["MasterPath"];
         var masterURL = "/hdfs"+masterFilePath;
         jQuery.ajax({
           url: masterURL,
@@ -37,8 +37,8 @@ $(function() {
           processData: false
         }).success(function(gindex_csv) {
           var gindex_json = convertCSVToJSON(gindex_csv);
-          if (data["image"] != null)
-            gindex_json["Image"] = path+"/"+data["image"];
+          if (data["ImagePath"] != null)
+            gindex_json["ImagePath"] = path+"/"+data["ImagePath"];
           else
             gindex_json["BaseDir"] = path;
           dust.render("global-index-template", gindex_json, function(err, out) {
@@ -46,10 +46,10 @@ $(function() {
           });
         });
       } else {
-        if (data["image"] != null) {
+        if (data["ImagePath"] != null) {
           // There is an image, display it
           var gindex_json = {
-            Image: path+"/"+data["image"],
+            Image: path+"/"+data["ImagePath"],
             ImageWidth: jQuery("#global-index").width(),
             ImageHeight: jQuery(window).height()
           };

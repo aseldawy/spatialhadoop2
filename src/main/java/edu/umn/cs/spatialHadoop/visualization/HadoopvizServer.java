@@ -171,10 +171,13 @@ public class HadoopvizServer extends AbstractHandler {
       });
       for (FileStatus metaFile : metaFiles) {
         String metaFileName = metaFile.getPath().getName();
-        if (metaFileName.startsWith("_master"))
-          out.printf(",\"master\":\"%s\"", metaFileName);
-        else if (metaFileName.equals("_data.png"))
-          out.printf(",\"image\":\"%s\"", metaFileName);
+        if (metaFileName.startsWith("_master")) {
+          out.printf(",\"MasterPath\":\"%s\"", metaFileName);
+          String shape = OperationsParams.detectShape(new Path[] {path}, commonParams);
+          if (shape != null)
+            out.printf(",\"Shape\":\"%s\"", shape);
+        } else if (metaFileName.equals("_data.png"))
+          out.printf(",\"ImagePath\":\"%s\"", metaFileName);
       }
       out.print("}");
       

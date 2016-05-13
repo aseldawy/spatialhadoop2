@@ -65,7 +65,7 @@
     {^Image}
     <form action="VISUALIZE.cgi" method="POST">
       <input type="hidden" name="path" value="{BaseDir}" />
-      <input type="hidden" name="shape" value="osm" />
+      <input type="text" name="shape" value="{Shape}" />
       <input type="submit" value="Plot" />
     </form>
     {/Image}    
@@ -79,7 +79,7 @@
     {/Partitions}
     {?Image}
     <image x="0" width="{ImageWidth}" y="0" height="{ImageHeight}" 
-         xlink:href="/hdfs{Image}"/>
+         xlink:href="/hdfs{ImagePath}"/>
     {/Image}
     </svg>
     </script>
