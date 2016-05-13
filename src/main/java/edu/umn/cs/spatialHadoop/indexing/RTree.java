@@ -52,6 +52,7 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.MemoryInputStream;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
@@ -566,7 +567,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     int nodeCount = (int) ((powInt(degree, height) - 1) / (degree - 1));
     /*int elementCount = */dataIn.readInt(); skippedBytes += 4;
     // Skip all nodes
-    dataIn.skipBytes(nodeCount * NodeSize); skippedBytes += nodeCount * NodeSize;
+    skippedBytes += dataIn.skipBytes(nodeCount * NodeSize);
     return skippedBytes;
   }
   
@@ -1552,6 +1553,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
     byte[] inputData = baos.toByteArray();
     FileSystem outFS = outPath.getFileSystem(params);
     FSDataOutputStream out = outFS.create(outPath);
+    out.write(SpatialSite.RTreeFileMarkerB);
     RTree.bulkLoadWrite(inputData, 0, inputData.length, 4, out, shape, true);
     out.close();
   }
