@@ -64,7 +64,7 @@ public class LocalSampler {
         // A directory. Include all contents
         FileStatus[] contents = fs.listStatus(file);
         for (FileStatus content : contents) {
-          if (!content.isDir())
+          if (!content.isDirectory())
             splits.add(new FileSplit(content.getPath(), 0, content.getLen(), new String[0]));
         }
       }
