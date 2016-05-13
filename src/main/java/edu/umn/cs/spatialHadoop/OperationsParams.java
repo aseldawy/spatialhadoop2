@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.lang.reflect.Array;
 import java.util.List;
 import java.util.Vector;
+import java.util.regex.Pattern;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -41,6 +42,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.nasa.NASAPoint;
 import edu.umn.cs.spatialHadoop.nasa.NASARectangle;
 import edu.umn.cs.spatialHadoop.operations.LocalSampler;
+import edu.umn.cs.spatialHadoop.osm.OSMEdge;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 
 /**
@@ -711,6 +713,111 @@ public class OperationsParams extends Configuration {
 			this.set("shape", autoDetectedShape);
 			return true;
 		}
+	}
+	
+	/**
+	 * Detects the shape from a sample set of lines
+	 * @param lines
+	 * @return
+	 */
+	public static String detectShape(String[] lines) {
+    // Possible separators used in auto detect
+    final char Separators[] = { ',', '\t' };
+    // Number of columns with each separator, -1 means an incompatible number
+    int[] numOfFields = new int[Separators.length];
+    for (String line : lines) {
+      for (int iSep = 0; iSep < Separators.length; iSep++) {
+        if (numOfFields[iSep] == -1)
+          continue; // Separator is already invalid, no need to check
+        int count = 1;
+        int i = 0;
+        while (i != -1 && i < line.length() &&
+            (i = line.indexOf(Separators[iSep], i)) != -1)
+          {count++; i++;}
+        if (numOfFields[iSep] == 0) // First line
+          numOfFields[iSep] = count;
+        else if (numOfFields[iSep] != count)
+          numOfFields[iSep] = -1; // Invalidate forever
+      }
+    }
+
+    // Regular expressions for expected columns.
+    // Notice that the regular expressions do not have to be very accurate
+    // as we are just guessing anyway
+    final Pattern[] TypesRegex = {
+        null, // Not yet detected
+        Pattern.compile("(-|\\+)?\\d+"), // Integer
+        Pattern.compile("(-|\\+)?(\\d*\\.\\d*|\\d+)(E(-|\\+)\\d+)?"), // Float
+        Pattern.compile("(POINT|MULTIPOINT|POLYGON|MULTIPOLYGON|LINESTRING|"
+            + "MULTILINESTRING|GEOMETRYCOLLECTION|EMPTY|GEOMETRY)"
+            + "[\\(\\),\\d\\-\\+E\\.\\s]*"), // Well-Known Text
+        Pattern.compile("(\\{\"[^\"]+\"=\"[^\"]+\"\\})*")
+    };
+    
+    for (int iSep = 0; iSep < Separators.length; iSep++) {
+      if (numOfFields[iSep] == -1)
+        continue;
+      // For each matched separator
+      // Try to detect the type of each column
+      int[] fieldTypes = new int[numOfFields[iSep]];
+      for (String line : lines) {
+        // For each line, try to detect the type of each field
+        String[] fieldValues = line.split(""+Separators[iSep]);
+        for (int iField = 0; iField < fieldValues.length; iField++) {
+          if (fieldTypes[iField] == -1)
+            continue; // A conflicting field, no need to check
+          // Try to detect the type of this field using possible regular expressions
+          boolean matched = false;
+          for (int iType = 1; iType < TypesRegex.length && !matched; iType++) {
+            if (matched = TypesRegex[iType].matcher(fieldValues[iField]).matches()) {
+              // Matches a regular expression
+              if (fieldTypes[iField] == 0)
+                fieldTypes[iField] = iType;
+              else if (fieldTypes[iField] != iType) {
+                if (fieldTypes[iField] == 1 && iType == 2)
+                  fieldTypes[iField] = 2;
+                else if (fieldTypes[iField] <= 2 && iType > 2 ||
+                    fieldTypes[iField] > 2 && iType <= 2)
+                  fieldTypes[iField] = -1; // Mark field as conflicted
+              }
+            }
+          }
+        }
+      }
+      // Now, time to make a decision
+      if (iSep == 0 && // Comma separated
+          numOfFields[iSep] == 2 && // Two fields
+          (fieldTypes[0] == 1 || fieldTypes[0] == 2) &&
+          (fieldTypes[1] == 2 || fieldTypes[1] == 2)) {
+        // Two fields, separated by comma, and both are numeric
+        return "point";
+      } else if (iSep == 0 && // Comma separated
+          numOfFields[iSep] == 4 && // Four fields
+          (fieldTypes[0] == 1 || fieldTypes[0] == 2) &&
+          (fieldTypes[1] == 1 || fieldTypes[1] == 2) &&
+          (fieldTypes[2] == 1 || fieldTypes[2] == 2) &&
+          (fieldTypes[3] == 1 || fieldTypes[3] == 2)) {
+        // Four fields, separated by commas, and all are numeric
+        return "rectangle";
+      } else if (iSep == 0 && // Comma
+          numOfFields[iSep] == 9 &&
+          fieldTypes[0] == 1 && // Integer EdgeID
+          fieldTypes[1] == 1 && // Integer StartNodeID
+          (fieldTypes[2] == 1 || fieldTypes[2] == 2) && // Longitude
+          (fieldTypes[3] == 1 || fieldTypes[2] == 3) && // Latitude
+          fieldTypes[4] == 1 && // Integer EndNodeID
+          (fieldTypes[5] == 1 || fieldTypes[5] == 2) && // Longitude
+          (fieldTypes[6] == 1 || fieldTypes[6] == 3) && // Latitude
+          fieldTypes[7] == 1 && // IntegerWayID
+          fieldTypes[8] == 4) { // Map
+        return OSMEdge.class.getName();
+      }
+          
+    }
+    
+    
+    // Now, check number of columns for detection
+	  return null;
 	}
 
 	/**
