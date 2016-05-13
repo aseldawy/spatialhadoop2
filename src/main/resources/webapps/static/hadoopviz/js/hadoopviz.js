@@ -5,8 +5,8 @@
  accompanies this distribution and is available at
  http://www.opensource.org/licenses/apache2.0.php.
  */
+ 
 $(function() {
-
   // List the contents of a directory
   function listFiles(path) {
     var url = '/LISTSTATUS.cgi';
@@ -44,7 +44,9 @@ $(function() {
           gindex_json["Shape"] = data["Shape"];
           dust.render("global-index-template", gindex_json, function(err, out) {
             jQuery("#global-index").html(out);
+            jQuery(".toggle-chekbox").change(checkboxToggle);
           });
+          jQuery("#frm-visualize").submit(ajaxVisualize);
         });
       } else {
         if (data["ImagePath"] != null) {
@@ -56,6 +58,7 @@ $(function() {
           };
           dust.render("global-index-template", gindex_json, function(err, out) {
             jQuery("#global-index").html(out);
+            registerCheckboxes();
           });
         } else {
           jQuery("#global-index").html("");
@@ -188,6 +191,15 @@ $(function() {
     };
   }
   
+  function checkboxToggle() {
+    var checkbox = jQuery(this);
+    var target = jQuery("#"+checkbox.attr("data-target"));
+      if (checkbox.is(":checked"))
+        target.show();
+      else
+        target.hide();
+  }
+  
   // Register address change of the URL
   jQuery(window).bind('hashchange', updateFromHash);
   
@@ -196,6 +208,20 @@ $(function() {
     e.preventDefault();
   });
   
+  function ajaxVisualize(e) {
+    var form = jQuery(this);
+    var url = form.attr("action");
+    var form_data = form.serialize();
+    jQuery.ajax({
+      url: url,
+      method: form.attr("method"),
+      data: form_data
+    }).success(function(data) {
+      window.location = data["TrackURL"];
+    });
+    e.preventDefault();
+  }
+
   // Initially, use the URL to initially list the files
   updateFromHash();
 });

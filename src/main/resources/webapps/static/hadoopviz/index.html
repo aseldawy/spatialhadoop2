@@ -63,24 +63,41 @@
     
     <script type="text/x-dust-template" id="global-index-template">
     {^ImagePath}
-    <form action="VISUALIZE.cgi" method="POST">
+    <form action="VISUALIZE.cgi" method="POST" id="frm-visualize">
       <input type="hidden" name="path" value="{BaseDir}" />
       <label for="shape">Shape</label>
       <input type="text" name="shape" id="shape" value="{Shape}" />
       <input type="submit" value="Plot" />
     </form>
     {/ImagePath}
+
+    {?Partitions}
+    <input type="checkbox" id="chk-gindex" checked="checked"
+           class="toggle-chekbox" data-target="gindex-partitions">
+    <label for="chk-gindex">Global Index</label>
+    {/Partitions}
+
+    {?ImagePath}
+    <input type="checkbox" id="chk-data" checked="checked"
+           class="toggle-chekbox" data-target="gindex-data">
+    <label for="chk-data">Data</label>
+    {/ImagePath}
+
     <svg xmlns="http://www.w3.org/2000/svg" version="1.1" 
       xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" 
       class="gindex" width="{ImageWidth}"
       height="{@math key=ImageHeight method="add" operand="1"/}">
+    <g id="gindex-partitions">
     {#Partitions}
     <rect x="{x1}" width="{@math key=x2 method="subtract" operand=x1/}" 
       y="{y1}" height="{@math key=y2 method="subtract" operand=y1/}"/>
     {/Partitions}
+    </g>
     {?ImagePath}
+    <g id="gindex-data">
     <image x="0" width="{ImageWidth}" y="0" height="{ImageHeight}" 
          xlink:href="/hdfs{ImagePath}"/>
+    </g>
     {/ImagePath}
     </svg>
     </script>

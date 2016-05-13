@@ -13,8 +13,11 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.URLConnection;
 import java.security.PrivilegedExceptionAction;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Date;
 
 import javax.servlet.ServletException;
 import javax.servlet.ServletOutputStream;
@@ -95,7 +98,7 @@ public class HadoopvizServer extends AbstractHandler {
         handleHDFSFetch(request, response);
       } else if (target.endsWith("/LISTSTATUS.cgi") && request.getMethod().equals("GET")){
         handleListFiles(request, response);
-      } else if (target.endsWith("/VISUALIZE.cgi") /*&& request.getMethod().equals("POST")*/){
+      } else if (target.endsWith("/VISUALIZE.cgi") && request.getMethod().equals("POST")){
         handleVisualize(request, response);
       } else if (request.getMethod().equals("GET")) {
         // Doesn't match any of the dynamic content, assume it's a static file
@@ -235,7 +238,7 @@ public class HadoopvizServer extends AbstractHandler {
         response.setStatus(HttpServletResponse.SC_OK);
         response.setContentType("application/json;charset=utf-8");
         PrintWriter out = response.getWriter();
-        out.printf("{\"JobID\":\"%s\", \"TrackURL\": \"%s\"",
+        out.printf("{\"JobID\":\"%s\", \"TrackURL\": \"%s\"}",
             vizJob.getJobID().toString(), vizJob.getTrackingURL());
         out.close();
       }
@@ -319,14 +322,7 @@ public class HadoopvizServer extends AbstractHandler {
       reportError(response, "Cannot load resource '" + target + "'", null);
       return;
     }
-    byte[] buffer = new byte[1024 * 1024];
-    ServletOutputStream outResponse = response.getOutputStream();
-    int size;
-    while ((size = resource.read(buffer)) != -1) {
-      outResponse.write(buffer, 0, size);
-    }
-    resource.close();
-    outResponse.close();
+    
     response.setStatus(HttpServletResponse.SC_OK);
     if (target.endsWith(".js")) {
       response.setContentType("application/javascript");
@@ -335,6 +331,19 @@ public class HadoopvizServer extends AbstractHandler {
     } else {
       response.setContentType(URLConnection.guessContentTypeFromName(target));
     }
+    final DateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss ZZZ");
+    final long year = 1000L * 60 * 60 * 24 * 365;
+    // Expires in a year
+    response.addHeader("Expires", format.format(new Date().getTime() + year));
+    
+    byte[] buffer = new byte[1024 * 1024];
+    ServletOutputStream outResponse = response.getOutputStream();
+    int size;
+    while ((size = resource.read(buffer)) != -1) {
+      outResponse.write(buffer, 0, size);
+    }
+    resource.close();
+    outResponse.close();
   }
 
   private void reportError(HttpServletResponse response, String msg, Exception e)
