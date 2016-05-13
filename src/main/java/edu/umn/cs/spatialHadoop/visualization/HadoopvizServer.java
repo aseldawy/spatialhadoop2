@@ -173,7 +173,7 @@ public class HadoopvizServer extends AbstractHandler {
         String metaFileName = metaFile.getPath().getName();
         if (metaFileName.startsWith("_master")) {
           out.printf(",\"MasterPath\":\"%s\"", metaFileName);
-          String shape = OperationsParams.detectShape(new Path[] {path}, commonParams);
+          String shape = OperationsParams.detectShape(fileStatuses[0].getPath(), commonParams);
           if (shape != null)
             out.printf(",\"Shape\":\"%s\"", shape);
         } else if (metaFileName.equals("_data.png"))
@@ -198,7 +198,6 @@ public class HadoopvizServer extends AbstractHandler {
   
   /**
    * Visualizes a dataset.
-   * If the 
    * @param request
    * @param response
    */
