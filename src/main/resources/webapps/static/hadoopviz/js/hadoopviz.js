@@ -41,6 +41,7 @@ $(function() {
             gindex_json["ImagePath"] = path+"/"+data["ImagePath"];
           else
             gindex_json["BaseDir"] = path;
+          gindex_json["Shape"] = data["Shape"];
           dust.render("global-index-template", gindex_json, function(err, out) {
             jQuery("#global-index").html(out);
           });
@@ -49,7 +50,7 @@ $(function() {
         if (data["ImagePath"] != null) {
           // There is an image, display it
           var gindex_json = {
-            Image: path+"/"+data["ImagePath"],
+            ImagePath: path+"/"+data["ImagePath"],
             ImageWidth: jQuery("#global-index").width(),
             ImageHeight: jQuery(window).height()
           };
