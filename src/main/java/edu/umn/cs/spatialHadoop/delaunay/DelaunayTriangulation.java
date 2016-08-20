@@ -14,12 +14,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import edu.umn.cs.spatialHadoop.io.Text2;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -322,8 +325,29 @@ public class DelaunayTriangulation {
     double buffer = Math.max(mbr.getWidth(), mbr.getHeight()) / 10;
     Rectangle bigMBR = mbr.buffer(buffer, buffer);
     dtAlgorithm.getFinalAnswerAsVoronoiRegions(mbr, finalRegions, nonfinalRegions);
-    drawVoronoiDiagram(System.out, mbr, bigMBR, finalRegions, nonfinalRegions);
-    
+    if (outPath != null && params.getBoolean("output", true)) {
+      FileSystem outFS = outPath.getFileSystem(params);
+      PrintStream out = new PrintStream(outFS.create(outPath));
+
+      // Write Voronoi regions to the output
+      Text text = new Text2();
+      for (Geometry geom : finalRegions) {
+        text.clear();
+        Point shape = (Point) geom.getUserData();
+        shape.toText(text);
+        out.write(text.getBytes(), 0, text.getLength());
+        out.printf("\t%s\n", geom.toText());
+      }
+      for (Geometry geom : nonfinalRegions) {
+        text.clear();
+        Point shape = (Point) geom.getUserData();
+        shape.toText(text);
+        out.write(text.getBytes(), 0, text.getLength());
+        out.printf("\t%s\n", geom.toText());
+      }
+      out.close();
+    }
+
 //    dtAlgorithm.getFinalAnswerAsGraph().draw();
     //Triangulation finalPart = new Triangulation();
     //Triangulation nonfinalPart = new Triangulation();
