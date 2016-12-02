@@ -134,7 +134,7 @@ public class Main {
       
       pgd.addClass("mplot", MagickPlot.class, "Plot using ImageMagick");
       
-      pgd.addClass("insert", Insert.class, "Insert data from a file to another file with same type of shape");
+      pgd.addClass("insert", Inserter.class, "Insert data from a file to another file with same type of shape");
       
       pgd.driver(args);
       
