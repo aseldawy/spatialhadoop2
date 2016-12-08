@@ -121,13 +121,8 @@ public class DelaunayTriangulation {
 
       context.setStatus("Computing DT");
       LOG.info("Computing DT for "+points.length+" sites");
-      GSDTAlgorithm algo = new GSDTAlgorithm(
-          points, context);
+      GSDTAlgorithm algo = new GSDTAlgorithm(points, context);
       if (key.isValid()) {
-        int col = Arrays.binarySearch(this.columnBoundaries, key.x1);
-        if (col < 0)
-          col = -col - 1;
-        column.set(col);
         LOG.info("Finding final and non-final edges");
         context.setStatus("Splitting DT");
         SimpleGraph finalPart = new SimpleGraph();
@@ -138,6 +133,11 @@ public class DelaunayTriangulation {
         writer.write(Boolean.TRUE, finalPart);
 
         // Write nonFinalpart to the reduce phase
+        // Find the corresponding column to ensure the vertical merge phase works correctly
+        int col = Arrays.binarySearch(this.columnBoundaries, key.x1);
+        if (col < 0)
+          col = -col - 1;
+        column.set(col);
         context.write(column, nonfinalPart);
         context.getCounter(DelaunayCounters.MAP_NONFINAL_SITES).increment(nonfinalPart.getNumSites());
       } else {

@@ -771,6 +771,19 @@ public class GSDTAlgorithm {
    * written to the output as they are not going to be affected by a future
    * merge step. Non-final parts cannot be written to the output yet as they
    * might be affected (i.e., some edges are pruned) by a future merge step.
+   *
+   * Here is how this functions works.
+   * 1. It classifies sites into safe sites and unsafe sites using the method
+   *   detectUnsafeSites. An unsafe site participates to at least one unsafe
+   *   triangle
+   * 2. It classifies edges into safe and unsafe edges. An unsafe edge is
+   *   incident to at least one unsafe site.
+   * 3. Two graphs are written, one that contains all safe edges along with all
+   *   start and end sites for those edges. And the other that contain all unsafe
+   *   edges along with all start and end sites for those edges.
+   *
+   * The above technique means that some sites might be repeated twice if they
+   * are safe by are adjacent to an unsafe site.
    * @param mbr The MBR used to check for final and non-final edges. It is assumed
    *          that no more points can be introduced in this MBR but more points
    *          can appear later outside that MBR.
