@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
 import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.operations.Head;
 import junit.framework.Test;
 import junit.framework.TestCase;
@@ -11,6 +12,7 @@ import org.apache.hadoop.fs.Path;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * Unit test for the utility class {@link Head}.
@@ -35,60 +37,64 @@ public class GSDTAlgorithmTest extends TestCase {
   }
 
 
-  // Test example is copied from https://www.mathworks.com/help/matlab/examples/creating-and-editing-delaunay-triangulations.html
-  double[] testPoints = {
-      0.2760,    0.7513,
-      0.6797,    0.2551,
-      0.6551,    0.5060,
-      0.1626,    0.6991,
-      0.1190,    0.8909,
-      0.4984,    0.9593,
-      0.9597,    0.5472,
-      0.3404,    0.1386,
-      0.5853,    0.1493,
-      0.2238,    0.2575,
-  };
-
-  int[] triangles = {
-      4,    10,     1,
-      3,     8,     9,
-      10,    4,     5,
-      4,     1,     5,
-      1,     6,     5,
-      3,    10,     8,
-      1,     3,     6,
-      2,     9,     7,
-      6,     3,     7,
-      1,    10,     3,
-  };
-
-  public void testPlainTextFile() {
-    // Test a simple scenario
-    List<Point> points = new ArrayList<Point>(testPoints.length/2);
-    for (int i = 0; i < testPoints.length; i+=2) {
-      points.add(new Point(testPoints[i], testPoints[i+1]));
-    }
-
-    GSDTAlgorithm algo = new GSDTAlgorithm(points.toArray(new Point[points.size()]), null);
-    SimpleGraph answer = algo.getFinalAnswerAsGraph();
-    answer.draw();
-    // Check that the edges are correct
-    for (int iEdge = 0; iEdge < answer.edgeStarts.length; iEdge++) {
-      // Check all the three edges of the triangle
-      // Notice that the order of points in the answer could be different than the input
-      int edgeStart = points.indexOf(answer.sites[answer.edgeStarts[iEdge]]) + 1;
-      int edgeEnd = points.indexOf(answer.sites[answer.edgeEnds[iEdge]]) + 1;
-
+  static<T> boolean arrayEqualAnyOrder(T[] a1, T[] a2) {
+    if (a1.length != a2.length)
+      return false;
+    for (T x : a1) {
       boolean found = false;
-      for (int iTriangle = 0; !found && iTriangle < triangles.length; iTriangle+=3) {
-        // An edge is found if both edge start and ends are in the same triangle
-        boolean startFound = edgeStart == triangles[iTriangle] || edgeStart == triangles[iTriangle+1] ||
-            edgeStart == triangles[iTriangle+2];
-        boolean endFound = edgeEnd == triangles[iTriangle] || edgeEnd == triangles[iTriangle+1] ||
-            edgeEnd == triangles[iTriangle+2];
-        found = startFound && endFound;
-      }
-      assertTrue(String.format("Edge (%d, %d) not found", edgeStart, edgeEnd), found);
+      for (int i = 0; !found && i < a2.length; i++)
+        found = x == a2[i];
+      // If this element was not found, return false as the arrays are not equal
+      if (!found)
+        return false;
     }
+    // If this point is reached, it indicates that all elements were found
+    return true;
+  }
+
+  /**
+   * Create a Delaunay Triangulation and partition it into safe and unsafe
+   * sites and make sure that the answer is consistent, i.e., triangles
+   * are not repeated.
+   */
+  public void testPartitioning() {
+    Random random = new Random(0);
+    // Generate 100 random points
+    Point[] points = new Point[100];
+    for (int i = 0; i < points.length; i++)
+      points[i] = new Point(random.nextInt(1000), random.nextInt(1000));
+
+    GSDTAlgorithm algo = new GSDTAlgorithm(points, null);
+    SimpleGraph answer = algo.getFinalAnswerAsGraph();
+    // Retrieve all triangles from the complete answer and use it as a baseline
+    List<Point[]> allTriangles = new ArrayList<Point[]>();
+    for (Point[] triangle : answer.iterateTriangles()) {
+      allTriangles.add(triangle.clone());
+    }
+    // Split into a final and non-final graphs and check that we get the same
+    // set of triangles from the two of them together
+
+    SimpleGraph safe = new SimpleGraph();
+    SimpleGraph unsafe = new SimpleGraph();
+    algo.splitIntoFinalAndNonFinalGraphs(new Rectangle(0, 0, 1000, 1000), safe, unsafe);
+    int numOfTrianglesFound = 0;
+    for (Point[] safeTriangle : safe.iterateTriangles()) {
+      // Check that the triangle is in the list of allTriangles
+      boolean found = false;
+      for (int i = 0; !found && i < allTriangles.size(); i++)
+        found = arrayEqualAnyOrder(safeTriangle, allTriangles.get(i));
+      assertTrue("A safe triangle not found", found);
+      numOfTrianglesFound++;
+    }
+    // Repeat the same for unsafe triangles
+    for (Point[] unsafeTriangle : unsafe.iterateTriangles()) {
+      // Check that the triangle is in the list of allTriangles
+      boolean found = false;
+      for (int i = 0; !found && i < allTriangles.size(); i++)
+        found = arrayEqualAnyOrder(unsafeTriangle, allTriangles.get(i));
+      assertTrue("An unsafe triangle not found", found);
+      numOfTrianglesFound++;
+    }
+    assertEquals(allTriangles.size(), numOfTrianglesFound);
   }
 }

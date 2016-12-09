@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop.delaunay;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Iterator;
 
 import org.apache.hadoop.io.Writable;
 
@@ -35,7 +36,7 @@ public class SimpleGraph implements Writable {
   Rectangle mbr;
   /**A safe site is a site that does not participate in any unsafe triangles*/
   BitArray safeSites;
-  
+
   public SimpleGraph() {
     safeSites = new BitArray();
     mbr = new Rectangle();
@@ -148,5 +149,114 @@ public class SimpleGraph implements Writable {
     }
     System.out.println("}");
   }
-  
+
+  class TriangleIterable implements Iterable<Point[]>, Iterator<Point[]> {
+    /**The index of the current site.
+     * A value equal to sites.length indicates that the iterator has finished.
+     */
+    protected int currentSiteIndex;
+
+    /**
+     * Index of the next site to be considered. Needed to implement hasNext
+     * without having to search for final sites each time it is called.
+     */
+    protected int nextSiteIndex;
+
+    /**Index of the current neighbor (triangle) being considered*/
+    protected int neighborIndex;
+
+    /**Neighbors of the current site*/
+    protected IntArray neighbors;
+
+    /**Always points to the current triangle*/
+    protected Point[] currentTriangle;
+
+    public TriangleIterable() {
+      this.currentSiteIndex = -1;
+      this.currentTriangle = new Point[3];
+      neighbors = new IntArray();
+      // Initialize at the first site
+      nextSiteIndex = 0;
+      while (nextSiteIndex < sites.length && !safeSites.get(nextSiteIndex))
+        nextSiteIndex++;
+    }
+
+    /**
+     * Skips the iterator to the next site and initialize the list of neighbors
+     * for the new site.
+     */
+    private void skipToNextSite() {
+      if (nextSiteIndex >= sites.length)
+        return;
+
+      // Move pointer to next safe site
+      currentSiteIndex = nextSiteIndex;
+
+      // Advance nextSiteIndex to the next safe site to be able to answer hasNext
+
+      do {
+        nextSiteIndex++;
+      } while (nextSiteIndex < sites.length && !safeSites.get(nextSiteIndex));
+
+      // Load all its neighbors of the current site
+      neighbors.clear();
+      for (int iEdge = 0; iEdge < edgeStarts.length; iEdge++) {
+        if (edgeStarts[iEdge] == currentSiteIndex)
+          neighbors.add(edgeEnds[iEdge]);
+        if (edgeEnds[iEdge] == currentSiteIndex)
+          neighbors.add(edgeStarts[iEdge]);
+      }
+
+      if (neighbors.size() < 3)
+        throw new RuntimeException("A final site must have at least 3 triangles");
+
+      // Sort neighbors in an clock-wise order to find triangles
+      // Use bubble sort since we do not expect too many neighbors
+      final Point center = currentTriangle[0] = sites[currentSiteIndex];
+      for (int i = neighbors.size() - 1; i >= 0 ; i--) {
+        for (int j = 0; j < i; j++) {
+          // Compare neighbors j and j+1
+          final Point a = sites[neighbors.get(j)];
+          final Point b = sites[neighbors.get(j+1)];
+          // Equation taken from http://stackoverflow.com/questions/6989100/sort-points-in-clockwise-order
+          double det = (a.x - center.x) * (b.y - center.y) -
+              (b.x - center.x) * (a.y - center.y);
+          if (det < 0) {
+            // Swap neighbors at i and j
+            neighbors.swap(i, j);
+          }
+        }
+      }
+    }
+
+    @Override
+    public Iterator<Point[]> iterator() {
+      return this;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return neighborIndex < neighbors.size() || nextSiteIndex < sites.length;
+    }
+
+    @Override
+    public Point[] next() {
+      if (neighborIndex < neighbors.size())
+        neighborIndex++;
+      else skipToNextSite();
+      // Return current triangle
+      currentTriangle[1] = sites[neighbors.get(neighborIndex)];
+      currentTriangle[2] = sites[neighbors.get((neighborIndex + 1) % neighbors.size())];
+      return currentTriangle;
+    }
+
+    @Override
+    public void remove() {
+      throw new RuntimeException("Not implemented");
+    }
+  }
+
+  Iterable<Point[]> iterateTriangles() {
+   return new TriangleIterable();
+  }
 }
