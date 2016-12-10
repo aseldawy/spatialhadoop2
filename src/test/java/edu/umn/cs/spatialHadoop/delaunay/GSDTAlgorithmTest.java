@@ -53,10 +53,39 @@ public class GSDTAlgorithmTest extends TestCase {
   }
 
   /**
+   * Test i
+   */
+  public void testTriangulation() {
+    Point[] points = {
+        new Point(50, 50),
+        new Point(60, 10),
+        new Point(70, 80),
+        new Point(80, 50),
+    };
+    Point[][] correctTriangulation = {
+        new Point[] {points[0], points[1], points[3]},
+        new Point[] {points[0], points[3], points[2]},
+    };
+
+    GSDTAlgorithm algo = new GSDTAlgorithm(points, null);
+    SimpleGraph answer = algo.getFinalAnswerAsGraph();
+
+    int numOfTrianglesFound = 0;
+    for (Point[] unsafeTriangle : answer.iterateTriangles()) {
+      boolean found = false;
+      for (int i = 0; !found && i < correctTriangulation.length; i++)
+        found = arrayEqualAnyOrder(unsafeTriangle, correctTriangulation[i]);
+      assertTrue("A triangle not found", found);
+      numOfTrianglesFound++;
+    }
+    assertEquals(correctTriangulation.length, numOfTrianglesFound);
+  }
+
+  /**
    * Create a Delaunay Triangulation and partition it into safe and unsafe
    * sites and make sure that the answer is consistent, i.e., triangles
    * are not repeated.
-   */
+   *//*
   public void testPartitioning() {
     Random random = new Random(0);
     // Generate 100 random points
@@ -96,5 +125,5 @@ public class GSDTAlgorithmTest extends TestCase {
       numOfTrianglesFound++;
     }
     assertEquals(allTriangles.size(), numOfTrianglesFound);
-  }
+  }*/
 }

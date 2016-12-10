@@ -163,7 +163,11 @@ public class SimpleGraph implements Writable {
     protected int nextSiteIndex;
 
     /**Index of the current neighbor (triangle) being considered*/
-    protected int neighborIndex;
+    protected int currentNeighborIndex;
+
+    /**Index of the next neighbor to be considered. The value is equal to
+     * neighbors.length if the last neighbor for the current site is reached.*/
+    protected int nextNeighborIndex;
 
     /**Neighbors of the current site*/
     protected IntArray neighbors;
@@ -207,12 +211,12 @@ public class SimpleGraph implements Writable {
           neighbors.add(edgeStarts[iEdge]);
       }
 
-      if (neighbors.size() < 3)
-        throw new RuntimeException("A final site must have at least 3 triangles");
+      if (neighbors.size() < 2)
+        throw new RuntimeException("A final site must have at least one triangles");
 
-      // Sort neighbors in an clock-wise order to find triangles
+      // Sort neighbors in a clock-wise order to find triangles
       // Use bubble sort since we do not expect too many neighbors
-      final Point center = currentTriangle[0] = sites[currentSiteIndex];
+      final Point center = currentTriangle[1] = sites[currentSiteIndex];
       for (int i = neighbors.size() - 1; i >= 0 ; i--) {
         for (int j = 0; j < i; j++) {
           // Compare neighbors j and j+1
@@ -227,6 +231,19 @@ public class SimpleGraph implements Writable {
           }
         }
       }
+
+      // Set nextNeighborIndex to the first neighbor with a valid triangle
+      currentNeighborIndex = -1;
+      nextNeighborIndex = -1;
+      boolean nextNeighborIsValid = false;
+      while (!nextNeighborIsValid && ++nextNeighborIndex < neighbors.size()) {
+        currentTriangle[2] = sites[neighbors.get(nextNeighborIndex)];
+        currentTriangle[0] = sites[neighbors.get((nextNeighborIndex + 1) % neighbors.size())];
+        nextNeighborIsValid = corssProduct(currentTriangle) > 0;
+      }
+
+      if (!nextNeighborIsValid)
+        throw new RuntimeException("Error! Found a valid site with no valid triangles");
     }
 
     @Override
@@ -236,17 +253,29 @@ public class SimpleGraph implements Writable {
 
     @Override
     public boolean hasNext() {
-      return neighborIndex < neighbors.size() || nextSiteIndex < sites.length;
+      return nextNeighborIndex < neighbors.size() || nextSiteIndex < sites.length;
     }
 
     @Override
     public Point[] next() {
-      if (neighborIndex < neighbors.size())
-        neighborIndex++;
-      else skipToNextSite();
-      // Return current triangle
-      currentTriangle[1] = sites[neighbors.get(neighborIndex)];
-      currentTriangle[2] = sites[neighbors.get((neighborIndex + 1) % neighbors.size())];
+      if (nextNeighborIndex >= neighbors.size())
+        skipToNextSite();
+
+      // Skip to next neighbor
+      currentNeighborIndex = nextNeighborIndex;
+
+      // Set nextNeighborIndex to the next valid neighbor
+      boolean nextNeighborIsValid = false;
+      while (!nextNeighborIsValid && ++nextNeighborIndex < neighbors.size()) {
+        currentTriangle[2] = sites[neighbors.get(nextNeighborIndex)];
+        currentTriangle[0] = sites[neighbors.get((nextNeighborIndex + 1) % neighbors.size())];
+        nextNeighborIsValid = corssProduct(currentTriangle) > 0;
+      }
+
+      // Set the corners of the current triangle
+      currentTriangle[2] = sites[neighbors.get(currentNeighborIndex)];
+      currentTriangle[0] = sites[neighbors.get((currentNeighborIndex + 1) % neighbors.size())];
+
       return currentTriangle;
     }
 
@@ -255,6 +284,22 @@ public class SimpleGraph implements Writable {
       throw new RuntimeException("Not implemented");
     }
   }
+
+  /**
+   * Calculate the cross product of the two vectors (a x b)
+   * a = p1 -> p2
+   * b = p1 -> p0
+   * @param p
+   * @return
+   */
+  private static double corssProduct(Point[] p) {
+    double a_x = p[2].x - p[1].x;
+    double a_y = p[2].y - p[1].y;
+    double b_x = p[0].x - p[1].x;
+    double b_y = p[0].y - p[1].y;
+    return a_x * b_y - a_y * b_x;
+  }
+
 
   Iterable<Point[]> iterateTriangles() {
    return new TriangleIterable();
