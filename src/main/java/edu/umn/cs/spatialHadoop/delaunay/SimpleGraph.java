@@ -151,100 +151,129 @@ public class SimpleGraph implements Writable {
   }
 
   class TriangleIterable implements Iterable<Point[]>, Iterator<Point[]> {
-    /**The index of the current site.
-     * A value equal to sites.length indicates that the iterator has finished.
+    /**
+     * Stores a pointer to a state and a specific neighbor in that state.
      */
-    protected int currentSiteIndex;
+    class Pointer {
+      /**The index of the site*/
+      int siteIndex;
+      /**The index of the neighbor in the sorted array of neighbors*/
+      int neighborIndex;
+      /**
+       * The triangle pointed with the current pointer. The triangle has the
+       * following three corners
+       * 1. site[siteIndex]
+       * 2. site[neighbors[neighborIndex]]
+       * 3. site[neighbors[neighborIndex + 1 (mod neighbors.length)]]
+       */
+      Point[] triangle = new Point[3];
+
+      public void copyFrom(Pointer other) {
+        this.siteIndex = other.siteIndex;
+        this.neighborIndex = other.neighborIndex;
+        this.triangle[0] = other.triangle[0];
+        this.triangle[1] = other.triangle[1];
+        this.triangle[2] = other.triangle[2];
+      }
+    }
 
     /**
-     * Index of the next site to be considered. Needed to implement hasNext
-     * without having to search for final sites each time it is called.
+     * Store two separate states, currentState where the iterator points
+     * and nextState where the iterator will point after calling next().
+     * We have to store these two separate pointers to ensure that we can
+     * execute hasNext() operation efficiently
      */
-    protected int nextSiteIndex;
+    protected Pointer currentState, nextState;
 
-    /**Index of the current neighbor (triangle) being considered*/
-    protected int currentNeighborIndex;
-
-    /**Index of the next neighbor to be considered. The value is equal to
-     * neighbors.length if the last neighbor for the current site is reached.*/
-    protected int nextNeighborIndex;
-
-    /**Neighbors of the current site*/
+    /**
+     * A sorted array of neighbors in a CCW order for next site.
+     */
     protected IntArray neighbors;
 
-    /**Always points to the current triangle*/
-    protected Point[] currentTriangle;
-
     public TriangleIterable() {
-      this.currentSiteIndex = -1;
-      this.currentTriangle = new Point[3];
+      this.currentState = new Pointer();
+      this.nextState = new Pointer();
       neighbors = new IntArray();
       // Initialize at the first site
-      nextSiteIndex = 0;
-      while (nextSiteIndex < sites.length && !safeSites.get(nextSiteIndex))
-        nextSiteIndex++;
+      nextState.siteIndex = -1;
+      moveToNextSite(nextState);
     }
 
     /**
-     * Skips the iterator to the next site and initialize the list of neighbors
-     * for the new site.
+     * Finds the first pointer where a triangle can be reported. A triangle
+     * can be reported at a specific pointer if the following conditions hold.
+     * 1. The site pointed by the pointer is safe.
+     * 2. The two consecutive neighbors pointed by the neighbor index form
+     *    an angle that is less than PI, i.e., they actually form a triangle
+     * 3. The site pointed by the pointer has the smallest index in the three
+     *    corners. This is to ensure that each triangle is reported exactly once
+     * @param state
      */
-    private void skipToNextSite() {
-      if (nextSiteIndex >= sites.length)
-        return;
+    private void moveToNextSite(Pointer state) {
+      while (++state.siteIndex < sites.length) {
+        // Skip if the site is not safe
+        if (!safeSites.get(state.siteIndex))
+          continue;
+        // Found a safe site, load its neighbors
+        neighbors.clear();
+        for (int iEdge = 0; iEdge < edgeStarts.length; iEdge++) {
+          if (edgeStarts[iEdge] == state.siteIndex)
+            neighbors.add(edgeEnds[iEdge]);
+          if (edgeEnds[iEdge] == state.siteIndex)
+            neighbors.add(edgeStarts[iEdge]);
+        }
 
-      // Move pointer to next safe site
-      currentSiteIndex = nextSiteIndex;
+        if (neighbors.size() < 2)
+          throw new RuntimeException("A safe site must have at least two neighbors");
 
-      // Advance nextSiteIndex to the next safe site to be able to answer hasNext
-
-      do {
-        nextSiteIndex++;
-      } while (nextSiteIndex < sites.length && !safeSites.get(nextSiteIndex));
-
-      // Load all its neighbors of the current site
-      neighbors.clear();
-      for (int iEdge = 0; iEdge < edgeStarts.length; iEdge++) {
-        if (edgeStarts[iEdge] == currentSiteIndex)
-          neighbors.add(edgeEnds[iEdge]);
-        if (edgeEnds[iEdge] == currentSiteIndex)
-          neighbors.add(edgeStarts[iEdge]);
-      }
-
-      if (neighbors.size() < 2)
-        throw new RuntimeException("A final site must have at least one triangles");
-
-      // Sort neighbors in a clock-wise order to find triangles
-      // Use bubble sort since we do not expect too many neighbors
-      final Point center = currentTriangle[1] = sites[currentSiteIndex];
-      for (int i = neighbors.size() - 1; i >= 0 ; i--) {
-        for (int j = 0; j < i; j++) {
-          // Compare neighbors j and j+1
-          final Point a = sites[neighbors.get(j)];
-          final Point b = sites[neighbors.get(j+1)];
-          // Equation taken from http://stackoverflow.com/questions/6989100/sort-points-in-clockwise-order
-          double det = (a.x - center.x) * (b.y - center.y) -
-              (b.x - center.x) * (a.y - center.y);
-          if (det < 0) {
-            // Swap neighbors at i and j
-            neighbors.swap(i, j);
+        // Sort neighbors in a CCW order to find triangles.
+        // Use bubble sort since we do not expect too many neighbors
+        final Point center = sites[state.siteIndex];
+        for (int i = neighbors.size() - 1; i >= 0 ; i--) {
+          for (int j = 0; j < i; j++) {
+            // Compare neighbors j and j+1
+            final Point a = sites[neighbors.get(j)];
+            final Point b = sites[neighbors.get(j+1)];
+            // Equation taken from http://stackoverflow.com/questions/6989100/sort-points-in-clockwise-order
+            double det = (a.x - center.x) * (b.y - center.y) -
+                (b.x - center.x) * (a.y - center.y);
+            if (det < 0) {
+              // Swap neighbors at i and j
+              neighbors.swap(i, j);
+            }
           }
         }
-      }
 
-      // Set nextNeighborIndex to the first neighbor with a valid triangle
-      currentNeighborIndex = -1;
-      nextNeighborIndex = -1;
-      boolean nextNeighborIsValid = false;
-      while (!nextNeighborIsValid && ++nextNeighborIndex < neighbors.size()) {
-        currentTriangle[2] = sites[neighbors.get(nextNeighborIndex)];
-        currentTriangle[0] = sites[neighbors.get((nextNeighborIndex + 1) % neighbors.size())];
-        nextNeighborIsValid = corssProduct(currentTriangle) > 0;
+        // Search for the first triangle that can be reported
+        state.neighborIndex = -1;
+        moveToNextNeighbor(state);
+        // If the neighbor found is valid, break the loop
+        if (state.neighborIndex < neighbors.size())
+          break;
       }
-
-      if (!nextNeighborIsValid)
-        throw new RuntimeException("Error! Found a valid site with no valid triangles");
+      if (state.siteIndex < neighbors.size()) {
+        // Store the triangle to report
+        state.triangle[0] = sites[state.siteIndex];
+        state.triangle[1] = sites[neighbors.get(state.neighborIndex)];
+        state.triangle[2] = sites[neighbors.get((state.neighborIndex + 1) % neighbors.size())];
+      }
     }
+
+    /**
+     * Moves the given pointer to the next neighbor where a triangle can be
+     * reported.
+     * @param state
+     */
+    private void moveToNextNeighbor(Pointer state) {
+      boolean canReportTriangle = false;
+      while (!canReportTriangle && ++state.neighborIndex < neighbors.size()) {
+        canReportTriangle = canReportTriangle(
+            state.siteIndex,
+            neighbors.get(state.neighborIndex),
+            neighbors.get((state.neighborIndex + 1) % neighbors.size()));
+      }
+    }
+
 
     @Override
     public Iterator<Point[]> iterator() {
@@ -253,53 +282,56 @@ public class SimpleGraph implements Writable {
 
     @Override
     public boolean hasNext() {
-      return nextNeighborIndex < neighbors.size() || nextSiteIndex < sites.length;
+      return nextState.siteIndex < sites.length;
     }
 
     @Override
     public Point[] next() {
-      if (nextNeighborIndex >= neighbors.size())
-        skipToNextSite();
+      // Copy nextState into currentState
+      currentState.copyFrom(nextState);
 
-      // Skip to next neighbor
-      currentNeighborIndex = nextNeighborIndex;
+      // Advance nextState to point to the next triangle
+      moveToNextNeighbor(nextState);
+      if (nextState.neighborIndex >= neighbors.size())
+        moveToNextSite(nextState);
 
-      // Set nextNeighborIndex to the next valid neighbor
-      boolean nextNeighborIsValid = false;
-      while (!nextNeighborIsValid && ++nextNeighborIndex < neighbors.size()) {
-        currentTriangle[2] = sites[neighbors.get(nextNeighborIndex)];
-        currentTriangle[0] = sites[neighbors.get((nextNeighborIndex + 1) % neighbors.size())];
-        nextNeighborIsValid = corssProduct(currentTriangle) > 0;
-      }
-
-      // Set the corners of the current triangle
-      currentTriangle[2] = sites[neighbors.get(currentNeighborIndex)];
-      currentTriangle[0] = sites[neighbors.get((currentNeighborIndex + 1) % neighbors.size())];
-
-      return currentTriangle;
+      return currentState.triangle;
     }
+
+    /**
+     * Returns true if an only if the given triangle should be reported.
+     * A triangle is reported iff the following conditions hold:
+     * 1- The head of the triangle (p0) is a safe site
+     * 2- The head of the triangle (p0) has the smallest index among the three
+     *    corners.
+     * 3- The angle at the triangle head is less than PI. This is actually to
+     *    make sure it is a valid triangle
+     * @param p0
+     * @param p1
+     * @param p2
+     * @return
+     */
+    private boolean canReportTriangle(int p0, int p1, int p2) {
+      if (p1 < p0 || p2 < p0)
+        return false;
+      // Compute the cross product between the vectors
+      // a = p1 -> p2
+      // b = p1 -> p0
+      double a_x = sites[p2].x - sites[p1].x;
+      double a_y = sites[p2].y - sites[p1].y;
+      double b_x = sites[p0].x - sites[p1].x;
+      double b_y = sites[p0].y - sites[p1].y;
+      if (a_x * b_y - a_y * b_x < 0)
+        return false;
+      return true;
+    }
+
 
     @Override
     public void remove() {
       throw new RuntimeException("Not implemented");
     }
   }
-
-  /**
-   * Calculate the cross product of the two vectors (a x b)
-   * a = p1 -> p2
-   * b = p1 -> p0
-   * @param p
-   * @return
-   */
-  private static double corssProduct(Point[] p) {
-    double a_x = p[2].x - p[1].x;
-    double a_y = p[2].y - p[1].y;
-    double b_x = p[0].x - p[1].x;
-    double b_y = p[0].y - p[1].y;
-    return a_x * b_y - a_y * b_x;
-  }
-
 
   Iterable<Point[]> iterateTriangles() {
    return new TriangleIterable();
