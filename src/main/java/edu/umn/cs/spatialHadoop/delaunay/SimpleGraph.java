@@ -11,6 +11,8 @@ package edu.umn.cs.spatialHadoop.delaunay;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Iterator;
 
 import org.apache.hadoop.io.Writable;
@@ -227,20 +229,38 @@ public class SimpleGraph implements Writable {
           throw new RuntimeException("A safe site must have at least two neighbors");
 
         // Sort neighbors in a CCW order to find triangles.
-        // Use bubble sort since we do not expect too many neighbors
+        // http://stackoverflow.com/questions/6989100/sort-points-in-clockwise-order
         final Point center = sites[state.siteIndex];
+        Comparator<Point> ccw_comparator = new Comparator<Point>() {
+          @Override
+          public int compare(Point a, Point b) {
+            if (a.x - center.x >= 0 && b.x - center.x < 0)
+              return 1;
+            if (a.x - center.x < 0 && b.x - center.x >= 0)
+              return -1;
+            if (a.x - center.x == 0 && b.x - center.x == 0) {
+              if (a.y - center.y >= 0 || b.y - center.y >= 0)
+                return a.y > b.y ? 1 : -1;
+              return b.y > a.y ? 1 : -1;
+            }
+
+            // compute the cross product of vectors (center -> a) x (center -> b)
+            double det = (a.x - center.x) * (b.y - center.y) - (b.x - center.x) * (a.y - center.y);
+            if (det < 0)
+              return 1;
+            if (det > 0)
+              return -1;
+            return 0;
+          }
+        };
+        // Use bubble sort since we do not expect too many neighbors
         for (int i = neighbors.size() - 1; i >= 0 ; i--) {
           for (int j = 0; j < i; j++) {
             // Compare neighbors j and j+1
             final Point a = sites[neighbors.get(j)];
             final Point b = sites[neighbors.get(j+1)];
-            // Equation taken from http://stackoverflow.com/questions/6989100/sort-points-in-clockwise-order
-            double det = (a.x - center.x) * (b.y - center.y) -
-                (b.x - center.x) * (a.y - center.y);
-            if (det < 0) {
-              // Swap neighbors at i and j
+            if (ccw_comparator.compare(a, b) < 0)
               neighbors.swap(i, j);
-            }
           }
         }
 

@@ -53,9 +53,9 @@ public class GSDTAlgorithmTest extends TestCase {
   }
 
   /**
-   * Test i
+   * Test Delaunay Triangulation for a toy dataset. Visualized in file test_dt1.svg
    */
-  public void testTriangulation() {
+  /*public void testTriangulation1() {
     Point[] points = {
         new Point(50, 50),
         new Point(60, 10),
@@ -76,6 +76,54 @@ public class GSDTAlgorithmTest extends TestCase {
       for (int i = 0; !found && i < correctTriangulation.length; i++)
         found = arrayEqualAnyOrder(unsafeTriangle, correctTriangulation[i]);
       assertTrue("A triangle not found", found);
+      numOfTrianglesFound++;
+    }
+    assertEquals(correctTriangulation.length, numOfTrianglesFound);
+  }*/
+
+  /**
+   * Test Delaunay Triangulation with a small dataset
+   */
+  public void testTriangulation2() {
+    Point[] points = {
+        new Point(27, 75),
+        new Point(75, 25),
+        new Point(65, 50),
+        new Point(18, 69),
+        new Point(11, 89),
+        new Point(49, 95),
+        new Point(95, 54),
+        new Point(34, 13),
+        new Point(58, 14),
+        new Point(22, 25),
+    };
+    Point[][] correctTriangulation = {
+        new Point[] {points[2], points[7], points[8]},
+        new Point[] {points[9], points[3], points[4]},
+        new Point[] {points[3], points[0], points[4]},
+        new Point[] {points[0], points[5], points[4]},
+        new Point[] {points[2], points[9], points[7]},
+        new Point[] {points[0], points[2], points[5]},
+        new Point[] {points[5], points[2], points[6]},
+        new Point[] {points[1], points[6], points[2]},
+        new Point[] {points[1], points[2], points[8]},
+        new Point[] {points[0], points[3], points[2]},
+        new Point[] {points[2], points[3], points[9]},
+    };
+
+    GSDTAlgorithm algo = new GSDTAlgorithm(points, null);
+    SimpleGraph answer = algo.getFinalAnswerAsGraph();
+
+    int numOfTrianglesFound = 0;
+    for (Point[] triangle : answer.iterateTriangles()) {
+      boolean found = false;
+      for (int i = 0; !found && i < correctTriangulation.length; i++)
+        found = arrayEqualAnyOrder(triangle, correctTriangulation[i]);
+      assertTrue(String.format("Triangle #%d (%f, %f), (%f, %f), (%f, %f) not found",
+          numOfTrianglesFound,
+          triangle[0].x, triangle[0].y,
+          triangle[1].x, triangle[1].y,
+          triangle[2].x, triangle[2].y), found);
       numOfTrianglesFound++;
     }
     assertEquals(correctTriangulation.length, numOfTrianglesFound);
