@@ -238,18 +238,13 @@ public class SimpleGraph implements Writable {
               return 1;
             if (a.x - center.x < 0 && b.x - center.x >= 0)
               return -1;
-            if (a.x - center.x == 0 && b.x - center.x == 0) {
-              if (a.y - center.y >= 0 || b.y - center.y >= 0)
-                return a.y > b.y ? 1 : -1;
-              return b.y > a.y ? 1 : -1;
-            }
 
             // compute the cross product of vectors (center -> a) x (center -> b)
             double det = (a.x - center.x) * (b.y - center.y) - (b.x - center.x) * (a.y - center.y);
             if (det < 0)
-              return 1;
-            if (det > 0)
               return -1;
+            if (det > 0)
+              return 1;
             return 0;
           }
         };
@@ -259,8 +254,8 @@ public class SimpleGraph implements Writable {
             // Compare neighbors j and j+1
             final Point a = sites[neighbors.get(j)];
             final Point b = sites[neighbors.get(j+1)];
-            if (ccw_comparator.compare(a, b) < 0)
-              neighbors.swap(i, j);
+            if (ccw_comparator.compare(a, b) > 0)
+              neighbors.swap(j, j+1);
           }
         }
 
@@ -270,12 +265,6 @@ public class SimpleGraph implements Writable {
         // If the neighbor found is valid, break the loop
         if (state.neighborIndex < neighbors.size())
           break;
-      }
-      if (state.siteIndex < neighbors.size()) {
-        // Store the triangle to report
-        state.triangle[0] = sites[state.siteIndex];
-        state.triangle[1] = sites[neighbors.get(state.neighborIndex)];
-        state.triangle[2] = sites[neighbors.get((state.neighborIndex + 1) % neighbors.size())];
       }
     }
 
@@ -291,6 +280,12 @@ public class SimpleGraph implements Writable {
             state.siteIndex,
             neighbors.get(state.neighborIndex),
             neighbors.get((state.neighborIndex + 1) % neighbors.size()));
+      }
+      if (canReportTriangle) {
+        // Store the triangle to report
+        state.triangle[0] = sites[state.siteIndex];
+        state.triangle[1] = sites[neighbors.get(state.neighborIndex)];
+        state.triangle[2] = sites[neighbors.get((state.neighborIndex + 1) % neighbors.size())];
       }
     }
 
@@ -335,12 +330,16 @@ public class SimpleGraph implements Writable {
       if (p1 < p0 || p2 < p0)
         return false;
       // Compute the cross product between the vectors
-      // a = p1 -> p2
-      // b = p1 -> p0
-      double a_x = sites[p2].x - sites[p1].x;
-      double a_y = sites[p2].y - sites[p1].y;
-      double b_x = sites[p0].x - sites[p1].x;
-      double b_y = sites[p0].y - sites[p1].y;
+      // a = p0 -> p1
+      // b = p0 -> p2
+      // If the cross product is positive, it indicates that the angle at p0
+      // is less than PI, hence the three points represent a valid triangle
+      // Otherwise, if the cross produce is negative, it indicates an angle
+      // larger than PI (or less than zero) which indicates an invalid triangle
+      double a_x = sites[p2].x - sites[p0].x;
+      double a_y = sites[p2].y - sites[p0].y;
+      double b_x = sites[p1].x - sites[p0].x;
+      double b_y = sites[p1].y - sites[p0].y;
       if (a_x * b_y - a_y * b_x < 0)
         return false;
       return true;
