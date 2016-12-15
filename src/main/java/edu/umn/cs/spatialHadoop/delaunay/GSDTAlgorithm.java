@@ -840,14 +840,15 @@ public class GSDTAlgorithm {
     safeGraph.edgeEnds = safeEdgeEnds.toArray();
     safeGraph.sitesToReport = unsafeSites.or(reportedSites).invert();
     safeGraph.reportedSites = reportedSites;
-    //safeGraph.compact();
 
     unsafeGraph.sites = this.points;
     unsafeGraph.edgeStarts = unsafeEdgeStarts.toArray();
     unsafeGraph.edgeEnds = unsafeEdgeEnds.toArray();
     unsafeGraph.sitesToReport = new BitArray(this.points.length); // Report nothing
     unsafeGraph.reportedSites = safeGraph.sitesToReport.or(this.reportedSites);
-    //unsafeGraph.compact();
+
+    safeGraph.compact();
+    unsafeGraph.compact();
   }
 
   /**

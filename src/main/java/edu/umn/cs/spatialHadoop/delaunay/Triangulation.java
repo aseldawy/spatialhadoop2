@@ -78,27 +78,33 @@ public class Triangulation implements Writable {
     int maxID = 0;
     Point[] newSites = new Point[newSiteCount];
     int[] newNodeIDs = new int[sites.length];
-    BitArray newSafeSites = new BitArray(newSiteCount);
+    BitArray newSitesToReport = new BitArray(newSiteCount);
+    BitArray newReportedSites = new BitArray(newSiteCount);
     this.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (int oldNodeID = 0; oldNodeID < sites.length; oldNodeID++) {
       if (connectedNodes.get(oldNodeID)) {
         newSites[maxID] = sites[oldNodeID];
         this.mbr.expand(newSites[maxID]);
-        newSafeSites.set(maxID, sitesToReport.get(oldNodeID));
+        newSitesToReport.set(maxID, sitesToReport.get(oldNodeID));
+        newReportedSites.set(maxID, reportedSites.get(oldNodeID));
         newNodeIDs[oldNodeID] = maxID++;
       }
     }
     if (maxID != newSiteCount)
       throw new RuntimeException(String.format("Error in compaction. "
           + "Copied only %d sites instead of %d", maxID, newSiteCount));
-    this.sites = newSites;
-    
     // Update all edges accordingly
+    // Notice that the number of edges is not changed because we only delete
+    // nodes that do not have any edges
     for (int i = 0; i < edgeStarts.length; i++) {
-      edgeStarts[i] = newNodeIDs[edgeStarts[i]];
-      edgeEnds[i] = newNodeIDs[edgeEnds[i]];
+      this.edgeStarts[i] = newNodeIDs[edgeStarts[i]];
+      this.edgeEnds[i] = newNodeIDs[edgeEnds[i]];
     }
+
+    this.sites = newSites;
+    this.reportedSites = newReportedSites;
+    this.sitesToReport = newSitesToReport;
   }
   
   @Override
