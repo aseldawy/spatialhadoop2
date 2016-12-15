@@ -166,7 +166,7 @@ public class DelaunayTriangulationOutputFormat extends
         } else {
           System.out.println("Merging "+allTriangulations.size()+" triangulations");
           finalAnswer = GSDTAlgorithm.mergeTriangulations(
-              allTriangulations, task).getFinalAnswerAsGraph();
+              allTriangulations, task).getFinalTriangulation();
         }
         // Write the final answer to the output and delete intermediate files
         System.out.println("Writing final output");

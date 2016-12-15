@@ -66,7 +66,7 @@ public class GSDTAlgorithmTest extends TestCase {
     };
 
     GSDTAlgorithm algo = new GSDTAlgorithm(points, null);
-    Triangulation answer = algo.getFinalAnswerAsGraph();
+    Triangulation answer = algo.getFinalTriangulation();
 
     int numOfTrianglesFound = 0;
     for (Point[] unsafeTriangle : answer.iterateTriangles()) {
@@ -109,7 +109,7 @@ public class GSDTAlgorithmTest extends TestCase {
     correctTriangulation.add(new Point[] {points[7], points[1], points[2]});
 
     GSDTAlgorithm algo = new GSDTAlgorithm(points, null);
-    Triangulation answer = algo.getFinalAnswerAsGraph();
+    Triangulation answer = algo.getFinalTriangulation();
 
     int iTriangle = 0;
     for (Point[] triangle : answer.iterateTriangles()) {
@@ -152,21 +152,14 @@ public class GSDTAlgorithmTest extends TestCase {
       points[i] = new Point(random.nextInt(1000), random.nextInt(1000));
 
     Arrays.sort(points);
-    //for (int i = 0; i < points.length; i++)
-    //  System.out.printf("[%.0f, %.0f], # %03d\n", points[i].x, points[i].y, i);
 
     // Compute Delaunay triangulation for the 100 points
     GSDTAlgorithm algo = new GSDTAlgorithm(points, null);
-    Triangulation answer = algo.getFinalAnswerAsGraph();
+    Triangulation answer = algo.getFinalTriangulation();
     // Retrieve all triangles from the complete answer and use it as a baseline
     List<Point[]> allTriangles = new ArrayList<Point[]>();
     for (Point[] triangle : answer.iterateTriangles()) {
       allTriangles.add(triangle.clone());
-      /*System.out.printf("[ %d, %d, %d],\n",
-          Arrays.binarySearch(points, triangle[0]),
-          Arrays.binarySearch(points, triangle[1]),
-          Arrays.binarySearch(points, triangle[2])
-          );*/
     }
 
     // Split into a final and non-final graphs and check that we get the same
@@ -174,7 +167,6 @@ public class GSDTAlgorithmTest extends TestCase {
     Triangulation safe = new Triangulation();
     Triangulation unsafe = new Triangulation();
     algo.splitIntoSafeAndUnsafeGraphs(new Rectangle(0, 0, 1000, 1000), safe, unsafe);
-    int i_triangle = 0;
     for (Point[] safeTriangle : safe.iterateTriangles()) {
       // Check that the triangle is in the list of allTriangles
       boolean found = false;
@@ -191,7 +183,6 @@ public class GSDTAlgorithmTest extends TestCase {
           Arrays.binarySearch(points, safeTriangle[0]),
           Arrays.binarySearch(points, safeTriangle[1]),
           Arrays.binarySearch(points, safeTriangle[2])), found);
-      i_triangle++;
     }
     // For unsafe triangles, invert the reportedSites to report all sites that
     // have never been reported before.
@@ -212,8 +203,123 @@ public class GSDTAlgorithmTest extends TestCase {
           Arrays.binarySearch(points, unsafeTriangle[0]),
           Arrays.binarySearch(points, unsafeTriangle[1]),
           Arrays.binarySearch(points, unsafeTriangle[2])), found);
-      i_triangle++;
     }
+    for (Point[] triangle : allTriangles) {
+      System.out.printf("Triangle not found (%d, %d, %d)\n",
+          Arrays.binarySearch(points, triangle[0]),
+          Arrays.binarySearch(points, triangle[1]),
+          Arrays.binarySearch(points, triangle[2])
+      );
+    }
+    assertTrue(String.format("%d triangles not found", allTriangles.size()),
+        allTriangles.isEmpty());
+  }
+
+  /**
+   * Tests the the calculation of DT in a distributed manner reports the correct
+   * triangles.
+   */
+  public void testMerge() {
+    Random random = new Random(0);
+    // Generate 100 random points
+    Point[] points = new Point[100];
+    for (int i = 0; i < points.length; i++)
+      points[i] = new Point(random.nextInt(1000), random.nextInt(1000));
+
+    Arrays.sort(points);
+
+    // Compute Delaunay triangulation for the 100 points
+    GSDTAlgorithm algo = new GSDTAlgorithm(points, null);
+    Triangulation answer = algo.getFinalTriangulation();
+    // Retrieve all triangles from the complete answer and use it as a baseline
+    List<Point[]> allTriangles = new ArrayList<Point[]>();
+    for (Point[] triangle : answer.iterateTriangles()) {
+      allTriangles.add(triangle.clone());
+    }
+
+    // Split the input set of points vertically, compute each DT separately,
+    // then merge them and make sure that we get the same answer
+    // Points are already sorted on the x-axis
+    Point[] leftHalf = new Point[points.length / 2];
+    System.arraycopy(points, 0, leftHalf, 0, leftHalf.length);
+
+    GSDTAlgorithm leftAlgo = new GSDTAlgorithm(leftHalf, null);
+    Rectangle leftMBR = new Rectangle(0, 0, (points[leftHalf.length - 1].x + points[leftHalf.length].x) / 2, 1000);
+    Triangulation leftSafe = new Triangulation();
+    Triangulation leftUnsafe = new Triangulation();
+    leftAlgo.splitIntoSafeAndUnsafeGraphs(leftMBR, leftSafe, leftUnsafe);
+
+    // Check all final triangles on the left half
+    for (Point[] safeTriangle : leftSafe.iterateTriangles()) {
+      // Check that the triangle is in the list of allTriangles
+      boolean found = false;
+      int i = 0;
+      while (!found && i < allTriangles.size()) {
+        found = arrayEqualAnyOrder(safeTriangle, allTriangles.get(i));
+        if (found)
+          allTriangles.remove(i);
+        else
+          i++;
+      }
+
+      assertTrue(String.format("Safe triangle (%d, %d, %d) not found",
+          Arrays.binarySearch(points, safeTriangle[0]),
+          Arrays.binarySearch(points, safeTriangle[1]),
+          Arrays.binarySearch(points, safeTriangle[2])), found);
+    }
+
+    // Repeat the same thing for the right half.
+    Point[] rightHalf = new Point[points.length - leftHalf.length];
+    System.arraycopy(points, leftHalf.length, rightHalf, 0, rightHalf.length);
+
+    // Compute DT for the right half
+    GSDTAlgorithm rightAlgo = new GSDTAlgorithm(rightHalf, null);
+    Rectangle rightMBR = new Rectangle((points[leftHalf.length - 1].x + points[leftHalf.length].x) / 2, 0, 1000, 1000);
+    Triangulation rightSafe = new Triangulation();
+    Triangulation rightUnsafe = new Triangulation();
+    rightAlgo.splitIntoSafeAndUnsafeGraphs(rightMBR, rightSafe, rightUnsafe);
+
+    // Check all final triangles on the right half
+    for (Point[] safeTriangle : rightSafe.iterateTriangles()) {
+      // Check that the triangle is in the list of allTriangles
+      boolean found = false;
+      int i = 0;
+      while (!found && i < allTriangles.size()) {
+        found = arrayEqualAnyOrder(safeTriangle, allTriangles.get(i));
+        if (found)
+          allTriangles.remove(i);
+        else
+          i++;
+      }
+
+      assertTrue(String.format("Safe triangle (%d, %d, %d) not found",
+          Arrays.binarySearch(points, safeTriangle[0]),
+          Arrays.binarySearch(points, safeTriangle[1]),
+          Arrays.binarySearch(points, safeTriangle[2])), found);
+    }
+
+    // Merge the unsafe parts from the letf and right to finalize
+    GSDTAlgorithm mergeAlgo = new GSDTAlgorithm(new Triangulation[] {leftUnsafe, rightUnsafe}, null);
+    Triangulation finalPart = mergeAlgo.getFinalTriangulation();
+
+    for (Point[] safeTriangle : finalPart.iterateTriangles()) {
+      // Check that the triangle is in the list of allTriangles
+      boolean found = false;
+      int i = 0;
+      while (!found && i < allTriangles.size()) {
+        found = arrayEqualAnyOrder(safeTriangle, allTriangles.get(i));
+        if (found)
+          allTriangles.remove(i);
+        else
+          i++;
+      }
+
+      assertTrue(String.format("Safe triangle (%d, %d, %d) not found",
+          Arrays.binarySearch(points, safeTriangle[0]),
+          Arrays.binarySearch(points, safeTriangle[1]),
+          Arrays.binarySearch(points, safeTriangle[2])), found);
+    }
+
     for (Point[] triangle : allTriangles) {
       System.out.printf("Triangle not found (%d, %d, %d)\n",
           Arrays.binarySearch(points, triangle[0]),

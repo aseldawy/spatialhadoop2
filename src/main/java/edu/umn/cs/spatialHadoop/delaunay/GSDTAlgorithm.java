@@ -320,7 +320,7 @@ public class GSDTAlgorithm {
       LOG.info("Merging "+column.size()+" triangulations vertically");
       GSDTAlgorithm algo =
           new GSDTAlgorithm(column.toArray(new Triangulation[column.size()]), progress);
-      mergedColumns.add(algo.getFinalAnswerAsGraph());
+      mergedColumns.add(algo.getFinalTriangulation());
     }
     
     // Merge the result horizontally
@@ -595,40 +595,40 @@ public class GSDTAlgorithm {
   }
 
   /**
-   * Returns the final answer as a graph.
+   * Returns the final answer as a triangulation.
    * @return
    */
-  public Triangulation getFinalAnswerAsGraph() {
-    Triangulation graph = new Triangulation();
+  public Triangulation getFinalTriangulation() {
+    Triangulation result = new Triangulation();
 
-    graph.sites = this.points.clone();
+    result.sites = this.points.clone();
+    result.reportedSites = this.reportedSites;
+    result.sitesToReport = this.reportedSites.invert();
     int numEdges = 0;
-    graph.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+    result.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (int s1 = 0; s1 < this.neighbors.length; s1++) {
       numEdges += this.neighbors[s1].size();
-      graph.mbr.expand(graph.sites[s1]);
+      result.mbr.expand(result.sites[s1]);
     }
-    graph.sitesToReport = new BitArray(graph.sites.length);
-    graph.sitesToReport.fill(true);
     numEdges /= 2; // We store each undirected edge once
-    graph.edgeStarts = new int[numEdges];
-    graph.edgeEnds = new int[numEdges];
+    result.edgeStarts = new int[numEdges];
+    result.edgeEnds = new int[numEdges];
 
     for (int s1 = 0; s1 < this.neighbors.length; s1++) {
       for (int s2 : this.neighbors[s1]) {
         if (s1 < s2) {
           numEdges--;
-          graph.edgeStarts[numEdges] = s1;
-          graph.edgeEnds[numEdges] = s2;
+          result.edgeStarts[numEdges] = s1;
+          result.edgeEnds[numEdges] = s2;
         }
       }
     }
     if (numEdges != 0)
       throw new RuntimeException("Error in edges! Copied "+
-    (graph.edgeStarts.length - numEdges)+" instead of "+graph.edgeStarts.length);
+    (result.edgeStarts.length - numEdges)+" instead of "+result.edgeStarts.length);
   
-    return graph;
+    return result;
   }
   
   /**

@@ -142,7 +142,7 @@ public class DelaunayTriangulation {
       } else {
         LOG.info("Writing the whole DT to the reduce phase");
         context.setStatus("Writing DT");
-        context.write(column, algo.getFinalAnswerAsGraph());
+        context.write(column, algo.getFinalTriangulation());
       }
     }
     
@@ -347,7 +347,7 @@ public class DelaunayTriangulation {
       out.close();
     }
 
-//    dtAlgorithm.getFinalAnswerAsGraph().draw();
+//    dtAlgorithm.getFinalTriangulation().draw();
     //Triangulation finalPart = new Triangulation();
     //Triangulation nonfinalPart = new Triangulation();
     //dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
