@@ -11,7 +11,6 @@ package edu.umn.cs.spatialHadoop.delaunay;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 
@@ -23,24 +22,27 @@ import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
- * A class to store the output of Dealaunay Triangulation as a graph. Sites
- * are stored as vertices and Delaunay edges are stored as graph edges.
+ * A class to store a Triangulation for a set of points as a graph. Sites
+ * are stored as vertices and triangle edges are stored as graph edges.
  * 
  * @author Ahmed Eldawy
  *
  */
-public class SimpleGraph implements Writable {
+public class Triangulation implements Writable {
   /**A list of all vertices in this graph.*/
   Point[] sites;
   /**A set of all edges, each connecting two points in the graph*/
   int[] edgeStarts, edgeEnds;
   /**Minimum bounding rectangles for all points*/
   Rectangle mbr;
-  /**A safe site is a site that does not participate in any unsafe triangles*/
-  BitArray safeSites;
+  /**A bitmask for all sites that can be reported*/
+  BitArray sitesToReport;
+  /**A bitmask for all sites that have been previously reported*/
+  BitArray reportedSites;
 
-  public SimpleGraph() {
-    safeSites = new BitArray();
+  public Triangulation() {
+    sitesToReport = new BitArray();
+    reportedSites = new BitArray();
     mbr = new Rectangle();
   }
   
@@ -83,7 +85,7 @@ public class SimpleGraph implements Writable {
       if (connectedNodes.get(oldNodeID)) {
         newSites[maxID] = sites[oldNodeID];
         this.mbr.expand(newSites[maxID]);
-        newSafeSites.set(maxID, safeSites.get(oldNodeID));
+        newSafeSites.set(maxID, sitesToReport.get(oldNodeID));
         newNodeIDs[oldNodeID] = maxID++;
       }
     }
@@ -108,7 +110,8 @@ public class SimpleGraph implements Writable {
       site.write(out);
     IntArray.writeIntArray(edgeStarts, out);
     IntArray.writeIntArray(edgeEnds, out);
-    safeSites.write(out);
+    sitesToReport.write(out);
+    reportedSites.write(out);
   }
 
   @Override
@@ -125,7 +128,8 @@ public class SimpleGraph implements Writable {
       }
       edgeStarts = IntArray.readIntArray(edgeStarts, in);
       edgeEnds = IntArray.readIntArray(edgeEnds, in);
-      safeSites.readFields(in);
+      sitesToReport.readFields(in);
+      reportedSites.readFields(in);
     } catch (ClassNotFoundException e) {
       throw new RuntimeException("Cannot find site class", e);
     } catch (InstantiationException e) {
@@ -214,7 +218,7 @@ public class SimpleGraph implements Writable {
     private void moveToNextSite(Pointer state) {
       while (++state.siteIndex < sites.length) {
         // Skip if the site is not safe
-        if (!safeSites.get(state.siteIndex))
+        if (!sitesToReport.get(state.siteIndex))
           continue;
         // Found a safe site, load its neighbors
         neighbors.clear();
@@ -226,7 +230,10 @@ public class SimpleGraph implements Writable {
         }
 
         if (neighbors.size() < 2)
-          throw new RuntimeException("A safe site must have at least two neighbors");
+          throw new RuntimeException(String.format(
+              "Safe site (%f, %f) must have at least two neighbors " +
+                  "but had only %d neighbors",
+              sites[state.siteIndex].x, sites[state.siteIndex].y, neighbors.size()));
 
         // Sort neighbors in a CCW order to find triangles.
         // http://stackoverflow.com/questions/6989100/sort-points-in-clockwise-order
@@ -317,16 +324,18 @@ public class SimpleGraph implements Writable {
      * Returns true if an only if the given triangle should be reported.
      * A triangle is reported iff the following conditions hold:
      * 1- The head of the triangle (p0) is a safe site
-     * 2- The head of the triangle (p0) has the smallest index among the three
-     *    corners.
+     * 2- The head of the triangle (p0) has the smallest index among the safe
+     *    sites of the three corners.
      * 3- The angle at the triangle head is less than PI. This is actually to
      *    make sure it is a valid triangle
-     * @param p0
-     * @param p1
-     * @param p2
+     * @param p0 Index of the first corner (head) of the triangle
+     * @param p1 Index of the second corner
+     * @param p2 Index of the third corner
      * @return
      */
     private boolean canReportTriangle(int p0, int p1, int p2) {
+      // To report the triangle, the current head (p0) should be the one with
+      // the least index. This is to ensure reporting a triangle exactly once
       if (p1 < p0 || p2 < p0)
         return false;
       // Compute the cross product between the vectors

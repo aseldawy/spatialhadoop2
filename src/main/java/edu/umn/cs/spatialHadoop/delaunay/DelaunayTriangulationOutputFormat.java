@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -35,11 +34,11 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  *
  */
 public class DelaunayTriangulationOutputFormat extends
-  FileOutputFormat<Boolean, SimpleGraph> {
+  FileOutputFormat<Boolean, Triangulation> {
   static final Log LOG = LogFactory.getLog(DelaunayTriangulationOutputFormat.class);
   
   public static class TriangulationRecordWriter extends
-    RecordWriter<Boolean, SimpleGraph> {
+    RecordWriter<Boolean, Triangulation> {
     
     /**An output stream to write non-final triangulations*/
     private FSDataOutputStream nonFinalOut;
@@ -57,7 +56,7 @@ public class DelaunayTriangulationOutputFormat extends
     }
 
     @Override
-    public void write(Boolean key, SimpleGraph value)
+    public void write(Boolean key, Triangulation value)
         throws IOException, InterruptedException {
       if (key.booleanValue()) {
         // Write a final triangulation in a user-friendly text format
@@ -72,7 +71,7 @@ public class DelaunayTriangulationOutputFormat extends
      * Writes a final triangulation in a user-friendly format
      * @param t
      */
-    public static void writeFinalTriangulation(PrintStream ps, SimpleGraph t,
+    public static void writeFinalTriangulation(PrintStream ps, Triangulation t,
         Progressable progress) {
       Text text = new Text2();
       for (int i = 0; i < t.edgeStarts.length; i++) {
@@ -104,7 +103,7 @@ public class DelaunayTriangulationOutputFormat extends
   }
 
   @Override
-  public RecordWriter<Boolean, SimpleGraph> getRecordWriter(
+  public RecordWriter<Boolean, Triangulation> getRecordWriter(
       TaskAttemptContext context) throws IOException, InterruptedException {
     Path nonFinalFile = getDefaultWorkFile(context, ".nonfinal");
     Path finalFile = getDefaultWorkFile(context, ".final");
@@ -137,15 +136,15 @@ public class DelaunayTriangulationOutputFormat extends
       });
       
       try {
-        List<List<SimpleGraph>> allLists = Parallel.forEach(nonFinalFiles.length, new RunnableRange<List<SimpleGraph>>() {
+        List<List<Triangulation>> allLists = Parallel.forEach(nonFinalFiles.length, new RunnableRange<List<Triangulation>>() {
           @Override
-          public List<SimpleGraph> run(int i1, int i2) {
+          public List<Triangulation> run(int i1, int i2) {
             try {
-              List<SimpleGraph> triangulations = new ArrayList<SimpleGraph>();
+              List<Triangulation> triangulations = new ArrayList<Triangulation>();
               for (int i = i1; i < i2; i++) {
                 FSDataInputStream in = fs.open(nonFinalFiles[i].getPath());
                 while (in.available() > 0) {
-                  SimpleGraph t = new SimpleGraph();
+                  Triangulation t = new Triangulation();
                   t.readFields(in);
                   triangulations.add(t);
                 }
@@ -158,10 +157,10 @@ public class DelaunayTriangulationOutputFormat extends
           }
         });
         
-        List<SimpleGraph> allTriangulations = new ArrayList<SimpleGraph>();
-        for (List<SimpleGraph> list : allLists)
+        List<Triangulation> allTriangulations = new ArrayList<Triangulation>();
+        for (List<Triangulation> list : allLists)
           allTriangulations.addAll(list);
-        SimpleGraph finalAnswer;
+        Triangulation finalAnswer;
         if (allTriangulations.size() == 1) {
           finalAnswer = allTriangulations.get(0);
         } else {

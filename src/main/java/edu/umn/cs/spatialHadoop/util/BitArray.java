@@ -107,10 +107,27 @@ public class BitArray implements Writable {
   }
 
   public BitArray invert() {
-    BitArray inverse = new BitArray();
-    inverse.entries = new long[this.entries.length];
+    BitArray result = new BitArray();
+    result.entries = new long[this.entries.length];
+    result.size = this.size();
     for (int i = 0; i < entries.length; i++)
-      inverse.entries[i] = ~this.entries[i];
-    return inverse;
+      result.entries[i] = ~this.entries[i];
+    return result;
+  }
+
+  /**
+   * Computes the bitwise OR of two bitmasks of the same size
+   * @param other
+   * @return
+   */
+  public BitArray or(BitArray other) {
+    if (this.size != other.size)
+      throw new RuntimeException("Cannot OR two BitArrays of different sizes");
+    BitArray result = new BitArray();
+    result.entries = new long[this.entries.length];
+    result.size = this.size;
+    for (int i = 0; i < entries.length; i++)
+      result.entries[i] = this.entries[i] | other.entries[i];
+    return result;
   }
 }

@@ -18,7 +18,6 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
@@ -78,7 +77,7 @@ public class DelaunayTriangulation {
    * @param <S> - The type of shape for sites
    */
   public static class DelaunayMap<S extends Point>
-    extends Mapper<Rectangle, Iterable<S>, IntWritable, SimpleGraph> {
+    extends Mapper<Rectangle, Iterable<S>, IntWritable, Triangulation> {
     
     /**Whether the map function should remove duplicates in the input or not*/
     private boolean deduplicate;
@@ -125,9 +124,9 @@ public class DelaunayTriangulation {
       if (key.isValid()) {
         LOG.info("Finding final and non-final edges");
         context.setStatus("Splitting DT");
-        SimpleGraph finalPart = new SimpleGraph();
-        SimpleGraph nonfinalPart = new SimpleGraph();
-        algo.splitIntoFinalAndNonFinalGraphs(key, finalPart, nonfinalPart);
+        Triangulation finalPart = new Triangulation();
+        Triangulation nonfinalPart = new Triangulation();
+        algo.splitIntoSafeAndUnsafeGraphs(key, finalPart, nonfinalPart);
         // Write final part directly to the output
         context.getCounter(DelaunayCounters.MAP_FINAL_SITES).increment(finalPart.getNumSites());
         writer.write(Boolean.TRUE, finalPart);
@@ -149,7 +148,7 @@ public class DelaunayTriangulation {
     
     @Override
     protected void cleanup(
-        Mapper<Rectangle, Iterable<S>, IntWritable, SimpleGraph>.Context context)
+        Mapper<Rectangle, Iterable<S>, IntWritable, Triangulation>.Context context)
             throws IOException, InterruptedException {
       super.cleanup(context);
       writer.close(context);
@@ -164,24 +163,24 @@ public class DelaunayTriangulation {
    *
    */
   public static class DelaunayReduce
-  extends Reducer<IntWritable, SimpleGraph, Boolean, SimpleGraph> {
+  extends Reducer<IntWritable, Triangulation, Boolean, Triangulation> {
     
     @Override
-    protected void reduce(IntWritable dummy, Iterable<SimpleGraph> values,
+    protected void reduce(IntWritable dummy, Iterable<Triangulation> values,
         Context context) throws IOException, InterruptedException {
-      List<SimpleGraph> triangulations = new ArrayList<SimpleGraph>();
+      List<Triangulation> triangulations = new ArrayList<Triangulation>();
       Rectangle overallMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
           -Double.MAX_VALUE, -Double.MAX_VALUE);
-      for (SimpleGraph t : values) {
+      for (Triangulation t : values) {
         overallMBR.expand(t.mbr);
         triangulations.add(t);
       }      
       
       GSDTAlgorithm algo = GSDTAlgorithm.mergeTriangulations(triangulations, context);
       
-      SimpleGraph finalPart = new SimpleGraph();
-      SimpleGraph nonfinalPart = new SimpleGraph();
-      algo.splitIntoFinalAndNonFinalGraphs(overallMBR, finalPart, nonfinalPart);
+      Triangulation finalPart = new Triangulation();
+      Triangulation nonfinalPart = new Triangulation();
+      algo.splitIntoSafeAndUnsafeGraphs(overallMBR, finalPart, nonfinalPart);
       
       // Write final part directly to the output path
       context.getCounter(DelaunayCounters.REDUCE_FINAL_SITES).increment(finalPart.getNumSites());
@@ -210,7 +209,7 @@ public class DelaunayTriangulation {
     // Set map and reduce
     job.setMapperClass(DelaunayMap.class);
     job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(SimpleGraph.class);
+    job.setMapOutputValueClass(Triangulation.class);
     job.setReducerClass(DelaunayReduce.class);
 
     // Set input and output

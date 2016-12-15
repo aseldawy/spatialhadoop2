@@ -41,6 +41,13 @@ public class GSDTAlgorithm {
   /** The original input set of points */
   Point[] points;
 
+  /** A bitmask with a bit set for each site that has been previously reported
+   * to the output. This is needed when merging intermediate triangulations to
+   * avoid reporting the same output twice. If <code>null</code>, it indicates
+   * that no sites have been previously reported.
+   */
+  BitArray reportedSites;
+
   /** Coordinates of all sites */
   double[] xs, ys;
 
@@ -126,7 +133,7 @@ public class GSDTAlgorithm {
      *          How much shift should be added to each edge to adjust it to the
      *          new points array
      */
-    public IntermediateTriangulation(SimpleGraph t, int pointShift) {
+    public IntermediateTriangulation(Triangulation t, int pointShift) {
       // Assume that points have already been copied
       this.site1 = pointShift;
       this.site2 = pointShift + t.sites.length - 1;
@@ -155,6 +162,7 @@ public class GSDTAlgorithm {
   public <P extends Point> GSDTAlgorithm(P[] points, Progressable progress) {
     this.progress = progress;
     this.points = new Point[points.length];
+    this.reportedSites = new BitArray(points.length); // Initialized to zeros
     System.arraycopy(points, 0, this.points, 0, points.length);
     Arrays.sort(this.points, new Comparator<Point>() {
       @Override
@@ -213,14 +221,15 @@ public class GSDTAlgorithm {
    * @param ts
    * @param progress
    */
-  public GSDTAlgorithm(SimpleGraph[] ts, Progressable progress) {
+  public GSDTAlgorithm(Triangulation[] ts, Progressable progress) {
     this.progress = progress;
     // Copy all triangulations
     int totalPointCount = 0;
-    for (SimpleGraph t : ts)
+    for (Triangulation t : ts)
       totalPointCount += t.sites.length;
     
     this.points = new Point[totalPointCount];
+    this.reportedSites = new BitArray(totalPointCount);
     // Initialize xs, ys and neighbors array
     this.xs = new double[totalPointCount];
     this.ys = new double[totalPointCount];
@@ -231,7 +240,7 @@ public class GSDTAlgorithm {
     IntermediateTriangulation[] triangulations = new IntermediateTriangulation[ts.length];
     int currentPointsCount = 0;
     for (int it = 0; it < ts.length; it++) {
-      SimpleGraph t = ts[it];
+      Triangulation t = ts[it];
       // Copy sites from that triangulation
       System.arraycopy(t.sites, 0, this.points, currentPointsCount, t.sites.length);
       
@@ -239,6 +248,7 @@ public class GSDTAlgorithm {
       for (int i = currentPointsCount; i < currentPointsCount + t.sites.length; i++) {
         this.xs[i] = points[i].x;
         this.ys[i] = points[i].y;
+        this.reportedSites.set(i, t.reportedSites.get(i - currentPointsCount));
       }
       
       // Create a corresponding partial answer
@@ -262,13 +272,13 @@ public class GSDTAlgorithm {
    * @return
    */
   static GSDTAlgorithm mergeTriangulations(
-      List<SimpleGraph> triangulations, Progressable progress) {
+      List<Triangulation> triangulations, Progressable progress) {
     // Arrange triangulations column-by-column
-    List<List<SimpleGraph>> columns = new ArrayList<List<SimpleGraph>>();
+    List<List<Triangulation>> columns = new ArrayList<List<Triangulation>>();
     int numTriangulations = 0;
-    for (SimpleGraph t : triangulations) {
+    for (Triangulation t : triangulations) {
       double x1 = t.mbr.x1, x2 = t.mbr.x2;
-      List<SimpleGraph> selectedColumn = null;
+      List<Triangulation> selectedColumn = null;
       int iColumn = 0;
       while (iColumn < columns.size() && selectedColumn == null) {
         Rectangle cmbr = columns.get(iColumn).get(0).mbr;
@@ -282,7 +292,7 @@ public class GSDTAlgorithm {
       }
       if (selectedColumn == null) {
         // Create a new column
-        selectedColumn = new ArrayList<SimpleGraph>();
+        selectedColumn = new ArrayList<Triangulation>();
         columns.add(selectedColumn);
       }
       selectedColumn.add(t);
@@ -291,13 +301,13 @@ public class GSDTAlgorithm {
     
     LOG.info("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
     
-    List<SimpleGraph> mergedColumns = new ArrayList<SimpleGraph>();
+    List<Triangulation> mergedColumns = new ArrayList<Triangulation>();
     // Merge all triangulations together column-by-column
-    for (List<SimpleGraph> column : columns) {
+    for (List<Triangulation> column : columns) {
       // Sort this column by y-axis
-      Collections.sort(column, new Comparator<SimpleGraph>() {
+      Collections.sort(column, new Comparator<Triangulation>() {
         @Override
-        public int compare(SimpleGraph t1, SimpleGraph t2) {
+        public int compare(Triangulation t1, Triangulation t2) {
           double dy = t1.mbr.y1 - t2.mbr.y1;
           if (dy < 0)
             return -1;
@@ -309,14 +319,14 @@ public class GSDTAlgorithm {
   
       LOG.info("Merging "+column.size()+" triangulations vertically");
       GSDTAlgorithm algo =
-          new GSDTAlgorithm(column.toArray(new SimpleGraph[column.size()]), progress);
+          new GSDTAlgorithm(column.toArray(new Triangulation[column.size()]), progress);
       mergedColumns.add(algo.getFinalAnswerAsGraph());
     }
     
     // Merge the result horizontally
-    Collections.sort(mergedColumns, new Comparator<SimpleGraph>() {
+    Collections.sort(mergedColumns, new Comparator<Triangulation>() {
       @Override
-      public int compare(SimpleGraph t1, SimpleGraph t2) {
+      public int compare(Triangulation t1, Triangulation t2) {
         double dx = t1.mbr.x1 - t2.mbr.x1;
         if (dx < 0)
           return -1;
@@ -327,7 +337,7 @@ public class GSDTAlgorithm {
     });
     LOG.info("Merging "+mergedColumns.size()+" triangulations horizontally");
     GSDTAlgorithm algo = new GSDTAlgorithm(
-        mergedColumns.toArray(new SimpleGraph[mergedColumns.size()]),
+        mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
         progress);
     return algo;
   }
@@ -588,8 +598,8 @@ public class GSDTAlgorithm {
    * Returns the final answer as a graph.
    * @return
    */
-  public SimpleGraph getFinalAnswerAsGraph() {
-    SimpleGraph graph = new SimpleGraph();
+  public Triangulation getFinalAnswerAsGraph() {
+    Triangulation graph = new Triangulation();
 
     graph.sites = this.points.clone();
     int numEdges = 0;
@@ -599,8 +609,8 @@ public class GSDTAlgorithm {
       numEdges += this.neighbors[s1].size();
       graph.mbr.expand(graph.sites[s1]);
     }
-    graph.safeSites = new BitArray(graph.sites.length);
-    graph.safeSites.fill(true);
+    graph.sitesToReport = new BitArray(graph.sites.length);
+    graph.sitesToReport.fill(true);
     numEdges /= 2; // We store each undirected edge once
     graph.edgeStarts = new int[numEdges];
     graph.edgeEnds = new int[numEdges];
@@ -767,80 +777,77 @@ public class GSDTAlgorithm {
   }
   
   /**
-   * Splits the answer into final and non-final parts. Final parts can be safely
-   * written to the output as they are not going to be affected by a future
-   * merge step. Non-final parts cannot be written to the output yet as they
-   * might be affected (i.e., some edges are pruned) by a future merge step.
+   * Splits the answer into safe and unsafe parts. Safe parts are final and can
+   * be safely written to the output as they are not going to be affected by any
+   * future merge steps. Unsafe parts cannot be written to the output yet as they
+   * might be affected by a future merge step, e.g., some edges are pruned.
    *
    * Here is how this functions works.
    * 1. It classifies sites into safe sites and unsafe sites using the method
    *   detectUnsafeSites. An unsafe site participates to at least one unsafe
    *   triangle
-   * 2. It classifies edges into safe and unsafe edges. An unsafe edge is
-   *   incident to at least one unsafe site.
-   * 3. Two graphs are written, one that contains all safe edges along with all
-   *   start and end sites for those edges. And the other that contain all unsafe
-   *   edges along with all start and end sites for those edges.
+   * 2. Two graphs are written, one that contains all safe sites along with all
+   *   their incident edges and one for unsafe sites along with all their
+   *   incident edges.
    *
-   * The above technique means that some sites might be repeated twice if they
-   * are safe by are adjacent to an unsafe site.
-   * @param mbr The MBR used to check for final and non-final edges. It is assumed
+   * Notice that edges are not completely separated as an edge connecting a safe
+   * and an unsafe site is written twice. Keep in mind that an edge that is
+   * incident to a safe site is also safe because, by definition, it
+   * participates in at least one safe triangle.
+   * This also means that the safe graph might contain some unsafe sites and
+   * the unsafe graph might contain some safe sites. This cannot be avoided as
+   * those edges connecting a safe and unsafe site is written in both graphs and
+   * needs its two ends to be present for completeness.
+   *
+   * @param mbr The MBR used to check for safe and unsafe sites. It is assumed
    *          that no more points can be introduced in this MBR but more points
    *          can appear later outside that MBR.
-   * @param finalGraph The set of final edges
-   * @param nonfinalGraph The set of non-final edges
+   * @param safeGraph The graph of all safe sites along with their edges and neighbors.
+   * @param unsafeGraph The set of unsafe sites along with their edges and neighbors.
    */
-  public void splitIntoFinalAndNonFinalGraphs(Rectangle mbr,
-      SimpleGraph finalGraph, SimpleGraph nonfinalGraph) {
+  public void splitIntoSafeAndUnsafeGraphs(Rectangle mbr,
+                                           Triangulation safeGraph,
+                                           Triangulation unsafeGraph) {
     BitArray unsafeSites = detectUnsafeSites(mbr);
-    
-    // A final edge is incident to at least one unsafe site
-    IntArray finalEdgeStarts = new IntArray();
-    IntArray finalEdgeEnds = new IntArray();
-    // A final edge connects two safe sites
-    IntArray nonfinalEdgeStarts = new IntArray();
-    IntArray nonfinalEdgeEnds = new IntArray();
+
+    // A safe edge is incident to at least one safe site
+    IntArray safeEdgeStarts = new IntArray();
+    IntArray safeEdgeEnds = new IntArray();
+    // An unsafe edge is incident to at least one unsafe site
+    IntArray unsafeEdgeStarts = new IntArray();
+    IntArray unsafeEdgeEnds = new IntArray();
 
     for (int i = 0; i < points.length; i++) {
       if (progress != null)
         progress.progress();
-      if (unsafeSites.get(i)) {
-        // An unsafe site, all of its adjacent edges are also unsafe
-        for (int n : neighbors[i]) {
-          if (i < n) { // To ensure that an edge is written only once
-            nonfinalEdgeStarts.add(i);
-            nonfinalEdgeEnds.add(n);
+      for (int n : neighbors[i]) {
+        if (i < n) { // To ensure that an edge is written only once
+          if (unsafeSites.get(n) || unsafeSites.get(i)) {
+            unsafeEdgeStarts.add(i);
+            unsafeEdgeEnds.add(n);
           }
-        }
-      } else {
-        // Found a safe site, all edges that are adjacent to another safe site
-        // are final edges
-        for (int n : neighbors[i]) {
-          if (i < n) { // To ensure that an edge is written only once
-            if (!unsafeSites.get(n)) {
-              // Found a final edge
-              finalEdgeStarts.add(i);
-              finalEdgeEnds.add(n);
-            } else {
-              nonfinalEdgeStarts.add(i);
-              nonfinalEdgeEnds.add(n);
-            }
+          // Do NOT add an else statement because an edge might be added to both
+          if (!unsafeSites.get(n) || !unsafeSites.get(i)) {
+            safeEdgeStarts.add(i);
+            safeEdgeEnds.add(n);
           }
         }
       }
     }
     
-    finalGraph.sites = this.points;
-    finalGraph.edgeStarts = finalEdgeStarts.toArray();
-    finalGraph.edgeEnds = finalEdgeEnds.toArray();
-    finalGraph.safeSites = unsafeSites.invert();
-    finalGraph.compact();
+    safeGraph.sites = this.points;
+    safeGraph.edgeStarts = safeEdgeStarts.toArray();
+    safeGraph.edgeEnds = safeEdgeEnds.toArray();
+    safeGraph.sitesToReport = unsafeSites.or(reportedSites).invert();
+    safeGraph.reportedSites = reportedSites;
+    //safeGraph.compact();
 
-    nonfinalGraph.sites = this.points;
-    nonfinalGraph.edgeStarts = nonfinalEdgeStarts.toArray();
-    nonfinalGraph.edgeEnds = nonfinalEdgeEnds.toArray();
-    nonfinalGraph.safeSites = new BitArray(this.points.length); // No safe sites
-    nonfinalGraph.compact();
+    unsafeGraph.sites = this.points;
+    unsafeGraph.edgeStarts = unsafeEdgeStarts.toArray();
+    unsafeGraph.edgeEnds = unsafeEdgeEnds.toArray();
+    unsafeGraph.sitesToReport = new BitArray(this.points.length); // Report nothing
+    unsafeGraph.reportedSites = safeGraph.sitesToReport.or(this.reportedSites);
+    //unsafeGraph.compact();
   }
 
   /**
