@@ -154,6 +154,13 @@ public class GSDTAlgorithm {
   }
 
   /**
+   * Added this constructor to be able to extend it.
+   */
+  protected GSDTAlgorithm() {
+
+  }
+
+  /**
    * Constructs a triangulation that merges two existing triangulations.
    * @param points
    * @param progress
