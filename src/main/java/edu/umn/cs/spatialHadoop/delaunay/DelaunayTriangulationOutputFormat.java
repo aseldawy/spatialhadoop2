@@ -74,21 +74,16 @@ public class DelaunayTriangulationOutputFormat extends
     public static void writeFinalTriangulation(PrintStream ps, Triangulation t,
         Progressable progress) {
       Text text = new Text2();
-      for (int i = 0; i < t.edgeStarts.length; i++) {
-        Point startNode = t.sites[t.edgeStarts[i]];
-        text.clear();
-        startNode.toText(text);
-        ps.print(text); // Write start node
 
-        ps.print('\t'); // Field separator
-        
-        Point endNode = t.sites[t.edgeEnds[i]];
+      byte[] tab = "\t".getBytes();
+      for (Point[] triangle : t.iterateTriangles()) {
         text.clear();
-        endNode.toText(text);
-        ps.println(text); // Write end node and new line
-        
-        if (progress != null && (i & 0xff) == 0)
-          progress.progress();
+        triangle[0].toText(text);
+        text.append(tab, 0, tab.length);
+        triangle[1].toText(text);
+        text.append(tab, 0, tab.length);
+        triangle[2].toText(text);
+        ps.println(text);
       }
     }
 

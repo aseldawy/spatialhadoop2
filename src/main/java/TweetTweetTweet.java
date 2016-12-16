@@ -20,18 +20,20 @@ import java.io.IOException;
  * @author Eldawy
  *
  */
-public class TweetTweet implements Shape {
-  Tweet tweet1, tweet2;
-  private final byte[] Comma = ",".getBytes();
+public class TweetTweetTweet implements Shape {
+  Tweet tweet1, tweet2, tweet3;
+  private final byte[] Tab = "\t".getBytes();
 
-  public TweetTweet() {
+  public TweetTweetTweet() {
     tweet1 = new Tweet();
     tweet2 = new Tweet();
+    tweet3 = new Tweet();
   }
 
-  public TweetTweet(Tweet tweet1, Tweet tweet2) {
+  public TweetTweetTweet(Tweet tweet1, Tweet tweet2, Tweet tweet3) {
     this.tweet1 = new Tweet(tweet1);
     this.tweet2 = new Tweet(tweet2);
+    this.tweet3 = new Tweet(tweet3);
   }
 
   @Override
@@ -40,13 +42,18 @@ public class TweetTweet implements Shape {
     // Skip the Tab
     text.set(text.getBytes(), 1, text.getLength() - 1);
     tweet2.fromText(text);
+    // Skip the Tab
+    text.set(text.getBytes(), 1, text.getLength() - 1);
+    tweet3.fromText(text);
   }
   
   @Override
   public Text toText(Text text) {
     tweet1.toText(text);
-    text.append(Comma, 0, Comma.length);
+    text.append(Tab, 0, Tab.length);
     tweet2.toText(text);
+    text.append(Tab, 0, Tab.length);
+    tweet3.toText(text);
     return text;
   }
   
@@ -54,22 +61,26 @@ public class TweetTweet implements Shape {
   public void write(DataOutput out) throws IOException {
     tweet1.write(out);
     tweet2.write(out);
+    tweet3.write(out);
   }
   
   @Override
   public void readFields(DataInput in) throws IOException {
     tweet1.readFields(in);
     tweet2.readFields(in);
+    tweet3.readFields(in);
   }
   
   @Override
-  public TweetTweet clone() {
-    return new TweetTweet(tweet1, tweet2);
+  public TweetTweetTweet clone() {
+    return new TweetTweetTweet(tweet1, tweet2, tweet3);
   }
 
   @Override
   public Rectangle getMBR() {
-    return new Rectangle(tweet1.x, tweet1.y, tweet2.x, tweet2.y);
+    Rectangle mbr = new Rectangle(tweet1.x, tweet1.y, tweet2.x, tweet2.y);
+    mbr.expand(tweet3);
+    return mbr;
   }
 
   @Override
@@ -83,7 +94,11 @@ public class TweetTweet implements Shape {
     int y1 = (int) Math.round(this.tweet1.y * yscale);
     int x2 = (int) Math.round(this.tweet2.x * xscale);
     int y2 = (int) Math.round(this.tweet2.y * yscale);
+    int x3 = (int) Math.round(this.tweet3.x * xscale);
+    int y3 = (int) Math.round(this.tweet3.y * yscale);
     g.drawLine(x1, y1, x2, y2);
+    g.drawLine(x2, y2, x3, y3);
+    g.drawLine(x3, y3, x1, y1);
   }
 
   @Override

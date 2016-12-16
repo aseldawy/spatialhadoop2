@@ -34,15 +34,15 @@ public class Tweet extends Point {
   @Override
   public void fromText(Text text) {
     this.id = TextSerializerHelper.consumeLong(text, ',');
-    this.x = TextSerializerHelper.consumeDouble(text, ',');
-    this.y = TextSerializerHelper.consumeDouble(text, '\0');
+    this.y = TextSerializerHelper.consumeDouble(text, ',');
+    this.x = TextSerializerHelper.consumeDouble(text, '\0');
   }
   
   @Override
   public Text toText(Text text) {
     TextSerializerHelper.serializeLong(id, text, ',');
-    TextSerializerHelper.serializeDouble(x, text, ',');
     TextSerializerHelper.serializeDouble(y, text, ',');
+    TextSerializerHelper.serializeDouble(x, text, '\0');
     return text;
   }
   

@@ -257,16 +257,16 @@ public class Triangulation implements Writable {
         neighbors.clear();
         int edge = Arrays.binarySearch(edgeStarts, state.siteIndex);
 
+        if (edge < 0)
+          continue;
+        //  throw new RuntimeException(String.format(
+        //      "No neighbors found for safe site (%f, %f)",
+        //      sites[state.siteIndex].x, sites[state.siteIndex].y));
+
         for (int iEdge = edge; iEdge < edgeStarts.length && edgeStarts[iEdge] == state.siteIndex; iEdge++)
           neighbors.add(edgeEnds[iEdge]);
         for (int iEdge = edge-1; iEdge >= 0 && edgeStarts[iEdge] == state.siteIndex; iEdge--)
           neighbors.add(edgeEnds[iEdge]);
-
-        if (neighbors.size() < 2)
-          throw new RuntimeException(String.format(
-              "Safe site (%f, %f) must have at least two neighbors " +
-                  "but had only %d neighbors",
-              sites[state.siteIndex].x, sites[state.siteIndex].y, neighbors.size()));
 
         // Sort neighbors in a CCW order to find triangles.
         // http://stackoverflow.com/questions/6989100/sort-points-in-clockwise-order
