@@ -323,26 +323,22 @@ public class DelaunayTriangulation {
     Rectangle mbr = FileMBR.fileMBR(inPaths, params);
     double buffer = Math.max(mbr.getWidth(), mbr.getHeight()) / 10;
     Rectangle bigMBR = mbr.buffer(buffer, buffer);
-    dtAlgorithm.getFinalAnswerAsVoronoiRegions(mbr, finalRegions, nonfinalRegions);
     if (outPath != null && params.getBoolean("output", true)) {
+      LOG.info("Writing the output as a soup of triangles");
+      Triangulation answer = dtAlgorithm.getFinalTriangulation();
       FileSystem outFS = outPath.getFileSystem(params);
       PrintStream out = new PrintStream(outFS.create(outPath));
 
-      // Write Voronoi regions to the output
       Text text = new Text2();
-      for (Geometry geom : finalRegions) {
+      byte[] tab = "\t".getBytes();
+      for (Point[] triangle : answer.iterateTriangles()) {
         text.clear();
-        Point shape = (Point) geom.getUserData();
-        shape.toText(text);
-        out.write(text.getBytes(), 0, text.getLength());
-        out.printf("\t%s\n", geom.toText());
-      }
-      for (Geometry geom : nonfinalRegions) {
-        text.clear();
-        Point shape = (Point) geom.getUserData();
-        shape.toText(text);
-        out.write(text.getBytes(), 0, text.getLength());
-        out.printf("\t%s\n", geom.toText());
+        triangle[0].toText(text);
+        text.append(tab, 0, tab.length);
+        triangle[1].toText(text);
+        text.append(tab, 0, tab.length);
+        triangle[2].toText(text);
+        out.println(text);
       }
       out.close();
     }
