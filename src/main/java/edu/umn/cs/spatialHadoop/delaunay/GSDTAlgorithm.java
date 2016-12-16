@@ -149,7 +149,6 @@ public class GSDTAlgorithm {
         int adjustedStart = t.edgeStarts[i] + pointShift;
         int adjustedEnd = t.edgeEnds[i] + pointShift;
         neighbors[adjustedStart].add(adjustedEnd);
-        neighbors[adjustedEnd].add(adjustedStart);
       }
     }
   }
@@ -608,22 +607,23 @@ public class GSDTAlgorithm {
     result.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (int s1 = 0; s1 < this.neighbors.length; s1++) {
+      //if (this.neighbors[s1].isEmpty())
+      //  throw new RuntimeException("A site has no incident edges");
       numEdges += this.neighbors[s1].size();
       result.mbr.expand(result.sites[s1]);
     }
-    numEdges /= 2; // We store each undirected edge once
+    // We store each undirected edge twice, once for each direction
     result.edgeStarts = new int[numEdges];
     result.edgeEnds = new int[numEdges];
 
     for (int s1 = 0; s1 < this.neighbors.length; s1++) {
       for (int s2 : this.neighbors[s1]) {
-        if (s1 < s2) {
-          numEdges--;
-          result.edgeStarts[numEdges] = s1;
-          result.edgeEnds[numEdges] = s2;
-        }
+        numEdges--;
+        result.edgeStarts[numEdges] = s1;
+        result.edgeEnds[numEdges] = s2;
       }
     }
+    result.sortEdges();
     if (numEdges != 0)
       throw new RuntimeException("Error in edges! Copied "+
     (result.edgeStarts.length - numEdges)+" instead of "+result.edgeStarts.length);
@@ -821,16 +821,14 @@ public class GSDTAlgorithm {
       if (progress != null)
         progress.progress();
       for (int n : neighbors[i]) {
-        if (i < n) { // To ensure that an edge is written only once
-          if (unsafeSites.get(n) || unsafeSites.get(i)) {
-            unsafeEdgeStarts.add(i);
-            unsafeEdgeEnds.add(n);
-          }
-          // Do NOT add an else statement because an edge might be added to both
-          if (!unsafeSites.get(n) || !unsafeSites.get(i)) {
-            safeEdgeStarts.add(i);
-            safeEdgeEnds.add(n);
-          }
+        if (unsafeSites.get(n) || unsafeSites.get(i)) {
+          unsafeEdgeStarts.add(i);
+          unsafeEdgeEnds.add(n);
+        }
+        // Do NOT add an else statement because an edge might be added to both
+        if (!unsafeSites.get(n) || !unsafeSites.get(i)) {
+          safeEdgeStarts.add(i);
+          safeEdgeEnds.add(n);
         }
       }
     }
@@ -840,12 +838,14 @@ public class GSDTAlgorithm {
     safeGraph.edgeEnds = safeEdgeEnds.toArray();
     safeGraph.sitesToReport = unsafeSites.or(reportedSites).invert();
     safeGraph.reportedSites = reportedSites;
+    safeGraph.sortEdges();
 
     unsafeGraph.sites = this.points;
     unsafeGraph.edgeStarts = unsafeEdgeStarts.toArray();
     unsafeGraph.edgeEnds = unsafeEdgeEnds.toArray();
     unsafeGraph.sitesToReport = new BitArray(this.points.length); // Report nothing
     unsafeGraph.reportedSites = safeGraph.sitesToReport.or(this.reportedSites);
+    unsafeGraph.sortEdges();
 
     safeGraph.compact();
     unsafeGraph.compact();

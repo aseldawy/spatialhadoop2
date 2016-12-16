@@ -11,6 +11,7 @@ package edu.umn.cs.spatialHadoop.delaunay;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 
@@ -20,6 +21,8 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
+import org.apache.hadoop.util.IndexedSortable;
+import org.apache.hadoop.util.QuickSort;
 
 /**
  * A class to store a Triangulation for a set of points as a graph. Sites
@@ -65,10 +68,6 @@ public class Triangulation implements Writable {
       if (!connectedNodes.get(edgeStarts[i])) {
         newSiteCount++;
         connectedNodes.set(edgeStarts[i], true);
-      }
-      if (!connectedNodes.get(edgeEnds[i])) {
-        newSiteCount++;
-        connectedNodes.set(edgeEnds[i], true);
       }
     }
     
@@ -162,6 +161,34 @@ public class Triangulation implements Writable {
     System.out.println("}");
   }
 
+  /**
+   * Sort edges by edgeStart and edgeEnd
+   */
+  public void sortEdges() {
+    QuickSort sorter = new QuickSort();
+    IndexedSortable sortable = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        if (edgeStarts[i] != edgeStarts[j])
+          return edgeStarts[i] - edgeStarts[j];
+        return edgeEnds[i]  - edgeEnds[j];
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        int t = edgeStarts[i];
+        edgeStarts[i] = edgeStarts[j];
+        edgeStarts[j] = t;
+
+        t = edgeEnds[i];
+        edgeEnds[i] = edgeEnds[j];
+        edgeEnds[j] = t;
+      }
+    };
+
+    sorter.sort(sortable, 0, edgeStarts.length);
+  }
+
   class TriangleIterable implements Iterable<Point[]>, Iterator<Point[]> {
     /**
      * Stores a pointer to a state and a specific neighbor in that state.
@@ -228,12 +255,12 @@ public class Triangulation implements Writable {
           continue;
         // Found a safe site, load its neighbors
         neighbors.clear();
-        for (int iEdge = 0; iEdge < edgeStarts.length; iEdge++) {
-          if (edgeStarts[iEdge] == state.siteIndex)
-            neighbors.add(edgeEnds[iEdge]);
-          if (edgeEnds[iEdge] == state.siteIndex)
-            neighbors.add(edgeStarts[iEdge]);
-        }
+        int edge = Arrays.binarySearch(edgeStarts, state.siteIndex);
+
+        for (int iEdge = edge; iEdge < edgeStarts.length && edgeStarts[iEdge] == state.siteIndex; iEdge++)
+          neighbors.add(edgeEnds[iEdge]);
+        for (int iEdge = edge-1; iEdge >= 0 && edgeStarts[iEdge] == state.siteIndex; iEdge--)
+          neighbors.add(edgeEnds[iEdge]);
 
         if (neighbors.size() < 2)
           throw new RuntimeException(String.format(
