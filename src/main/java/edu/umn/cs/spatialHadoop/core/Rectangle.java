@@ -223,7 +223,18 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
     double uy2 = Math.max(y2, r.y2);
     return new Rectangle(ux1, uy1, ux2, uy2);
   }
-  
+
+  public void expand(double x, double y) {
+    if (x < this.x1)
+      this.x1 = x;
+    if (y < this.y1)
+      this.y1 = y;
+    if (x > this.x2)
+      this.x2 = x;
+    if (y > this.y2)
+      this.y2 = y;
+  }
+
   public void expand(final Shape s) {
     Rectangle r = s.getMBR();
     if (r.x1 < this.x1)

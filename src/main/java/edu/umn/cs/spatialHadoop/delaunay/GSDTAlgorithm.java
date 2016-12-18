@@ -154,72 +154,100 @@ public class GSDTAlgorithm {
   }
 
   /**
-   * Added this constructor to be able to extend it.
-   */
-  protected GSDTAlgorithm() {
-
-  }
-
-  /**
    * Constructs a triangulation that merges two existing triangulations.
    * @param points
    * @param progress
    */
-  public <P extends Point> GSDTAlgorithm(P[] points, Progressable progress) {
+  public <P extends Point> GSDTAlgorithm(P[] inPoints, Progressable progress) {
     this.progress = progress;
-    this.points = new Point[points.length];
+    this.points = new Point[inPoints.length];
     this.reportedSites = new BitArray(points.length); // Initialized to zeros
-    System.arraycopy(points, 0, this.points, 0, points.length);
-    Arrays.sort(this.points, new Comparator<Point>() {
-      @Override
-      public int compare(Point o1, Point o2) {
-        double dx = o1.x - o2.x;
-        if (dx < 0) return -1;
-        if (dx > 0) return 1;
-        double dy = o1.y - o2.y;
-        if (dy < 0) return -1;
-        if (dy > 0) return 1;
-        return 0;
-      }
-    });
-    this.xs = new double[this.points.length];
-    this.ys = new double[this.points.length];
+    System.arraycopy(inPoints, 0, points, 0, points.length);
+
+    // Compute the answer
+    this.finalAnswer = computeTriangulation(0, points.length);
+  }
+
+  /**
+   * Fills in and initializes some auxiliary data structures that are used for
+   * computations. In particular, the xs and ys arrays are more cache-friendly
+   * as the are stored in one contiguous memory space. Neighbors is an adjacency
+   * list for the computed triangulation which is used to store and update the
+   * triangulation as it is computed.
+   */
+  protected void fillInAuxiliaryDataStructures() {
+    this.xs = new double[points.length];
+    this.ys = new double[points.length];
     this.neighbors = new IntArray[this.points.length];
-    for (int i = 0; i < this.points.length; i++) {
-      xs[i] = this.points[i].x;
-      ys[i] = this.points[i].y;
+    for (int i = 0; i < points.length; i++) {
+      xs[i] = points[i].x;
+      ys[i] = points[i].y;
       neighbors[i] = new IntArray();
     }
-    
-    // Compute the answer
-    IntermediateTriangulation[] triangulations = new IntermediateTriangulation[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
+  }
+
+  /**
+   * Performs the actual computation for the given subset of the points array.
+   */
+  protected IntermediateTriangulation computeTriangulation(int start, int end) {
+    // Sort all points by x-coordinates to prepare for processing
+    // Sort points by their containing cell
+    QuickSort quickSort = new QuickSort();
+    IndexedSortable xSorter = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        if (points[i].x < points[j].x)
+          return -1;
+        if (points[i].x > points[j].x)
+          return 1;
+        if (points[i].y < points[j].y)
+          return -1;
+        if (points[i].y > points[j].y)
+          return 1;
+        return 0;
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        Point t = points[i];
+        points[i] = points[j];
+        points[j] = t;
+      }
+    };
+
+    quickSort.sort(xSorter, 0, points.length);
+    // Fill in some auxiliary data structures to speed up the computation
+    fillInAuxiliaryDataStructures();
+
+    int size = end - start;
+    IntermediateTriangulation[] triangulations = new IntermediateTriangulation[size / 3 + (size % 3 == 0 ? 0 : 1)];
     // Compute the trivial Delaunay triangles of every three consecutive points
     int i, t = 0;
-    for (i = 0; i < points.length - 4; i += 3) {
+    for (i = start; i < end - 4; i += 3) {
       // Compute DT for three points
       triangulations[t++] =  new IntermediateTriangulation(i, i+1, i+2);
       if (progress != null && (t & 0xff) == 0)
         progress.progress();
     }
-    if (points.length - i == 4) {
+    if (end - i == 4) {
       // Compute DT for every two points
        triangulations[t++] = new IntermediateTriangulation(i, i+1);
        triangulations[t++] = new IntermediateTriangulation(i+2, i+3);
-    } else if (points.length - i == 3) {
+    } else if (end - i == 3) {
       // Compute for three points
       triangulations[t++] = new IntermediateTriangulation(i, i+1, i+2);
-    } else if (points.length - i == 2) {
+    } else if (end - i == 2) {
       // Two points, connect with a line
       triangulations[t++] = new IntermediateTriangulation(i, i+1);
     } else {
       throw new RuntimeException("Cannot happen");
     }
-    
+
     if (progress != null)
       progress.progress();
-    this.finalAnswer = mergeAllTriangulations(triangulations);
+    return mergeAllTriangulations(triangulations);
   }
-  
+
   /**
    * Compute the DT by merging existing triangulations created at different
    * machines. The given triangulations should be sorted correctly such that
@@ -263,7 +291,6 @@ public class GSDTAlgorithm {
       currentPointsCount += t.sites.length;
     }
 
-    
     if (progress != null)
       progress.progress();
     this.finalAnswer = mergeAllTriangulations(triangulations);

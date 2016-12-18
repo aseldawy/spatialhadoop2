@@ -286,7 +286,7 @@ public class GSDTAlgorithmTest extends TestCase {
             Arrays.binarySearch(points, safeTriangle[2])), found);
       }
 
-      // Merge the unsafe parts from the letf and right to finalize
+      // Merge the unsafe parts from the left and right to finalize
       GSDTAlgorithm mergeAlgo = new GSDTAlgorithm(new Triangulation[] {leftUnsafe, rightUnsafe}, null);
       Triangulation finalPart = mergeAlgo.getFinalTriangulation();
 
