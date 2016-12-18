@@ -64,7 +64,7 @@ public class GSDTAlgorithm {
   /**
    * Use to report progress to avoid mapper or reducer timeout
    */
-  private Progressable progress;
+  protected Progressable progress;
 
   /**
    * A class that stores a set of triangles for part of the sites.
@@ -155,12 +155,17 @@ public class GSDTAlgorithm {
 
   /**
    * Constructs a triangulation that merges two existing triangulations.
-   * @param points
+   * @param inPoints
    * @param progress
    */
   public <P extends Point> GSDTAlgorithm(P[] inPoints, Progressable progress) {
     this.progress = progress;
     this.points = new Point[inPoints.length];
+    this.xs = new double[points.length];
+    this.ys = new double[points.length];
+    this.neighbors = new IntArray[points.length];
+    for (int i = 0; i < points.length; i++)
+      neighbors[i] = new IntArray();
     this.reportedSites = new BitArray(points.length); // Initialized to zeros
     System.arraycopy(inPoints, 0, points, 0, points.length);
 
@@ -174,15 +179,13 @@ public class GSDTAlgorithm {
    * as the are stored in one contiguous memory space. Neighbors is an adjacency
    * list for the computed triangulation which is used to store and update the
    * triangulation as it is computed.
+   * @param start The start of the range to fill
+   * @param end The end of the range to fill
    */
-  protected void fillInAuxiliaryDataStructures() {
-    this.xs = new double[points.length];
-    this.ys = new double[points.length];
-    this.neighbors = new IntArray[this.points.length];
-    for (int i = 0; i < points.length; i++) {
+  protected void fillInAuxiliaryDataStructures(int start, int end) {
+    for (int i = start; i < end; i++) {
       xs[i] = points[i].x;
       ys[i] = points[i].y;
-      neighbors[i] = new IntArray();
     }
   }
 
@@ -217,7 +220,7 @@ public class GSDTAlgorithm {
 
     quickSort.sort(xSorter, 0, points.length);
     // Fill in some auxiliary data structures to speed up the computation
-    fillInAuxiliaryDataStructures();
+    fillInAuxiliaryDataStructures(start, end);
 
     int size = end - start;
     IntermediateTriangulation[] triangulations = new IntermediateTriangulation[size / 3 + (size % 3 == 0 ? 0 : 1)];

@@ -1,23 +1,18 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
 import edu.umn.cs.spatialHadoop.core.Point;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.operations.Head;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
  * Unit test for the utility class {@link Head}.
  */
-public class DweyrsAlgorithmTest extends TestCase {
+public class GSImprovedAlgorithmTest extends TestCase {
 
   /**
    * Create the test case
@@ -25,7 +20,7 @@ public class DweyrsAlgorithmTest extends TestCase {
    * @param testName
    *          name of the test case
    */
-  public DweyrsAlgorithmTest(String testName) {
+  public GSImprovedAlgorithmTest(String testName) {
     super(testName);
   }
 
@@ -33,11 +28,11 @@ public class DweyrsAlgorithmTest extends TestCase {
    * @return the suite of tests being tested
    */
   public static Test suite() {
-    return new TestSuite(DweyrsAlgorithmTest.class);
+    return new TestSuite(GSImprovedAlgorithmTest.class);
   }
 
   /**
-   * Test Delaunay Triangulation for a toy dataset. Visualized in file test_dt1.svg
+   * Test Delaunay Triangulation for a toy dataset.
    */
   public void testTriangulations() {
     String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3"};
@@ -46,7 +41,7 @@ public class DweyrsAlgorithmTest extends TestCase {
         Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
         List<Point[]> correctTriangulation = GSDTAlgorithmTest.readTriangles("src/test/resources/"+datasetName+".triangles", points);
 
-        DwyersAlgorithm algo = new DwyersAlgorithm(points, null);
+        GSImprovedAlgorithm algo = new GSImprovedAlgorithm(points, null);
         Triangulation answer = algo.getFinalTriangulation();
 
         int iTriangle = 0;

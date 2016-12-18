@@ -35,7 +35,6 @@ public class DwyersAlgorithm extends GSDTAlgorithm {
    */
   protected void sortPointsByGrid() {
     int gridSize = (int) Math.ceil(Math.sqrt(points.length / (Math.log(points.length) / Math.log(2))));
-    System.out.printf("Grid size: %d\n", gridSize);
     grid = new GridInfo(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (Point p : points)
       grid.expand(p);
@@ -88,7 +87,7 @@ public class DwyersAlgorithm extends GSDTAlgorithm {
     // grid are sorted by x-coordinate.
     sortPointsByGrid();
 
-    fillInAuxiliaryDataStructures();
+    fillInAuxiliaryDataStructures(start, end);
 
     // Dwyer's algorithm runs in three phases.
     // Phase I: Apply Guibas and Stolfi's algorithm in each cell
