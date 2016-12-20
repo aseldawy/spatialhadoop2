@@ -1131,7 +1131,12 @@ public class GSDTAlgorithm {
         int s2 = lowerChain.get(lowerChain.size() - 1);
         int s3 = points[i];
         double crossProduct = (xs[s2] - xs[s1]) * (ys[s3] - ys[s1]) - (ys[s2] - ys[s1]) * (xs[s3] - xs[s1]);
-        if (crossProduct <= 0) lowerChain.pop();
+        // Changing the following condition to "corssProduct <= 0" will remove
+        // colinear points along the convex hull edge which might product incorrect
+        // results with Delaunay triangulation as it might skip the points in
+        // the middle.
+        if (crossProduct < 0)
+          lowerChain.pop();
         else break;
       }
       lowerChain.push(points[i]);
@@ -1144,7 +1149,12 @@ public class GSDTAlgorithm {
         int s2 = upperChain.get(upperChain.size() - 1);
         int s3 = points[i];
         double crossProduct = (xs[s2] - xs[s1]) * (ys[s3] - ys[s1]) - (ys[s2] - ys[s1]) * (xs[s3] - xs[s1]);
-        if (crossProduct <= 0) upperChain.pop();
+        // Changing the following condition to "corssProduct <= 0" will remove
+        // colinear points along the convex hull edge which might product incorrect
+        // results with Delaunay triangulation as it might skip the points in
+        // the middle.
+        if (crossProduct < 0)
+          upperChain.pop();
         else break;
       }
       upperChain.push(points[i]);

@@ -314,7 +314,7 @@ public class DelaunayTriangulation {
     }
     
     LOG.info("Computing DT for "+allPoints.length+" points");
-    GSDTAlgorithm dtAlgorithm = new GSDTAlgorithm(allPoints, null);
+    GSImprovedAlgorithm dtAlgorithm = new GSImprovedAlgorithm(allPoints, null);
     LOG.info("DT computed");
     
     Rectangle mbr = FileMBR.fileMBR(inPaths, params);
@@ -323,7 +323,6 @@ public class DelaunayTriangulation {
     if (outPath != null && params.getBoolean("output", true)) {
       LOG.info("Writing the output as a soup of triangles");
       Triangulation answer = dtAlgorithm.getFinalTriangulation();
-      answer.draw();
       FileSystem outFS = outPath.getFileSystem(params);
       PrintStream out = new PrintStream(outFS.create(outPath));
 
