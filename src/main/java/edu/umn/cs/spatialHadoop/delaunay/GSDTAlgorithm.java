@@ -8,11 +8,10 @@ import java.util.List;
 import java.util.Stack;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.util.MergeSorter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.util.IndexedSortable;
-import org.apache.hadoop.util.Progressable;
-import org.apache.hadoop.util.QuickSort;
+import org.apache.hadoop.util.*;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
@@ -155,6 +154,23 @@ public class GSDTAlgorithm {
     @Override
     public String toString() {
       return String.format("Triangulation: [%d, %d]", site1, site2);
+    }
+
+    public void draw() {
+      // Draw to rasem
+      System.out.println("group {");
+      for (int i = site1; i <= site2; i++) {
+        System.out.printf("circle %f, %f, 1\n", xs[i], ys[i]);
+        System.out.printf("text(%f, %f) { raw '%d' }\n", xs[i], ys[i], i);
+      }
+      System.out.println("}");
+      System.out.println("group {");
+      for (int i = site1; i <= site2; i++) {
+        for (int j : neighbors[i]) {
+          System.out.printf("line %f, %f, %f, %f\n", xs[i], ys[i], xs[j], ys[j]);
+        }
+      }
+      System.out.println("}");
     }
   }
 
@@ -1078,16 +1094,36 @@ public class GSDTAlgorithm {
     
     return new Point(ix, iy);
   }
-  
-  int[] convexHull(int[] points) {
+
+  /**
+   * Compute the convex hull of a list of points given by their indexes in the
+   * array of points
+   * @param points
+   * @return
+   */
+  int[] convexHull(final int[] points) {
     Stack<Integer> lowerChain = new Stack<Integer>();
     Stack<Integer> upperChain = new Stack<Integer>();
 
-    // Sort sites by increasing x-axis
-    // Sorting by Site ID is equivalent to sorting by x-axis as the original
-    // array of site is sorted by x in the DT algorithm
-    Arrays.sort(points);
-    
+    // Sort sites by increasing x-axis. We cannot rely of them being sorted as
+    // different algorithms can partition the data points in different ways
+    // For example, Dwyer's algorithm partition points by a grid
+    IndexedSorter sort = new MergeSorter();
+    IndexedSortable xSortable = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        return Double.compare(xs[points[i]], xs[points[j]]);
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        int temp = points[i];
+        points[i] = points[j];
+        points[j] = temp;
+      }
+    };
+    sort.sort(xSortable, 0, points.length);
+
     // Lower chain
     for (int i = 0; i < points.length; i++) {
       while(lowerChain.size() > 1) {
