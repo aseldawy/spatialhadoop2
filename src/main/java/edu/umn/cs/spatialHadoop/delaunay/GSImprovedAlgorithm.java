@@ -96,16 +96,7 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
         // Merge the top two triangulations
         IntermediateTriangulation partial1 = toMerge.pop();
         IntermediateTriangulation partial2 = toMerge.pop();
-        if (toMerge.isEmpty() && toPartition.isEmpty()) {
-          // Last step
-          partial1.draw();
-          partial2.draw();
-        }
         IntermediateTriangulation merged = merge(partial1, partial2);
-        if (toMerge.isEmpty() && toPartition.isEmpty()) {
-          // Last step
-          merged.draw();
-        }
         toMerge.push(merged);
       } else if (currentPart.pend - currentPart.pstart == 4) {
         xs[currentPart.pstart] = points[currentPart.pstart].x;

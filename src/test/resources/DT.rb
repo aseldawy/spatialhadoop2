@@ -25,14 +25,14 @@ all_ys = points.map{|p| p[1]}
 
 point_size = 12
 
-width = 1000
-height = 1000
+width = 500
+height = 500
 
 img = Rasem::SVGImage.new(:width=>(width+2*point_size), :height=>(height+2*point_size)) do
 	@mbr = [all_xs.min, all_ys.min, all_xs.max, all_ys.max]
 	@point_size = 12
 	def project_point(pt)
-		[@point_size+(pt[0] - @mbr[0]) * 1000/ (@mbr[2] - @mbr[0]), @point_size+(pt[1] - @mbr[1])*1000/ (@mbr[3] - @mbr[1])]
+		[@point_size+(pt[0] - @mbr[0]) * 500/ (@mbr[2] - @mbr[0]), @point_size+(pt[1] - @mbr[1])*500/ (@mbr[3] - @mbr[1])]
 	end
 
 	points.each_with_index do |point, index|
