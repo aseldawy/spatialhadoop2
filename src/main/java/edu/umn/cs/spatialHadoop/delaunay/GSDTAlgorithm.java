@@ -151,6 +151,11 @@ public class GSDTAlgorithm {
         neighbors[adjustedStart].add(adjustedEnd);
       }
     }
+
+    @Override
+    public String toString() {
+      return String.format("Triangulation: [%d, %d]", site1, site2);
+    }
   }
 
   /**
@@ -174,53 +179,27 @@ public class GSDTAlgorithm {
   }
 
   /**
-   * Fills in and initializes some auxiliary data structures that are used for
-   * computations. In particular, the xs and ys arrays are more cache-friendly
-   * as the are stored in one contiguous memory space. Neighbors is an adjacency
-   * list for the computed triangulation which is used to store and update the
-   * triangulation as it is computed.
-   * @param start The start of the range to fill
-   * @param end The end of the range to fill
-   */
-  protected void fillInAuxiliaryDataStructures(int start, int end) {
-    for (int i = start; i < end; i++) {
-      xs[i] = points[i].x;
-      ys[i] = points[i].y;
-    }
-  }
-
-  /**
    * Performs the actual computation for the given subset of the points array.
    */
   protected IntermediateTriangulation computeTriangulation(int start, int end) {
     // Sort all points by x-coordinates to prepare for processing
     // Sort points by their containing cell
-    QuickSort quickSort = new QuickSort();
-    IndexedSortable xSorter = new IndexedSortable() {
+    Arrays.sort(points, new Comparator<Point>() {
       @Override
-      public int compare(int i, int j) {
-        if (points[i].x < points[j].x)
-          return -1;
-        if (points[i].x > points[j].x)
-          return 1;
-        if (points[i].y < points[j].y)
-          return -1;
-        if (points[i].y > points[j].y)
-          return 1;
-        return 0;
+      public int compare(Point p1, Point p2) {
+        int dx = Double.compare(p1.x, p2.x);
+        if (dx != 0)
+          return dx;
+        return Double.compare(p1.y, p2.y);
       }
+    });
 
-      @Override
-      public void swap(int i, int j) {
-        Point t = points[i];
-        points[i] = points[j];
-        points[j] = t;
-      }
-    };
+    // Store all coordinates in primitive arrays for efficiency
+    for (int i = start; i < end; i++) {
+      xs[i] = points[i].x;
+      ys[i] = points[i].y;
+    }
 
-    quickSort.sort(xSorter, 0, points.length);
-    // Fill in some auxiliary data structures to speed up the computation
-    fillInAuxiliaryDataStructures(start, end);
 
     int size = end - start;
     IntermediateTriangulation[] triangulations = new IntermediateTriangulation[size / 3 + (size % 3 == 0 ? 0 : 1)];
@@ -233,7 +212,7 @@ public class GSDTAlgorithm {
         progress.progress();
     }
     if (end - i == 4) {
-      // Compute DT for every two points
+       // Compute DT for every two points
        triangulations[t++] = new IntermediateTriangulation(i, i+1);
        triangulations[t++] = new IntermediateTriangulation(i+2, i+3);
     } else if (end - i == 3) {
@@ -391,6 +370,8 @@ public class GSDTAlgorithm {
     System.arraycopy(L.convexHull, 0, bothHulls, 0, L.convexHull.length);
     System.arraycopy(R.convexHull, 0, bothHulls, L.convexHull.length, R.convexHull.length);
     merged.convexHull = convexHull(bothHulls);
+
+    // TODO avoid computing the circumcircle and test if a point is within the circle or not
     
     // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
     int[] baseEdge = findBaseEdge(merged.convexHull, L, R);
@@ -427,7 +408,7 @@ public class GSDTAlgorithm {
         // Compute the circum circle between the base edge and potential candidate
         Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
         if (circleCenter == null) {
-          // Degnerate case of three collinear points
+          // Degenerate case of three collinear points
           // Delete the RR edge between baseR and rPotentialCandidate and restart
           neighbors[baseR].remove(potentialCandidate);
           neighbors[potentialCandidate].remove(baseR);
@@ -1040,7 +1021,7 @@ public class GSDTAlgorithm {
   /**
    * Calculate the intersection between the perpendicular bisector of the line
    * segment (p1, p2) towards the right (CCW) and the given rectangle.
-   * It is assumed that the two end points p1 and p2 lie inside the given
+   * It is assumed that the two pend points p1 and p2 lie inside the given
    * rectangle.
    * @param p1
    * @param p2

@@ -7,6 +7,7 @@ import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -35,16 +36,16 @@ public class GSImprovedAlgorithmTest extends TestCase {
    * Test Delaunay Triangulation for a toy dataset.
    */
   public void testTriangulations() {
-    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3"};
+    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3", "test_dt4"};
     try {
       for (String datasetName : datasetNames) {
+        System.out.println("Testing "+datasetName);
         Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
         List<Point[]> correctTriangulation = GSDTAlgorithmTest.readTriangles("src/test/resources/"+datasetName+".triangles", points);
 
         GSImprovedAlgorithm algo = new GSImprovedAlgorithm(points, null);
         Triangulation answer = algo.getFinalTriangulation();
 
-        int iTriangle = 0;
         for (Point[] triangle : answer.iterateTriangles()) {
           boolean found = false;
           int i = 0;
@@ -55,19 +56,16 @@ public class GSImprovedAlgorithmTest extends TestCase {
             else
               i++;
           }
-          assertTrue(String.format("Triangle #%d (%f, %f), (%f, %f), (%f, %f) not found",
-              iTriangle,
-              triangle[0].x, triangle[0].y,
-              triangle[1].x, triangle[1].y,
-              triangle[2].x, triangle[2].y), found);
-          iTriangle++;
+          assertTrue(String.format("Triangle (%d, %d, %d) not expected in the answer",
+              Arrays.binarySearch(points, triangle[0]),
+              Arrays.binarySearch(points, triangle[1]),
+              Arrays.binarySearch(points, triangle[2])), found);
         }
         for (Point[] triangle : correctTriangulation) {
-          System.out.printf("Triangle not found (%f, %f) (%f, %f) (%f, %f)\n",
-              triangle[0].x, triangle[0].y,
-              triangle[1].x, triangle[1].y,
-              triangle[2].x, triangle[2].y
-          );
+          System.out.printf("Triangle (%d, %d, %d) expected but not found\n",
+              Arrays.binarySearch(points, triangle[0]),
+              Arrays.binarySearch(points, triangle[1]),
+              Arrays.binarySearch(points, triangle[2]));
         }
         assertTrue(String.format("%d triangles not found", correctTriangulation.size()),
             correctTriangulation.isEmpty());

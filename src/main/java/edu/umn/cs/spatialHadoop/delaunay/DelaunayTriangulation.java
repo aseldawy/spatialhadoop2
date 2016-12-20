@@ -317,15 +317,13 @@ public class DelaunayTriangulation {
     GSDTAlgorithm dtAlgorithm = new GSDTAlgorithm(allPoints, null);
     LOG.info("DT computed");
     
-    List<Geometry> finalRegions = new ArrayList<Geometry>();
-    List<Geometry> nonfinalRegions = new ArrayList<Geometry>();
-    
     Rectangle mbr = FileMBR.fileMBR(inPaths, params);
     double buffer = Math.max(mbr.getWidth(), mbr.getHeight()) / 10;
     Rectangle bigMBR = mbr.buffer(buffer, buffer);
     if (outPath != null && params.getBoolean("output", true)) {
       LOG.info("Writing the output as a soup of triangles");
       Triangulation answer = dtAlgorithm.getFinalTriangulation();
+      answer.draw();
       FileSystem outFS = outPath.getFileSystem(params);
       PrintStream out = new PrintStream(outFS.create(outPath));
 

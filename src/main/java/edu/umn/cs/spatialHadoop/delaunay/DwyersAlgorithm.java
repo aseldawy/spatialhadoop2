@@ -87,7 +87,11 @@ public class DwyersAlgorithm extends GSDTAlgorithm {
     // grid are sorted by x-coordinate.
     sortPointsByGrid();
 
-    fillInAuxiliaryDataStructures(start, end);
+    // Fill in some auxiliary data structures to speed up the computation
+    for (int i = start; i < end; i++) {
+      xs[i] = points[i].x;
+      ys[i] = points[i].y;
+    }
 
     // Dwyer's algorithm runs in three phases.
     // Phase I: Apply Guibas and Stolfi's algorithm in each cell
