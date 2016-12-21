@@ -630,30 +630,37 @@ public class GSDTAlgorithm {
       IntermediateTriangulation R) {
     int base1L = -1, base1R = -1; // First LR edge
     int base2L = -1, base2R = -1; // Second LR edge
-    for (int i = 0; i < mergedConvexHull.length; i++) {
-      int p1 = mergedConvexHull[i];
-      int p2 = i == mergedConvexHull.length - 1 ? mergedConvexHull[0] : mergedConvexHull[i+1];
-      if (p1 <= L.site2 && p2 >= R.site1) {
-        // Found an LR edge, store it
-        if (base1L == -1) {
-          // First LR edge
-          base1L = p1;
-          base1R = p2;
-        } else {
-          // Second LR edge
-          base2L = p1;
-          base2R = p2;
-        }
-      } else if (p2 <= L.site2 && p1 >= R.site1) {
-        if (base1L == -1) {
-          // First LR edge
-          base1L = p2;
-          base1R = p1;
-        } else {
-          // Second LR edge
-          base2L = p2;
-          base2R = p1;
-        }
+    int i = 0;
+    // Search for the first edge
+    while (i < mergedConvexHull.length - 1 && (mergedConvexHull[i] <= L.site2) == (mergedConvexHull[i+1] <= L.site2))
+      i++;
+    if (mergedConvexHull[i] <= L.site2) {
+      base1L = mergedConvexHull[i];
+      base1R = mergedConvexHull[i+1];
+    } else {
+      base1R = mergedConvexHull[i];
+      base1L = mergedConvexHull[i+1];
+    }
+    // Continue searching for the second edge
+    i++;
+    while (i < mergedConvexHull.length - 1 && (mergedConvexHull[i] <= L.site2) == (mergedConvexHull[i+1] <= L.site2))
+      i++;
+    if (i < mergedConvexHull.length - 1) {
+      if (mergedConvexHull[i] <= L.site2) {
+        base2L = mergedConvexHull[i];
+        base2R = mergedConvexHull[i+1];
+      } else {
+        base2R = mergedConvexHull[i];
+        base2L = mergedConvexHull[i+1];
+      }
+    } else {
+      //  Reached the end, only one edge left
+      if (mergedConvexHull[i] <= L.site2) {
+        base2L = mergedConvexHull[i];
+        base2R = mergedConvexHull[0];
+      } else {
+        base2R = mergedConvexHull[i];
+        base2L = mergedConvexHull[0];
       }
     }
     
