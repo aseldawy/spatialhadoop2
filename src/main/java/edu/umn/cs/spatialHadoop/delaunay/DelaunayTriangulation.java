@@ -314,7 +314,7 @@ public class DelaunayTriangulation {
     }
     
     LOG.info("Computing DT for "+allPoints.length+" points");
-    GSImprovedAlgorithm dtAlgorithm = new GSImprovedAlgorithm(allPoints, null);
+    GSDTAlgorithm dtAlgorithm = new GSDTAlgorithm(allPoints, null);
     LOG.info("DT computed");
     
     Rectangle mbr = FileMBR.fileMBR(inPaths, params);

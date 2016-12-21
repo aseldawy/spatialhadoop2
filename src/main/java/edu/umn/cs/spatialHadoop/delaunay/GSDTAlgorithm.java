@@ -633,7 +633,7 @@ public class GSDTAlgorithm {
     for (int i = 0; i < mergedConvexHull.length; i++) {
       int p1 = mergedConvexHull[i];
       int p2 = i == mergedConvexHull.length - 1 ? mergedConvexHull[0] : mergedConvexHull[i+1];
-      if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
+      if (p1 <= L.site2 && p2 >= R.site1) {
         // Found an LR edge, store it
         if (base1L == -1) {
           // First LR edge
@@ -644,7 +644,7 @@ public class GSDTAlgorithm {
           base2L = p1;
           base2R = p2;
         }
-      } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
+      } else if (p2 <= L.site2 && p1 >= R.site1) {
         if (base1L == -1) {
           // First LR edge
           base1L = p2;
@@ -1063,13 +1063,6 @@ public class GSDTAlgorithm {
     return unsafeSites;
   }
 
-  boolean inArray(int[] array, int objectToFind) {
-    for (int objectToCompare : array)
-      if (objectToFind == objectToCompare)
-        return true;
-    return false;
-  }
-
   /**
    * Compute the clock-wise angle between (s2->s1) and (s2->s3)
    * @param s1
@@ -1227,7 +1220,8 @@ public class GSDTAlgorithm {
     pmaxmin++;
 
     // Lower chain
-    for (int i = pminmin; i <= pmaxmin; i++) {
+    lowerChain.push(points[pminmin]);
+    for (int i = pminmax+1; i <= pmaxmin; i++) {
       while(lowerChain.size() > 1) {
         int s1 = lowerChain.get(lowerChain.size() - 2);
         int s2 = lowerChain.get(lowerChain.size() - 1);
