@@ -378,7 +378,7 @@ public class DelaunayTriangulation {
     out.println("}");
     out.println("}");
     out.println("group {");
-    out.println("group(:fill => :none, :strok=>:red) {");
+    out.println("group(:fill => :none, :stroke=>:red) {");
     for (Geometry p : nonfinalRegions) {
       if (!bigMBRPoly.contains(p)) {
         if (p instanceof Polygon) {
@@ -397,7 +397,7 @@ public class DelaunayTriangulation {
       out.println("]");
     }
     out.println("}");
-    out.println("group(:fill => :red, :stroke=>nil) {");
+    out.println("group(:fill => :red, :stroke=>:none) {");
     for (Geometry p : nonfinalRegions) {
       Point site = (Point) p.getUserData();
       out.printf("circle %f, %f, 1\n", site.x, site.y);

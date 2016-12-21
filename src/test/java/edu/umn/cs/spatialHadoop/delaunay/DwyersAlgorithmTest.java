@@ -34,8 +34,8 @@ public class DwyersAlgorithmTest extends TestCase {
   /**
    * Test Delaunay Triangulation for a toy dataset. Visualized in file test_dt1.svg
    */
-  /*public void testTriangulations() {
-    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3"};
+  public void testTriangulations() {
+    String[] datasetNames = {"test_dt2"};
     try {
       for (String datasetName : datasetNames) {
         Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
@@ -75,5 +75,5 @@ public class DwyersAlgorithmTest extends TestCase {
     } catch (IOException e) {
       fail("File not found");
     }
-  }*/
+  }
 }

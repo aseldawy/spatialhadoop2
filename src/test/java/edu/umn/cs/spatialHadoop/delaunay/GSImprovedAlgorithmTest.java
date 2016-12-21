@@ -36,7 +36,7 @@ public class GSImprovedAlgorithmTest extends TestCase {
    * Test Delaunay Triangulation for a toy dataset.
    */
   public void testTriangulations() {
-    String[] datasetNames = {"test_dt1", "test_dt1", "test_dt3", "test_dt4", "test_dt5"};
+    String[] datasetNames = {"test_dt1", "test_dt1", "test_dt3", "test_dt4", "test_dt5", "test_dt6"};
     try {
       for (String datasetName : datasetNames) {
         System.out.println("Testing "+datasetName);

@@ -1,5 +1,7 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
+import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -8,9 +10,12 @@ import java.util.List;
 import java.util.Stack;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.util.MergeSorter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.io.BooleanWritable;
+import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.util.*;
 
 import com.vividsolutions.jts.geom.Coordinate;
@@ -156,21 +161,120 @@ public class GSDTAlgorithm {
       return String.format("Triangulation: [%d, %d]", site1, site2);
     }
 
-    public void draw() {
-      // Draw to rasem
-      System.out.println("group {");
-      for (int i = site1; i <= site2; i++) {
-        System.out.printf("circle %f, %f, 1\n", xs[i], ys[i]);
-        System.out.printf("text(%f, %f) { raw '%d' }\n", xs[i], ys[i], i);
-      }
-      System.out.println("}");
-      System.out.println("group {");
-      for (int i = site1; i <= site2; i++) {
-        for (int j : neighbors[i]) {
-          System.out.printf("line %f, %f, %f, %f\n", xs[i], ys[i], xs[j], ys[j]);
+    /**
+     * Perform some sanity checks to see if the current triangulation could
+     * be incorrect. This can be used to find as early as possible when the
+     * output becomes bad.
+     * @return
+     */
+    public boolean isIncorrect() {
+      // Test if there are any overlapping edges
+      // First, compute the MBR of all edges
+      class Edge extends Rectangle {
+        int source, destination;
+
+        public Edge(int s, int d) {
+          this.source = s;
+          this.destination = d;
+          super.set(xs[s], ys[s], xs[d], ys[d]);
         }
       }
-      System.out.println("}");
+
+      List<Edge> edges = new ArrayList<Edge>();
+
+      for (int s = site1; s <= site2; s++) {
+        for (int d : neighbors[s]) {
+          // Add each undirected edge only once
+          if (s < d)
+            edges.add(new Edge(s, d));
+        }
+      }
+
+      Edge[] aredges = edges.toArray(new Edge[edges.size()]);
+      final BooleanWritable correct = new BooleanWritable(true);
+
+      try {
+        SpatialAlgorithms.SelfJoin_rectangles(aredges, new OutputCollector<Edge, Edge>() {
+          static final double Threshold = 1E-5;
+          @Override
+          public void collect(Edge e1, Edge e2) throws IOException {
+            double x1 = xs[e1.source];
+            double y1 = ys[e1.source];
+            double x2 = xs[e1.destination];
+            double y2 = ys[e1.destination];
+            double x3 = xs[e2.source];
+            double y3 = ys[e2.source];
+            double x4 = xs[e2.destination];
+            double y4 = ys[e2.destination];
+
+            double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+            double ix = (x1 * y2 - y1 * x2) * (x3 - x4) / den - (x1 - x2) * (x3 * y4 - y3 * x4) / den;
+            double iy = (x1 * y2 - y1 * x2) * (y3 - y4) / den - (y1 - y2) * (x3 * y4 - y3 * x4) / den;
+            double minx1 = Math.min(x1, x2);
+            double maxx1 = Math.max(x1, x2);
+            double miny1 = Math.min(y1, y2);
+            double maxy1 = Math.max(y1, y2);
+            double minx2 = Math.min(x3, x4);
+            double maxx2 = Math.max(x3, x4);
+            double miny2 = Math.min(y3, y4);
+            double maxy2 = Math.max(y3, y4);
+            if ((ix - minx1 > Threshold && ix - maxx1 < -Threshold) && (iy - miny1 > Threshold && iy - maxy1 < -Threshold) &&
+                (ix - minx2 > Threshold && ix - maxx2 < -Threshold) && (iy - miny2 > Threshold && iy - maxy2 < -Threshold)) {
+              System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
+              System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
+              System.out.printf("circle %f, %f, 0.5\n", ix, iy);
+              correct.set(false);
+            }
+          }
+        }, null);
+
+        // Test if all the lines of the convex hull are edges
+        int[] sites = new int[this.site2 - this.site1 + 1];
+        for (int i = site1; i <= site2; i++)
+          sites[i - this.site1] = i;
+        int[] ch = convexHull(sites);
+        for (int i = 0; i < ch.length; i++) {
+          int s = ch[i];
+          int d = ch[(i+1)%ch.length];
+          if (s > d) {
+            // Swap to make it easier to search
+            int t = s;
+            s = d;
+            d = t;
+          }
+          boolean found = false;
+          for (int iEdge = 0; !found && iEdge < aredges.length; iEdge++) {
+            found = s == aredges[iEdge].source && d == aredges[iEdge].destination;
+          }
+          if (!found) {
+            correct.set(false);
+            System.out.printf("Edge %d, %d on the convex hull and not found in the DT\n", s, d);
+          }
+        }
+
+      } catch (IOException e) {
+        e.printStackTrace();
+        return false;
+      }
+
+      return !correct.get();
+    }
+
+    public void draw(PrintStream out) {
+      // Draw to rasem
+      out.println("group {");
+      for (int i = site1; i <= site2; i++) {
+        out.printf("circle %f, %f, 1\n", xs[i], ys[i]);
+        out.printf("text(%f, %f) { raw '%d' }\n", xs[i], ys[i], i);
+      }
+      out.println("}");
+      out.println("group {");
+      for (int i = site1; i <= site2; i++) {
+        for (int j : neighbors[i]) {
+          out.printf("line %f, %f, %f, %f\n", xs[i], ys[i], xs[j], ys[j]);
+        }
+      }
+      out.println("}");
     }
   }
 
@@ -1112,7 +1216,10 @@ public class GSDTAlgorithm {
     IndexedSortable xSortable = new IndexedSortable() {
       @Override
       public int compare(int i, int j) {
-        return Double.compare(xs[points[i]], xs[points[j]]);
+        int dx = Double.compare(xs[points[i]], xs[points[j]]);
+        if (dx != 0)
+          return dx;
+        return Double.compare(ys[points[i]], ys[points[j]]);
       }
 
       @Override
@@ -1130,9 +1237,10 @@ public class GSDTAlgorithm {
         int s1 = lowerChain.get(lowerChain.size() - 2);
         int s2 = lowerChain.get(lowerChain.size() - 1);
         int s3 = points[i];
+        // Compute the cross product between (s1 -> s2) and (s1 -> s3)
         double crossProduct = (xs[s2] - xs[s1]) * (ys[s3] - ys[s1]) - (ys[s2] - ys[s1]) * (xs[s3] - xs[s1]);
-        // Changing the following condition to "corssProduct <= 0" will remove
-        // colinear points along the convex hull edge which might product incorrect
+        // Changing the following condition to "crossProduct <= 0" will remove
+        // collinear points along the convex hull edge which might product incorrect
         // results with Delaunay triangulation as it might skip the points in
         // the middle.
         if (crossProduct < 0)
@@ -1149,8 +1257,8 @@ public class GSDTAlgorithm {
         int s2 = upperChain.get(upperChain.size() - 1);
         int s3 = points[i];
         double crossProduct = (xs[s2] - xs[s1]) * (ys[s3] - ys[s1]) - (ys[s2] - ys[s1]) * (xs[s3] - xs[s1]);
-        // Changing the following condition to "corssProduct <= 0" will remove
-        // colinear points along the convex hull edge which might product incorrect
+        // Changing the following condition to "crossProduct <= 0" will remove
+        // collinear points along the convex hull edge which might product incorrect
         // results with Delaunay triangulation as it might skip the points in
         // the middle.
         if (crossProduct < 0)

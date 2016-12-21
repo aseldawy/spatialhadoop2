@@ -109,7 +109,7 @@ public class GSDTAlgorithmTest extends TestCase {
    * Test Delaunay Triangulation for a toy dataset. Visualized in file test_dt1.svg
    */
   public void testTriangulations() {
-    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3", "test_dt4", "test_dt5"};
+    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3", "test_dt4", "test_dt5", "test_dt6"};
     try {
       for (String datasetName : datasetNames) {
         Point[] points = readPoints("src/test/resources/"+datasetName+".points");

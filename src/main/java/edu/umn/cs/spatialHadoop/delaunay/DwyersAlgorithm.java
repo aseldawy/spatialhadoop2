@@ -47,7 +47,6 @@ public class DwyersAlgorithm extends GSDTAlgorithm {
       public int compare(int i, int j) {
         int cellI = grid.getOverlappingCell(points[i].x, points[i].y);
         int cellJ = grid.getOverlappingCell(points[j].x, points[j].y);
-        System.out.printf("cellI %d, cellJ %d\n", cellI, cellJ);
         if (cellI != cellJ)
           return cellI - cellJ;
         if (points[i].x < points[j].x)
