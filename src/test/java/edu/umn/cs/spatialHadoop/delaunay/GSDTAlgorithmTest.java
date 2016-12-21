@@ -151,7 +151,8 @@ public class GSDTAlgorithmTest extends TestCase {
    * Test Delaunay Triangulation for the datasets stored under 'test/resources'
    */
   public void testTriangulations() {
-    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3", "test_dt4", "test_dt5", "test_dt6", "test_dt7", "test_dt8"};
+    // test_dt9 is not tested because it have four points on one circle resulting in a non-unique answer
+    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3", "test_dt4", "test_dt5", "test_dt6", "test_dt7", "test_dt8", "test_dt10"};
     try {
       for (String datasetName : datasetNames) {
         Point[] points = readPoints("src/test/resources/"+datasetName+".points");

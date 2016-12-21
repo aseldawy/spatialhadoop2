@@ -117,10 +117,6 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
         ys[currentPart.pStart +1] = points[currentPart.pStart +1].y;
         xs[currentPart.pStart +2] = points[currentPart.pStart +2].x;
         ys[currentPart.pStart +2] = points[currentPart.pStart +2].y;
-        if (xs[currentPart.pStart] == xs[currentPart.pStart +1] &&
-            xs[currentPart.pStart +1] == xs[currentPart.pStart +2]) {
-          System.out.printf("A7aaaaaaa! Three colinear points (%d, %d, %d)\n", currentPart.pStart, currentPart.pStart +1, currentPart.pStart +2);
-        }
         // Compute for three points
         toMerge.push(new IntermediateTriangulation(currentPart.pStart, currentPart.pStart + 1, currentPart.pStart + 2));
       } else if (currentPart.pEnd - currentPart.pStart == 2) {

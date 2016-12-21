@@ -39,10 +39,10 @@ public class GSImprovedAlgorithmTest extends TestCase {
    * Test Delaunay Triangulation for some small test datasets.
    */
   public void testTriangulations() {
-    String[] datasetNames = {"test_dt1", "test_dt1", "test_dt3", "test_dt4", "test_dt5", "test_dt6", "test_dt7", "test_dt8"};
+    String[] datasetNames = {/*"test_dt1", "test_dt1", "test_dt3", "test_dt4",
+        "test_dt5", "test_dt6", "test_dt7", "test_dt8",*/ "test_dt10"};
     try {
       for (String datasetName : datasetNames) {
-        System.out.println("Testing "+datasetName);
         Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
         List<Point[]> correctTriangulation = GSDTAlgorithmTest.readTriangles("src/test/resources/"+datasetName+".triangles", points);
 

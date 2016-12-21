@@ -490,17 +490,15 @@ public class GSDTAlgorithm {
     System.arraycopy(R.convexHull, 0, bothHulls, L.convexHull.length, R.convexHull.length);
     merged.convexHull = convexHull(bothHulls);
 
-    // TODO avoid computing the circumcircle and test if a point is within the circle or not
-    
     // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
     int[] baseEdge = findBaseEdge(merged.convexHull, L, R);
     int baseL = baseEdge[0];
     int baseR = baseEdge[1];
   
     // Add the first base edge
+    // Trace the base LR edge up to the top
     neighbors[baseL].add(baseR);
     neighbors[baseR].add(baseL);
-    // Trace the base LR edge up to the top
     boolean finished = false;
     do { // Until the finished flag is raised
       // Search for the potential candidate on the right
@@ -524,8 +522,6 @@ public class GSDTAlgorithm {
       }
       int rCandidate = -1;
       if (anglePotential < Math.PI && potentialCandidate != -1) {
-        // Compute the circum circle between the base edge and potential candidate
-        //Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
         if (nextPotentialCandidate == -1) {
           // The only potential candidate, accept it right away
           rCandidate = potentialCandidate;
@@ -564,8 +560,6 @@ public class GSDTAlgorithm {
       }
       int lCandidate = -1;
       if (anglePotential - Math.PI < -1E-9 && potentialCandidate != -1) {
-        // Compute the circum circle between the base edge and potential candidate
-        //Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
         if (nextPotentialCandidate == -1) {
           // The only potential candidate, accept it right away
           lCandidate = potentialCandidate;
@@ -1087,7 +1081,7 @@ public class GSDTAlgorithm {
     // TODO use cross product to avoid using atan2
     double angle1 = Math.atan2(ys[s1] - ys[s2], xs[s1] - xs[s2]);
     double angle2 = Math.atan2(ys[s3] - ys[s2], xs[s3] - xs[s2]);
-    return angle1 > angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
+    return angle1 >= angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
   }
   
   /**
@@ -1214,6 +1208,11 @@ public class GSDTAlgorithm {
     };
     sort.sort(xSortable, 0, points.length);
 
+    // A flag that is set when there are collinear points on the convex hull
+    // When set, an additional step is performed to ensure that no point is
+    // added to the convex hull twice
+    boolean collinear_points = false;
+
     // Lower chain
     for (int i = 0; i < points.length; i++) {
       while(lowerChain.size() > 1) {
@@ -1226,6 +1225,8 @@ public class GSDTAlgorithm {
         // collinear points along the convex hull edge which might product incorrect
         // results with Delaunay triangulation as it might skip the points in
         // the middle.
+        if (crossProduct == 0)
+          collinear_points = true;
         if (crossProduct < 0)
           lowerChain.pop();
         else break;
@@ -1244,6 +1245,8 @@ public class GSDTAlgorithm {
         // collinear points along the convex hull edge which might product incorrect
         // results with Delaunay triangulation as it might skip the points in
         // the middle.
+        if (crossProduct == 0)
+          collinear_points = true;
         if (crossProduct < 0)
           upperChain.pop();
         else break;
@@ -1258,6 +1261,22 @@ public class GSDTAlgorithm {
       result[i] = lowerChain.get(i);
     for (int i = 0; i < upperChain.size(); i++)
       result[i + lowerChain.size()] = upperChain.get(i);
-    return result;    
+    if (collinear_points) {
+      // Remove possible duplicates in the list
+      int unique_size = 1;
+      Arrays.sort(result);
+      for ( int i = result.length - 1; i > 0; i--)
+        if (result[i] != result[i-1])
+          unique_size++;
+      if (unique_size != result.length) {
+        int[] unique_result = new int[unique_size];
+        unique_result[--unique_size] = result[result.length - 1];
+        for ( int i = result.length - 1; i > 0; i--)
+          if (result[i] != result[i-1])
+            unique_result[--unique_size] = result[i-1];
+        result = unique_result;
+      }
+    }
+    return result;
   }
 }
