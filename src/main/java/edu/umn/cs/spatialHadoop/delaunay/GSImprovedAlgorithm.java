@@ -33,20 +33,19 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
     final Point[] sortedX = this.points;
     final Point[] sortedY = this.points.clone();
 
-
     // Sort all points and record the order of merging
     class Part {
-      int pstart;
-      int pend;
+      int pStart;
+      int pEnd;
 
       Part(int start, int end) {
-        this.pstart = start;
-        this.pend = end;
+        this.pStart = start;
+        this.pEnd = end;
       }
 
       @Override
       public String toString() {
-        return "Partition: "+ pstart +","+ pend;
+        return "Partition: "+ pStart +","+ pEnd;
       }
     };
 
@@ -89,7 +88,7 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
         progress.progress();
       if (System.currentTimeMillis() - reportedTime > 1000) {
         reportedTime = System.currentTimeMillis();
-        LOG.info(String.format("%d to partition, %d to merge", toPartition.size(), toMerge.size()));
+        LOG.debug(String.format("%d to partition, %d to merge", toPartition.size(), toMerge.size()));
       }
       Part currentPart = toPartition.pop();
       if (currentPart == null) {
@@ -98,63 +97,63 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
         IntermediateTriangulation partial2 = toMerge.pop();
         IntermediateTriangulation merged = merge(partial1, partial2);
         toMerge.push(merged);
-      } else if (currentPart.pend - currentPart.pstart == 4) {
-        xs[currentPart.pstart] = points[currentPart.pstart].x;
-        ys[currentPart.pstart] = points[currentPart.pstart].y;
-        xs[currentPart.pstart +1] = points[currentPart.pstart +1].x;
-        ys[currentPart.pstart +1] = points[currentPart.pstart +1].y;
-        xs[currentPart.pstart +2] = points[currentPart.pstart +2].x;
-        ys[currentPart.pstart +2] = points[currentPart.pstart +2].y;
-        xs[currentPart.pstart +3] = points[currentPart.pstart +3].x;
-        ys[currentPart.pstart +3] = points[currentPart.pstart +3].y;
+      } else if (currentPart.pEnd - currentPart.pStart == 4) {
+        xs[currentPart.pStart] = points[currentPart.pStart].x;
+        ys[currentPart.pStart] = points[currentPart.pStart].y;
+        xs[currentPart.pStart +1] = points[currentPart.pStart +1].x;
+        ys[currentPart.pStart +1] = points[currentPart.pStart +1].y;
+        xs[currentPart.pStart +2] = points[currentPart.pStart +2].x;
+        ys[currentPart.pStart +2] = points[currentPart.pStart +2].y;
+        xs[currentPart.pStart +3] = points[currentPart.pStart +3].x;
+        ys[currentPart.pStart +3] = points[currentPart.pStart +3].y;
         // Compute DT for every two points
         toPartition.push(null);
-        toMerge.push(new IntermediateTriangulation(currentPart.pstart + 2, currentPart.pstart + 3));
-        toMerge.push(new IntermediateTriangulation(currentPart.pstart, currentPart.pstart + 1));
-      } else if (currentPart.pend - currentPart.pstart == 3) {
-        xs[currentPart.pstart] = points[currentPart.pstart].x;
-        ys[currentPart.pstart] = points[currentPart.pstart].y;
-        xs[currentPart.pstart +1] = points[currentPart.pstart +1].x;
-        ys[currentPart.pstart +1] = points[currentPart.pstart +1].y;
-        xs[currentPart.pstart +2] = points[currentPart.pstart +2].x;
-        ys[currentPart.pstart +2] = points[currentPart.pstart +2].y;
-        if (xs[currentPart.pstart] == xs[currentPart.pstart +1] &&
-            xs[currentPart.pstart +1] == xs[currentPart.pstart +2]) {
-          System.out.printf("A7aaaaaaa! Three colinear points (%d, %d, %d)\n", currentPart.pstart, currentPart.pstart+1, currentPart.pstart+2);
+        toMerge.push(new IntermediateTriangulation(currentPart.pStart + 2, currentPart.pStart + 3));
+        toMerge.push(new IntermediateTriangulation(currentPart.pStart, currentPart.pStart + 1));
+      } else if (currentPart.pEnd - currentPart.pStart == 3) {
+        xs[currentPart.pStart] = points[currentPart.pStart].x;
+        ys[currentPart.pStart] = points[currentPart.pStart].y;
+        xs[currentPart.pStart +1] = points[currentPart.pStart +1].x;
+        ys[currentPart.pStart +1] = points[currentPart.pStart +1].y;
+        xs[currentPart.pStart +2] = points[currentPart.pStart +2].x;
+        ys[currentPart.pStart +2] = points[currentPart.pStart +2].y;
+        if (xs[currentPart.pStart] == xs[currentPart.pStart +1] &&
+            xs[currentPart.pStart +1] == xs[currentPart.pStart +2]) {
+          System.out.printf("A7aaaaaaa! Three colinear points (%d, %d, %d)\n", currentPart.pStart, currentPart.pStart +1, currentPart.pStart +2);
         }
         // Compute for three points
-        toMerge.push(new IntermediateTriangulation(currentPart.pstart, currentPart.pstart + 1, currentPart.pstart + 2));
-      } else if (currentPart.pend - currentPart.pstart == 2) {
-        xs[currentPart.pstart] = points[currentPart.pstart].x;
-        ys[currentPart.pstart] = points[currentPart.pstart].y;
-        xs[currentPart.pstart +1] = points[currentPart.pstart +1].x;
-        ys[currentPart.pstart +1] = points[currentPart.pstart +1].y;
+        toMerge.push(new IntermediateTriangulation(currentPart.pStart, currentPart.pStart + 1, currentPart.pStart + 2));
+      } else if (currentPart.pEnd - currentPart.pStart == 2) {
+        xs[currentPart.pStart] = points[currentPart.pStart].x;
+        ys[currentPart.pStart] = points[currentPart.pStart].y;
+        xs[currentPart.pStart +1] = points[currentPart.pStart +1].x;
+        ys[currentPart.pStart +1] = points[currentPart.pStart +1].y;
         // Two points, connect with a line
-        toMerge.push(new IntermediateTriangulation(currentPart.pstart, currentPart.pstart + 1));
+        toMerge.push(new IntermediateTriangulation(currentPart.pStart, currentPart.pStart + 1));
       } else {
         // Further partition into two along the longer dimension
-        double width = sortedX[currentPart.pend -1].x - sortedX[currentPart.pstart].x;
-        double height = sortedY[currentPart.pend -1].y - sortedY[currentPart.pstart].y;
+        double width = sortedX[currentPart.pEnd -1].x - sortedX[currentPart.pStart].x;
+        double height = sortedY[currentPart.pEnd -1].y - sortedY[currentPart.pStart].y;
         if (width > height) {
-          int middle = (currentPart.pstart + currentPart.pend) / 2;
+          int middle = (currentPart.pStart + currentPart.pEnd) / 2;
           toPartition.push(null); // An indicator of a merge needed
           // TODO Split the sortedY list around the middle
           {
             // For now, use a naive way to ensure that the algorithm works
-            Point[] newSortedRange = new Point[currentPart.pend - currentPart.pstart];
-            // Copy the range [pstart, pend)
+            Point[] newSortedRange = new Point[currentPart.pEnd - currentPart.pStart];
+            // Copy the range [pStart, pend)
             // Count number of points in the first part (left to middle.x)
             int size_1 = 0;
-            for (int i = currentPart.pstart; i < currentPart.pend; i++)
+            for (int i = currentPart.pStart; i < currentPart.pEnd; i++)
               if (sortedY[i].x < sortedX[middle].x)
                 size_1++;
-            if ((middle - currentPart.pstart) - size_1 < (currentPart.pend - currentPart.pstart) * 1 / 10) {
-              middle = currentPart.pstart + size_1;
+            if ((middle - currentPart.pStart) - size_1 < (currentPart.pEnd - currentPart.pStart) * 1 / 10) {
+              middle = currentPart.pStart + size_1;
               // A clean situation, only one point at the middle or all points
               // at the middle line go to one partition
               int position1 = 0;
-              int position2 = middle - currentPart.pstart;
-              for (int i = currentPart.pstart; i < currentPart.pend; i++) {
+              int position2 = middle - currentPart.pStart;
+              for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
                 if (sortedY[i].x < sortedX[middle].x)
                   newSortedRange[position1++] = sortedY[i];
                 else
@@ -165,10 +164,10 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
               // they need to go to different partitions
               // Apply a slower, more sophisticated algorithm
               int position1 = 0;
-              int position2 = middle - currentPart.pstart;
-              for (int i = currentPart.pstart; i < currentPart.pend; i++) {
+              int position2 = middle - currentPart.pStart;
+              for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
                 // Search for the position of that object as compared to the middle object
-                int position = Arrays.binarySearch(sortedX, currentPart.pstart, currentPart.pend, sortedY[i], comparatorX);
+                int position = Arrays.binarySearch(sortedX, currentPart.pStart, currentPart.pEnd, sortedY[i], comparatorX);
                 if (position < middle)
                   newSortedRange[position1++] = sortedY[i];
                 else
@@ -176,32 +175,32 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
               }
             }
             // Copy the range [pend, last)
-            System.arraycopy(newSortedRange, 0, sortedY, currentPart.pstart, currentPart.pend - currentPart.pstart);
+            System.arraycopy(newSortedRange, 0, sortedY, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
           }
 
           // Create left partition
-          toPartition.push(new Part(currentPart.pstart, middle));
+          toPartition.push(new Part(currentPart.pStart, middle));
           // Create right partition
-          toPartition.push(new Part(middle, currentPart.pend));
+          toPartition.push(new Part(middle, currentPart.pEnd));
         } else {
           // Partition along the Y-axis
-          int middle = (currentPart.pstart + currentPart.pend) / 2;
+          int middle = (currentPart.pStart + currentPart.pEnd) / 2;
           toPartition.push(null); // An indicator of a merge needed
           // TODO Split the sortedX list around the middle
           {
             // For now, use a naive way to ensure that the algorithm works
-            Point[] newSortedRange = new Point[currentPart.pend - currentPart.pstart];
-            // Copy the range [pstart, pend)
+            Point[] newSortedRange = new Point[currentPart.pEnd - currentPart.pStart];
+            // Copy the range [pStart, pend)
             // Count number of points in the first part (left to middle.x)
             int size_1 = 0;
-            if ((middle - currentPart.pstart) - size_1 < (currentPart.pend - currentPart.pstart) * 1 / 10) {
-              middle = currentPart.pstart + size_1;
-              for (int i = currentPart.pstart; i < currentPart.pend; i++)
+            if ((middle - currentPart.pStart) - size_1 < (currentPart.pEnd - currentPart.pStart) * 1 / 10) {
+              middle = currentPart.pStart + size_1;
+              for (int i = currentPart.pStart; i < currentPart.pEnd; i++)
                 if (sortedX[i].y < sortedY[middle].y)
                   size_1++;
               int position1 = 0;
               int position2 = size_1;
-              for (int i = currentPart.pstart; i < currentPart.pend; i++) {
+              for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
                 if (sortedX[i].y < sortedY[middle].y)
                   newSortedRange[position1++] = sortedX[i];
                 else
@@ -212,10 +211,10 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
               // they need to go to different partitions
               // Apply a slower, more sophisticated algorithm
               int position1 = 0;
-              int position2 = middle - currentPart.pstart;
-              for (int i = currentPart.pstart; i < currentPart.pend; i++) {
+              int position2 = middle - currentPart.pStart;
+              for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
                 // Search for the position of that object as compared to the middle object
-                int position = Arrays.binarySearch(sortedY, currentPart.pstart, currentPart.pend, sortedX[i], comparatorY);
+                int position = Arrays.binarySearch(sortedY, currentPart.pStart, currentPart.pEnd, sortedX[i], comparatorY);
                 if (position < middle)
                   newSortedRange[position1++] = sortedX[i];
                 else
@@ -223,12 +222,12 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
               }
             }
             // Copy the range [pend, last)
-            System.arraycopy(newSortedRange, 0, sortedX, currentPart.pstart, currentPart.pend - currentPart.pstart);
+            System.arraycopy(newSortedRange, 0, sortedX, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
           }
           // Create upper partition
-          toPartition.push(new Part(currentPart.pstart, middle));
+          toPartition.push(new Part(currentPart.pStart, middle));
           // Create lower partition
-          toPartition.push(new Part(middle, currentPart.pend));
+          toPartition.push(new Part(middle, currentPart.pEnd));
         }
       }
     }

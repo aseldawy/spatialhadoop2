@@ -433,7 +433,7 @@ public class GSDTAlgorithm {
       numTriangulations++;
     }
     
-    LOG.info("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
+    LOG.debug("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
     
     List<Triangulation> mergedColumns = new ArrayList<Triangulation>();
     // Merge all triangulations together column-by-column
@@ -451,7 +451,7 @@ public class GSDTAlgorithm {
         }
       });
   
-      LOG.info("Merging "+column.size()+" triangulations vertically");
+      LOG.debug("Merging "+column.size()+" triangulations vertically");
       GSDTAlgorithm algo =
           new GSDTAlgorithm(column.toArray(new Triangulation[column.size()]), progress);
       mergedColumns.add(algo.getFinalTriangulation());
@@ -469,7 +469,7 @@ public class GSDTAlgorithm {
         return 0;
       }
     });
-    LOG.info("Merging "+mergedColumns.size()+" triangulations horizontally");
+    LOG.debug("Merging "+mergedColumns.size()+" triangulations horizontally");
     GSDTAlgorithm algo = new GSDTAlgorithm(
         mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
         progress);
@@ -525,28 +525,20 @@ public class GSDTAlgorithm {
       int rCandidate = -1;
       if (anglePotential < Math.PI && potentialCandidate != -1) {
         // Compute the circum circle between the base edge and potential candidate
-        Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-        if (circleCenter != null) {
-          if (nextPotentialCandidate == -1) {
-            // The only potential candidate, accept it right away
-            rCandidate = potentialCandidate;
+        //Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+        if (nextPotentialCandidate == -1) {
+          // The only potential candidate, accept it right away
+          rCandidate = potentialCandidate;
+        } else {
+          // Check if the circumcircle of the base edge with the potential
+          // candidate contains the next potential candidate
+          if (inCircle(baseL, baseR, potentialCandidate, nextPotentialCandidate)) {
+            // Delete the RR edge between baseR and rPotentialCandidate and restart
+            neighbors[baseR].remove(potentialCandidate);
+            neighbors[potentialCandidate].remove(baseR);
+            continue;
           } else {
-            // Check if the circumcircle of the base edge with the potential
-            // candidate contains the next potential candidate
-            double dx = circleCenter.x - xs[nextPotentialCandidate];
-            double dy = circleCenter.y - ys[nextPotentialCandidate];
-            double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - xs[potentialCandidate];
-            dy = circleCenter.y - ys[potentialCandidate];
-            double d2 = dx * dx + dy * dy;
-            if (d1 < d2) {
-              // Delete the RR edge between baseR and rPotentialCandidate and restart
-              neighbors[baseR].remove(potentialCandidate);
-              neighbors[potentialCandidate].remove(baseR);
-              continue;
-            } else {
-              rCandidate = potentialCandidate;
-            }
+            rCandidate = potentialCandidate;
           }
         }
       }
@@ -573,42 +565,30 @@ public class GSDTAlgorithm {
       int lCandidate = -1;
       if (anglePotential - Math.PI < -1E-9 && potentialCandidate != -1) {
         // Compute the circum circle between the base edge and potential candidate
-        Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-        if (circleCenter != null) {
-          if (nextPotentialCandidate == -1) {
-            // The only potential candidate, accept it right away
-            lCandidate = potentialCandidate;
+        //Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
+        if (nextPotentialCandidate == -1) {
+          // The only potential candidate, accept it right away
+          lCandidate = potentialCandidate;
+        } else {
+          // Check if the circumcircle of the base edge with the potential
+          // candidate contains the next potential candidate
+          if (inCircle(baseL, baseR, potentialCandidate, nextPotentialCandidate)) {
+            // Delete the LL edge between baseL and potentialCandidate and restart
+            neighbors[baseL].remove(potentialCandidate);
+            neighbors[potentialCandidate].remove(baseL);
+            continue;
           } else {
-            // Check if the circumcircle of the base edge with the potential
-            // candidate contains the next potential candidate
-            double dx = circleCenter.x - xs[nextPotentialCandidate];
-            double dy = circleCenter.y - ys[nextPotentialCandidate];
-            double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - xs[potentialCandidate];
-            dy = circleCenter.y - ys[potentialCandidate];
-            double d2 = dx * dx + dy * dy;
-            if (d1 < d2) {
-              // Delete the LL edge between baseL and potentialCandidate and restart
-              neighbors[baseL].remove(potentialCandidate);
-              neighbors[potentialCandidate].remove(baseL);
-              continue;
-            } else {
-              lCandidate = potentialCandidate;
-            }
-          } // nextPotentialCandidate == -1
-        } // circleCenter == null
-      } // anglePotential < Math.PI      
+            lCandidate = potentialCandidate;
+          }
+        } // nextPotentialCandidate == -1
+      } // anglePotential < Math.PI
       // Choose the right candidate
       if (lCandidate != -1 && rCandidate != -1) {
-        // Two candidates, choose the correct one
-        Point circumCircleL = calculateCircumCircleCenter(baseL, baseR, lCandidate);
-        double dx = circumCircleL.x - xs[lCandidate];
-        double dy = circumCircleL.y - ys[lCandidate];
-        double lCandidateDistance = dx * dx + dy * dy;
-        dx = circumCircleL.x - xs[rCandidate];
-        dy = circumCircleL.y - ys[rCandidate];
-        double rCandidateDistance = dx * dx + dy * dy;
-        if (lCandidateDistance < rCandidateDistance) {
+        // Two candidates, choose the candidate that defines a circle with the
+        // base edge that does NOT contain the other candidate
+
+        // Check if the left candidate is valid, if not, choose the *right* one
+        if (!inCircle(baseL, baseR, lCandidate, rCandidate)) {
           // rCandidate is outside the circumcircle, lCandidate is correct
           rCandidate = -1;
         } else {
@@ -721,7 +701,7 @@ public class GSDTAlgorithm {
     while (triangulations.length > 1) {
       long currentTime = System.currentTimeMillis();
       if (currentTime - reportTime > 1000) {
-        LOG.info("Merging "+triangulations.length+" triangulations");
+        LOG.debug("Merging "+triangulations.length+" triangulations");
         reportTime = currentTime;
       }
       // Merge every pair of DTs
@@ -1089,53 +1069,6 @@ public class GSDTAlgorithm {
     return unsafeSites;
   }
 
-  public boolean test() {
-    final double threshold = 1E-6;
-    List<Point> starts = new Vector<Point>();
-    List<Point> ends = new Vector<Point>();
-    for (int s1 = 0; s1 < points.length; s1++) {
-      for (int s2 : neighbors[s1]) {
-        if (s1 < s2) {
-          starts.add(new Point(xs[s1], ys[s1]));
-          ends.add(new Point(xs[s2], ys[s2]));
-        }
-      }
-    }
-    
-    for (int i = 0; i < starts.size(); i++) {
-      double x1 = starts.get(i).x;
-      double y1 = starts.get(i).y;
-      double x2 = ends.get(i).x;
-      double y2 = ends.get(i).y;
-      for (int j = i + 1; j < starts.size(); j++) {
-        double x3 = starts.get(j).x;
-        double y3 = starts.get(j).y;
-        double x4 = ends.get(j).x;
-        double y4 = ends.get(j).y;
-  
-        double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-        double ix = (x1 * y2 - y1 * x2) * (x3 - x4) / den - (x1 - x2) * (x3 * y4 - y3 * x4) / den;
-        double iy = (x1 * y2 - y1 * x2) * (y3 - y4) / den - (y1 - y2) * (x3 * y4 - y3 * x4) / den;
-        double minx1 = Math.min(x1, x2);
-        double maxx1 = Math.max(x1, x2); 
-        double miny1 = Math.min(y1, y2);
-        double maxy1 = Math.max(y1, y2); 
-        double minx2 = Math.min(x3, x4);
-        double maxx2 = Math.max(x3, x4); 
-        double miny2 = Math.min(y3, y4);
-        double maxy2 = Math.max(y3, y4); 
-        if ((ix - minx1 > threshold && ix - maxx1 < -threshold) && (iy - miny1 > threshold && iy - maxy1 < -threshold) &&
-            (ix - minx2 > threshold && ix - maxx2 < -threshold) && (iy - miny2 > threshold && iy - maxy2 < -threshold)) {
-          System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
-          System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
-          System.out.printf("circle %f, %f, 0.5\n", ix, iy);
-          throw new RuntimeException("error");
-        }
-      }
-    }
-    return true;
-  }
-
   boolean inArray(int[] array, int objectToFind) {
     for (int objectToCompare : array)
       if (objectToFind == objectToCompare)
@@ -1177,19 +1110,27 @@ public class GSDTAlgorithm {
     double a = Math.min(a1, a2);
     return new Point(px + a * vx, py + a * vy);
   }
-  
+
+  /**
+   * @deprecated use inCircle(int, int, int, int) instead
+   * @param s1
+   * @param s2
+   * @param s3
+   * @return
+   */
+  @Deprecated
   Point calculateCircumCircleCenter(int s1, int s2, int s3) {
     // Calculate the perpendicular bisector of the first two points
     double x1 = (xs[s1] + xs[s2]) / 2;
     double y1 = (ys[s1] + ys[s2]) /2;
     double x2 = x1 + ys[s2] - ys[s1];
     double y2 = y1 + xs[s1] - xs[s2];
-    // Calculate the perpendicular bisector of the second two points 
+    // Calculate the perpendicular bisector of the second two points
     double x3 = (xs[s3] + xs[s2]) / 2;
     double y3 = (ys[s3] + ys[s2]) / 2;
     double x4 = x3 + ys[s2] - ys[s3];
     double y4 = y3 + xs[s3] - xs[s2];
-    
+
     // Calculate the intersection of the two new lines
     // See https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
     double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
@@ -1203,20 +1144,43 @@ public class GSDTAlgorithm {
     }
     double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
     double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
-    
+
     // We can also use the following equations from
     // http://mathforum.org/library/drmath/view/62814.html
 //    double v12x = x2 - x1;
 //    double v12y = y2 - y1;
 //    double v34x = x4 - x3;
 //    double v34y = y4 - y3;
-//    
+//
 //    double a = ((x3 - x1) * v34y - (y3 - y1) * v34x) / (v12x * v34y - v12y * v34x);
 //    double ix = x1 + a * v12x;
 //    double iy = y1 + a * v12y;
-    
+
     return new Point(ix, iy);
   }
+
+  /**
+   * Returns twice the area of the oriented triangle (a, b, c), i.e., the
+   * area is positive if the triangle is oriented counterclockwise.
+   */
+  double triArea(int p1, int p2, int p3) {
+    return (xs[p2] - xs[p1])*(ys[p3] - ys[p1]) - (ys[p2] - ys[p1])*(xs[p3] - xs[p1]);
+  }
+
+  /**
+   * Returns true if p4 is inside the circumcircle of the three points
+   * p1, p2, and p3
+   * If the p4 is exactly on the circumference of the circle, it returns false.
+   * See Guibas and Stolfi (1985) p.107.
+   * @return true iff p4 is inside the circle (p1, p2, p3)
+   */
+  boolean inCircle(int p1, int p2, int p3, int p4) {
+    return (xs[p1]*xs[p1] + ys[p1]*ys[p1]) * triArea(p2, p3, p4) -
+        (xs[p2] * xs[p2] + ys[p2]*ys[p2]) * triArea(p1, p3, p4) +
+        (xs[p3]*xs[p3] + ys[p3]*ys[p3]) * triArea(p1, p2, p4) -
+        (xs[p4]*xs[p4] + ys[p4]*ys[p4]) * triArea(p1, p2, p3) > 0;
+  }
+
 
   /**
    * Compute the convex hull of a list of points given by their indexes in the
