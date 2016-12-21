@@ -1208,13 +1208,26 @@ public class GSDTAlgorithm {
     };
     sort.sort(xSortable, 0, points.length);
 
-    // A flag that is set when there are collinear points on the convex hull
-    // When set, an additional step is performed to ensure that no point is
-    // added to the convex hull twice
-    boolean collinear_points = false;
+    // pminmin, pminmax, pmaxmin, and pmaxmax are used to handle the case where
+    // several points have min x or several points have maxx
+    // Check http://geomalgorithms.com/a10-_hull-1.html
+    int pminmin = 0;
+    int pminmax = pminmin;
+    while (pminmax < points.length && xs[points[pminmax]] == xs[points[pminmin]])
+      pminmax++;
+    if (pminmax == points.length) {
+      // Special case, all points form one vertical line, return all of them
+      return points;
+    }
+    pminmax--;
+    int pmaxmax = points.length - 1;
+    int pmaxmin = pmaxmax;
+    while (pmaxmin > 0 && xs[points[pmaxmin]] == xs[points[pmaxmax]])
+      pmaxmin--;
+    pmaxmin++;
 
     // Lower chain
-    for (int i = 0; i < points.length; i++) {
+    for (int i = pminmin; i <= pmaxmin; i++) {
       while(lowerChain.size() > 1) {
         int s1 = lowerChain.get(lowerChain.size() - 2);
         int s2 = lowerChain.get(lowerChain.size() - 1);
@@ -1225,8 +1238,6 @@ public class GSDTAlgorithm {
         // collinear points along the convex hull edge which might product incorrect
         // results with Delaunay triangulation as it might skip the points in
         // the middle.
-        if (crossProduct == 0)
-          collinear_points = true;
         if (crossProduct < 0)
           lowerChain.pop();
         else break;
@@ -1235,7 +1246,7 @@ public class GSDTAlgorithm {
     }
     
     // Upper chain
-    for (int i = points.length - 1; i >= 0; i--) {
+    for (int i = pmaxmax; i >= pminmax; i--) {
       while(upperChain.size() > 1) {
         int s1 = upperChain.get(upperChain.size() - 2);
         int s2 = upperChain.get(upperChain.size() - 1);
@@ -1245,8 +1256,6 @@ public class GSDTAlgorithm {
         // collinear points along the convex hull edge which might product incorrect
         // results with Delaunay triangulation as it might skip the points in
         // the middle.
-        if (crossProduct == 0)
-          collinear_points = true;
         if (crossProduct < 0)
           upperChain.pop();
         else break;
@@ -1256,27 +1265,17 @@ public class GSDTAlgorithm {
     
     lowerChain.pop();
     upperChain.pop();
-    int[] result = new int[lowerChain.size() + upperChain.size()];
-    for (int i = 0; i < lowerChain.size(); i++)
-      result[i] = lowerChain.get(i);
-    for (int i = 0; i < upperChain.size(); i++)
-      result[i + lowerChain.size()] = upperChain.get(i);
-    if (collinear_points) {
-      // Remove possible duplicates in the list
-      int unique_size = 1;
-      Arrays.sort(result);
-      for ( int i = result.length - 1; i > 0; i--)
-        if (result[i] != result[i-1])
-          unique_size++;
-      if (unique_size != result.length) {
-        int[] unique_result = new int[unique_size];
-        unique_result[--unique_size] = result[result.length - 1];
-        for ( int i = result.length - 1; i > 0; i--)
-          if (result[i] != result[i-1])
-            unique_result[--unique_size] = result[i-1];
-        result = unique_result;
-      }
-    }
+
+    int[] result = new int[lowerChain.size() + upperChain.size() + (pminmax-pminmin) + (pmaxmax-pmaxmin)];
+    int iResult = 0;
+    for (int i = pminmax; i > pminmin; i--)
+      result[iResult++] = points[i];
+    for (int il = 0; il < lowerChain.size(); il++)
+      result[iResult++] = lowerChain.get(il);
+    for (int i = pmaxmin; i < pmaxmax; i++)
+      result[iResult++] = points[i];
+    for (int iu = 0; iu < upperChain.size(); iu++)
+      result[iResult++] = upperChain.get(iu);
     return result;
   }
 }
