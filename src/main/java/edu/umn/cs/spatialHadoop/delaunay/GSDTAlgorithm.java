@@ -264,7 +264,6 @@ public class GSDTAlgorithm {
       // Draw to rasem
       out.println("group {");
       for (int i = site1; i <= site2; i++) {
-        out.printf("circle %f, %f, 1\n", xs[i], ys[i]);
         out.printf("text(%f, %f) { raw '%d' }\n", xs[i], ys[i], i);
       }
       out.println("}");
@@ -527,12 +526,7 @@ public class GSDTAlgorithm {
       if (anglePotential < Math.PI && potentialCandidate != -1) {
         // Compute the circum circle between the base edge and potential candidate
         Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-        if (circleCenter == null) {
-          // Degenerate case of three collinear points
-          // Delete the RR edge between baseR and rPotentialCandidate and restart
-          neighbors[baseR].remove(potentialCandidate);
-          neighbors[potentialCandidate].remove(baseR);
-        } else {
+        if (circleCenter != null) {
           if (nextPotentialCandidate == -1) {
             // The only potential candidate, accept it right away
             rCandidate = potentialCandidate;
@@ -580,12 +574,7 @@ public class GSDTAlgorithm {
       if (anglePotential - Math.PI < -1E-9 && potentialCandidate != -1) {
         // Compute the circum circle between the base edge and potential candidate
         Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-        if (circleCenter == null) {
-          // Degenerate case, the potential candidate is collinear with base edge
-          // Delete the LL edge between baseL and potentialCandidate and restart
-          neighbors[baseL].remove(potentialCandidate);
-          neighbors[potentialCandidate].remove(baseL);
-        } else {
+        if (circleCenter != null) {
           if (nextPotentialCandidate == -1) {
             // The only potential candidate, accept it right away
             lCandidate = potentialCandidate;

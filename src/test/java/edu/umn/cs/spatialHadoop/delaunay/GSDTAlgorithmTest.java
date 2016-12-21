@@ -109,7 +109,7 @@ public class GSDTAlgorithmTest extends TestCase {
    * Test Delaunay Triangulation for a toy dataset. Visualized in file test_dt1.svg
    */
   public void testTriangulations() {
-    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3", "test_dt4", "test_dt5", "test_dt6"};
+    String[] datasetNames = {"test_dt1", "test_dt2", "test_dt3", "test_dt4", "test_dt5", "test_dt6", "test_dt7"};
     try {
       for (String datasetName : datasetNames) {
         Point[] points = readPoints("src/test/resources/"+datasetName+".points");
@@ -129,19 +129,17 @@ public class GSDTAlgorithmTest extends TestCase {
             else
               i++;
           }
-          assertTrue(String.format("Triangle #%d (%f, %f), (%f, %f), (%f, %f) not found",
-              iTriangle,
-              triangle[0].x, triangle[0].y,
-              triangle[1].x, triangle[1].y,
-              triangle[2].x, triangle[2].y), found);
+          assertTrue(String.format("Triangle (%d, %d, %d) not expected in the answer",
+              Arrays.binarySearch(points, triangle[0]),
+              Arrays.binarySearch(points, triangle[1]),
+              Arrays.binarySearch(points, triangle[2])), found);
           iTriangle++;
         }
         for (Point[] triangle : correctTriangulation) {
-          System.out.printf("Triangle not found (%f, %f) (%f, %f) (%f, %f)\n",
-              triangle[0].x, triangle[0].y,
-              triangle[1].x, triangle[1].y,
-              triangle[2].x, triangle[2].y
-          );
+          System.out.printf("Triangle (%d, %d, %d) expected but not found\n",
+              Arrays.binarySearch(points, triangle[0]),
+              Arrays.binarySearch(points, triangle[1]),
+              Arrays.binarySearch(points, triangle[2]));
         }
         assertTrue(String.format("%d triangles not found", correctTriangulation.size()),
             correctTriangulation.isEmpty());
