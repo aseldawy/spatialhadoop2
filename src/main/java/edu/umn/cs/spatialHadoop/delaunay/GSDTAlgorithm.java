@@ -654,25 +654,29 @@ public class GSDTAlgorithm {
    */
   private int[] findBaseEdge(int[] mergedConvexHull, IntermediateTriangulation L,
       IntermediateTriangulation R) {
-    int base1L = -1, base1R = -1;
-    int base2L = -1, base2R = -1;
+    int base1L = -1, base1R = -1; // First LR edge
+    int base2L = -1, base2R = -1; // Second LR edge
     for (int i = 0; i < mergedConvexHull.length; i++) {
       int p1 = mergedConvexHull[i];
       int p2 = i == mergedConvexHull.length - 1 ? mergedConvexHull[0] : mergedConvexHull[i+1];
       if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
         // Found an LR edge, store it
         if (base1L == -1) {
+          // First LR edge
           base1L = p1;
           base1R = p2;
         } else {
+          // Second LR edge
           base2L = p1;
           base2R = p2;
         }
       } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
         if (base1L == -1) {
+          // First LR edge
           base1L = p2;
           base1R = p1;
         } else {
+          // Second LR edge
           base2L = p2;
           base2R = p1;
         }
@@ -681,10 +685,28 @@ public class GSDTAlgorithm {
     
     // Choose the right LR edge. The one which makes an angle [0, 180] with
     // each point in both partitions
-    double cwAngle = base1R != base2R? calculateCWAngle(base1L, base1R, base2R)
-        : calculateCWAngle(base1L, base1R, base2L);
-    
-    return cwAngle < Math.PI ? new int[] {base1L, base1R} :
+    // Compute the angle of the first LR edge and test if it qualifies
+    // Instead of testing with all the points, we test with one of the two points
+    // on the second LR edge as they are probably two different points
+    double cwAngleFirst;
+    if (base1R == base2R) {
+      // Both LR edges share the right point, can only test with the left
+      // point of the second edge
+      cwAngleFirst = calculateCWAngle(base1L, base1R, base2L);
+    } else if (base1L == base2L) {
+      // Both LR edges share the  left point, can only test with the right
+      // point of the second edge
+      cwAngleFirst = calculateCWAngle(base1L, base1R, base2R);
+    } else {
+      // The two LR edges do not share any points, we have the luxury of choosing
+      // which point on the right edge to test. We will choose the point that
+      // does not give an angle of PI which indicates three collinear points
+      cwAngleFirst = calculateCWAngle(base1L, base1R, base2R);
+      if (cwAngleFirst == Math.PI)
+        cwAngleFirst = calculateCWAngle(base1L, base1R, base2L);
+    }
+
+    return cwAngleFirst < Math.PI ? new int[] {base1L, base1R} :
       new int[] {base2L, base2R};
   }
 
@@ -1120,8 +1142,16 @@ public class GSDTAlgorithm {
         return true;
     return false;
   }
-  
+
+  /**
+   * Compute the clock-wise angle between (s2->s1) and (s2->s3)
+   * @param s1
+   * @param s2
+   * @param s3
+   * @return
+   */
   double calculateCWAngle(int s1, int s2, int s3) {
+    // TODO use cross product to avoid using atan2
     double angle1 = Math.atan2(ys[s1] - ys[s2], xs[s1] - xs[s2]);
     double angle2 = Math.atan2(ys[s3] - ys[s2], xs[s3] - xs[s2]);
     return angle1 > angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
