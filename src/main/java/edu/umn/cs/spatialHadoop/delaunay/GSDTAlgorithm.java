@@ -619,8 +619,8 @@ public class GSDTAlgorithm {
 
   /**
    * Computes the base edge that is used to merge two triangulations.
-   * There are at most two crossing edges from L to R, the base edge is the one
-   * that makes CW angles with sites in the range [0, PI]. 
+   * There are at most two crossing edges from L to R, the correct one is the
+   * one that crosses from L to R as we traverse the CH in the CW order.
    * @param mergedConvexHull
    * @param L
    * @param R
@@ -628,67 +628,20 @@ public class GSDTAlgorithm {
    */
   private int[] findBaseEdge(int[] mergedConvexHull, IntermediateTriangulation L,
       IntermediateTriangulation R) {
-    int base1L = -1, base1R = -1; // First LR edge
-    int base2L = -1, base2R = -1; // Second LR edge
+    int baseL, baseR;
     int i = 0;
-    // Search for the first edge
-    while (i < mergedConvexHull.length - 1 && (mergedConvexHull[i] <= L.site2) == (mergedConvexHull[i+1] <= L.site2))
+    while (i < mergedConvexHull.length && mergedConvexHull[i] > L.site2) {
+      // The first point is on the right side, continue the search until we
+      // find a point on the left side
       i++;
-    if (mergedConvexHull[i] <= L.site2) {
-      base1L = mergedConvexHull[i];
-      base1R = mergedConvexHull[i+1];
-    } else {
-      base1R = mergedConvexHull[i];
-      base1L = mergedConvexHull[i+1];
     }
-    // Continue searching for the second edge
-    i++;
-    while (i < mergedConvexHull.length - 1 && (mergedConvexHull[i] <= L.site2) == (mergedConvexHull[i+1] <= L.site2))
-      i++;
-    if (i < mergedConvexHull.length - 1) {
-      if (mergedConvexHull[i] <= L.site2) {
-        base2L = mergedConvexHull[i];
-        base2R = mergedConvexHull[i+1];
-      } else {
-        base2R = mergedConvexHull[i];
-        base2L = mergedConvexHull[i+1];
-      }
-    } else {
-      //  Reached the end, only one edge left
-      if (mergedConvexHull[i] <= L.site2) {
-        base2L = mergedConvexHull[i];
-        base2R = mergedConvexHull[0];
-      } else {
-        base2R = mergedConvexHull[i];
-        base2L = mergedConvexHull[0];
-      }
-    }
-    
-    // Choose the right LR edge. The one which makes an angle [0, 180] with
-    // each point in both partitions
-    // Compute the angle of the first LR edge and test if it qualifies
-    // Instead of testing with all the points, we test with one of the two points
-    // on the second LR edge as they are probably two different points
-    double cwAngleFirst;
-    if (base1R == base2R) {
-      // Both LR edges share the right point, can only test with the left
-      // point of the second edge
-      cwAngleFirst = calculateCWAngle(base1L, base1R, base2L);
-    } else if (base1L == base2L) {
-      // Both LR edges share the  left point, can only test with the right
-      // point of the second edge
-      cwAngleFirst = calculateCWAngle(base1L, base1R, base2R);
-    } else {
-      // The two LR edges do not share any points, we have the luxury of choosing
-      // which point on the right edge to test. We will choose the point that
-      // does not give an angle of PI which indicates three collinear points
-      cwAngleFirst = calculateCWAngle(base1L, base1R, base2R);
-      if (cwAngleFirst == Math.PI)
-        cwAngleFirst = calculateCWAngle(base1L, base1R, base2L);
-    }
+    // Now i points to the first point on the left side, continue the search
+    // until we find the first point on the right side.
+    while (++i < mergedConvexHull.length && mergedConvexHull[i] <= L.site2);
+    baseL = mergedConvexHull[i-1];
+    baseR = mergedConvexHull[i % mergedConvexHull.length];
 
-    return cwAngleFirst < Math.PI ? new int[] {base1L, base1R} :
-      new int[] {base2L, base2R};
+    return new int[] {baseL, baseR};
   }
 
   /**
