@@ -115,14 +115,11 @@ public class GSDTAlgorithm {
       site2 = s3;
       neighbors[s1].add(s2); neighbors[s2].add(s1); // edge: s1 -- s2
       neighbors[s2].add(s3); neighbors[s3].add(s2); // edge: s3 -- s3
-      if (crossProduct(s1, s2, s3) == 0) {
-        // Degenerate case, three points are collinear
-        convexHull = new int[] {s1, s3};
-      } else {
-        // Normal case
+      if (crossProduct(s1, s2, s3) != 0) {
+        // The three points are not collinear
         neighbors[s1].add(s3); neighbors[s3].add(s1); // edge: s1 -- s3
-        convexHull = new int[] {s1, s2, s3};
       }
+      convexHull = new int[] {s1, s2, s3};
     }
 
     /**
@@ -229,26 +226,21 @@ public class GSDTAlgorithm {
         }, null);
 
         // Test if all the lines of the convex hull are edges
-        int[] sites = new int[this.site2 - this.site1 + 1];
-        for (int i = site1; i <= site2; i++)
-          sites[i - this.site1] = i;
-        int[] ch = convexHull(sites);
-        for (int i = 0; i < ch.length; i++) {
-          int s = ch[i];
-          int d = ch[(i+1)%ch.length];
-          if (s > d) {
-            // Swap to make it easier to search
-            int t = s;
-            s = d;
-            d = t;
-          }
-          boolean found = false;
-          for (int iEdge = 0; !found && iEdge < aredges.length; iEdge++) {
-            found = s == aredges[iEdge].source && d == aredges[iEdge].destination;
-          }
-          if (!found) {
-            correct.set(false);
-            System.out.printf("Edge %d, %d on the convex hull and not found in the DT\n", s, d);
+        boolean collinear_ch = true;
+        for (int i = 2; collinear_ch && i < convexHull.length; i++) {
+          collinear_ch = crossProduct(convexHull[i-2], convexHull[i-1], convexHull[i]) == 0;
+        }
+
+        if (!collinear_ch) {
+          // Test if all edges of the convex hull are in the triangulation only
+          // if the convex hull is not a line
+          for (int i = 0; i < convexHull.length; i++) {
+            int s = convexHull[i];
+            int d = convexHull[(i+1)%convexHull.length];
+            if (!neighbors[s].contains(d)) {
+              correct.set(false);
+              System.out.printf("Edge %d, %d on the convex hull but not found in the DT\n", s, d);
+            }
           }
         }
 
@@ -270,7 +262,8 @@ public class GSDTAlgorithm {
       out.println("group {");
       for (int i = site1; i <= site2; i++) {
         for (int j : neighbors[i]) {
-          out.printf("line %f, %f, %f, %f\n", xs[i], ys[i], xs[j], ys[j]);
+          if (i < j)
+            out.printf("line %f, %f, %f, %f\n", xs[i], ys[i], xs[j], ys[j]);
         }
       }
       out.println("}");
@@ -1223,6 +1216,12 @@ public class GSDTAlgorithm {
     upperChain.pop();
 
     int[] result = new int[lowerChain.size() + upperChain.size() + (pminmax-pminmin) + (pmaxmax-pmaxmin)];
+    if (result.length > points.length) {
+      // More points on the convex hull than the actual points.
+      // The only case when this happens is when all the points are collinear
+      // Simply, return the original set of points which are sorted on (x, y)
+      return points;
+    }
     int iResult = 0;
     for (int i = pminmax; i > pminmin; i--)
       result[iResult++] = points[i];

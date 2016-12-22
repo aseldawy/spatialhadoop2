@@ -23,16 +23,17 @@ unsafe_sites = File.read(unsafe_sites_file).each_line.map {|l| l.to_i == 1} if F
 all_xs = points.map{|p| p[0]}
 all_ys = points.map{|p| p[1]}
 
-point_size = 12
+point_size = 4
 
-width = 500
-height = 500
+width = 100
+height = 100
 
 img = Rasem::SVGImage.new(:width=>(width+2*point_size), :height=>(height+2*point_size)) do
 	@mbr = [all_xs.min, all_ys.min, all_xs.max, all_ys.max]
+	@scale = 100 / [(@mbr[2] - @mbr[0]) , (@mbr[3] - @mbr[1])].max
 	@point_size = 12
 	def project_point(pt)
-		[@point_size+(pt[0] - @mbr[0]) * 500/ (@mbr[2] - @mbr[0]), @point_size+(pt[1] - @mbr[1])*500/ (@mbr[3] - @mbr[1])]
+		[@point_size+(pt[0] - @mbr[0]) * @scale, @point_size+(pt[1] - @mbr[1])*@scale]
 	end
 
 	points.each_with_index do |point, index|
