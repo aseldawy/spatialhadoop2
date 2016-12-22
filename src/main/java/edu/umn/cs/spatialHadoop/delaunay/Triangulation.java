@@ -383,7 +383,7 @@ public class Triangulation implements Writable {
       double a_y = sites[p2].y - sites[p0].y;
       double b_x = sites[p1].x - sites[p0].x;
       double b_y = sites[p1].y - sites[p0].y;
-      if (a_x * b_y - a_y * b_x < 0)
+      if (a_x * b_y - a_y * b_x <= 0)
         return false;
       return true;
     }

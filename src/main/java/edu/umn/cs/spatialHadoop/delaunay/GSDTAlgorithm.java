@@ -502,45 +502,46 @@ public class GSDTAlgorithm {
     boolean finished = false;
     do { // Until the finished flag is raised
       // Search for the potential candidate on the right
-      double anglePotential = -1, angleNextPotential = -1;
+      // Cache the cross product of the potential candidate and next one
+      double crossProductPotentialCandidate=0, crossProductNextPotentialCandidate = 0;
       int potentialCandidate = -1, nextPotentialCandidate = -1;
       for (int rNeighbor : neighbors[baseR]) {
-        if (rNeighbor >= R.site1 && rNeighbor <= R.site2) {
-          // Check this RR edge
-          double cwAngle = calculateCWAngle(baseL, baseR, rNeighbor);
-          if (potentialCandidate == -1 || cwAngle < anglePotential) {
-            // Found a new potential candidate
-            angleNextPotential = anglePotential;
-            nextPotentialCandidate = potentialCandidate;
-            anglePotential = cwAngle;
-            potentialCandidate = rNeighbor;
-          } else if (nextPotentialCandidate == -1 || cwAngle < angleNextPotential) {
-            angleNextPotential = cwAngle;
-            nextPotentialCandidate = rNeighbor;
-          }
+        // Check if this is an edge that crosses from L to R and skip it if true
+        if (rNeighbor <= L.site2)
+          continue;
+        double crossProduct = crossProduct(baseL, baseR, rNeighbor);
+        // This neighbor can be considered, let's add it in the right order
+        if (potentialCandidate == -1 || crossProductPotentialCandidate < 0 ||
+            (crossProduct > 0 && crossProduct(potentialCandidate, baseR, rNeighbor) < 0)){
+          nextPotentialCandidate = potentialCandidate;
+          crossProductNextPotentialCandidate = crossProductPotentialCandidate;
+          potentialCandidate = rNeighbor;
+          crossProductPotentialCandidate = crossProduct;
+        } else if (nextPotentialCandidate == -1 || crossProductNextPotentialCandidate < 0 ||
+            (crossProduct > 0 && crossProduct(nextPotentialCandidate, baseR, rNeighbor) < 0))  {
+          nextPotentialCandidate = rNeighbor;
+          crossProductNextPotentialCandidate = crossProduct;
         }
       }
-      int rCandidate = -1;
-      if (anglePotential < Math.PI && potentialCandidate != -1) {
-        if (nextPotentialCandidate == -1) {
-          // The only potential candidate, accept it right away
-          rCandidate = potentialCandidate;
+      int rCandidate;
+      if (potentialCandidate == -1 || crossProductPotentialCandidate <= 0) {
+        // No potential candidate
+        rCandidate = -1;
+      } else if (nextPotentialCandidate == -1){
+        rCandidate = potentialCandidate;
+      } else {
+        if (inCircle(baseL, baseR, potentialCandidate, nextPotentialCandidate)) {
+          // Delete the RR edge between baseR and rPotentialCandidate and restart
+          neighbors[baseR].remove(potentialCandidate);
+          neighbors[potentialCandidate].remove(baseR);
+          continue;
         } else {
-          // Check if the circumcircle of the base edge with the potential
-          // candidate contains the next potential candidate
-          if (inCircle(baseL, baseR, potentialCandidate, nextPotentialCandidate)) {
-            // Delete the RR edge between baseR and rPotentialCandidate and restart
-            neighbors[baseR].remove(potentialCandidate);
-            neighbors[potentialCandidate].remove(baseR);
-            continue;
-          } else {
-            rCandidate = potentialCandidate;
-          }
+          rCandidate = potentialCandidate;
         }
       }
-      
+
       // Search for the potential candidate on the left
-      anglePotential = -1; angleNextPotential = -1;
+      double anglePotential = -1, angleNextPotential = -1;
       potentialCandidate = -1; nextPotentialCandidate = -1;
       for (int lNeighbor : neighbors[baseL]) {
         if (lNeighbor >= L.site1 && lNeighbor <= L.site2) {
@@ -1036,7 +1037,23 @@ public class GSDTAlgorithm {
     double angle2 = Math.atan2(ys[s3] - ys[s2], xs[s3] - xs[s2]);
     return angle1 >= angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
   }
-  
+
+  /**
+   * Compute the cross product of the two vectors (s2->s1) and (s2->s3)
+   * @param s1
+   * @param s2
+   * @param s3
+   * @return
+   */
+  double crossProduct(int s1, int s2, int s3) {
+    double dx1 = xs[s1]-xs[s2];
+    double dy1 = ys[s1]-ys[s2];
+    double dx2 = xs[s3]-xs[s2];
+    double dy2 = ys[s3]-ys[s2];
+    return dy1 * dx2 - dx1 * dy2;
+  }
+
+
   /**
    * Calculate the intersection between the perpendicular bisector of the line
    * segment (p1, p2) towards the right (CCW) and the given rectangle.
