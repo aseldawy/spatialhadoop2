@@ -115,7 +115,7 @@ public class GSDTAlgorithm {
       site2 = s3;
       neighbors[s1].add(s2); neighbors[s2].add(s1); // edge: s1 -- s2
       neighbors[s2].add(s3); neighbors[s3].add(s2); // edge: s3 -- s3
-      if (calculateCircumCircleCenter(s1, s2, s3) == null) {
+      if (crossProduct(s1, s2, s3) == 0) {
         // Degenerate case, three points are collinear
         convexHull = new int[] {s1, s3};
       } else {
@@ -539,44 +539,43 @@ public class GSDTAlgorithm {
           rCandidate = potentialCandidate;
         }
       }
-
       // Search for the potential candidate on the left
-      double anglePotential = -1, angleNextPotential = -1;
+      crossProductPotentialCandidate=0; crossProductNextPotentialCandidate = 0;
       potentialCandidate = -1; nextPotentialCandidate = -1;
       for (int lNeighbor : neighbors[baseL]) {
-        if (lNeighbor >= L.site1 && lNeighbor <= L.site2) {
-          // Check this LL edge
-          double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, lNeighbor);
-          if (potentialCandidate == -1 || ccwAngle < anglePotential) {
-            // Found a new potential candidate
-            angleNextPotential = anglePotential;
-            nextPotentialCandidate = potentialCandidate;
-            anglePotential = ccwAngle;
-            potentialCandidate = lNeighbor;
-          } else if (nextPotentialCandidate == -1 || ccwAngle < angleNextPotential) {
-            angleNextPotential = ccwAngle;
-            nextPotentialCandidate = lNeighbor;
-          }
+        if (lNeighbor > L.site2)
+          continue;
+        // Check this LL edge
+        double crossProduct = crossProduct(baseL, baseR, lNeighbor);
+        // This neighbor can be considered, let's add it in the right order
+        if (potentialCandidate == -1 || crossProductPotentialCandidate < 0 ||
+            (crossProduct > 0 && crossProduct(potentialCandidate, baseL, lNeighbor) > 0)){
+          nextPotentialCandidate = potentialCandidate;
+          crossProductNextPotentialCandidate = crossProductPotentialCandidate;
+          potentialCandidate = lNeighbor;
+          crossProductPotentialCandidate = crossProduct;
+        } else if (nextPotentialCandidate == -1 || crossProductNextPotentialCandidate < 0 ||
+            (crossProduct > 0 && crossProduct(nextPotentialCandidate, baseL, lNeighbor) > 0))  {
+          nextPotentialCandidate = lNeighbor;
+          crossProductNextPotentialCandidate = crossProduct;
         }
       }
       int lCandidate = -1;
-      if (anglePotential - Math.PI < -1E-9 && potentialCandidate != -1) {
-        if (nextPotentialCandidate == -1) {
-          // The only potential candidate, accept it right away
-          lCandidate = potentialCandidate;
+      if (potentialCandidate == -1 || crossProductPotentialCandidate <= 0) {
+        // No potential candidate
+        lCandidate = -1;
+      } else if (nextPotentialCandidate == -1){
+        lCandidate = potentialCandidate;
+      } else {
+        if (inCircle(baseL, baseR, potentialCandidate, nextPotentialCandidate)) {
+          // Delete the LL edge between baseR and rPotentialCandidate and restart
+          neighbors[baseL].remove(potentialCandidate);
+          neighbors[potentialCandidate].remove(baseL);
+          continue;
         } else {
-          // Check if the circumcircle of the base edge with the potential
-          // candidate contains the next potential candidate
-          if (inCircle(baseL, baseR, potentialCandidate, nextPotentialCandidate)) {
-            // Delete the LL edge between baseL and potentialCandidate and restart
-            neighbors[baseL].remove(potentialCandidate);
-            neighbors[potentialCandidate].remove(baseL);
-            continue;
-          } else {
-            lCandidate = potentialCandidate;
-          }
-        } // nextPotentialCandidate == -1
-      } // anglePotential < Math.PI
+          lCandidate = potentialCandidate;
+        }
+      }
       // Choose the right candidate
       if (lCandidate != -1 && rCandidate != -1) {
         // Two candidates, choose the candidate that defines a circle with the
@@ -1022,20 +1021,6 @@ public class GSDTAlgorithm {
       }
     }
     return unsafeSites;
-  }
-
-  /**
-   * Compute the clock-wise angle between (s2->s1) and (s2->s3)
-   * @param s1
-   * @param s2
-   * @param s3
-   * @return
-   */
-  double calculateCWAngle(int s1, int s2, int s3) {
-    // TODO use cross product to avoid using atan2
-    double angle1 = Math.atan2(ys[s1] - ys[s2], xs[s1] - xs[s2]);
-    double angle2 = Math.atan2(ys[s3] - ys[s2], xs[s3] - xs[s2]);
-    return angle1 >= angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
   }
 
   /**
