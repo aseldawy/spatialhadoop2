@@ -12,6 +12,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import org.apache.hadoop.io.WritableComparable;
 
 /**
@@ -82,5 +83,20 @@ public class TileIndex implements WritableComparable<TileIndex> {
 
   public String getImageFileName() {
     return "tile-"+this.level+"-"+this.x+"-"+this.y;
+  }
+
+  /**
+   * Returns the MBR of this rectangle given that the MBR of whole pyramid
+   * (i.e., the top tile) is the given one.
+   * @param spaceMBR
+   * @return
+   */
+  public Rectangle getMBR(Rectangle spaceMBR) {
+    int fraction = 1 << this.level;
+    double tileWidth = spaceMBR.getWidth() / fraction;
+    double tileHeight = spaceMBR.getHeight() / fraction;
+    double x1 = tileWidth * this.x;
+    double y1 = tileWidth * this.y;
+    return new Rectangle(x1, y1, x1 + tileWidth, y1 + tileHeight);
   }
 }
