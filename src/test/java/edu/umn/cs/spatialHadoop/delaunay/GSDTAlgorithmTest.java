@@ -194,6 +194,42 @@ public class GSDTAlgorithmTest extends TestCase {
   }
 
   /**
+   * Test some points without a ground truth triangulation. Just make sure that
+   * the answer *seems* correct. We try to avoid obvious mistakes including
+   * - A convex hull edge not in the triangulation
+   * - Two intersecting edges in the triangulation
+   */
+  public void testTriangulationsNoGroundTruth() {
+    String[] datasetNames = {"test_dt9", "test_dt13"};
+    try {
+      // A flag that is set to true when the first error is found
+      final BooleanWritable errorFound = new BooleanWritable(false);
+      for (String datasetName : datasetNames) {
+        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
+
+        GSDTAlgorithm algo = new GSDTAlgorithm(points, null) {
+          @Override
+          protected IntermediateTriangulation merge(IntermediateTriangulation L, IntermediateTriangulation R) {
+            IntermediateTriangulation partialAnswer = super.merge(L, R);
+            if (!errorFound.get()) {
+              // No error found so far, test for errors
+              if (partialAnswer.isIncorrect()) {
+                System.out.println("Found an error");
+                errorFound.set(true);
+              }
+            }
+            return partialAnswer;
+          }
+        };
+        Triangulation answer = algo.getFinalTriangulation();
+        assertTrue(String.format("Found an error in file '%s'", datasetName), !errorFound.get());
+      }
+    } catch (IOException e) {
+      fail("File not found");
+    }
+  }
+
+  /**
    * Test that partitioning a Delaunay triangulation into final and non-final
    * ones does not change the reported triangles.
    */

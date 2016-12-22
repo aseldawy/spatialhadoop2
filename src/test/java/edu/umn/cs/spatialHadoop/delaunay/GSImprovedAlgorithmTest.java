@@ -79,6 +79,42 @@ public class GSImprovedAlgorithmTest extends TestCase {
   }
 
   /**
+   * Test some points without a ground truth triangulation. Just make sure that
+   * the answer *seems* correct. We try to avoid obvious mistakes including
+   * - A convex hull edge not in the triangulation
+   * - Two intersecting edges in the triangulation
+   */
+  public void testTriangulationsNoGroundTruth() {
+    String[] datasetNames = {"test_dt9", "test_dt13"};
+    try {
+      // A flag that is set to true when the first error is found
+      final BooleanWritable errorFound = new BooleanWritable(false);
+      for (String datasetName : datasetNames) {
+        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
+
+        GSImprovedAlgorithm algo = new GSImprovedAlgorithm(points, null) {
+          @Override
+          protected IntermediateTriangulation merge(IntermediateTriangulation L, IntermediateTriangulation R) {
+            IntermediateTriangulation partialAnswer = super.merge(L, R);
+            if (!errorFound.get()) {
+              // No error found so far, test for errors
+              if (partialAnswer.isIncorrect()) {
+                System.out.println("Found an error");
+                errorFound.set(true);
+              }
+            }
+            return partialAnswer;
+          }
+        };
+        Triangulation answer = algo.getFinalTriangulation();
+        assertTrue(String.format("Found an error in file '%s'", datasetName), !errorFound.get());
+      }
+    } catch (IOException e) {
+      fail("File not found");
+    }
+  }
+
+  /**
    * Put the algorithm under stress test by generating many random test points
    * and checking that the output of every merge step is a correct Delaunay
    * triangulation. If an error happens, it is reported as early as possible to
