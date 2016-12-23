@@ -82,6 +82,8 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
     Part topPart = new Part(rstart, rend);
     toPartition.push(topPart);
     long reportedTime = 0;
+    // A temporary array to partition sorted arrays
+    Point[] newSortedRange = new Point[points.length];
 
     while (!toPartition.isEmpty()) {
       if (progress != null)
@@ -133,7 +135,6 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
         int middle = (currentPart.pStart + currentPart.pEnd) / 2;
         int position1 = 0;
         int position2 = middle - currentPart.pStart;
-        Point[] newSortedRange = new Point[currentPart.pEnd - currentPart.pStart];
         Point[] arrayToPartition;
         Comparator<Point> comparator;
         Point middlePoint;
