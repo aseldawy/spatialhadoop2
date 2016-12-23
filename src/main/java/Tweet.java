@@ -62,4 +62,9 @@ public class Tweet extends Point {
   public Tweet clone() {
     return new Tweet(this);
   }
+
+  @Override
+  public String toString() {
+    return Long.toString(id);
+  }
 }

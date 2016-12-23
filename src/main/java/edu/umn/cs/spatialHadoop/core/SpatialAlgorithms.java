@@ -591,13 +591,10 @@ public class SpatialAlgorithms {
     Arrays.sort(allPoints, new Comparator<Point>() {
       @Override
       public int compare(Point p1, Point p2) {
-        double dx = p1.x - p2.x;
-        if (dx < 0) return -1;
-        if (dx > 0) return 1;
-        double dy = p1.y - p2.y;
-        if (dy < 0) return -1;
-        if (dy > 0) return 1;
-        return 0;
+        int dx = Double.compare(p1.x, p2.x);
+        if (dx != 0)
+          return dx;
+        return Double.compare(p1.y,  p2.y);
       }
     });
 
