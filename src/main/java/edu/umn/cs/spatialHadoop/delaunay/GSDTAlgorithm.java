@@ -88,19 +88,26 @@ public class GSDTAlgorithm {
      * Constructs an empty triangulation to be used for merging
      */
     IntermediateTriangulation() {}
-    
+
     /**
-     * Initialize a triangulation with two sites only. The triangulation consists
-     * of one line connecting the two sites and no triangles at all.
+     * Initialize a triangulation that consists only of straight lines between
+     * the two given sites. If these two sites are not consecutive in the sort
+     * order, they are treated as a contiguous range of sites and every pair
+     * of consecutive sites are connected with a line. This is used to construct
+     * a triangulation for a list of sites that form a straight line.
      * @param s1
      * @param s2
      */
     IntermediateTriangulation(int s1, int s2) {
       site1 = s1;
       site2 = s2;
-      neighbors[s1].add(s2);
-      neighbors[s2].add(s1);
-      convexHull = new int[] {s1, s2};
+      convexHull = new int[s2 - s1 + 1];
+      for (int s = s1; s < s2; s++) {
+        neighbors[s].add(s+1);
+        neighbors[s+1].add(s);
+        convexHull[s-s1] = s;
+      }
+      convexHull[s2-s1] = s2;
     }
     
     /**

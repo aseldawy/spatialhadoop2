@@ -132,40 +132,46 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
         // Further partition into two along the longer dimension
         double width = sortedX[currentPart.pEnd -1].x - sortedX[currentPart.pStart].x;
         double height = sortedY[currentPart.pEnd -1].y - sortedY[currentPart.pStart].y;
-        int middle = (currentPart.pStart + currentPart.pEnd) / 2;
-        int position1 = 0;
-        int position2 = middle - currentPart.pStart;
-        Point[] arrayToPartition;
-        Comparator<Point> comparator;
-        Point middlePoint;
-        if (width > height) {
-          // Split the sortedY list into two lists, left and right, around
-          // the middle point
-          middlePoint = sortedX[middle];
-          comparator = comparatorX;
-          arrayToPartition = sortedY;
+        if (width == 0 || height == 0) {
+          // All points form one line, use all of them together as an intermediate
+          // triangulation
+          toMerge.push(new IntermediateTriangulation(currentPart.pStart, currentPart.pEnd));
         } else {
-          // Partition along the Y-axis
-          // Split the sortedX list around the middle point into top and bottom
-          // lists, each of them is separately sorted by X.
-          comparator = comparatorY;
-          middlePoint = sortedY[middle];
-          arrayToPartition = sortedX;
-        }
-        for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
-          if (comparator.compare(arrayToPartition[i], middlePoint) < 0) {
-            newSortedRange[position1++] = arrayToPartition[i];
+          int middle = (currentPart.pStart + currentPart.pEnd) / 2;
+          int position1 = 0;
+          int position2 = middle - currentPart.pStart;
+          Point[] arrayToPartition;
+          Comparator<Point> comparator;
+          Point middlePoint;
+          if (width > height) {
+            // Split the sortedY list into two lists, left and right, around
+            // the middle point
+            middlePoint = sortedX[middle];
+            comparator = comparatorX;
+            arrayToPartition = sortedY;
           } else {
-            newSortedRange[position2++] = arrayToPartition[i];
+            // Partition along the Y-axis
+            // Split the sortedX list around the middle point into top and bottom
+            // lists, each of them is separately sorted by X.
+            comparator = comparatorY;
+            middlePoint = sortedY[middle];
+            arrayToPartition = sortedX;
           }
+          for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
+            if (comparator.compare(arrayToPartition[i], middlePoint) < 0) {
+              newSortedRange[position1++] = arrayToPartition[i];
+            } else {
+              newSortedRange[position2++] = arrayToPartition[i];
+            }
+          }
+          // Copy the range [pend, last)
+          System.arraycopy(newSortedRange, 0, arrayToPartition, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
+          toPartition.push(null); // An indicator of a merge needed
+          // Create upper partition
+          toPartition.push(new Part(currentPart.pStart, middle));
+          // Create lower partition
+          toPartition.push(new Part(middle, currentPart.pEnd));
         }
-        // Copy the range [pend, last)
-        System.arraycopy(newSortedRange, 0, arrayToPartition, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
-        toPartition.push(null); // An indicator of a merge needed
-        // Create upper partition
-        toPartition.push(new Part(currentPart.pStart, middle));
-        // Create lower partition
-        toPartition.push(new Part(middle, currentPart.pEnd));
       }
     }
 
