@@ -279,6 +279,8 @@ public class Triangulation implements Writable {
               return 1;
             if (a.x - center.x < 0 && b.x - center.x >= 0)
               return -1;
+            if (a.x - center.x == 0 && b.x - center.x == 0)
+              return Double.compare(b.y - center.y, a.y - center.y);
 
             // compute the cross product of vectors (center -> a) x (center -> b)
             double det = (a.x - center.x) * (b.y - center.y) - (b.x - center.x) * (a.y - center.y);

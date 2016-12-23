@@ -202,6 +202,7 @@ public class GSDTAlgorithm {
           static final double Threshold = 1E-5;
           @Override
           public void collect(Edge e1, Edge e2) throws IOException {
+            // Do a refine step where we compare the actual lines
             double x1 = xs[e1.source];
             double y1 = ys[e1.source];
             double x2 = xs[e1.destination];
@@ -231,6 +232,8 @@ public class GSDTAlgorithm {
             }
           }
         }, null);
+        if (!correct.get())
+          return false;
 
         // Test if all the lines of the convex hull are edges
         boolean collinear_ch = true;
@@ -245,18 +248,76 @@ public class GSDTAlgorithm {
             int s = convexHull[i];
             int d = convexHull[(i+1)%convexHull.length];
             if (!neighbors[s].contains(d)) {
-              correct.set(false);
               System.out.printf("Edge %d, %d on the convex hull but not found in the DT\n", s, d);
+              return false;
             }
           }
         }
 
+        // Test that this is indeed a triangulation. For each node, sort its
+        // neighbors in a CW order and make sure that every pair of nodes in
+        // a consecutive CW order with less than 180 degrees are connected
+        for (int i = site1; i <= site2; i++) {
+          final IntArray ineighbors = neighbors[i];
+          if (ineighbors.size() == 1)
+            continue;
+          final Point center = points[i];
+          Comparator<Point> ccw_comparator = new Comparator<Point>() {
+            @Override
+            public int compare(Point a, Point b) {
+              if (a.x - center.x >= 0 && b.x - center.x < 0)
+                return 1;
+              if (a.x - center.x < 0 && b.x - center.x >= 0)
+                return -1;
+              if (a.x - center.x == 0 && b.x - center.x == 0)
+                return Double.compare(b.y - center.y, a.y - center.y);
+
+              // compute the cross product of vectors (center -> a) x (center -> b)
+              double det = (a.x - center.x) * (b.y - center.y) - (b.x - center.x) * (a.y - center.y);
+              if (det < 0)
+                return -1;
+              if (det > 0)
+                return 1;
+              return 0;
+            }
+          };
+          for (int n1 = ineighbors.size() - 1; n1 >= 0 ; n1--) {
+            for (int n2 = 0; n2 < n1; n2++) {
+              // Compare neighbors n2 and n2+1
+              final Point a = points[ineighbors.get(n2)];
+              final Point b = points[ineighbors.get(n2+1)];
+              if (ccw_comparator.compare(a, b) > 0)
+                ineighbors.swap(n2, n2+1);
+            }
+          }
+
+          for (int j1 = 0; j1 < ineighbors.size(); j1++) {
+            int j2 = (j1 + 1) % ineighbors.size();
+            int n1 = ineighbors.get(j1);
+            int n2 = ineighbors.get(j2);
+            // Check if the triangle (i, n1, n1+1) can be reported
+            double a_x = points[n1].x - points[i].x;
+            double a_y = points[n1].y - points[i].y;
+            double b_x = points[n2].x - points[i].x;
+            double b_y = points[n2].y - points[i].y;
+            if (a_x * b_y - a_y * b_x < 0) {
+              // Triangle is correct. Now make sure that the edge n1-n2 exists
+              if (!neighbors[n1].contains(n2)) {
+                System.out.printf("An incomplete triangle (%d,%d,%d)\n",
+                    i, n1, n2);
+                return true; // Incorrect
+              }
+            }
+          }
+        }
+
+
       } catch (IOException e) {
         e.printStackTrace();
-        return false;
+        return true; // Incorrect
       }
 
-      return !correct.get();
+      return false; // Correct
     }
 
     public void draw(PrintStream out) {

@@ -200,7 +200,7 @@ public class GSDTAlgorithmTest extends TestCase {
    * - Two intersecting edges in the triangulation
    */
   public void testTriangulationsNoGroundTruth() {
-    String[] datasetNames = {"test_dt9", "test_dt13"};
+    String[] datasetNames = {"test_dt9", "test_dt13", "test_dt14"};
     try {
       // A flag that is set to true when the first error is found
       final BooleanWritable errorFound = new BooleanWritable(false);
@@ -214,7 +214,7 @@ public class GSDTAlgorithmTest extends TestCase {
             if (!errorFound.get()) {
               // No error found so far, test for errors
               if (partialAnswer.isIncorrect()) {
-                System.out.println("Found an error");
+                System.out.println("Found an error while merging "+L+" and "+R);
                 errorFound.set(true);
               }
             }
