@@ -263,14 +263,16 @@ public class GSDTAlgorithm {
       // Draw to rasem
       out.println("group {");
       for (int i = site1; i <= site2; i++) {
-        out.printf("text(%f, %f) { raw '%d' }\n", xs[i], ys[i], i);
+        out.printf("text(%s, %s) { raw '%d' }\n", Double.toString(xs[i]), Double.toString(ys[i]), i);
       }
       out.println("}");
       out.println("group {");
       for (int i = site1; i <= site2; i++) {
         for (int j : neighbors[i]) {
           if (i < j)
-            out.printf("line %f, %f, %f, %f\n", xs[i], ys[i], xs[j], ys[j]);
+            out.printf("line %s, %s, %s, %s\n", Double.toString(xs[i]),
+                Double.toString(ys[i]), Double.toString(xs[j]),
+                Double.toString(ys[j]));
         }
       }
       out.println("}");

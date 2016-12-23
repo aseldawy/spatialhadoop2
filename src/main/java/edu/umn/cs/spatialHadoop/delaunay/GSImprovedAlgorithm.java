@@ -79,8 +79,7 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
     Stack<IntermediateTriangulation> toMerge = new Stack<IntermediateTriangulation>();
 
     // Compute the MBR of the input
-    Part topPart = new Part(rstart, rend);
-    toPartition.push(topPart);
+    toPartition.push(new Part(rstart, rend));
     long reportedTime = 0;
     // A temporary array to partition sorted arrays
     Point[] newSortedRange = new Point[points.length];
@@ -135,11 +134,17 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
         if (width == 0 || height == 0) {
           // All points form one line, use all of them together as an intermediate
           // triangulation
-          toMerge.push(new IntermediateTriangulation(currentPart.pStart, currentPart.pEnd));
+          for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
+            xs[i] = points[i].x;
+            ys[i] = points[i].y;
+          }
+          // Notice that the range of currentPart is exclusive of the end point
+          // while the range in IntermediateTriangulation is inclusive
+          toMerge.push(new IntermediateTriangulation(currentPart.pStart, currentPart.pEnd-1));
         } else {
           int middle = (currentPart.pStart + currentPart.pEnd) / 2;
-          int position1 = 0;
-          int position2 = middle - currentPart.pStart;
+          int position1 = currentPart.pStart;
+          int position2 = middle;
           Point[] arrayToPartition;
           Comparator<Point> comparator;
           Point middlePoint;
@@ -165,7 +170,7 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
             }
           }
           // Copy the range [pend, last)
-          System.arraycopy(newSortedRange, 0, arrayToPartition, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
+          System.arraycopy(newSortedRange, currentPart.pStart, arrayToPartition, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
           toPartition.push(null); // An indicator of a merge needed
           // Create upper partition
           toPartition.push(new Part(currentPart.pStart, middle));
