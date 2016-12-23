@@ -130,101 +130,41 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
         // Further partition into two along the longer dimension
         double width = sortedX[currentPart.pEnd -1].x - sortedX[currentPart.pStart].x;
         double height = sortedY[currentPart.pEnd -1].y - sortedY[currentPart.pStart].y;
+        int middle = (currentPart.pStart + currentPart.pEnd) / 2;
+        int position1 = 0;
+        int position2 = middle - currentPart.pStart;
+        Point[] newSortedRange = new Point[currentPart.pEnd - currentPart.pStart];
+        Point[] arrayToPartition;
+        Comparator<Point> comparator;
+        Point middlePoint;
         if (width > height) {
-          int middle = (currentPart.pStart + currentPart.pEnd) / 2;
-          toPartition.push(null); // An indicator of a merge needed
-          // TODO Split the sortedY list around the middle
-          {
-            // For now, use a naive way to ensure that the algorithm works
-            Point[] newSortedRange = new Point[currentPart.pEnd - currentPart.pStart];
-            // Copy the range [pStart, pend)
-            // Count number of points in the first part (left to middle.x)
-            int size_1 = 0;
-            for (int i = currentPart.pStart; i < currentPart.pEnd; i++)
-              if (sortedY[i].x < sortedX[middle].x)
-                size_1++;
-            if ((middle - currentPart.pStart) - size_1 < (currentPart.pEnd - currentPart.pStart) * 1 / 10) {
-              middle = currentPart.pStart + size_1;
-              // A clean situation, only one point at the middle or all points
-              // at the middle line go to one partition
-              int position1 = 0;
-              int position2 = middle - currentPart.pStart;
-              for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
-                if (sortedY[i].x < sortedX[middle].x)
-                  newSortedRange[position1++] = sortedY[i];
-                else
-                  newSortedRange[position2++] = sortedY[i];
-              }
-            } else {
-              // A degenerate case, more than one point at the middle line and
-              // they need to go to different partitions
-              // Apply a slower, more sophisticated algorithm
-              int position1 = 0;
-              int position2 = middle - currentPart.pStart;
-              for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
-                // Search for the position of that object as compared to the middle object
-                int position = Arrays.binarySearch(sortedX, currentPart.pStart, currentPart.pEnd, sortedY[i], comparatorX);
-                if (position < middle)
-                  newSortedRange[position1++] = sortedY[i];
-                else
-                  newSortedRange[position2++] = sortedY[i];
-              }
-            }
-            // Copy the range [pend, last)
-            System.arraycopy(newSortedRange, 0, sortedY, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
-          }
-
-          // Create left partition
-          toPartition.push(new Part(currentPart.pStart, middle));
-          // Create right partition
-          toPartition.push(new Part(middle, currentPart.pEnd));
+          // Split the sortedY list into two lists, left and right, around
+          // the middle point
+          middlePoint = sortedX[middle];
+          comparator = comparatorX;
+          arrayToPartition = sortedY;
         } else {
           // Partition along the Y-axis
-          int middle = (currentPart.pStart + currentPart.pEnd) / 2;
-          toPartition.push(null); // An indicator of a merge needed
-          // TODO Split the sortedX list around the middle
-          {
-            // For now, use a naive way to ensure that the algorithm works
-            Point[] newSortedRange = new Point[currentPart.pEnd - currentPart.pStart];
-            // Copy the range [pStart, pend)
-            // Count number of points in the first part (left to middle.x)
-            int size_1 = 0;
-            if ((middle - currentPart.pStart) - size_1 < (currentPart.pEnd - currentPart.pStart) * 1 / 10) {
-              middle = currentPart.pStart + size_1;
-              for (int i = currentPart.pStart; i < currentPart.pEnd; i++)
-                if (sortedX[i].y < sortedY[middle].y)
-                  size_1++;
-              int position1 = 0;
-              int position2 = size_1;
-              for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
-                if (sortedX[i].y < sortedY[middle].y)
-                  newSortedRange[position1++] = sortedX[i];
-                else
-                  newSortedRange[position2++] = sortedX[i];
-              }
-            } else {
-              // A degenerate case, more than one point at the middle line and
-              // they need to go to different partitions
-              // Apply a slower, more sophisticated algorithm
-              int position1 = 0;
-              int position2 = middle - currentPart.pStart;
-              for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
-                // Search for the position of that object as compared to the middle object
-                int position = Arrays.binarySearch(sortedY, currentPart.pStart, currentPart.pEnd, sortedX[i], comparatorY);
-                if (position < middle)
-                  newSortedRange[position1++] = sortedX[i];
-                else
-                  newSortedRange[position2++] = sortedX[i];
-              }
-            }
-            // Copy the range [pend, last)
-            System.arraycopy(newSortedRange, 0, sortedX, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
-          }
-          // Create upper partition
-          toPartition.push(new Part(currentPart.pStart, middle));
-          // Create lower partition
-          toPartition.push(new Part(middle, currentPart.pEnd));
+          // Split the sortedX list around the middle point into top and bottom
+          // lists, each of them is separately sorted by X.
+          comparator = comparatorY;
+          middlePoint = sortedY[middle];
+          arrayToPartition = sortedX;
         }
+        for (int i = currentPart.pStart; i < currentPart.pEnd; i++) {
+          if (comparator.compare(arrayToPartition[i], middlePoint) < 0) {
+            newSortedRange[position1++] = arrayToPartition[i];
+          } else {
+            newSortedRange[position2++] = arrayToPartition[i];
+          }
+        }
+        // Copy the range [pend, last)
+        System.arraycopy(newSortedRange, 0, arrayToPartition, currentPart.pStart, currentPart.pEnd - currentPart.pStart);
+        toPartition.push(null); // An indicator of a merge needed
+        // Create upper partition
+        toPartition.push(new Part(currentPart.pStart, middle));
+        // Create lower partition
+        toPartition.push(new Part(middle, currentPart.pEnd));
       }
     }
 
