@@ -91,6 +91,15 @@ public class GSDTAlgorithm {
     IntermediateTriangulation() {}
 
     /**
+     * A triangulation with a single site.
+     * @param s
+     */
+    public IntermediateTriangulation(int s) {
+      site1 = site2 = s;
+      convexHull = new int[] {s};
+    }
+
+    /**
      * Initialize a triangulation that consists only of straight lines between
      * the two given sites. If these two sites are not consecutive in the sort
      * order, they are treated as a contiguous range of sites and every pair
@@ -426,8 +435,9 @@ public class GSDTAlgorithm {
     } else if (end - i == 2) {
       // Two points, connect with a line
       triangulations[t++] = new IntermediateTriangulation(i, i+1);
-    } else {
-      throw new RuntimeException("Cannot happen");
+    } else if (end - i == 1) {
+      // One point, have it as a single site
+      triangulations[t++] = new IntermediateTriangulation(i);
     }
 
     if (progress != null)

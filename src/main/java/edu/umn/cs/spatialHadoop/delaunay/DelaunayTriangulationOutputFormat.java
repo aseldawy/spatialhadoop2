@@ -158,6 +158,7 @@ public class DelaunayTriangulationOutputFormat extends
         Triangulation finalAnswer;
         if (allTriangulations.size() == 1) {
           finalAnswer = allTriangulations.get(0);
+          finalAnswer.makeFinal();
         } else {
           System.out.println("Merging "+allTriangulations.size()+" triangulations");
           finalAnswer = GSDTAlgorithm.mergeTriangulations(

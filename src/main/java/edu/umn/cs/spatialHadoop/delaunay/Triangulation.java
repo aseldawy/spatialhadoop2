@@ -63,6 +63,10 @@ public class Triangulation implements Writable {
    * Remove all unnecessary nodes.
    */
   void compact() {
+    // Skip compaction if we have one site only as it should not be removed
+    // even though it does not have any neighbors.
+    if (this.sites.length == 1)
+      return;
     // Detect which nodes are connected and which are disconnected
     BitArray connectedNodes = new BitArray(sites.length);
     int newSiteCount = 0;
@@ -146,6 +150,23 @@ public class Triangulation implements Writable {
     }
   }
 
+  /**
+   * Make an exact replica of the triangulation. This is needed for the reducer
+   * to work as it needs to merge all triangulations.
+   * @return
+   */
+  @Override
+  protected Triangulation clone() {
+    Triangulation replica = new Triangulation();
+    replica.sites = this.sites.clone(); // Deep clone is not necessary
+    replica.edgeStarts = this.edgeStarts.clone();
+    replica.edgeEnds = this.edgeEnds.clone();
+    replica.mbr = this.mbr.clone();
+    replica.sitesToReport = this.sitesToReport.clone();
+    replica.reportedSites = this.reportedSites.clone();
+    return replica;
+  }
+
   public void draw(PrintStream out) {
     double scale = 1000 / Math.max(mbr.getWidth(), mbr.getHeight());
     this.draw(out, mbr, scale);
@@ -176,7 +197,8 @@ public class Triangulation implements Writable {
   }
 
   /**
-   * Sort edges by edgeStart and edgeEnd
+   * Sort edges lexicographically by edgeStart and edgeEnd to be able to use
+   * binary search when finding all neighbors of a specific node.
    */
   public void sortEdges() {
     QuickSort sorter = new QuickSort();
@@ -200,7 +222,18 @@ public class Triangulation implements Writable {
       }
     };
 
-    sorter.sort(sortable, 0, edgeStarts.length);
+    if (edgeStarts.length > 0)
+      sorter.sort(sortable, 0, edgeStarts.length);
+  }
+
+  /**
+   * Make this the final triangulation by marking all sites that have never
+   * been reported as final. This method should be called when there is only one
+   * triangulation that will not be merged with any other triangulations to
+   * ensure that all sites will be reported correct.
+   */
+  public void  makeFinal() {
+    sitesToReport = reportedSites.invert();
   }
 
   class TriangleIterable implements Iterable<Point[]>, Iterator<Point[]> {

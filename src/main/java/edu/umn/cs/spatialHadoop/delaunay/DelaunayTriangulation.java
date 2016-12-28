@@ -120,7 +120,7 @@ public class DelaunayTriangulation {
 
       context.setStatus("Computing DT");
       LOG.info("Computing DT for "+points.length+" sites");
-      GSDTAlgorithm algo = new GSDTAlgorithm(points, context);
+      GSDTAlgorithm algo = new GSImprovedAlgorithm(points, context);
       if (key.isValid()) {
         LOG.info("Finding final and non-final edges");
         context.setStatus("Splitting DT");
@@ -173,7 +173,7 @@ public class DelaunayTriangulation {
           -Double.MAX_VALUE, -Double.MAX_VALUE);
       for (Triangulation t : values) {
         overallMBR.expand(t.mbr);
-        triangulations.add(t);
+        triangulations.add(t.clone());
       }
 
       GSDTAlgorithm algo = GSDTAlgorithm.mergeTriangulations(triangulations, context);
@@ -314,7 +314,7 @@ public class DelaunayTriangulation {
     }
     
     LOG.info("Computing DT for "+allPoints.length+" points");
-    GSDTAlgorithm dtAlgorithm = new GSDTAlgorithm(allPoints, null);
+    GSDTAlgorithm dtAlgorithm = new GSImprovedAlgorithm(allPoints, null);
     LOG.info("DT computed");
     
     Rectangle mbr = FileMBR.fileMBR(inPaths, params);

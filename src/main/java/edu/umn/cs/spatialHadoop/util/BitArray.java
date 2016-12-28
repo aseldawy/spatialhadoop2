@@ -45,6 +45,14 @@ public class BitArray implements Writable {
     entries = new long[(int) ((size + BitsPerEntry - 1) / BitsPerEntry)];
   }
 
+  @Override
+  public BitArray clone() {
+    BitArray replica = new BitArray();
+    replica.size = this.size;
+    replica.entries = this.entries.clone();
+    return replica;
+  }
+
   /**
    * Sets the bit at position <code>i</code>
    * @param i
