@@ -11,10 +11,12 @@ package edu.umn.cs.spatialHadoop.delaunay;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -143,21 +145,32 @@ public class Triangulation implements Writable {
       throw new RuntimeException("Non-accessbile constructor of site class", e);
     }
   }
-  
-  /**
-   * Draw as SVG Rasem commands.
-   */
-  public void draw() {
+
+  public void draw(PrintStream out) {
+    double scale = 1000 / Math.max(mbr.getWidth(), mbr.getHeight());
+    this.draw(out, mbr, scale);
+  }
+
+    /**
+     * Draw as SVG Rasem commands.
+     */
+  public void draw(PrintStream out, Rectangle mbr, double scale) {
     System.out.println("group {");
+    Text text = new Text();
     for (Point s : sites) {
-      System.out.printf("circle %f, %f, 0.5\n", s.x, s.y);
+      text.clear();
+      System.out.printf("circle %f, %f, 0.5 # %s\n", (s.x - mbr.x1) * scale,
+          (s.y - mbr.y1) * scale, s.toText(text).toString());
     }
     System.out.println("}");
     System.out.println("group {");
     for (int i = 0; i < edgeStarts.length; i++) {
       if (edgeStarts[i] < edgeEnds[i])
-        System.out.printf("line %f, %f, %f, %f\n", sites[edgeStarts[i]].x,
-            sites[edgeStarts[i]].y, sites[edgeEnds[i]].x, sites[edgeEnds[i]].y);
+        System.out.printf("line %f, %f, %f, %f\n",
+            (sites[edgeStarts[i]].x - mbr.x1) * scale,
+            (sites[edgeStarts[i]].y - mbr.y1) * scale,
+            (sites[edgeEnds[i]].x - mbr.x1) * scale,
+            (sites[edgeEnds[i]].y - mbr.y1) * scale);
     }
     System.out.println("}");
   }

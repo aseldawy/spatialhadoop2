@@ -15,6 +15,7 @@ import edu.umn.cs.spatialHadoop.util.MergeSorter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.io.BooleanWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.util.*;
 
@@ -320,20 +321,42 @@ public class GSDTAlgorithm {
       return false; // Correct
     }
 
+    public Rectangle getMBR() {
+      Rectangle mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE);
+      for (int i : convexHull) {
+        mbr.expand(points[i]);
+      }
+      return mbr;
+    }
+
     public void draw(PrintStream out) {
+      Rectangle mbr = getMBR();
+      double scale = 1000 / Math.max(mbr.getWidth(), mbr.getHeight());
+      this.draw(out, mbr, scale);
+    }
+
+    public void draw(PrintStream out, Rectangle mbr, double scale) {
       // Draw to rasem
+      out.println("=begin");
+      Text text = new Text();
+      for (int i = site1; i <= site2; i++) {
+        text.clear();
+        out.printf("%s\n", points[i].toText(text));
+      }
+      out.println("=end");
       out.println("group {");
       for (int i = site1; i <= site2; i++) {
-        out.printf("text(%s, %s) { raw '%d' }\n", Double.toString(xs[i]), Double.toString(ys[i]), i);
+        out.printf("text(%f, %f) { raw '%d' }\n", (xs[i]-mbr.x1) * scale,
+            (ys[i]-mbr.y1) * scale, i);
       }
       out.println("}");
       out.println("group {");
       for (int i = site1; i <= site2; i++) {
         for (int j : neighbors[i]) {
           if (i < j)
-            out.printf("line %s, %s, %s, %s\n", Double.toString(xs[i]),
-                Double.toString(ys[i]), Double.toString(xs[j]),
-                Double.toString(ys[j]));
+            out.printf("line %f, %f, %f, %f\n", (xs[i]-mbr.x1) * scale,
+                (ys[i]-mbr.y1) * scale, (xs[j]-mbr.x1) * scale,
+              (ys[j]-mbr.y1) * scale);
         }
       }
       out.println("}");
