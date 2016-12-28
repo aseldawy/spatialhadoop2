@@ -598,12 +598,17 @@ public class SpatialAlgorithms {
       }
     });
 
-    for (int i = 1; i < allPoints.length; i++) {
-      Point p1 = allPoints[i-1];
-      Point p2 = allPoints[i];
-      double dx = Math.abs(p1.x - p2.x);
-      double dy = Math.abs(p1.y - p2.y);
-      if (dx < threshold && dy < threshold) {
+    for (int i = 0; i < allPoints.length; i++) {
+      int j = i + 1;
+      boolean duplicate = false;
+      while (!duplicate && j < allPoints.length && allPoints[i].x + threshold > allPoints[j].x) {
+        double dy = Math.abs(allPoints[j].y - allPoints[i].y);
+        if (dy < threshold)
+          duplicate = true;
+        else
+          j++;
+      }
+      if (duplicate) {
         duplicates.set(i, true);
         numDuplicates++;
       }
