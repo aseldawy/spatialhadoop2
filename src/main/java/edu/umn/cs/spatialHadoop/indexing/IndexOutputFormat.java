@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -447,6 +448,14 @@ public class IndexOutputFormat<S extends Shape>
         }
         wktOut.close();
         destOut.close();
+        
+        Path permanentFile = new Path(outPath, "_partitioner." + sindex);
+        if(!outFs.exists(permanentFile)) {
+        	FSDataOutputStream out = outFs.create(permanentFile);
+        	Partitioner partitioner = Partitioner.getPartitioner(conf);
+        	partitioner.write(out);
+        	out.close();
+        }
       }
     }
   }

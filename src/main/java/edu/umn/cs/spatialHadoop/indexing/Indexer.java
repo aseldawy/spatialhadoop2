@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -189,6 +190,7 @@ public class Indexer {
     setLocalIndexer(conf, index);
     Partitioner partitioner = createPartitioner(inPath, outPath, conf, index);
     Partitioner.setPartitioner(conf, partitioner);
+//    Partitioner.setPartitioner(outPath, conf, partitioner);
     
     long t2 = System.currentTimeMillis();
     System.out.println("Total time for space subdivision in millis: "+(t2-t1));
@@ -419,6 +421,12 @@ public class Indexer {
     }
     in.close();
     wktOut.close();
+    
+    Path permanentFile = new Path(outPath, "_partitioner." + sindex);
+    FSDataOutputStream out = outFs.create(permanentFile);
+	partitioner.write(out);
+	out.close();
+	System.out.println("Local indexing");
   }
   
   public static Job index(Path inPath, Path outPath, OperationsParams params)

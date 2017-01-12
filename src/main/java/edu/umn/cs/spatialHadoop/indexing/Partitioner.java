@@ -103,7 +103,7 @@ public abstract class Partitioner implements Writable {
     partitioner.write(out);
     out.close();
     
-//    fs.deleteOnExit(tempFile);
+    fs.deleteOnExit(tempFile);
 
     DistributedCache.addCacheFile(tempFile.toUri(), conf);
     conf.set(PartitionerValue, tempFile.getName());
