@@ -2,3 +2,5 @@
 lib/ivy/**/*.jar
 /dist
 /target
+*.classpath
+*.project
