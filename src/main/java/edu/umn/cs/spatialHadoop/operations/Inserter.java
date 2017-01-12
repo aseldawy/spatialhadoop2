@@ -35,8 +35,6 @@ import edu.umn.cs.spatialHadoop.indexing.QuadTreePartitioner;
 import edu.umn.cs.spatialHadoop.indexing.RTreeLocalIndexer;
 import edu.umn.cs.spatialHadoop.indexing.STRPartitioner;
 import edu.umn.cs.spatialHadoop.indexing.ZCurvePartitioner;
-import edu.umn.cs.spatialHadoop.indexing.Indexer.PartitionerMap;
-import edu.umn.cs.spatialHadoop.indexing.Indexer.PartitionerReduce;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 
 public class Inserter {
@@ -175,7 +173,8 @@ public class Inserter {
 		job.setInputFormatClass(SpatialInputFormat3.class);
 		SpatialInputFormat3.setInputPaths(job, insertPath);
 		job.setOutputFormatClass(IndexOutputFormat.class);
-		IndexOutputFormat.setOutputPath(job, currentPath);
+		Path tempPath = new Path(currentPath, "temp");
+		IndexOutputFormat.setOutputPath(job, tempPath);
 		// Set number of reduce tasks according to cluster status
 		ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
 		job.setNumReduceTasks(
