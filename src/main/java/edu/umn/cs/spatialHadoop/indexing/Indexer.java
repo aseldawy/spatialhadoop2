@@ -190,7 +190,6 @@ public class Indexer {
     setLocalIndexer(conf, index);
     Partitioner partitioner = createPartitioner(inPath, outPath, conf, index);
     Partitioner.setPartitioner(conf, partitioner);
-//    Partitioner.setPartitioner(outPath, conf, partitioner);
     
     long t2 = System.currentTimeMillis();
     System.out.println("Total time for space subdivision in millis: "+(t2-t1));

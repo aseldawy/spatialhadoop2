@@ -144,4 +144,36 @@ public abstract class Partitioner implements Writable {
       return null;
     }
   }
+  
+  /**
+   * Retrieves the value of a partitioner for a given job.
+   * @param conf
+   * @param currentPath
+   * @return
+   */
+  public static Partitioner getCurrentPartitioner(Configuration conf, Path currentPath) {
+    Class<? extends Partitioner> klass = conf.getClass(PartitionerClass, Partitioner.class).asSubclass(Partitioner.class);
+    if (klass == null)
+      return null;
+    try {
+      Partitioner partitioner = klass.newInstance();
+      
+      String sindex = conf.get("sindex");
+      Path permanentFile = new Path(currentPath, "_partitioner." + sindex);
+      FSDataInputStream in = FileSystem.getLocal(conf).open(permanentFile);
+      partitioner.readFields(in);
+      in.close();
+		
+      return partitioner;
+    } catch (InstantiationException e) {
+      Log.warn("Error instantiating partitioner", e);
+      return null;
+    } catch (IllegalAccessException e) {
+      Log.warn("Error instantiating partitioner", e);
+      return null;
+    } catch (IOException e) {
+      Log.warn("Error retrieving partitioner value", e);
+      return null;
+    }
+  }
 }
