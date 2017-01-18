@@ -28,6 +28,9 @@ public class BitArray implements Writable {
   
   /**Condensed representation of all data*/
   protected long[] entries;
+  
+  /**Total number of bits stores in this array*/
+  protected long size;
 
   /**Default constructor is needed for deserialization*/
   public BitArray() {
@@ -35,10 +38,11 @@ public class BitArray implements Writable {
   
   /**
    * Initializes a bit array with the given capacity in bits.
-   * @param capacity
+   * @param size Total number of bits in the array. All initialized to false.
    */
-  public BitArray(long capacity) {
-    entries = new long[(int) ((capacity + BitsPerEntry - 1) / BitsPerEntry)];
+  public BitArray(long size) {
+    this.size = size;
+    entries = new long[(int) ((size + BitsPerEntry - 1) / BitsPerEntry)];
   }
 
   /**
@@ -92,8 +96,8 @@ public class BitArray implements Writable {
       throw new RuntimeException("Did not consume all entries");
   }
 
-  public int size() {
-    return entries.length * BitsPerEntry;
+  public long size() {
+    return size;
   }
 
   public void fill(boolean b) {
@@ -103,10 +107,27 @@ public class BitArray implements Writable {
   }
 
   public BitArray invert() {
-    BitArray inverse = new BitArray();
-    inverse.entries = new long[this.entries.length];
+    BitArray result = new BitArray();
+    result.entries = new long[this.entries.length];
+    result.size = this.size();
     for (int i = 0; i < entries.length; i++)
-      inverse.entries[i] = ~this.entries[i];
-    return inverse;
+      result.entries[i] = ~this.entries[i];
+    return result;
+  }
+
+  /**
+   * Computes the bitwise OR of two bitmasks of the same size
+   * @param other
+   * @return
+   */
+  public BitArray or(BitArray other) {
+    if (this.size != other.size)
+      throw new RuntimeException("Cannot OR two BitArrays of different sizes");
+    BitArray result = new BitArray();
+    result.entries = new long[this.entries.length];
+    result.size = this.size;
+    for (int i = 0; i < entries.length; i++)
+      result.entries[i] = this.entries[i] | other.entries[i];
+    return result;
   }
 }

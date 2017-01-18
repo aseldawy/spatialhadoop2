@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="524"
+   height="524"
+   version="1.1"
+   id="svg2"
+   inkscape:version="0.48.4 r9939"
+   sodipodi:docname="test_dt6.svg">
+  <metadata
+     id="metadata88">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <defs
+     id="defs86" />
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="1765"
+     inkscape:window-height="1331"
+     id="namedview84"
+     showgrid="false"
+     inkscape:zoom="0.90076336"
+     inkscape:cx="-19.212871"
+     inkscape:cy="465.8446"
+     inkscape:window-x="65"
+     inkscape:window-y="34"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg2" />
+  <circle
+     cx="12.0"
+     cy="212.0"
+     r="6"
+     style="stroke:black;"
+     id="circle4" />
+  <text
+     x="5.719933"
+     y="202.60852"
+     style="fill:#000000"
+     id="text6">0</text>
+  <circle
+     cx="12.0"
+     cy="512.0"
+     r="6"
+     style="stroke:black;"
+     id="circle8" />
+  <text
+     x="2.5635593"
+     y="502.90677"
+     style="fill:#000000"
+     id="text10">1</text>
+  <circle
+     cx="62.0"
+     cy="312.0"
+     r="6"
+     style="stroke:black;"
+     id="circle12" />
+  <text
+     x="65.052963"
+     y="327.33051"
+     style="fill:#000000"
+     id="text14">2</text>
+  <circle
+     cx="112.0"
+     cy="312.0"
+     r="6"
+     style="stroke:black;"
+     id="circle16" />
+  <text
+     x="110.05721"
+     y="329.8284"
+     style="fill:#000000"
+     id="text18">3</text>
+  <circle
+     cx="212.0"
+     cy="412.0"
+     r="6"
+     style="stroke:black;"
+     id="circle20" />
+  <text
+     x="207.00424"
+     y="428.44067"
+     style="fill:#000000"
+     id="text22">4</text>
+  <circle
+     cx="262.0"
+     cy="12.0"
+     r="6"
+     style="stroke:black;"
+     id="circle24" />
+  <text
+     x="243.40466"
+     y="16.228813"
+     style="fill:#000000"
+     id="text26">5</text>
+  <circle
+     cx="262.0"
+     cy="212.0"
+     r="6"
+     style="stroke:black;"
+     id="circle28" />
+  <text
+     x="247.29025"
+     y="210.95551"
+     style="fill:#000000"
+     id="text30">6</text>
+  <circle
+     cx="262.0"
+     cy="412.0"
+     r="6"
+     style="stroke:black;"
+     id="circle32" />
+  <text
+     x="265.60806"
+     y="426.22034"
+     style="fill:#000000"
+     id="text34">7</text>
+  <circle
+     cx="262.0"
+     cy="512.0"
+     r="6"
+     style="stroke:black;"
+     id="circle36" />
+  <text
+     x="269.49365"
+     y="520.94702"
+     style="fill:#000000"
+     id="text38">8</text>
+  <circle
+     cx="412.0"
+     cy="212.0"
+     r="6"
+     style="stroke:black;"
+     id="circle40" />
+  <text
+     x="414.49789"
+     y="227.60805"
+     style="fill:#000000"
+     id="text42">9</text>
+  <circle
+     cx="412.0"
+     cy="412.0"
+     r="6"
+     style="stroke:black;"
+     id="circle44" />
+  <text
+     x="411.16736"
+     y="429.27332"
+     style="fill:#000000"
+     id="text46">10</text>
+  <circle
+     cx="512.0"
+     cy="12.0"
+     r="6"
+     style="stroke:black;"
+     id="circle48" />
+  <text
+     x="488.96399"
+     y="10.122882"
+     style="fill:#000000"
+     id="text50">11</text>
+  <polygon
+     points="12.0,212.0 12.0,512.0 62.0,312.0"
+     style="fill:none;stroke:black;"
+     id="polygon52" />
+  <polygon
+     points="12.0,212.0 62.0,312.0 112.0,312.0"
+     style="fill:none;stroke:black;"
+     id="polygon54" />
+  <polygon
+     points="12.0,212.0 112.0,312.0 262.0,12.0"
+     style="fill:none;stroke:black;"
+     id="polygon56" />
+  <polygon
+     points="12.0,512.0 262.0,512.0 212.0,412.0"
+     style="fill:none;stroke:black;"
+     id="polygon58" />
+  <polygon
+     points="12.0,512.0 212.0,412.0 112.0,312.0"
+     style="fill:none;stroke:black;"
+     id="polygon60" />
+  <polygon
+     points="12.0,512.0 112.0,312.0 62.0,312.0"
+     style="fill:none;stroke:black;"
+     id="polygon62" />
+  <polygon
+     points="112.0,312.0 212.0,412.0 262.0,212.0"
+     style="fill:none;stroke:black;"
+     id="polygon64" />
+  <polygon
+     points="112.0,312.0 262.0,212.0 262.0,12.0"
+     style="fill:none;stroke:black;"
+     id="polygon66" />
+  <polygon
+     points="212.0,412.0 262.0,512.0 262.0,412.0"
+     style="fill:none;stroke:black;"
+     id="polygon68" />
+  <polygon
+     points="212.0,412.0 262.0,412.0 262.0,212.0"
+     style="fill:none;stroke:black;"
+     id="polygon70" />
+  <polygon
+     points="262.0,12.0 262.0,212.0 412.0,212.0"
+     style="fill:none;stroke:black;"
+     id="polygon72" />
+  <polygon
+     points="262.0,12.0 412.0,212.0 512.0,12.0"
+     style="fill:none;stroke:black;"
+     id="polygon74" />
+  <polygon
+     points="262.0,212.0 262.0,412.0 412.0,412.0"
+     style="fill:none;stroke:black;"
+     id="polygon76" />
+  <polygon
+     points="262.0,212.0 412.0,412.0 412.0,212.0"
+     style="fill:none;stroke:black;"
+     id="polygon78" />
+  <polygon
+     points="262.0,412.0 262.0,512.0 412.0,412.0"
+     style="fill:none;stroke:black;"
+     id="polygon80" />
+  <polygon
+     points="412.0,212.0 412.0,412.0 512.0,12.0"
+     style="fill:none;stroke:black;"
+     id="polygon82" />
+</svg>

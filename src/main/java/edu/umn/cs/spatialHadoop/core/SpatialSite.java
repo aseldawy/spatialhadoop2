@@ -394,7 +394,10 @@ public class SpatialSite {
     CompressionCodec codec = compressionCodecs.getCodec(fileToCheck);
     Decompressor decompressor = null;
     if (codec != null) {
-      decompressor = CodecPool.getDecompressor(codec);
+      synchronized (compressionCodecs) {
+        // CodecPool is not thread-safe
+        decompressor = CodecPool.getDecompressor(codec);
+      }
       fileIn = codec.createInputStream(fileIn, decompressor);
     }
     byte[] signature = new byte[RTreeFileMarkerB.length];

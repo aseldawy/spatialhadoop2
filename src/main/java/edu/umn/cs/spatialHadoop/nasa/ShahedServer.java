@@ -28,6 +28,7 @@ import javax.mail.Message;
 import javax.mail.Message.RecipientType;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
+import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.AddressException;
@@ -85,22 +86,16 @@ public class ShahedServer extends AbstractHandler {
   private Path indexPath;
   
   static {
-    MAIL_HOST = "mail.cs.umn.edu";
+    MAIL_HOST = "smtp.gmail.com";
     
     // Mail properties that work with mail.cs.umn.edu
     MAIL_PROPERTIES = new Properties();
- 
-    MAIL_PROPERTIES.put("mail.smtp.starttls.enable", "true");
-    MAIL_PROPERTIES.put("mail.smtp.auth", "true");
-    
-    // Use the following if you need SSL
-    MAIL_PROPERTIES.put("mail.smtp.socketFactory.port", 465);
-    MAIL_PROPERTIES.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-    MAIL_PROPERTIES.put("mail.smtp.socketFactory.fallback", "false");
 
-    
+    MAIL_PROPERTIES.put("mail.smtp.auth", "true");
+    MAIL_PROPERTIES.put("mail.smtp.starttls.enable", "true");
+    MAIL_PROPERTIES.put("mail.smtp.port", "587");
+
     MAIL_PROPERTIES.put("mail.smtp.host", MAIL_HOST);
-    MAIL_PROPERTIES.put("mail.smtp.port", "465");
   }
 
   /**
@@ -418,14 +413,16 @@ public class ShahedServer extends AbstractHandler {
     private void sendConfirmEmail() throws AddressException, MessagingException, UnsupportedEncodingException {
       Properties props = new Properties(MAIL_PROPERTIES);
       
-      props.put("mail.smtp.user", from);
-      props.put("mail.smtp.password", password);
-
-      Session mailSession = Session.getDefaultInstance(props);
+      Session mailSession = Session.getInstance(props,
+          new javax.mail.Authenticator() {
+        protected PasswordAuthentication getPasswordAuthentication() {
+          return new PasswordAuthentication(username, password);
+        }
+      });
       
       Message message = new MimeMessage(mailSession);
+      message.setFrom(new InternetAddress(from, "SHAHED Team"));
       InternetAddress requesterAddress = new InternetAddress(email, requesterName);
-      message.setFrom(new InternetAddress(username));
       message.addRecipient(RecipientType.TO, requesterAddress);
       InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
       message.addRecipient(RecipientType.BCC, adminAddress);
@@ -440,16 +437,9 @@ public class ShahedServer extends AbstractHandler {
           " Start date: "+dateFormat.format(startDate)+"\n"+
           " end date: "+dateFormat.format(endDate)+"\n"+
           "Thank you for using Shahed. \n\n Shahed team");
-      InternetAddress shahedAddress = new InternetAddress(from, "SHAHED Team");
+      message.setReplyTo(new InternetAddress[] {new InternetAddress(from, "SHAHED Team")});
       
-      message.setFrom(shahedAddress);
-      message.setReplyTo(new InternetAddress[] {shahedAddress});
-      
-      Transport transport = mailSession.getTransport();
-      transport.connect(MAIL_HOST, username, password);
-      
-      transport.sendMessage(message, message.getAllRecipients());
-      transport.close();
+      Transport.send(message, message.getAllRecipients());
       LOG.info("Message sent successfully to '"+requesterAddress+"'");
     }
 
@@ -488,15 +478,19 @@ public class ShahedServer extends AbstractHandler {
     private void sendSuccessEmail() throws AddressException, MessagingException, IOException {
       Properties props = new Properties(MAIL_PROPERTIES);
       
-      props.put("mail.smtp.user", from);
-      props.put("mail.smtp.password", password);
-    
-      Session mailSession = Session.getInstance(props);
-    
+      Session mailSession = Session.getInstance(props,
+          new javax.mail.Authenticator() {
+        protected PasswordAuthentication getPasswordAuthentication() {
+          return new PasswordAuthentication(username, password);
+        }
+      });
+      
       Message message = new MimeMessage(mailSession);
-      message.setFrom(new InternetAddress(username));
+      message.setFrom(new InternetAddress(from, "SHAHED Team"));
       String toLine = requesterName+'<'+email+'>';
       message.setRecipients(RecipientType.TO, InternetAddress.parse(toLine));
+      InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
+      message.addRecipient(RecipientType.BCC, adminAddress);
       message.setSubject("Your request is complete");
       
       Multipart multipart = new MimeMultipart();
@@ -536,26 +530,24 @@ public class ShahedServer extends AbstractHandler {
       multipart.addBodyPart(kmzPart);
       
       message.setContent(multipart);
-
-      Transport transport = mailSession.getTransport();
-      transport.connect(MAIL_HOST, username, password);
+      Transport.send(message, message.getAllRecipients());
       
-      transport.sendMessage(message, message.getAllRecipients());
-      transport.close();
       LOG.info("Request finished successfully");
     }
     
     private void sendFailureEmail(Exception e) throws AddressException, MessagingException, UnsupportedEncodingException {
       Properties props = new Properties(MAIL_PROPERTIES);
-      
-      props.put("mail.smtp.user", from);
-      props.put("mail.smtp.password", password);
 
-      Session mailSession = Session.getDefaultInstance(props);
+      Session mailSession = Session.getInstance(props,
+          new javax.mail.Authenticator() {
+        protected PasswordAuthentication getPasswordAuthentication() {
+          return new PasswordAuthentication(username, password);
+        }
+      });
       
       Message message = new MimeMessage(mailSession);
       InternetAddress requesterAddress = new InternetAddress(email, requesterName);
-      message.setFrom(new InternetAddress(username));
+      message.setFrom(new InternetAddress(from, "SHAHED Team"));
       message.addRecipient(RecipientType.TO, requesterAddress);
       InternetAddress adminAddress = new InternetAddress("eldawy@cs.umn.edu", "Ahmed Eldawy");
       message.addRecipient(RecipientType.BCC, adminAddress);
@@ -564,16 +556,9 @@ public class ShahedServer extends AbstractHandler {
           "Unfortunately there was an internal error while processing your request.\n"+
           e.getMessage() + "\n" +
           "Sorry for inconvenience. \n\n Shahed team");
-      InternetAddress shahedAddress = new InternetAddress(from, "SHAHED Team");
+      message.setReplyTo(new InternetAddress[] {new InternetAddress(from, "SHAHED Team")});
       
-      message.setFrom(shahedAddress);
-      message.setReplyTo(new InternetAddress[] {shahedAddress});
-      
-      Transport transport = mailSession.getTransport();
-      transport.connect(MAIL_HOST, username, password);
-      
-      transport.sendMessage(message, message.getAllRecipients());
-      transport.close();
+      Transport.send(message, message.getAllRecipients());
       LOG.info("Message sent successfully to '"+requesterAddress+"'");
     }
 

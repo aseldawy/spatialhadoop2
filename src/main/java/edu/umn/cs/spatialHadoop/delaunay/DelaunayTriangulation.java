@@ -14,12 +14,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import edu.umn.cs.spatialHadoop.io.Text2;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -75,7 +77,7 @@ public class DelaunayTriangulation {
    * @param <S> - The type of shape for sites
    */
   public static class DelaunayMap<S extends Point>
-    extends Mapper<Rectangle, Iterable<S>, IntWritable, SimpleGraph> {
+    extends Mapper<Rectangle, Iterable<S>, IntWritable, Triangulation> {
     
     /**Whether the map function should remove duplicates in the input or not*/
     private boolean deduplicate;
@@ -118,35 +120,35 @@ public class DelaunayTriangulation {
 
       context.setStatus("Computing DT");
       LOG.info("Computing DT for "+points.length+" sites");
-      GSDTAlgorithm algo = new GSDTAlgorithm(
-          points, context);
+      GSDTAlgorithm algo = new GSDTAlgorithm(points, context);
       if (key.isValid()) {
-        int col = Arrays.binarySearch(this.columnBoundaries, key.x1);
-        if (col < 0)
-          col = -col - 1;
-        column.set(col);
         LOG.info("Finding final and non-final edges");
         context.setStatus("Splitting DT");
-        SimpleGraph finalPart = new SimpleGraph();
-        SimpleGraph nonfinalPart = new SimpleGraph();
-        algo.splitIntoFinalAndNonFinalGraphs(key, finalPart, nonfinalPart);
+        Triangulation finalPart = new Triangulation();
+        Triangulation nonfinalPart = new Triangulation();
+        algo.splitIntoSafeAndUnsafeGraphs(key, finalPart, nonfinalPart);
         // Write final part directly to the output
         context.getCounter(DelaunayCounters.MAP_FINAL_SITES).increment(finalPart.getNumSites());
         writer.write(Boolean.TRUE, finalPart);
 
         // Write nonFinalpart to the reduce phase
+        // Find the corresponding column to ensure the vertical merge phase works correctly
+        int col = Arrays.binarySearch(this.columnBoundaries, key.x1);
+        if (col < 0)
+          col = -col - 1;
+        column.set(col);
         context.write(column, nonfinalPart);
         context.getCounter(DelaunayCounters.MAP_NONFINAL_SITES).increment(nonfinalPart.getNumSites());
       } else {
         LOG.info("Writing the whole DT to the reduce phase");
         context.setStatus("Writing DT");
-        context.write(column, algo.getFinalAnswerAsGraph());
+        context.write(column, algo.getFinalTriangulation());
       }
     }
     
     @Override
     protected void cleanup(
-        Mapper<Rectangle, Iterable<S>, IntWritable, SimpleGraph>.Context context)
+        Mapper<Rectangle, Iterable<S>, IntWritable, Triangulation>.Context context)
             throws IOException, InterruptedException {
       super.cleanup(context);
       writer.close(context);
@@ -161,24 +163,24 @@ public class DelaunayTriangulation {
    *
    */
   public static class DelaunayReduce
-  extends Reducer<IntWritable, SimpleGraph, Boolean, SimpleGraph> {
+  extends Reducer<IntWritable, Triangulation, Boolean, Triangulation> {
     
     @Override
-    protected void reduce(IntWritable dummy, Iterable<SimpleGraph> values,
+    protected void reduce(IntWritable dummy, Iterable<Triangulation> values,
         Context context) throws IOException, InterruptedException {
-      List<SimpleGraph> triangulations = new ArrayList<SimpleGraph>();
+      List<Triangulation> triangulations = new ArrayList<Triangulation>();
       Rectangle overallMBR = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
           -Double.MAX_VALUE, -Double.MAX_VALUE);
-      for (SimpleGraph t : values) {
+      for (Triangulation t : values) {
         overallMBR.expand(t.mbr);
         triangulations.add(t);
-      }      
-      
+      }
+
       GSDTAlgorithm algo = GSDTAlgorithm.mergeTriangulations(triangulations, context);
       
-      SimpleGraph finalPart = new SimpleGraph();
-      SimpleGraph nonfinalPart = new SimpleGraph();
-      algo.splitIntoFinalAndNonFinalGraphs(overallMBR, finalPart, nonfinalPart);
+      Triangulation finalPart = new Triangulation();
+      Triangulation nonfinalPart = new Triangulation();
+      algo.splitIntoSafeAndUnsafeGraphs(overallMBR, finalPart, nonfinalPart);
       
       // Write final part directly to the output path
       context.getCounter(DelaunayCounters.REDUCE_FINAL_SITES).increment(finalPart.getNumSites());
@@ -207,7 +209,7 @@ public class DelaunayTriangulation {
     // Set map and reduce
     job.setMapperClass(DelaunayMap.class);
     job.setMapOutputKeyClass(IntWritable.class);
-    job.setMapOutputValueClass(SimpleGraph.class);
+    job.setMapOutputValueClass(Triangulation.class);
     job.setReducerClass(DelaunayReduce.class);
 
     // Set input and output
@@ -315,16 +317,30 @@ public class DelaunayTriangulation {
     GSDTAlgorithm dtAlgorithm = new GSDTAlgorithm(allPoints, null);
     LOG.info("DT computed");
     
-    List<Geometry> finalRegions = new ArrayList<Geometry>();
-    List<Geometry> nonfinalRegions = new ArrayList<Geometry>();
-    
     Rectangle mbr = FileMBR.fileMBR(inPaths, params);
     double buffer = Math.max(mbr.getWidth(), mbr.getHeight()) / 10;
     Rectangle bigMBR = mbr.buffer(buffer, buffer);
-    dtAlgorithm.getFinalAnswerAsVoronoiRegions(mbr, finalRegions, nonfinalRegions);
-    drawVoronoiDiagram(System.out, mbr, bigMBR, finalRegions, nonfinalRegions);
-    
-//    dtAlgorithm.getFinalAnswerAsGraph().draw();
+    if (outPath != null && params.getBoolean("output", true)) {
+      LOG.info("Writing the output as a soup of triangles");
+      Triangulation answer = dtAlgorithm.getFinalTriangulation();
+      FileSystem outFS = outPath.getFileSystem(params);
+      PrintStream out = new PrintStream(outFS.create(outPath));
+
+      Text text = new Text2();
+      byte[] tab = "\t".getBytes();
+      for (Point[] triangle : answer.iterateTriangles()) {
+        text.clear();
+        triangle[0].toText(text);
+        text.append(tab, 0, tab.length);
+        triangle[1].toText(text);
+        text.append(tab, 0, tab.length);
+        triangle[2].toText(text);
+        out.println(text);
+      }
+      out.close();
+    }
+
+//    dtAlgorithm.getFinalTriangulation().draw();
     //Triangulation finalPart = new Triangulation();
     //Triangulation nonfinalPart = new Triangulation();
     //dtAlgorithm.splitIntoFinalAndNonFinalParts(new Rectangle(-180, -90, 180, 90), finalPart, nonfinalPart);
@@ -362,7 +378,7 @@ public class DelaunayTriangulation {
     out.println("}");
     out.println("}");
     out.println("group {");
-    out.println("group(:fill => :none, :strok=>:red) {");
+    out.println("group(:fill => :none, :stroke=>:red) {");
     for (Geometry p : nonfinalRegions) {
       if (!bigMBRPoly.contains(p)) {
         if (p instanceof Polygon) {
@@ -381,7 +397,7 @@ public class DelaunayTriangulation {
       out.println("]");
     }
     out.println("}");
-    out.println("group(:fill => :red, :stroke=>nil) {");
+    out.println("group(:fill => :red, :stroke=>:none) {");
     for (Geometry p : nonfinalRegions) {
       Point site = (Point) p.getUserData();
       out.printf("circle %f, %f, 1\n", site.x, site.y);

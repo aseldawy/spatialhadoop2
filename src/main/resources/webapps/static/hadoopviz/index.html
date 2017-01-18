@@ -1,33 +1,122 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>HadoopViz</title>
-  <link rel="stylesheet" href="http://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
-  <script src="http://code.jquery.com/jquery-1.10.2.js"></script>
-  <script src="http://code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
-  <link rel="stylesheet" href="css/shahed.css">
-  <script>
-  $(function() {
-    $( "#tabs" ).tabs();
-  });
-  </script>
-</head>
-<body style="height: 100%">
- 
-<div id="tabs" class="fullscreen">
-  <ul>
-    <li><a href="#tabs-1">Plot</a></li>
-    <li><a href="#tabs-2">Display</a></li>
-  </ul>
-  <div id="tabs-1" class="fullscreen" style="padding: 0;">
-    <iframe src="plot.html" class="fullscreen"></iframe>
-  </div>
-  <div id="tabs-2" class="fullscreen" style="padding: 0;">
-    <iframe src="display.html" class="fullscreen"></iframe>
-  </div>
-</div>
- 
- 
-</body>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!--
+ Copyright (c) 2015 by Regents of the University of Minnesota.
+ All rights reserved. This program and the accompanying materials
+ are made available under the terms of the Apache License, Version 2.0 which 
+ accompanies this distribution and is available at
+ http://www.opensource.org/licenses/apache2.0.php.
+  -->
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>SpatialHadoop Visualizer</title>
+    <script type="text/javascript" src="/js/jquery-2.2.3.min.js"></script>
+    <script type="text/javascript" src="/js/dust-full-2.0.0.min.js"></script>
+    <script type="text/javascript" src="/js/dust-helpers-1.1.1.min.js"></script>
+    <script type="text/javascript" src="/js/hadoopviz.js"> </script>
+    <link rel="stylesheet" href="/css/hadoopviz.css">
+    <link rel="stylesheet" href="/css/responstable.css">
+    <link rel="stylesheet" href="/css/font-awesome.min.css">
+    
+    <script type="text/x-dust-template" id="file-list-template">
+    {?ParentDir}
+    <i class="fa fa-level-up fa-flip-horizontal fa-2x"></i>&nbsp;&nbsp;
+    <a href="#{ParentDir}">Parent Directory</a>
+    {/ParentDir}
+    <table class="responstable">
+    <thead>
+      <tr>
+        <th>permission</th>
+        <th>Owner:Group</th>
+        <th>Size</th>
+        <th>Block Size</th>
+        <th>Replication</th>
+        <th>Modification Time</th>
+        <th style="width: 40%;">Name</th>
+      </tr>
+    </thead>
+    <tbody>
+    {#FileStatus}
+      <tr class="{type}">
+        <td>{@eq key=type value="DIRECTORY"}d{/eq}{permission}</td>
+        <td>{owner}:{group}</td>
+        <td>{@formatSizeHelper value=length/}</td>
+        <td>{@formatSizeHelper value=blockSize/}</td>
+        <td>{replication}</td>
+        <td>{@formatDateHelper value=modificationTime/}</td>
+        <td>
+          {@eq key=type value="DIRECTORY"}
+          <i class="ext fa fa-fw fa-folder-o"></i>&nbsp;&nbsp;&nbsp;
+          <a href="#{BaseDir}/{pathSuffix}">{pathSuffix}</a>
+          {:else}
+          <i class="ext fa fa-fw {extension}"></i>&nbsp;&nbsp;&nbsp;
+          {pathSuffix}
+          {/eq}
+        </td>
+      </tr>
+    {:else}
+      <tr><td colspan="7">The current path is empty</td></tr>
+    {/FileStatus}
+    </tbody>
+    </table>
+    </script>
+    
+    <script type="text/x-dust-template" id="global-index-template">
+    {^ImagePath}
+    <form action="VISUALIZE.cgi" method="POST" id="frm-visualize">
+      <input type="hidden" name="path" value="{BaseDir}" />
+      <label for="shape">Shape</label>
+      <input type="text" name="shape" id="shape" value="{Shape}" />
+      <input type="submit" value="Plot" />
+    </form>
+    {/ImagePath}
+
+    {?Partitions}
+    <input type="checkbox" id="chk-gindex" checked="checked"
+           class="toggle-chekbox" data-target="gindex-partitions">
+    <label for="chk-gindex">Global Index</label>
+    {/Partitions}
+
+    {?ImagePath}
+    <input type="checkbox" id="chk-data" checked="checked"
+           class="toggle-chekbox" data-target="gindex-data">
+    <label for="chk-data">Data</label>
+    {/ImagePath}
+
+    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" 
+      xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" 
+      class="gindex" width="{ImageWidth}"
+      height="{@math key=ImageHeight method="add" operand="1"/}">
+    <g id="gindex-partitions">
+    {#Partitions}
+    <rect x="{x1}" width="{@math key=x2 method="subtract" operand=x1/}" 
+      y="{y1}" height="{@math key=y2 method="subtract" operand=y1/}"/>
+    {/Partitions}
+    </g>
+    {?ImagePath}
+    <g id="gindex-data">
+    <image x="0" width="{ImageWidth}" y="0" height="{ImageHeight}" 
+         xlink:href="/hdfs{ImagePath}"/>
+    </g>
+    {/ImagePath}
+    </svg>
+    </script>
+  </head>
+
+  <body>
+    <div id="file-list">
+      <form id="navigate">
+        <label for="current-path">Current path</label>
+        <input type="text" name="path" id="current-path" value="/"/>
+        <input type="submit" value="Go"/>
+      </form>
+      <div id="global-index">
+      </div>
+      <div id="listed-files">
+      </div>
+    </div>
+    <div id="copyright">
+    SpatialHadoop, 2016
+    </div>
+  </body>
 </html>

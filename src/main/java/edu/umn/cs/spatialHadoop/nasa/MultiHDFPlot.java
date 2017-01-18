@@ -52,6 +52,8 @@ import edu.umn.cs.spatialHadoop.nasa.HDFPlot.HDFRasterizer;
 public class MultiHDFPlot {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(MultiHDFPlot.class);
+  
+  private static final long OneDayMillis = 24 * 60 * 60 * 1000;
 
   private static void printUsage() {
     System.out.println("Plots all NASA datasets matching user criteria");
@@ -227,7 +229,10 @@ public class MultiHDFPlot {
       String kmlDate = kmlDateFormat.format(date);
       ps.println("<GroundOverlay>");
       ps.println("<name>"+kmlDate+"</name>");
-      ps.println("<TimeStamp><when>"+kmlDate+"</when></TimeStamp>");
+      ps.println("<TimeSpan>");
+      ps.println("<begin>"+kmlDate+"</begin>");
+      ps.println("<end>"+kmlDateFormat.format(date.getTime() + OneDayMillis)+"</end>");
+      ps.println("</TimeSpan>");
       ps.println("<Icon><href>"+image.getPath().getName()+"</href></Icon>");
       ps.println(mbrStr);
       ps.println("</GroundOverlay>");

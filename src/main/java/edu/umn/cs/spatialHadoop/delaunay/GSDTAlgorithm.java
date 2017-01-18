@@ -1,5 +1,7 @@
 package edu.umn.cs.spatialHadoop.delaunay;
 
+import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -8,11 +10,13 @@ import java.util.List;
 import java.util.Stack;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
+import edu.umn.cs.spatialHadoop.util.MergeSorter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.util.IndexedSortable;
-import org.apache.hadoop.util.Progressable;
-import org.apache.hadoop.util.QuickSort;
+import org.apache.hadoop.io.BooleanWritable;
+import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.util.*;
 
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
@@ -41,6 +45,13 @@ public class GSDTAlgorithm {
   /** The original input set of points */
   Point[] points;
 
+  /** A bitmask with a bit set for each site that has been previously reported
+   * to the output. This is needed when merging intermediate triangulations to
+   * avoid reporting the same output twice. If <code>null</code>, it indicates
+   * that no sites have been previously reported.
+   */
+  BitArray reportedSites;
+
   /** Coordinates of all sites */
   double[] xs, ys;
 
@@ -57,7 +68,7 @@ public class GSDTAlgorithm {
   /**
    * Use to report progress to avoid mapper or reducer timeout
    */
-  private Progressable progress;
+  protected Progressable progress;
 
   /**
    * A class that stores a set of triangles for part of the sites.
@@ -77,19 +88,26 @@ public class GSDTAlgorithm {
      * Constructs an empty triangulation to be used for merging
      */
     IntermediateTriangulation() {}
-    
+
     /**
-     * Initialize a triangulation with two sites only. The triangulation consists
-     * of one line connecting the two sites and no triangles at all.
+     * Initialize a triangulation that consists only of straight lines between
+     * the two given sites. If these two sites are not consecutive in the sort
+     * order, they are treated as a contiguous range of sites and every pair
+     * of consecutive sites are connected with a line. This is used to construct
+     * a triangulation for a list of sites that form a straight line.
      * @param s1
      * @param s2
      */
     IntermediateTriangulation(int s1, int s2) {
       site1 = s1;
       site2 = s2;
-      neighbors[s1].add(s2);
-      neighbors[s2].add(s1);
-      convexHull = new int[] {s1, s2};
+      convexHull = new int[s2 - s1 + 1];
+      for (int s = s1; s < s2; s++) {
+        neighbors[s].add(s+1);
+        neighbors[s+1].add(s);
+        convexHull[s-s1] = s;
+      }
+      convexHull[s2-s1] = s2;
     }
     
     /**
@@ -104,14 +122,11 @@ public class GSDTAlgorithm {
       site2 = s3;
       neighbors[s1].add(s2); neighbors[s2].add(s1); // edge: s1 -- s2
       neighbors[s2].add(s3); neighbors[s3].add(s2); // edge: s3 -- s3
-      if (calculateCircumCircleCenter(s1, s2, s3) == null) {
-        // Degenerate case, three points are collinear
-        convexHull = new int[] {s1, s3};
-      } else {
-        // Normal case
+      if (crossProduct(s1, s2, s3) != 0) {
+        // The three points are not collinear
         neighbors[s1].add(s3); neighbors[s3].add(s1); // edge: s1 -- s3
-        convexHull = new int[] {s1, s2, s3};
       }
+      convexHull = new int[] {s1, s2, s3};
     }
 
     /**
@@ -126,7 +141,7 @@ public class GSDTAlgorithm {
      *          How much shift should be added to each edge to adjust it to the
      *          new points array
      */
-    public IntermediateTriangulation(SimpleGraph t, int pointShift) {
+    public IntermediateTriangulation(Triangulation t, int pointShift) {
       // Assume that points have already been copied
       this.site1 = pointShift;
       this.site2 = pointShift + t.sites.length - 1;
@@ -142,70 +157,261 @@ public class GSDTAlgorithm {
         int adjustedStart = t.edgeStarts[i] + pointShift;
         int adjustedEnd = t.edgeEnds[i] + pointShift;
         neighbors[adjustedStart].add(adjustedEnd);
-        neighbors[adjustedEnd].add(adjustedStart);
       }
+    }
+
+    @Override
+    public String toString() {
+      return String.format("Triangulation: [%d, %d]", site1, site2);
+    }
+
+    /**
+     * Perform some sanity checks to see if the current triangulation could
+     * be incorrect. This can be used to find as early as possible when the
+     * output becomes bad.
+     * @return
+     */
+    public boolean isIncorrect() {
+      // Test if there are any overlapping edges
+      // First, compute the MBR of all edges
+      class Edge extends Rectangle {
+        int source, destination;
+
+        public Edge(int s, int d) {
+          this.source = s;
+          this.destination = d;
+          super.set(xs[s], ys[s], xs[d], ys[d]);
+        }
+      }
+
+      List<Edge> edges = new ArrayList<Edge>();
+
+      for (int s = site1; s <= site2; s++) {
+        for (int d : neighbors[s]) {
+          // Add each undirected edge only once
+          if (s < d)
+            edges.add(new Edge(s, d));
+        }
+      }
+
+      Edge[] aredges = edges.toArray(new Edge[edges.size()]);
+      final BooleanWritable correct = new BooleanWritable(true);
+
+      try {
+        SpatialAlgorithms.SelfJoin_rectangles(aredges, new OutputCollector<Edge, Edge>() {
+          static final double Threshold = 1E-5;
+          @Override
+          public void collect(Edge e1, Edge e2) throws IOException {
+            // Do a refine step where we compare the actual lines
+            double x1 = xs[e1.source];
+            double y1 = ys[e1.source];
+            double x2 = xs[e1.destination];
+            double y2 = ys[e1.destination];
+            double x3 = xs[e2.source];
+            double y3 = ys[e2.source];
+            double x4 = xs[e2.destination];
+            double y4 = ys[e2.destination];
+
+            double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+            double ix = (x1 * y2 - y1 * x2) * (x3 - x4) / den - (x1 - x2) * (x3 * y4 - y3 * x4) / den;
+            double iy = (x1 * y2 - y1 * x2) * (y3 - y4) / den - (y1 - y2) * (x3 * y4 - y3 * x4) / den;
+            double minx1 = Math.min(x1, x2);
+            double maxx1 = Math.max(x1, x2);
+            double miny1 = Math.min(y1, y2);
+            double maxy1 = Math.max(y1, y2);
+            double minx2 = Math.min(x3, x4);
+            double maxx2 = Math.max(x3, x4);
+            double miny2 = Math.min(y3, y4);
+            double maxy2 = Math.max(y3, y4);
+            if ((ix - minx1 > Threshold && ix - maxx1 < -Threshold) && (iy - miny1 > Threshold && iy - maxy1 < -Threshold) &&
+                (ix - minx2 > Threshold && ix - maxx2 < -Threshold) && (iy - miny2 > Threshold && iy - maxy2 < -Threshold)) {
+              System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
+              System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
+              System.out.printf("circle %f, %f, 0.5\n", ix, iy);
+              correct.set(false);
+            }
+          }
+        }, null);
+        if (!correct.get())
+          return false;
+
+        // Test if all the lines of the convex hull are edges
+        boolean collinear_ch = true;
+        for (int i = 2; collinear_ch && i < convexHull.length; i++) {
+          collinear_ch = crossProduct(convexHull[i-2], convexHull[i-1], convexHull[i]) == 0;
+        }
+
+        if (!collinear_ch) {
+          // Test if all edges of the convex hull are in the triangulation only
+          // if the convex hull is not a line
+          for (int i = 0; i < convexHull.length; i++) {
+            int s = convexHull[i];
+            int d = convexHull[(i+1)%convexHull.length];
+            if (!neighbors[s].contains(d)) {
+              System.out.printf("Edge %d, %d on the convex hull but not found in the DT\n", s, d);
+              return false;
+            }
+          }
+        }
+
+        // Test that this is indeed a triangulation. For each node, sort its
+        // neighbors in a CW order and make sure that every pair of nodes in
+        // a consecutive CW order with less than 180 degrees are connected
+        for (int i = site1; i <= site2; i++) {
+          final IntArray ineighbors = neighbors[i];
+          if (ineighbors.size() == 1)
+            continue;
+          final Point center = points[i];
+          Comparator<Point> ccw_comparator = new Comparator<Point>() {
+            @Override
+            public int compare(Point a, Point b) {
+              if (a.x - center.x >= 0 && b.x - center.x < 0)
+                return 1;
+              if (a.x - center.x < 0 && b.x - center.x >= 0)
+                return -1;
+              if (a.x - center.x == 0 && b.x - center.x == 0)
+                return Double.compare(b.y - center.y, a.y - center.y);
+
+              // compute the cross product of vectors (center -> a) x (center -> b)
+              double det = (a.x - center.x) * (b.y - center.y) - (b.x - center.x) * (a.y - center.y);
+              if (det < 0)
+                return -1;
+              if (det > 0)
+                return 1;
+              return 0;
+            }
+          };
+          for (int n1 = ineighbors.size() - 1; n1 >= 0 ; n1--) {
+            for (int n2 = 0; n2 < n1; n2++) {
+              // Compare neighbors n2 and n2+1
+              final Point a = points[ineighbors.get(n2)];
+              final Point b = points[ineighbors.get(n2+1)];
+              if (ccw_comparator.compare(a, b) > 0)
+                ineighbors.swap(n2, n2+1);
+            }
+          }
+
+          for (int j1 = 0; j1 < ineighbors.size(); j1++) {
+            int j2 = (j1 + 1) % ineighbors.size();
+            int n1 = ineighbors.get(j1);
+            int n2 = ineighbors.get(j2);
+            // Check if the triangle (i, n1, n1+1) can be reported
+            double a_x = points[n1].x - points[i].x;
+            double a_y = points[n1].y - points[i].y;
+            double b_x = points[n2].x - points[i].x;
+            double b_y = points[n2].y - points[i].y;
+            if (a_x * b_y - a_y * b_x < 0) {
+              // Triangle is correct. Now make sure that the edge n1-n2 exists
+              if (!neighbors[n1].contains(n2)) {
+                System.out.printf("An incomplete triangle (%d,%d,%d)\n",
+                    i, n1, n2);
+                return true; // Incorrect
+              }
+            }
+          }
+        }
+
+
+      } catch (IOException e) {
+        e.printStackTrace();
+        return true; // Incorrect
+      }
+
+      return false; // Correct
+    }
+
+    public void draw(PrintStream out) {
+      // Draw to rasem
+      out.println("group {");
+      for (int i = site1; i <= site2; i++) {
+        out.printf("text(%s, %s) { raw '%d' }\n", Double.toString(xs[i]), Double.toString(ys[i]), i);
+      }
+      out.println("}");
+      out.println("group {");
+      for (int i = site1; i <= site2; i++) {
+        for (int j : neighbors[i]) {
+          if (i < j)
+            out.printf("line %s, %s, %s, %s\n", Double.toString(xs[i]),
+                Double.toString(ys[i]), Double.toString(xs[j]),
+                Double.toString(ys[j]));
+        }
+      }
+      out.println("}");
     }
   }
 
   /**
    * Constructs a triangulation that merges two existing triangulations.
-   * @param points
+   * @param inPoints
    * @param progress
    */
-  public <P extends Point> GSDTAlgorithm(P[] points, Progressable progress) {
+  public <P extends Point> GSDTAlgorithm(P[] inPoints, Progressable progress) {
     this.progress = progress;
-    this.points = new Point[points.length];
-    System.arraycopy(points, 0, this.points, 0, points.length);
-    Arrays.sort(this.points, new Comparator<Point>() {
+    this.points = new Point[inPoints.length];
+    this.xs = new double[points.length];
+    this.ys = new double[points.length];
+    this.neighbors = new IntArray[points.length];
+    for (int i = 0; i < points.length; i++)
+      neighbors[i] = new IntArray();
+    this.reportedSites = new BitArray(points.length); // Initialized to zeros
+    System.arraycopy(inPoints, 0, points, 0, points.length);
+
+    // Compute the answer
+    this.finalAnswer = computeTriangulation(0, points.length);
+  }
+
+  /**
+   * Performs the actual computation for the given subset of the points array.
+   */
+  protected IntermediateTriangulation computeTriangulation(int start, int end) {
+    // Sort all points by x-coordinates to prepare for processing
+    // Sort points by their containing cell
+    Arrays.sort(points, new Comparator<Point>() {
       @Override
-      public int compare(Point o1, Point o2) {
-        double dx = o1.x - o2.x;
-        if (dx < 0) return -1;
-        if (dx > 0) return 1;
-        double dy = o1.y - o2.y;
-        if (dy < 0) return -1;
-        if (dy > 0) return 1;
-        return 0;
+      public int compare(Point p1, Point p2) {
+        int dx = Double.compare(p1.x, p2.x);
+        if (dx != 0)
+          return dx;
+        return Double.compare(p1.y, p2.y);
       }
     });
-    this.xs = new double[this.points.length];
-    this.ys = new double[this.points.length];
-    this.neighbors = new IntArray[this.points.length];
-    for (int i = 0; i < this.points.length; i++) {
-      xs[i] = this.points[i].x;
-      ys[i] = this.points[i].y;
-      neighbors[i] = new IntArray();
+
+    // Store all coordinates in primitive arrays for efficiency
+    for (int i = start; i < end; i++) {
+      xs[i] = points[i].x;
+      ys[i] = points[i].y;
     }
-    
-    // Compute the answer
-    IntermediateTriangulation[] triangulations = new IntermediateTriangulation[points.length / 3 + (points.length % 3 == 0 ? 0 : 1)];
+
+
+    int size = end - start;
+    IntermediateTriangulation[] triangulations = new IntermediateTriangulation[size / 3 + (size % 3 == 0 ? 0 : 1)];
     // Compute the trivial Delaunay triangles of every three consecutive points
     int i, t = 0;
-    for (i = 0; i < points.length - 4; i += 3) {
+    for (i = start; i < end - 4; i += 3) {
       // Compute DT for three points
       triangulations[t++] =  new IntermediateTriangulation(i, i+1, i+2);
       if (progress != null && (t & 0xff) == 0)
         progress.progress();
     }
-    if (points.length - i == 4) {
-      // Compute DT for every two points
+    if (end - i == 4) {
+       // Compute DT for every two points
        triangulations[t++] = new IntermediateTriangulation(i, i+1);
        triangulations[t++] = new IntermediateTriangulation(i+2, i+3);
-    } else if (points.length - i == 3) {
+    } else if (end - i == 3) {
       // Compute for three points
       triangulations[t++] = new IntermediateTriangulation(i, i+1, i+2);
-    } else if (points.length - i == 2) {
+    } else if (end - i == 2) {
       // Two points, connect with a line
       triangulations[t++] = new IntermediateTriangulation(i, i+1);
     } else {
       throw new RuntimeException("Cannot happen");
     }
-    
+
     if (progress != null)
       progress.progress();
-    this.finalAnswer = mergeAllTriangulations(triangulations);
+    return mergeAllTriangulations(triangulations);
   }
-  
+
   /**
    * Compute the DT by merging existing triangulations created at different
    * machines. The given triangulations should be sorted correctly such that
@@ -213,14 +419,15 @@ public class GSDTAlgorithm {
    * @param ts
    * @param progress
    */
-  public GSDTAlgorithm(SimpleGraph[] ts, Progressable progress) {
+  public GSDTAlgorithm(Triangulation[] ts, Progressable progress) {
     this.progress = progress;
     // Copy all triangulations
     int totalPointCount = 0;
-    for (SimpleGraph t : ts)
+    for (Triangulation t : ts)
       totalPointCount += t.sites.length;
     
     this.points = new Point[totalPointCount];
+    this.reportedSites = new BitArray(totalPointCount);
     // Initialize xs, ys and neighbors array
     this.xs = new double[totalPointCount];
     this.ys = new double[totalPointCount];
@@ -231,7 +438,7 @@ public class GSDTAlgorithm {
     IntermediateTriangulation[] triangulations = new IntermediateTriangulation[ts.length];
     int currentPointsCount = 0;
     for (int it = 0; it < ts.length; it++) {
-      SimpleGraph t = ts[it];
+      Triangulation t = ts[it];
       // Copy sites from that triangulation
       System.arraycopy(t.sites, 0, this.points, currentPointsCount, t.sites.length);
       
@@ -239,6 +446,7 @@ public class GSDTAlgorithm {
       for (int i = currentPointsCount; i < currentPointsCount + t.sites.length; i++) {
         this.xs[i] = points[i].x;
         this.ys[i] = points[i].y;
+        this.reportedSites.set(i, t.reportedSites.get(i - currentPointsCount));
       }
       
       // Create a corresponding partial answer
@@ -247,7 +455,6 @@ public class GSDTAlgorithm {
       currentPointsCount += t.sites.length;
     }
 
-    
     if (progress != null)
       progress.progress();
     this.finalAnswer = mergeAllTriangulations(triangulations);
@@ -262,13 +469,13 @@ public class GSDTAlgorithm {
    * @return
    */
   static GSDTAlgorithm mergeTriangulations(
-      List<SimpleGraph> triangulations, Progressable progress) {
+      List<Triangulation> triangulations, Progressable progress) {
     // Arrange triangulations column-by-column
-    List<List<SimpleGraph>> columns = new ArrayList<List<SimpleGraph>>();
+    List<List<Triangulation>> columns = new ArrayList<List<Triangulation>>();
     int numTriangulations = 0;
-    for (SimpleGraph t : triangulations) {
+    for (Triangulation t : triangulations) {
       double x1 = t.mbr.x1, x2 = t.mbr.x2;
-      List<SimpleGraph> selectedColumn = null;
+      List<Triangulation> selectedColumn = null;
       int iColumn = 0;
       while (iColumn < columns.size() && selectedColumn == null) {
         Rectangle cmbr = columns.get(iColumn).get(0).mbr;
@@ -282,22 +489,22 @@ public class GSDTAlgorithm {
       }
       if (selectedColumn == null) {
         // Create a new column
-        selectedColumn = new ArrayList<SimpleGraph>();
+        selectedColumn = new ArrayList<Triangulation>();
         columns.add(selectedColumn);
       }
       selectedColumn.add(t);
       numTriangulations++;
     }
     
-    LOG.info("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
+    LOG.debug("Merging "+numTriangulations+" triangulations in "+columns.size()+" columns" );
     
-    List<SimpleGraph> mergedColumns = new ArrayList<SimpleGraph>();
+    List<Triangulation> mergedColumns = new ArrayList<Triangulation>();
     // Merge all triangulations together column-by-column
-    for (List<SimpleGraph> column : columns) {
+    for (List<Triangulation> column : columns) {
       // Sort this column by y-axis
-      Collections.sort(column, new Comparator<SimpleGraph>() {
+      Collections.sort(column, new Comparator<Triangulation>() {
         @Override
-        public int compare(SimpleGraph t1, SimpleGraph t2) {
+        public int compare(Triangulation t1, Triangulation t2) {
           double dy = t1.mbr.y1 - t2.mbr.y1;
           if (dy < 0)
             return -1;
@@ -307,16 +514,16 @@ public class GSDTAlgorithm {
         }
       });
   
-      LOG.info("Merging "+column.size()+" triangulations vertically");
+      LOG.debug("Merging "+column.size()+" triangulations vertically");
       GSDTAlgorithm algo =
-          new GSDTAlgorithm(column.toArray(new SimpleGraph[column.size()]), progress);
-      mergedColumns.add(algo.getFinalAnswerAsGraph());
+          new GSDTAlgorithm(column.toArray(new Triangulation[column.size()]), progress);
+      mergedColumns.add(algo.getFinalTriangulation());
     }
     
     // Merge the result horizontally
-    Collections.sort(mergedColumns, new Comparator<SimpleGraph>() {
+    Collections.sort(mergedColumns, new Comparator<Triangulation>() {
       @Override
-      public int compare(SimpleGraph t1, SimpleGraph t2) {
+      public int compare(Triangulation t1, Triangulation t2) {
         double dx = t1.mbr.x1 - t2.mbr.x1;
         if (dx < 0)
           return -1;
@@ -325,9 +532,9 @@ public class GSDTAlgorithm {
         return 0;
       }
     });
-    LOG.info("Merging "+mergedColumns.size()+" triangulations horizontally");
+    LOG.debug("Merging "+mergedColumns.size()+" triangulations horizontally");
     GSDTAlgorithm algo = new GSDTAlgorithm(
-        mergedColumns.toArray(new SimpleGraph[mergedColumns.size()]),
+        mergedColumns.toArray(new Triangulation[mergedColumns.size()]),
         progress);
     return algo;
   }
@@ -345,134 +552,100 @@ public class GSDTAlgorithm {
     System.arraycopy(L.convexHull, 0, bothHulls, 0, L.convexHull.length);
     System.arraycopy(R.convexHull, 0, bothHulls, L.convexHull.length, R.convexHull.length);
     merged.convexHull = convexHull(bothHulls);
-    
+
     // Find the base LR-edge (lowest edge of the convex hull that crosses from L to R)
     int[] baseEdge = findBaseEdge(merged.convexHull, L, R);
     int baseL = baseEdge[0];
     int baseR = baseEdge[1];
   
     // Add the first base edge
+    // Trace the base LR edge up to the top
     neighbors[baseL].add(baseR);
     neighbors[baseR].add(baseL);
-    // Trace the base LR edge up to the top
     boolean finished = false;
     do { // Until the finished flag is raised
       // Search for the potential candidate on the right
-      double anglePotential = -1, angleNextPotential = -1;
+      // Cache the cross product of the potential candidate and next one
+      double crossProductPotentialCandidate=0, crossProductNextPotentialCandidate = 0;
       int potentialCandidate = -1, nextPotentialCandidate = -1;
       for (int rNeighbor : neighbors[baseR]) {
-        if (rNeighbor >= R.site1 && rNeighbor <= R.site2) {
-          // Check this RR edge
-          double cwAngle = calculateCWAngle(baseL, baseR, rNeighbor);
-          if (potentialCandidate == -1 || cwAngle < anglePotential) {
-            // Found a new potential candidate
-            angleNextPotential = anglePotential;
-            nextPotentialCandidate = potentialCandidate;
-            anglePotential = cwAngle;
-            potentialCandidate = rNeighbor;
-          } else if (nextPotentialCandidate == -1 || cwAngle < angleNextPotential) {
-            angleNextPotential = cwAngle;
-            nextPotentialCandidate = rNeighbor;
-          }
+        // Check if this is an edge that crosses from L to R and skip it if true
+        if (rNeighbor <= L.site2)
+          continue;
+        double crossProduct = crossProduct(baseL, baseR, rNeighbor);
+        // This neighbor can be considered, let's add it in the right order
+        if (potentialCandidate == -1 || crossProductPotentialCandidate < 0 ||
+            (crossProduct > 0 && crossProduct(potentialCandidate, baseR, rNeighbor) < 0)){
+          nextPotentialCandidate = potentialCandidate;
+          crossProductNextPotentialCandidate = crossProductPotentialCandidate;
+          potentialCandidate = rNeighbor;
+          crossProductPotentialCandidate = crossProduct;
+        } else if (nextPotentialCandidate == -1 || crossProductNextPotentialCandidate < 0 ||
+            (crossProduct > 0 && crossProduct(nextPotentialCandidate, baseR, rNeighbor) < 0))  {
+          nextPotentialCandidate = rNeighbor;
+          crossProductNextPotentialCandidate = crossProduct;
         }
       }
-      int rCandidate = -1;
-      if (anglePotential < Math.PI && potentialCandidate != -1) {
-        // Compute the circum circle between the base edge and potential candidate
-        Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-        if (circleCenter == null) {
-          // Degnerate case of three collinear points
+      int rCandidate;
+      if (potentialCandidate == -1 || crossProductPotentialCandidate <= 0) {
+        // No potential candidate
+        rCandidate = -1;
+      } else if (nextPotentialCandidate == -1){
+        rCandidate = potentialCandidate;
+      } else {
+        if (inCircle(baseL, baseR, potentialCandidate, nextPotentialCandidate)) {
           // Delete the RR edge between baseR and rPotentialCandidate and restart
           neighbors[baseR].remove(potentialCandidate);
           neighbors[potentialCandidate].remove(baseR);
+          continue;
         } else {
-          if (nextPotentialCandidate == -1) {
-            // The only potential candidate, accept it right away
-            rCandidate = potentialCandidate;
-          } else {
-            // Check if the circumcircle of the base edge with the potential
-            // candidate contains the next potential candidate
-            double dx = circleCenter.x - xs[nextPotentialCandidate];
-            double dy = circleCenter.y - ys[nextPotentialCandidate];
-            double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - xs[potentialCandidate];
-            dy = circleCenter.y - ys[potentialCandidate];
-            double d2 = dx * dx + dy * dy;
-            if (d1 < d2) {
-              // Delete the RR edge between baseR and rPotentialCandidate and restart
-              neighbors[baseR].remove(potentialCandidate);
-              neighbors[potentialCandidate].remove(baseR);
-              continue;
-            } else {
-              rCandidate = potentialCandidate;
-            }
-          }
+          rCandidate = potentialCandidate;
         }
       }
-      
       // Search for the potential candidate on the left
-      anglePotential = -1; angleNextPotential = -1;
+      crossProductPotentialCandidate=0; crossProductNextPotentialCandidate = 0;
       potentialCandidate = -1; nextPotentialCandidate = -1;
       for (int lNeighbor : neighbors[baseL]) {
-        if (lNeighbor >= L.site1 && lNeighbor <= L.site2) {
-          // Check this LL edge
-          double ccwAngle = Math.PI * 2 - calculateCWAngle(baseR, baseL, lNeighbor);
-          if (potentialCandidate == -1 || ccwAngle < anglePotential) {
-            // Found a new potential candidate
-            angleNextPotential = anglePotential;
-            nextPotentialCandidate = potentialCandidate;
-            anglePotential = ccwAngle;
-            potentialCandidate = lNeighbor;
-          } else if (nextPotentialCandidate == -1 || ccwAngle < angleNextPotential) {
-            angleNextPotential = ccwAngle;
-            nextPotentialCandidate = lNeighbor;
-          }
+        if (lNeighbor > L.site2)
+          continue;
+        // Check this LL edge
+        double crossProduct = crossProduct(baseL, baseR, lNeighbor);
+        // This neighbor can be considered, let's add it in the right order
+        if (potentialCandidate == -1 || crossProductPotentialCandidate < 0 ||
+            (crossProduct > 0 && crossProduct(potentialCandidate, baseL, lNeighbor) > 0)){
+          nextPotentialCandidate = potentialCandidate;
+          crossProductNextPotentialCandidate = crossProductPotentialCandidate;
+          potentialCandidate = lNeighbor;
+          crossProductPotentialCandidate = crossProduct;
+        } else if (nextPotentialCandidate == -1 || crossProductNextPotentialCandidate < 0 ||
+            (crossProduct > 0 && crossProduct(nextPotentialCandidate, baseL, lNeighbor) > 0))  {
+          nextPotentialCandidate = lNeighbor;
+          crossProductNextPotentialCandidate = crossProduct;
         }
       }
       int lCandidate = -1;
-      if (anglePotential - Math.PI < -1E-9 && potentialCandidate != -1) {
-        // Compute the circum circle between the base edge and potential candidate
-        Point circleCenter = calculateCircumCircleCenter(baseL, baseR, potentialCandidate);
-        if (circleCenter == null) {
-          // Degenerate case, the potential candidate is collinear with base edge
-          // Delete the LL edge between baseL and potentialCandidate and restart
+      if (potentialCandidate == -1 || crossProductPotentialCandidate <= 0) {
+        // No potential candidate
+        lCandidate = -1;
+      } else if (nextPotentialCandidate == -1){
+        lCandidate = potentialCandidate;
+      } else {
+        if (inCircle(baseL, baseR, potentialCandidate, nextPotentialCandidate)) {
+          // Delete the LL edge between baseR and rPotentialCandidate and restart
           neighbors[baseL].remove(potentialCandidate);
           neighbors[potentialCandidate].remove(baseL);
+          continue;
         } else {
-          if (nextPotentialCandidate == -1) {
-            // The only potential candidate, accept it right away
-            lCandidate = potentialCandidate;
-          } else {
-            // Check if the circumcircle of the base edge with the potential
-            // candidate contains the next potential candidate
-            double dx = circleCenter.x - xs[nextPotentialCandidate];
-            double dy = circleCenter.y - ys[nextPotentialCandidate];
-            double d1 = dx * dx + dy * dy;
-            dx = circleCenter.x - xs[potentialCandidate];
-            dy = circleCenter.y - ys[potentialCandidate];
-            double d2 = dx * dx + dy * dy;
-            if (d1 < d2) {
-              // Delete the LL edge between baseL and potentialCandidate and restart
-              neighbors[baseL].remove(potentialCandidate);
-              neighbors[potentialCandidate].remove(baseL);
-              continue;
-            } else {
-              lCandidate = potentialCandidate;
-            }
-          } // nextPotentialCandidate == -1
-        } // circleCenter == null
-      } // anglePotential < Math.PI      
+          lCandidate = potentialCandidate;
+        }
+      }
       // Choose the right candidate
       if (lCandidate != -1 && rCandidate != -1) {
-        // Two candidates, choose the correct one
-        Point circumCircleL = calculateCircumCircleCenter(baseL, baseR, lCandidate);
-        double dx = circumCircleL.x - xs[lCandidate];
-        double dy = circumCircleL.y - ys[lCandidate];
-        double lCandidateDistance = dx * dx + dy * dy;
-        dx = circumCircleL.x - xs[rCandidate];
-        dy = circumCircleL.y - ys[rCandidate];
-        double rCandidateDistance = dx * dx + dy * dy;
-        if (lCandidateDistance < rCandidateDistance) {
+        // Two candidates, choose the candidate that defines a circle with the
+        // base edge that does NOT contain the other candidate
+
+        // Check if the left candidate is valid, if not, choose the *right* one
+        if (!inCircle(baseL, baseR, lCandidate, rCandidate)) {
           // rCandidate is outside the circumcircle, lCandidate is correct
           rCandidate = -1;
         } else {
@@ -509,8 +682,8 @@ public class GSDTAlgorithm {
 
   /**
    * Computes the base edge that is used to merge two triangulations.
-   * There are at most two crossing edges from L to R, the base edge is the one
-   * that makes CW angles with sites in the range [0, PI]. 
+   * There are at most two crossing edges from L to R, the correct one is the
+   * one that crosses from L to R as we traverse the CH in the CW order.
    * @param mergedConvexHull
    * @param L
    * @param R
@@ -518,38 +691,20 @@ public class GSDTAlgorithm {
    */
   private int[] findBaseEdge(int[] mergedConvexHull, IntermediateTriangulation L,
       IntermediateTriangulation R) {
-    int base1L = -1, base1R = -1;
-    int base2L = -1, base2R = -1;
-    for (int i = 0; i < mergedConvexHull.length; i++) {
-      int p1 = mergedConvexHull[i];
-      int p2 = i == mergedConvexHull.length - 1 ? mergedConvexHull[0] : mergedConvexHull[i+1];
-      if (inArray(L.convexHull, p1) && inArray(R.convexHull, p2)) {
-        // Found an LR edge, store it
-        if (base1L == -1) {
-          base1L = p1;
-          base1R = p2;
-        } else {
-          base2L = p1;
-          base2R = p2;
-        }
-      } else if (inArray(L.convexHull, p2) && inArray(R.convexHull, p1)) {
-        if (base1L == -1) {
-          base1L = p2;
-          base1R = p1;
-        } else {
-          base2L = p2;
-          base2R = p1;
-        }
-      }
+    int baseL, baseR;
+    int i = 0;
+    while (i < mergedConvexHull.length && mergedConvexHull[i] > L.site2) {
+      // The first point is on the right side, continue the search until we
+      // find a point on the left side
+      i++;
     }
-    
-    // Choose the right LR edge. The one which makes an angle [0, 180] with
-    // each point in both partitions
-    double cwAngle = base1R != base2R? calculateCWAngle(base1L, base1R, base2R)
-        : calculateCWAngle(base1L, base1R, base2L);
-    
-    return cwAngle < Math.PI ? new int[] {base1L, base1R} :
-      new int[] {base2L, base2R};
+    // Now i points to the first point on the left side, continue the search
+    // until we find the first point on the right side.
+    while (++i < mergedConvexHull.length && mergedConvexHull[i] <= L.site2);
+    baseL = mergedConvexHull[i-1];
+    baseR = mergedConvexHull[i % mergedConvexHull.length];
+
+    return new int[] {baseL, baseR};
   }
 
   /**
@@ -563,7 +718,7 @@ public class GSDTAlgorithm {
     while (triangulations.length > 1) {
       long currentTime = System.currentTimeMillis();
       if (currentTime - reportTime > 1000) {
-        LOG.info("Merging "+triangulations.length+" triangulations");
+        LOG.debug("Merging "+triangulations.length+" triangulations");
         reportTime = currentTime;
       }
       // Merge every pair of DTs
@@ -585,40 +740,41 @@ public class GSDTAlgorithm {
   }
 
   /**
-   * Returns the final answer as a graph.
+   * Returns the final answer as a triangulation.
    * @return
    */
-  public SimpleGraph getFinalAnswerAsGraph() {
-    SimpleGraph graph = new SimpleGraph();
+  public Triangulation getFinalTriangulation() {
+    Triangulation result = new Triangulation();
 
-    graph.sites = this.points.clone();
+    result.sites = this.points.clone();
+    result.reportedSites = this.reportedSites;
+    result.sitesToReport = this.reportedSites.invert();
     int numEdges = 0;
-    graph.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
+    result.mbr = new Rectangle(Double.MAX_VALUE, Double.MAX_VALUE,
         -Double.MAX_VALUE, -Double.MAX_VALUE);
     for (int s1 = 0; s1 < this.neighbors.length; s1++) {
+      //if (this.neighbors[s1].isEmpty())
+      //  throw new RuntimeException("A site has no incident edges");
       numEdges += this.neighbors[s1].size();
-      graph.mbr.expand(graph.sites[s1]);
+      result.mbr.expand(result.sites[s1]);
     }
-    graph.safeSites = new BitArray(graph.sites.length);
-    graph.safeSites.fill(true);
-    numEdges /= 2; // We store each undirected edge once
-    graph.edgeStarts = new int[numEdges];
-    graph.edgeEnds = new int[numEdges];
+    // We store each undirected edge twice, once for each direction
+    result.edgeStarts = new int[numEdges];
+    result.edgeEnds = new int[numEdges];
 
     for (int s1 = 0; s1 < this.neighbors.length; s1++) {
       for (int s2 : this.neighbors[s1]) {
-        if (s1 < s2) {
-          numEdges--;
-          graph.edgeStarts[numEdges] = s1;
-          graph.edgeEnds[numEdges] = s2;
-        }
+        numEdges--;
+        result.edgeStarts[numEdges] = s1;
+        result.edgeEnds[numEdges] = s2;
       }
     }
+    result.sortEdges();
     if (numEdges != 0)
       throw new RuntimeException("Error in edges! Copied "+
-    (graph.edgeStarts.length - numEdges)+" instead of "+graph.edgeStarts.length);
+    (result.edgeStarts.length - numEdges)+" instead of "+result.edgeStarts.length);
   
-    return graph;
+    return result;
   }
   
   /**
@@ -767,67 +923,78 @@ public class GSDTAlgorithm {
   }
   
   /**
-   * Splits the answer into final and non-final parts. Final parts can be safely
-   * written to the output as they are not going to be affected by a future
-   * merge step. Non-final parts cannot be written to the output yet as they
-   * might be affected (i.e., some edges are pruned) by a future merge step.
-   * @param mbr The MBR used to check for final and non-final edges. It is assumed
+   * Splits the answer into safe and unsafe parts. Safe parts are final and can
+   * be safely written to the output as they are not going to be affected by any
+   * future merge steps. Unsafe parts cannot be written to the output yet as they
+   * might be affected by a future merge step, e.g., some edges are pruned.
+   *
+   * Here is how this functions works.
+   * 1. It classifies sites into safe sites and unsafe sites using the method
+   *   detectUnsafeSites. An unsafe site participates to at least one unsafe
+   *   triangle
+   * 2. Two graphs are written, one that contains all safe sites along with all
+   *   their incident edges and one for unsafe sites along with all their
+   *   incident edges.
+   *
+   * Notice that edges are not completely separated as an edge connecting a safe
+   * and an unsafe site is written twice. Keep in mind that an edge that is
+   * incident to a safe site is also safe because, by definition, it
+   * participates in at least one safe triangle.
+   * This also means that the safe graph might contain some unsafe sites and
+   * the unsafe graph might contain some safe sites. This cannot be avoided as
+   * those edges connecting a safe and unsafe site is written in both graphs and
+   * needs its two ends to be present for completeness.
+   *
+   * @param mbr The MBR used to check for safe and unsafe sites. It is assumed
    *          that no more points can be introduced in this MBR but more points
    *          can appear later outside that MBR.
-   * @param finalGraph The set of final edges
-   * @param nonfinalGraph The set of non-final edges
+   * @param safeGraph The graph of all safe sites along with their edges and neighbors.
+   * @param unsafeGraph The set of unsafe sites along with their edges and neighbors.
    */
-  public void splitIntoFinalAndNonFinalGraphs(Rectangle mbr,
-      SimpleGraph finalGraph, SimpleGraph nonfinalGraph) {
+  public void splitIntoSafeAndUnsafeGraphs(Rectangle mbr,
+                                           Triangulation safeGraph,
+                                           Triangulation unsafeGraph) {
     BitArray unsafeSites = detectUnsafeSites(mbr);
-    
-    // A final edge is incident to at least one unsafe site
-    IntArray finalEdgeStarts = new IntArray();
-    IntArray finalEdgeEnds = new IntArray();
-    // A final edge connects two safe sites
-    IntArray nonfinalEdgeStarts = new IntArray();
-    IntArray nonfinalEdgeEnds = new IntArray();
+
+    // A safe edge is incident to at least one safe site
+    IntArray safeEdgeStarts = new IntArray();
+    IntArray safeEdgeEnds = new IntArray();
+    // An unsafe edge is incident to at least one unsafe site
+    IntArray unsafeEdgeStarts = new IntArray();
+    IntArray unsafeEdgeEnds = new IntArray();
 
     for (int i = 0; i < points.length; i++) {
       if (progress != null)
         progress.progress();
-      if (unsafeSites.get(i)) {
-        // An unsafe site, all of its adjacent edges are also unsafe
-        for (int n : neighbors[i]) {
-          if (i < n) { // To ensure that an edge is written only once
-            nonfinalEdgeStarts.add(i);
-            nonfinalEdgeEnds.add(n);
-          }
+      for (int n : neighbors[i]) {
+        if (unsafeSites.get(n) || unsafeSites.get(i)) {
+          unsafeEdgeStarts.add(i);
+          unsafeEdgeEnds.add(n);
         }
-      } else {
-        // Found a safe site, all edges that are adjacent to another safe site
-        // are final edges
-        for (int n : neighbors[i]) {
-          if (i < n) { // To ensure that an edge is written only once
-            if (!unsafeSites.get(n)) {
-              // Found a final edge
-              finalEdgeStarts.add(i);
-              finalEdgeEnds.add(n);
-            } else {
-              nonfinalEdgeStarts.add(i);
-              nonfinalEdgeEnds.add(n);
-            }
-          }
+        // Do NOT add an else statement because an edge might be added to both
+        if (!unsafeSites.get(n) || !unsafeSites.get(i)) {
+          safeEdgeStarts.add(i);
+          safeEdgeEnds.add(n);
         }
       }
     }
     
-    finalGraph.sites = this.points;
-    finalGraph.edgeStarts = finalEdgeStarts.toArray();
-    finalGraph.edgeEnds = finalEdgeEnds.toArray();
-    finalGraph.safeSites = unsafeSites.invert();
-    finalGraph.compact();
+    safeGraph.sites = this.points;
+    safeGraph.edgeStarts = safeEdgeStarts.toArray();
+    safeGraph.edgeEnds = safeEdgeEnds.toArray();
+    safeGraph.sitesToReport = unsafeSites.or(reportedSites).invert();
+    safeGraph.reportedSites = reportedSites;
+    safeGraph.sortEdges();
 
-    nonfinalGraph.sites = this.points;
-    nonfinalGraph.edgeStarts = nonfinalEdgeStarts.toArray();
-    nonfinalGraph.edgeEnds = nonfinalEdgeEnds.toArray();
-    nonfinalGraph.safeSites = new BitArray(this.points.length); // No safe sites
-    nonfinalGraph.compact();
+    unsafeGraph.sites = this.points;
+    unsafeGraph.edgeStarts = unsafeEdgeStarts.toArray();
+    unsafeGraph.edgeEnds = unsafeEdgeEnds.toArray();
+    unsafeGraph.sitesToReport = new BitArray(this.points.length); // Report nothing
+    unsafeGraph.reportedSites = safeGraph.sitesToReport.or(this.reportedSites);
+    unsafeGraph.sortEdges();
+
+    safeGraph.compact();
+    unsafeGraph.compact();
   }
 
   /**
@@ -919,70 +1086,26 @@ public class GSDTAlgorithm {
     return unsafeSites;
   }
 
-  public boolean test() {
-    final double threshold = 1E-6;
-    List<Point> starts = new Vector<Point>();
-    List<Point> ends = new Vector<Point>();
-    for (int s1 = 0; s1 < points.length; s1++) {
-      for (int s2 : neighbors[s1]) {
-        if (s1 < s2) {
-          starts.add(new Point(xs[s1], ys[s1]));
-          ends.add(new Point(xs[s2], ys[s2]));
-        }
-      }
-    }
-    
-    for (int i = 0; i < starts.size(); i++) {
-      double x1 = starts.get(i).x;
-      double y1 = starts.get(i).y;
-      double x2 = ends.get(i).x;
-      double y2 = ends.get(i).y;
-      for (int j = i + 1; j < starts.size(); j++) {
-        double x3 = starts.get(j).x;
-        double y3 = starts.get(j).y;
-        double x4 = ends.get(j).x;
-        double y4 = ends.get(j).y;
-  
-        double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-        double ix = (x1 * y2 - y1 * x2) * (x3 - x4) / den - (x1 - x2) * (x3 * y4 - y3 * x4) / den;
-        double iy = (x1 * y2 - y1 * x2) * (y3 - y4) / den - (y1 - y2) * (x3 * y4 - y3 * x4) / den;
-        double minx1 = Math.min(x1, x2);
-        double maxx1 = Math.max(x1, x2); 
-        double miny1 = Math.min(y1, y2);
-        double maxy1 = Math.max(y1, y2); 
-        double minx2 = Math.min(x3, x4);
-        double maxx2 = Math.max(x3, x4); 
-        double miny2 = Math.min(y3, y4);
-        double maxy2 = Math.max(y3, y4); 
-        if ((ix - minx1 > threshold && ix - maxx1 < -threshold) && (iy - miny1 > threshold && iy - maxy1 < -threshold) &&
-            (ix - minx2 > threshold && ix - maxx2 < -threshold) && (iy - miny2 > threshold && iy - maxy2 < -threshold)) {
-          System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
-          System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
-          System.out.printf("circle %f, %f, 0.5\n", ix, iy);
-          throw new RuntimeException("error");
-        }
-      }
-    }
-    return true;
+  /**
+   * Compute the cross product of the two vectors (s2->s1) and (s2->s3)
+   * @param s1
+   * @param s2
+   * @param s3
+   * @return
+   */
+  double crossProduct(int s1, int s2, int s3) {
+    double dx1 = xs[s1]-xs[s2];
+    double dy1 = ys[s1]-ys[s2];
+    double dx2 = xs[s3]-xs[s2];
+    double dy2 = ys[s3]-ys[s2];
+    return dy1 * dx2 - dx1 * dy2;
   }
 
-  boolean inArray(int[] array, int objectToFind) {
-    for (int objectToCompare : array)
-      if (objectToFind == objectToCompare)
-        return true;
-    return false;
-  }
-  
-  double calculateCWAngle(int s1, int s2, int s3) {
-    double angle1 = Math.atan2(ys[s1] - ys[s2], xs[s1] - xs[s2]);
-    double angle2 = Math.atan2(ys[s3] - ys[s2], xs[s3] - xs[s2]);
-    return angle1 > angle2 ? (angle1 - angle2) : (Math.PI * 2 + (angle1 - angle2));
-  }
-  
+
   /**
    * Calculate the intersection between the perpendicular bisector of the line
    * segment (p1, p2) towards the right (CCW) and the given rectangle.
-   * It is assumed that the two end points p1 and p2 lie inside the given
+   * It is assumed that the two pend points p1 and p2 lie inside the given
    * rectangle.
    * @param p1
    * @param p2
@@ -999,19 +1122,27 @@ public class GSDTAlgorithm {
     double a = Math.min(a1, a2);
     return new Point(px + a * vx, py + a * vy);
   }
-  
+
+  /**
+   * @deprecated use inCircle(int, int, int, int) instead
+   * @param s1
+   * @param s2
+   * @param s3
+   * @return
+   */
+  @Deprecated
   Point calculateCircumCircleCenter(int s1, int s2, int s3) {
     // Calculate the perpendicular bisector of the first two points
     double x1 = (xs[s1] + xs[s2]) / 2;
     double y1 = (ys[s1] + ys[s2]) /2;
     double x2 = x1 + ys[s2] - ys[s1];
     double y2 = y1 + xs[s1] - xs[s2];
-    // Calculate the perpendicular bisector of the second two points 
+    // Calculate the perpendicular bisector of the second two points
     double x3 = (xs[s3] + xs[s2]) / 2;
     double y3 = (ys[s3] + ys[s2]) / 2;
     double x4 = x3 + ys[s2] - ys[s3];
     double y4 = y3 + xs[s3] - xs[s2];
-    
+
     // Calculate the intersection of the two new lines
     // See https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
     double den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
@@ -1025,51 +1156,127 @@ public class GSDTAlgorithm {
     }
     double ix = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / den;
     double iy = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / den;
-    
+
     // We can also use the following equations from
     // http://mathforum.org/library/drmath/view/62814.html
 //    double v12x = x2 - x1;
 //    double v12y = y2 - y1;
 //    double v34x = x4 - x3;
 //    double v34y = y4 - y3;
-//    
+//
 //    double a = ((x3 - x1) * v34y - (y3 - y1) * v34x) / (v12x * v34y - v12y * v34x);
 //    double ix = x1 + a * v12x;
 //    double iy = y1 + a * v12y;
-    
+
     return new Point(ix, iy);
   }
-  
-  int[] convexHull(int[] points) {
+
+  /**
+   * Returns twice the area of the oriented triangle (a, b, c), i.e., the
+   * area is positive if the triangle is oriented counterclockwise.
+   */
+  double triArea(int p1, int p2, int p3) {
+    return (xs[p2] - xs[p1])*(ys[p3] - ys[p1]) - (ys[p2] - ys[p1])*(xs[p3] - xs[p1]);
+  }
+
+  /**
+   * Returns true if p4 is inside the circumcircle of the three points
+   * p1, p2, and p3
+   * If the p4 is exactly on the circumference of the circle, it returns false.
+   * See Guibas and Stolfi (1985) p.107.
+   * @return true iff p4 is inside the circle (p1, p2, p3)
+   */
+  boolean inCircle(int p1, int p2, int p3, int p4) {
+    return (xs[p1]*xs[p1] + ys[p1]*ys[p1]) * triArea(p2, p3, p4) -
+        (xs[p2] * xs[p2] + ys[p2]*ys[p2]) * triArea(p1, p3, p4) +
+        (xs[p3]*xs[p3] + ys[p3]*ys[p3]) * triArea(p1, p2, p4) -
+        (xs[p4]*xs[p4] + ys[p4]*ys[p4]) * triArea(p1, p2, p3) > 0;
+  }
+
+
+  /**
+   * Compute the convex hull of a list of points given by their indexes in the
+   * array of points
+   * @param points
+   * @return
+   */
+  int[] convexHull(final int[] points) {
     Stack<Integer> lowerChain = new Stack<Integer>();
     Stack<Integer> upperChain = new Stack<Integer>();
 
-    // Sort sites by increasing x-axis
-    // Sorting by Site ID is equivalent to sorting by x-axis as the original
-    // array of site is sorted by x in the DT algorithm
-    Arrays.sort(points);
-    
+    // Sort sites by increasing x-axis. We cannot rely of them being sorted as
+    // different algorithms can partition the data points in different ways
+    // For example, Dwyer's algorithm partition points by a grid
+    IndexedSorter sort = new MergeSorter();
+    IndexedSortable xSortable = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        int dx = Double.compare(xs[points[i]], xs[points[j]]);
+        if (dx != 0)
+          return dx;
+        return Double.compare(ys[points[i]], ys[points[j]]);
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        int temp = points[i];
+        points[i] = points[j];
+        points[j] = temp;
+      }
+    };
+    sort.sort(xSortable, 0, points.length);
+
+    // pminmin, pminmax, pmaxmin, and pmaxmax are used to handle the case where
+    // several points have min x or several points have maxx
+    // Check http://geomalgorithms.com/a10-_hull-1.html
+    int pminmin = 0;
+    int pminmax = pminmin;
+    while (pminmax < points.length && xs[points[pminmax]] == xs[points[pminmin]])
+      pminmax++;
+    if (pminmax == points.length) {
+      // Special case, all points form one vertical line, return all of them
+      return points;
+    }
+    pminmax--;
+    int pmaxmax = points.length - 1;
+    int pmaxmin = pmaxmax;
+    while (pmaxmin > 0 && xs[points[pmaxmin]] == xs[points[pmaxmax]])
+      pmaxmin--;
+    pmaxmin++;
+
     // Lower chain
-    for (int i = 0; i < points.length; i++) {
+    lowerChain.push(points[pminmin]);
+    for (int i = pminmax+1; i <= pmaxmin; i++) {
       while(lowerChain.size() > 1) {
         int s1 = lowerChain.get(lowerChain.size() - 2);
         int s2 = lowerChain.get(lowerChain.size() - 1);
         int s3 = points[i];
+        // Compute the cross product between (s1 -> s2) and (s1 -> s3)
         double crossProduct = (xs[s2] - xs[s1]) * (ys[s3] - ys[s1]) - (ys[s2] - ys[s1]) * (xs[s3] - xs[s1]);
-        if (crossProduct <= 0) lowerChain.pop();
+        // Changing the following condition to "crossProduct <= 0" will remove
+        // collinear points along the convex hull edge which might product incorrect
+        // results with Delaunay triangulation as it might skip the points in
+        // the middle.
+        if (crossProduct < 0)
+          lowerChain.pop();
         else break;
       }
       lowerChain.push(points[i]);
     }
     
     // Upper chain
-    for (int i = points.length - 1; i >= 0; i--) {
+    for (int i = pmaxmax; i >= pminmax; i--) {
       while(upperChain.size() > 1) {
         int s1 = upperChain.get(upperChain.size() - 2);
         int s2 = upperChain.get(upperChain.size() - 1);
         int s3 = points[i];
         double crossProduct = (xs[s2] - xs[s1]) * (ys[s3] - ys[s1]) - (ys[s2] - ys[s1]) * (xs[s3] - xs[s1]);
-        if (crossProduct <= 0) upperChain.pop();
+        // Changing the following condition to "crossProduct <= 0" will remove
+        // collinear points along the convex hull edge which might product incorrect
+        // results with Delaunay triangulation as it might skip the points in
+        // the middle.
+        if (crossProduct < 0)
+          upperChain.pop();
         else break;
       }
       upperChain.push(points[i]);
@@ -1077,11 +1284,23 @@ public class GSDTAlgorithm {
     
     lowerChain.pop();
     upperChain.pop();
-    int[] result = new int[lowerChain.size() + upperChain.size()];
-    for (int i = 0; i < lowerChain.size(); i++)
-      result[i] = lowerChain.get(i);
-    for (int i = 0; i < upperChain.size(); i++)
-      result[i + lowerChain.size()] = upperChain.get(i);
-    return result;    
+
+    int[] result = new int[lowerChain.size() + upperChain.size() + (pminmax-pminmin) + (pmaxmax-pmaxmin)];
+    if (result.length > points.length) {
+      // More points on the convex hull than the actual points.
+      // The only case when this happens is when all the points are collinear
+      // Simply, return the original set of points which are sorted on (x, y)
+      return points;
+    }
+    int iResult = 0;
+    for (int i = pminmax; i > pminmin; i--)
+      result[iResult++] = points[i];
+    for (int il = 0; il < lowerChain.size(); il++)
+      result[iResult++] = lowerChain.get(il);
+    for (int i = pmaxmin; i < pmaxmax; i++)
+      result[iResult++] = points[i];
+    for (int iu = 0; iu < upperChain.size(); iu++)
+      result[iResult++] = upperChain.get(iu);
+    return result;
   }
 }

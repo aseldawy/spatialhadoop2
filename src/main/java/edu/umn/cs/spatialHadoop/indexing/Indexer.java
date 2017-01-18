@@ -181,12 +181,6 @@ public class Indexer {
       OperationsParams.setShape(conf, "mbr", inputMBR);
     }
     
-    // Set input and output
-    job.setInputFormatClass(SpatialInputFormat3.class);
-    SpatialInputFormat3.setInputPaths(job, inPath);
-    job.setOutputFormatClass(IndexOutputFormat.class);
-    IndexOutputFormat.setOutputPath(job, outPath);
-
     // Set the correct partitioner according to index type
     String index = conf.get("sindex");
     if (index == null)
@@ -205,6 +199,11 @@ public class Indexer {
     job.setMapOutputKeyClass(IntWritable.class);
     job.setMapOutputValueClass(shape.getClass());
     job.setReducerClass(PartitionerReduce.class);
+    // Set input and output
+    job.setInputFormatClass(SpatialInputFormat3.class);
+    SpatialInputFormat3.setInputPaths(job, inPath);
+    job.setOutputFormatClass(IndexOutputFormat.class);
+    IndexOutputFormat.setOutputPath(job, outPath);
     // Set number of reduce tasks according to cluster status
     ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
     job.setNumReduceTasks(Math.max(1, Math.min(partitioner.getPartitionCount(),
@@ -291,7 +290,8 @@ public class Indexer {
           sample.add(p.clone());
         }
       };
-      OperationsParams params2 = new OperationsParams();
+
+      OperationsParams params2 = new OperationsParams(job);
       params2.setFloat("ratio", sample_ratio);
       params2.setLong("size", sample_size);
       if (job.get("shape") != null)

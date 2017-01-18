@@ -191,7 +191,7 @@ public class IntArray implements Writable, Iterable<Integer> {
   public int pop() {
     return array[--size];
   }
-  
+
   public boolean remove(int value) {
     for (int i = 0; i < size; i++) {
       if (array[i] == value) {
@@ -203,11 +203,18 @@ public class IntArray implements Writable, Iterable<Integer> {
     return false;
   }
 
+  /**
+   * Remove all elements in the array.
+   */
+  public void clear() {
+    size = 0;
+  }
+
   @Override
   public Iterator<Integer> iterator() {
     return new IntIterator();
   }
-  
+
   class IntIterator implements Iterator<Integer> {
     int i = -1;
 

@@ -95,14 +95,13 @@ class TOPK {
 
 public class SpatialAlgorithms {
   public static final Log LOG = LogFactory.getLog(SpatialAlgorithms.class);
-
   
   public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweepFilterOnly(
 	      final List<S1> R, final List<S2> S, final ResultCollector2<S1, S2> output,
 	      Reporter reporter)
 	      throws IOException {
 	  
-	  	LOG.info("Start spatial join plan sweep algorithm !!!");
+	  	LOG.debug("Start spatial join plan sweep algorithm !!!");
 	  
 	    final RectangleID[] Rmbrs = new RectangleID[R.size()];
 	    for (int i = 0; i < R.size(); i++) {
@@ -126,7 +125,7 @@ public class SpatialAlgorithms {
 	        }
 	    }, reporter);
 	      
-	      LOG.info("Filtered result size "+filterCount+", refined result size "+count.get());
+	      LOG.debug("Filtered result size "+filterCount+", refined result size "+count.get());
 	      
 	      return count.get();
 	}
@@ -154,7 +153,7 @@ public class SpatialAlgorithms {
     };
 
     long t1 = System.currentTimeMillis();
-    LOG.info("Joining lists "+ R.size()+" with "+S.size());
+    LOG.debug("Joining lists "+ R.size()+" with "+S.size());
     Collections.sort(R, comparator);
     Collections.sort(S, comparator);
 
@@ -206,7 +205,7 @@ public class SpatialAlgorithms {
       e.printStackTrace();
     }
     long t2 = System.currentTimeMillis();
-    LOG.info("Finished plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
+    LOG.debug("Finished plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
     return count;
 	}
 
@@ -225,7 +224,7 @@ public class SpatialAlgorithms {
 	    };
 	    
 	    long t1 = System.currentTimeMillis();
-	    LOG.info("Joining arrays "+ R.length+" with "+S.length);
+	    LOG.debug("Joining arrays "+ R.length+" with "+S.length);
 	    Arrays.sort(R, comparator);
 	    Arrays.sort(S, comparator);
 
@@ -276,7 +275,7 @@ public class SpatialAlgorithms {
 	      e.printStackTrace();
 	    }
 	    long t2 = System.currentTimeMillis();
-	    LOG.info("Finished plane sweep filter only in "+(t2-t1)+" millis and found "+count+" pairs");
+	    LOG.debug("Finished plane sweep filter only in "+(t2-t1)+" millis and found "+count+" pairs");
 	    return count;
 	  }
 
@@ -295,7 +294,7 @@ public class SpatialAlgorithms {
     };
     
     long t1 = System.currentTimeMillis();
-    LOG.info("Joining arrays "+ R.length+" with "+S.length);
+    LOG.debug("Joining arrays "+ R.length+" with "+S.length);
     Arrays.sort(R, comparator);
     Arrays.sort(S, comparator);
 
@@ -345,7 +344,7 @@ public class SpatialAlgorithms {
       e.printStackTrace();
     }
     long t2 = System.currentTimeMillis();
-    LOG.info("Finished plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
+    LOG.debug("Finished plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
     return count;
   }
 
@@ -370,7 +369,7 @@ public class SpatialAlgorithms {
     };
     
     long t1 = System.currentTimeMillis();
-    LOG.info("Spatial Join of "+ R.length+" X " + S.length + "shapes");
+    LOG.debug("Spatial Join of "+ R.length+" X " + S.length + "shapes");
     Arrays.sort(R, comparator);
     Arrays.sort(S, comparator);
     
@@ -421,7 +420,7 @@ public class SpatialAlgorithms {
       e.printStackTrace();
     }
     long t2 = System.currentTimeMillis();
-    LOG.info("Finished spatial join plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
+    LOG.debug("Finished spatial join plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
     
     return count;
   }
@@ -449,7 +448,7 @@ public class SpatialAlgorithms {
     };
     
     long t1 = System.currentTimeMillis();
-    LOG.info("Self Join of "+ rs.length+" shapes");
+    LOG.debug("Self Join of "+ rs.length+" shapes");
     Arrays.sort(rs, comparator);
 
     int i = 0, j = 0;
@@ -500,7 +499,7 @@ public class SpatialAlgorithms {
       e.printStackTrace();
     }
     long t2 = System.currentTimeMillis();
-    LOG.info("Finished self plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
+    LOG.debug("Finished self plane sweep in "+(t2-t1)+" millis and found "+count+" pairs");
     
     return count;
   }
@@ -561,7 +560,7 @@ public class SpatialAlgorithms {
         }
       }, reporter);
       
-      LOG.info("Filtered result size "+filterCount+", refined result size "+count.get());
+      LOG.debug("Filtered result size "+filterCount+", refined result size "+count.get());
       
       return count.get();
     } else {
@@ -587,18 +586,15 @@ public class SpatialAlgorithms {
   public static Point[] deduplicatePoints(Point[] allPoints, final float threshold) {
     BitArray duplicates = new BitArray(allPoints.length);
     int numDuplicates = 0;
-    LOG.info("Deduplicating a list of "+allPoints.length+" points");
+    LOG.debug("Deduplicating a list of "+allPoints.length+" points");
     // Remove duplicates to ensure correctness
     Arrays.sort(allPoints, new Comparator<Point>() {
       @Override
       public int compare(Point p1, Point p2) {
-        double dx = p1.x - p2.x;
-        if (dx < 0) return -1;
-        if (dx > 0) return 1;
-        double dy = p1.y - p2.y;
-        if (dy < 0) return -1;
-        if (dy > 0) return 1;
-        return 0;
+        int dx = Double.compare(p1.x, p2.x);
+        if (dx != 0)
+          return dx;
+        return Double.compare(p1.y,  p2.y);
       }
     });
 
@@ -614,7 +610,7 @@ public class SpatialAlgorithms {
     }
 
     if (numDuplicates > 0) {
-      LOG.info("Shrinking the array");
+      LOG.debug("Shrinking the array");
       // Shrinking the array
       Point[] newAllPoints = new Point[allPoints.length - numDuplicates];
       int newI = 0, oldI1 = 0;
@@ -730,7 +726,7 @@ public class SpatialAlgorithms {
     for (List<Geometry> group : groups.values()) {
       groupedPolygons[counter++] = group.toArray(new Geometry[group.size()]);
     }
-    LOG.info("Grouped "+parent.length+" shapes into "+groups.size()+" clusters in "+(t2-t1)/1000.0+" seconds");
+    LOG.debug("Grouped "+parent.length+" shapes into "+groups.size()+" clusters in "+(t2-t1)/1000.0+" seconds");
     return groupedPolygons;
   }
 
@@ -775,12 +771,9 @@ public class SpatialAlgorithms {
         LOG.warn("Exception in merging "+(rangeEnd - rangeStart)+" polygons", e);
         // Fall back to the union operation
         if (rangeEnd - rangeStart < MinimumThreshold) {
-          LOG.info("Error in union "+rangeStart+"-"+rangeEnd);
+          LOG.warn("Error in union "+rangeStart+"-"+rangeEnd);
           // Do the union directly using the old method (union)
           Geometry rangeUnion = geomFactory.buildGeometry(new ArrayList<Geometry>());
-          for (int i = rangeStart; i < rangeEnd; i++) {
-            LOG.info(polys.get(i).toText());
-          }
           for (int i = rangeStart; i < rangeEnd; i++) {
             try {
               rangeUnion = rangeUnion.union(polys.get(i));
@@ -856,7 +849,7 @@ public class SpatialAlgorithms {
         return 0;
       }
     });
-    LOG.info("Sorted "+geoms.length+" geometries by x");
+    LOG.debug("Sorted "+geoms.length+" geometries by x");
   
     final int MaxBatchSize = 500;
     // All polygons that are to the right of the sweep line

@@ -53,7 +53,7 @@ public class LocalSampler {
    * @throws InterruptedException
    */
   public static long sampleLocal(Path[] files, float ratioOrCount,
-      ResultCollector<Text> output, OperationsParams conf) throws IOException, InterruptedException {
+      ResultCollector<Text> output, Configuration conf) throws IOException, InterruptedException {
     Vector<FileSplit> splits = new Vector<FileSplit>();
     for (Path file : files) {
       FileSystem fs = file.getFileSystem(conf);
@@ -83,7 +83,7 @@ public class LocalSampler {
    * @throws InterruptedException
    */
   public static long sampleLocal(final FileSplit[] files, final float ratioOrCount,
-      final ResultCollector<Text> output, final OperationsParams conf) throws IOException, InterruptedException {
+      final ResultCollector<Text> output, final Configuration conf) throws IOException, InterruptedException {
     // A prefix sum of all files sizes. Used to draw a different sample size
     // from each file according to its size
     long[] fileStartOffset = new long[files.length + 1];

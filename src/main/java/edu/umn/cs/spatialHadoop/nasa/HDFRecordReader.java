@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Vector;
 
@@ -35,7 +36,9 @@ import edu.umn.cs.spatialHadoop.hdf.DDVGroup;
 import edu.umn.cs.spatialHadoop.hdf.DataDescriptor;
 import edu.umn.cs.spatialHadoop.hdf.HDFConstants;
 import edu.umn.cs.spatialHadoop.hdf.HDFFile;
+import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
+import edu.umn.cs.spatialHadoop.util.ShortArray;
 
 /**
  * A record reader for HDF files with the new mapreduce interface
@@ -324,22 +327,6 @@ public class HDFRecordReader<S extends NASAShape>
     }
   }
   
-  /**
-   * Return the value at the given offset in the array
-   * @param x
-   * @param y
-   * @return
-   */
-  private int getValueAt(int x, int y) {
-    int position = (y * nasaDataset.resolution + x) * valueSize;
-    return HDFConstants.readAsInteger(unparsedDataArray, position, valueSize);
-  }
-  
-  private boolean isFillValue(int x, int y) {
-    int position = (y * nasaDataset.resolution + x) * valueSize;
-    return isFillValue(position);
-  }
-  
   private boolean isFillValue(int position) {
     int sizeToCheck = valueSize;
     int b = 0;
@@ -348,11 +335,6 @@ public class HDFRecordReader<S extends NASAShape>
     return sizeToCheck == 0;
   }
 
-  private void setValueAt(int x, int y, int value) {
-    int position = (y * nasaDataset.resolution + x) * valueSize;
-    HDFConstants.writeAt(unparsedDataArray, position, value, valueSize);
-  }
-  
   /**
    * Recover fill values in the array {@link Values}.
    * @param conf
@@ -394,165 +376,211 @@ public class HDFRecordReader<S extends NASAShape>
           waterMask = (byte[])numericDataGroup.getAsByteArray();
         }
       }
-
-      // Stores which values has been recovered by copying a single value
-      // without interpolation in the x-direction
-      byte[] valueStatus = new byte[unparsedDataArray.length / valueSize];
+      // Convert the waterMask to a BinArray of the right size
+      int size = 4800 / nasaDataset.resolution;
+      BitArray waterMaskBits = convertWaterMaskToBits(ByteBuffer.wrap(waterMask), size);
       
-      recoverXDirection(waterMask, valueStatus);
-      int emptyColumns = recoverYDirection(waterMask, valueStatus);
-      // Do an additional round in x-direction to make sure there are no empty columns
-      if (emptyColumns > 10)
-        recoverXDirection(waterMask, valueStatus);
+      short fillValueShort = (short) HDFConstants.readAsInteger(fillValueBytes, 0, fillValueBytes.length);
+      recoverXYShorts(ByteBuffer.wrap(unparsedDataArray), fillValueShort, waterMaskBits);
     } finally {
       if (waterMaskFile != null)
         waterMaskFile.close();
     }
   }
-
-  /***
-   * Recover fill values in x-direction (horizontally)
-   * @param water_mask
-   * @param valueStatus - (output) tells the status of each entry in the input <br/>
-   *  0 - the corresponding entry originally contained a value<br/>
-   *  1 - the entry did not contain a value and still does not contain one<br/>
-   *  2 - the entry did not contain a value and its current value is copied<br/>
-   *  3 - the entry did not contain a value and its current value is interpolated<br/>
-   */
-  private void recoverXDirection(byte[] water_mask, byte[] valueStatus) {
-    // Resolution of the input dataset
-    int inputRes = nasaDataset.resolution;
-    // Recover in x-direction
-    for (int y = 0; y < inputRes; y++) {
-      int x2 = 0;
-      while (x2 < inputRes) {
-        int x1 = x2;
-        // x1 should point to the first missing point
-        while (x1 < inputRes && !isFillValue(x1, y))
-          x1++;
-        // Now advance x2 until it reaches the first non-missing value
-        x2 = x1;
-        while (x2 < inputRes && isFillValue(x2, y))
-          x2++;
-        // Recover all points in the range [x1, x2)
-        if (x1 == 0 && x2 == inputRes) {
-          // The whole line is empty. Nothing to do
-          for (int x = x1; x < x2; x++)
-            valueStatus[y * inputRes + x] = 1;
-        } else if (x1 == 0 || x2 == inputRes) {
-          // We have only one value at one end of the missing run
-          int copyVal = getValueAt(x1 == 0 ? x2 : (x1 - 1), y);
-          for (int x = x1; x < x2; x++) {
-            if (onLand(water_mask, x, y, inputRes))
-              setValueAt(x, y, copyVal);
-            valueStatus[y * inputRes + x] = 2;
-          }
-        } else {
-          // Interpolate values between x1 and x2
-          int val1 = getValueAt(x1 - 1, y);
-          int val2 = getValueAt(x2, y);
-          for (int x = x1; x < x2; x++) {
-            if (onLand(water_mask, x, y, inputRes)) {
-              short interpolatedValue = (short) (((double)val1 * (x2 - x) + (double)val2 * (x - x1)) / (x2 - x1));
-              setValueAt(x, y, interpolatedValue);
-            }
-            valueStatus[y * inputRes + x] = 3;
-          }
-        }
-      }
-    }
-  }
   
   /**
-   * Recover fill values in the y-direction (vertically).
-   * @param water_mask
-   * @param valueStatus - (input) tells the status of each entry in the input <br/>
-   *  0 - the corresponding entry originally contained a value<br/>
-   *  1 - the entry did not contain a value and still does not contain one<br/>
-   *  2 - the entry did not contain a value and its current value is copied<br/>
-   *  3 - the entry did not contain a value and its current value is interpolated<br/>
-   */
-  private int recoverYDirection(byte[] water_mask, byte[] valueStatus) {
-    int emptyColumns = 0;
-    // Resolution of the input dataset
-    int inputRes = nasaDataset.resolution;
-    // Recover in x-direction
-    for (int x = 0; x < inputRes; x++) {
-      int y2 = 0;
-      while (y2 < inputRes) {
-        int y1 = y2;
-        // y1 should point to the first missing point
-        while (y1 < inputRes && valueStatus[y1 * inputRes + x] == 0)
-          y1++;
-        // Now advance y2 until it reaches the first non-missing value
-        y2 = y1;
-        while (y2 < inputRes && valueStatus[y2 * inputRes + x] != 0)
-          y2++;
-        // Recover all points in the range [y1, y2)
-        if (y1 == 0 && y2 == inputRes) {
-          // The whole column is empty. Nothing to do
-          emptyColumns++;
-        } else if (y1 == 0 || y2 == inputRes) {
-          // We have only one value at one end of the missing run
-          int copyVal = getValueAt(x, y1 == 0 ? y2 : (y1 - 1));
-          for (int y = y1; y < y2; y++) {
-            if (onLand(water_mask, x, y, inputRes)) {
-              if (valueStatus[y * inputRes + x] == 1) {
-                // Value has never been recovered but needs to
-                setValueAt(x, y, copyVal);
-              } else if (valueStatus[y * inputRes + x] == 2) {
-                // Value has been previously copied. Take average
-                setValueAt(x, y,  ((getValueAt(x, y) + copyVal) / 2));
-              }
-            }
-          }
-        } else {
-          // Interpolate values between x1 and x2
-          int val1 = getValueAt(x, y1 - 1);
-          int val2 = getValueAt(x, y2);
-          for (int y = y1; y < y2; y++) {
-            if (onLand(water_mask, x, y, inputRes)) {
-              short interValue =
-                  (short) (((double)val1 * (y2 - y) + (double)val2 * (y - y1)) / (y2 - y1));
-              if (valueStatus[y * inputRes + x] <= 2) {
-                // Value has never been recovered or has been copied
-                setValueAt(x, y, interValue);
-              } else {
-                // Value has been previously interpolated, take average
-                setValueAt(x, y, (getValueAt(x, y) + interValue) / 2);
-              }
-            }
-          }
-        }
-      }
-    }
-    return emptyColumns;
-  }
-  
-  /***
-   * Checks whether a value is on land or not. If a value is on land, it will
-   * be recovered during the hole recovery process.
-   * @param water_mask
-   * @param x
-   * @param y
-   * @param inputRes
+   * Converts a water mask from the byte_array format to the bit_array format.
+   * In the byte array format, 0 means land, anything else means water.
+   * In the bit array format, false means land and true means water.
+   * Each square with side length of <code>size</code> will be converted to
+   * one value in the output bit array depending on average value in this
+   * square box. If at least half of the values are land (i.e., 0), the
+   * corresponding value in the bit array is set to false. Otherwise, the
+   * corresponding value in the bit array is set to true. 
+   * @param waterMaskBytes
+   * @param size
    * @return
    */
-  private static boolean onLand(byte[] water_mask, int x, int y, int resolution) {
-    int wm_x = x * 4800 / resolution;
-    int wm_y = y * 4800 / resolution;
-    int size = 4800 / resolution;
-    byte wm_sum = 0;
-    for (int xx = 0; xx < size; xx++) {
-      for (int yy = 0; yy < size; yy++) {
-        byte wm_value = water_mask[(yy +wm_y) * 4800 + (xx+wm_x)];
-        if (wm_value == 0)
-          wm_sum++; // value = 0 means land
+  static BitArray convertWaterMaskToBits(ByteBuffer waterMaskBytes, int size) {
+    int wmRes = (int) Math.sqrt(waterMaskBytes.limit());
+    int dataRes = wmRes / size;
+    BitArray waterMaskBits = new BitArray(dataRes * dataRes);
+    // Size of each pixel of the data when mapped to the water mask
+    for (int row = 0; row < dataRes; row++)
+      for (int col = 0; col < dataRes; col++) {
+        int r1 = row * size;
+        int r2 = (row + 1) * size;
+        int c1 = col * size;
+        int c2 = (col + 1) * size;
+        
+        byte wm_sum = 0;
+        for (int r = r1; r < r2; r++)
+          for (int c = c1; c < c2; c++) {
+            byte wm_value = waterMaskBytes.get(r * wmRes + c);
+            if (wm_value == 0)
+              wm_sum++;
+          }
+        waterMaskBits.set(row * dataRes + col, wm_sum < (size * size) / 2);
+      }
+    return waterMaskBits;
+  }
+
+  /**
+   * Recovers all missing entries using a two-dimensional interpolation technique.
+   * @param values The dataset that need to be recovered
+   * @param fillValue The marker that marks missing values
+   * @param waterMask A bit-mask with <code>true</code> values in water areas
+   * and <code>false</code> values for land areas.
+   */
+  public static void recoverXYShorts(ByteBuffer values, short fillValue, BitArray waterMask) {
+    // Resolution of the dataset which is the size of each of its two dimensions
+    // e.g., 1200x1200, 2400x2400, or 4800x4800
+    int resolution = (int) Math.sqrt(values.limit() / 2);
+    // This array stores all the runs of true (non-fill) values. The size is
+    // always even where the two values point to the first and last positions
+    // of the run, respectively
+    ShortArray[] trueRuns = findTrueRuns(values, fillValue);
+
+    // Now, scan the dataset column by column to recover missing values
+    for (short col = 0; col < resolution; col++) {
+      // Find runs of fillValues and recover all of them
+      short row1 = 0;
+      while (row1 < resolution) {
+        // Skip as many true values as we can
+        while (row1 < resolution && values.getShort(2*(row1 * resolution + col)) != fillValue)
+          row1++;
+        // Now, row1 points to the first fillValue
+        if (row1 == resolution) {
+          // All entries in the column have true values. No processing needed
+          continue;
+        }
+        short row2 = (short) (row1 + 1);
+        // Skip as many fillValues as we can
+        while (row2 < resolution && values.getShort(2*(row2 * resolution + col)) == fillValue)
+          row2++;
+        // Now, row2 points to a true value
+        
+        // Offsets of the four true values to the (top, bottom, left, right)
+        short[] offsetsToInterpolate = {-1, -1, -1, -1};
+        short[] valuesToInterpolate = new short[4];
+        if (row1 > 0) {
+          offsetsToInterpolate[0] = (short) (row1 - 1);
+          valuesToInterpolate[0] = values.getShort(2*(offsetsToInterpolate[0] * resolution + col));
+        }
+        if (row2 < resolution) {
+          offsetsToInterpolate[1] = row2;
+          valuesToInterpolate[1] = values.getShort(2*(offsetsToInterpolate[1] * resolution + col));
+        }
+        
+        for (int row = row1; row < row2; row++) {
+          if (values.getShort(2*(row * resolution + col)) == fillValue &&
+              !waterMask.get((row * resolution + col))) {
+            // The point at (row, col) is on land and has a fill (empty) value
+            // Find the position of the run in this row to find points to the left and right
+            int position = -trueRuns[row].binarySearch(col) - 1;
+            if (position > 0) {
+              // There's a true value to the left
+              offsetsToInterpolate[2] = trueRuns[row].get(position-1);
+              valuesToInterpolate[2] = values.getShort(2*(row * resolution + offsetsToInterpolate[2]));
+            } else {
+              offsetsToInterpolate[2] = -1;
+            }
+            if (position < trueRuns[row].size()) {
+              // There's a true value to the right
+              offsetsToInterpolate[3] = trueRuns[row].get(position);
+              valuesToInterpolate[3] = values.getShort(2*(row * resolution + offsetsToInterpolate[3]));
+            } else {
+              offsetsToInterpolate[3] = -1;
+            }
+            short interpolatedValue = interpolatePoint(row, col, offsetsToInterpolate, valuesToInterpolate, fillValue);
+            values.putShort(2*(row * resolution + col), interpolatedValue);
+          }
+        }
+        
+        // Skip the current empty run and go to the next one
+        row1 = row2;
       }
     }
-    if (wm_sum >= (size * size) / 2)
-      return true;
-    return false;
+  }
+
+  private static short interpolatePoint(int row, short col,
+      short[] offsetsToInterpolate, short[] valuesToInterpolate, short fillValue) {
+    // First interpolation value along the row
+    int vr, dr;
+    int d0 = row - offsetsToInterpolate[0];
+    int d1 = offsetsToInterpolate[1] - row;
+    if (offsetsToInterpolate[0] != -1 && offsetsToInterpolate[1] != -1) {
+      // Interpolate the two values based on their distances.
+      vr = (valuesToInterpolate[0] * d1 + valuesToInterpolate[1] * d0) / (d0 + d1);
+      dr = (d0 + d1 + 1) / 2;
+    } else if (offsetsToInterpolate[0] != -1) {
+      vr = valuesToInterpolate[0];
+      dr = d0;
+    } else if (offsetsToInterpolate[1] != -1) {
+      vr = valuesToInterpolate[1];
+      dr = d1;
+    } else {
+      vr = 0;
+      dr = 0;
+    }
+    // Second interpolation value along the column
+    int vc, dc;
+    int d2 = col - offsetsToInterpolate[2];
+    int d3 = offsetsToInterpolate[3] - col;
+    if (offsetsToInterpolate[2] != -1 && offsetsToInterpolate[3] != -1) {
+      // Interpolate the two values based on their distances.
+      vc = (valuesToInterpolate[2] * d3 + valuesToInterpolate[3] * d2) / (d2 + d3);
+      dc = (d2 + d2 + 1) / 2;
+    } else if (offsetsToInterpolate[2] != -1) {
+      vc = valuesToInterpolate[2];
+      dc = d2;
+    } else if (offsetsToInterpolate[3] != -1) {
+      vc = valuesToInterpolate[3];
+      dc = d3;
+    } else {
+      vc = 0;
+      dc = 0;
+    }
+    
+    if (dr != 0 && dc != 0) {
+      // Interpolate the two values based on their distances
+      return (short) ((((vr * dc + vc * dr) *2) + (dr + dc)) / (2*(dr + dc)));
+    }
+    if (dr != 0)
+      return (short) vr;
+    if (dc != 0)
+      return (short) vc;
+    // Couldn't find any values to interpolate
+    return fillValue;
+  }
+
+  /**
+   * Find runs of true values in each row of the given 2D array of value.
+   * @param values All the short values stored in a {@link ByteBuffer}
+   * @param fillValue The marker that marks fillValue
+   * @return An array of runs as one for each row in the given array.
+   */
+  static ShortArray[] findTrueRuns(ByteBuffer values, short fillValue) {
+    int resolution = (int) Math.sqrt(values.limit() / 2);
+    ShortArray[] trueRuns = new ShortArray[resolution];
+    for (short row = 0; row < resolution; row++) {
+      trueRuns[row] = new ShortArray();
+      // A flag that is set to true if currently inside a run of fillValues.
+      boolean insideFillValue = true;
+      for (short col = 0; col < resolution; col++) {
+        if ((values.getShort((row * resolution + col) *2) == fillValue) ^ insideFillValue) {
+          // Found a flip between true and fill values.
+          if (!insideFillValue && col != 0)
+            trueRuns[row].append((short)(col - 1));
+          else
+            trueRuns[row].append(col);
+          insideFillValue = !insideFillValue;
+        }
+      }
+      if (!insideFillValue)
+        trueRuns[row].append((short) (resolution - 1));
+    }
+    return trueRuns;
   }
 
 }
