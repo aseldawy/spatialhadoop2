@@ -1,11 +1,10 @@
-package edu.umn.cs.spatialHadoop.operations;
+package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,20 +32,9 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.indexing.GridPartitioner;
-import edu.umn.cs.spatialHadoop.indexing.HilbertCurvePartitioner;
-import edu.umn.cs.spatialHadoop.indexing.IndexOutputFormat;
-import edu.umn.cs.spatialHadoop.indexing.Indexer;
-import edu.umn.cs.spatialHadoop.indexing.KdTreePartitioner;
-import edu.umn.cs.spatialHadoop.indexing.LocalIndexer;
-import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.indexing.Partitioner;
-import edu.umn.cs.spatialHadoop.indexing.QuadTreePartitioner;
-import edu.umn.cs.spatialHadoop.indexing.RTreeLocalIndexer;
-import edu.umn.cs.spatialHadoop.indexing.STRPartitioner;
-import edu.umn.cs.spatialHadoop.indexing.ZCurvePartitioner;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
+import edu.umn.cs.spatialHadoop.operations.FileMBR;
 
 public class Inserter {
 
@@ -242,7 +230,7 @@ public class Inserter {
 		
 		// Append files in temp directory to corresponding files in current path
 		for(Partition partition: currentPartitions) {
-			System.out.println(partition.filename);
+			System.out.println("Appending to " + partition.filename);
 			FSDataOutputStream out = fs.append(new Path(currentPath, partition.filename));
 			BufferedReader br = new BufferedReader(
 					new InputStreamReader(fs.open(new Path(currentPath, "temp/" + partition.filename))));
@@ -253,11 +241,16 @@ public class Inserter {
 					out.writeUTF(line);
 				}
 			} while (line != null);
+			out.close();
 		}
 		
+		// Update master and wkt file
+		
 		Path currentWKTPath = new Path(currentPath, "_"+sindex+".wkt");
-		fs.delete(currentWKTPath);
-		fs.delete(currentMasterPath);
+//		fs.delete(currentWKTPath);
+//		fs.delete(currentMasterPath);
+		fs.rename(currentWKTPath, new Path(currentWKTPath + ".std"));
+		fs.rename(currentMasterPath, new Path(currentMasterPath + ".std"));
 		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
         wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
 		OutputStream masterOut = fs.create(currentMasterPath);
@@ -269,14 +262,11 @@ public class Inserter {
 			wktOut.println(currentPartition.toWKT());
 		}
 		
-		
 		wktOut.close();
 		masterOut.close();
 		fs.delete(new Path(currentPath, "temp"));
 		fs.close();
-		
-		// Update master and wkt file
-		
+		System.out.println("Complete!");
 	}
 
 	// private static void insertLocal(Path currentPath, Path insertPath,
@@ -348,23 +338,6 @@ public class Inserter {
 		System.out.println("Current path: " + currentPath);
 		System.out.println("Insert path: " + insertPath);
 		insertMapReduce(currentPath, insertPath, params);
-//		System.out.println("Job done");
-//		// instantiate a configuration class
-//		Configuration conf = new Configuration();
-//		// get a HDFS filesystem instance
-//		FileSystem fs = FileSystem.get(conf);
-//		FSDataOutputStream out = fs.append(new Path(currentPath, "part-00000"));
-//		BufferedReader br = new BufferedReader(
-//				new InputStreamReader(fs.open(new Path(currentPath, "temp/part-00000"))));
-//		String line;
-//		do {
-//			line = br.readLine();
-//			if (line != null) {
-//				out.writeUTF(line);
-//			}
-//		} while (line != null);
-//		out.writeUTF("this is the append string");
-//		fs.close();
 		appendNewFiles(currentPath, params);
 	}
 

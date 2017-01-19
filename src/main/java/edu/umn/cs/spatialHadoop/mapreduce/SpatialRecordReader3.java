@@ -226,7 +226,7 @@ public class SpatialRecordReader3<V extends Shape> extends
         // Indicates an end of stream
         return false;
       }
-      
+      System.out.println("value " + value);
       // Append the part read from stream to the part extracted from buffer
       bytesRead += lineLength;
       
