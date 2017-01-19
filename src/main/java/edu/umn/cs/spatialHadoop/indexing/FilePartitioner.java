@@ -60,9 +60,9 @@ public class FilePartitioner extends Partitioner {
 		Path masterPath = new Path(outPath, "_master." + sindex);
 		FileSystem outFs = outPath.getFileSystem(params);
 		Text tempLine = new Text2();
-		Partition tempPartition = new Partition();
 		LineReader in = new LineReader(outFs.open(masterPath));
 		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
 			tempPartition.fromText(tempLine);
 			this.partitions.add(tempPartition);
 		}

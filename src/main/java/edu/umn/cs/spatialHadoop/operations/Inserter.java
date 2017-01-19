@@ -1,6 +1,10 @@
 package edu.umn.cs.spatialHadoop.operations;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -8,9 +12,11 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -19,6 +25,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
@@ -30,11 +37,13 @@ import edu.umn.cs.spatialHadoop.indexing.IndexOutputFormat;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.indexing.KdTreePartitioner;
 import edu.umn.cs.spatialHadoop.indexing.LocalIndexer;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.indexing.Partitioner;
 import edu.umn.cs.spatialHadoop.indexing.QuadTreePartitioner;
 import edu.umn.cs.spatialHadoop.indexing.RTreeLocalIndexer;
 import edu.umn.cs.spatialHadoop.indexing.STRPartitioner;
 import edu.umn.cs.spatialHadoop.indexing.ZCurvePartitioner;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 
 public class Inserter {
@@ -142,11 +151,11 @@ public class Inserter {
 		}
 	}
 
-	private static Job insertMapReduce(Path currentPath, Path insertPath, OperationsParams params)
-			throws IOException, InterruptedException, ClassNotFoundException, InstantiationException, IllegalAccessException {
+	private static Job insertMapReduce(Path currentPath, Path insertPath, OperationsParams params) throws IOException,
+			InterruptedException, ClassNotFoundException, InstantiationException, IllegalAccessException {
 		Job job = new Job(params, "Inserter");
 		Configuration conf = job.getConfiguration();
-		job.setJarByClass(Indexer.class);
+		job.setJarByClass(Inserter.class);
 
 		// Set input file MBR if not already set
 		Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
@@ -193,6 +202,41 @@ public class Inserter {
 		return job;
 	}
 
+	private static void appendNewFiles(Path currentPath, OperationsParams params) throws IOException {
+		// Read master file to get all file names
+		ArrayList<Partition> partitions = new ArrayList<Partition>();
+		
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+		Path masterPath = new Path(currentPath, "_master." + params.get("sindex"));
+		Text tempLine = new Text2();
+		LineReader in = new LineReader(fs.open(masterPath));
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			partitions.add(tempPartition);
+		}
+		
+		// Append files in temp directory to corresponding files in current path
+		for(Partition partition: partitions) {
+			System.out.println(partition.filename);
+			FSDataOutputStream out = fs.append(new Path(currentPath, partition.filename));
+			BufferedReader br = new BufferedReader(
+					new InputStreamReader(fs.open(new Path(currentPath, "temp/" + partition.filename))));
+			String line;
+			do {
+				line = br.readLine();
+				if (line != null) {
+					out.writeUTF(line);
+				}
+			} while (line != null);
+		}
+		fs.close();
+		
+		// Update metadata
+		
+	}
+
 	// private static void insertLocal(Path currentPath, Path insertPath,
 	// OperationsParams params) {
 	//
@@ -219,7 +263,7 @@ public class Inserter {
 
 		String sindex = conf.get("sindex");
 		Path permanentFile = new Path(currentPath, "_partitioner." + sindex);
-		FSDataInputStream in = FileSystem.getLocal(conf).open(permanentFile);
+		FSDataInputStream in = FileSystem.get(conf).open(permanentFile);
 		partitioner.readFields(in);
 		in.close();
 
@@ -246,7 +290,8 @@ public class Inserter {
 		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
 
-	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException, InstantiationException, IllegalAccessException {
+	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException,
+			InstantiationException, IllegalAccessException {
 		// TODO Auto-generated method stub
 		final OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
 		Path[] inputFiles = params.getPaths();
@@ -261,6 +306,24 @@ public class Inserter {
 		System.out.println("Current path: " + currentPath);
 		System.out.println("Insert path: " + insertPath);
 		insertMapReduce(currentPath, insertPath, params);
+//		System.out.println("Job done");
+//		// instantiate a configuration class
+//		Configuration conf = new Configuration();
+//		// get a HDFS filesystem instance
+//		FileSystem fs = FileSystem.get(conf);
+//		FSDataOutputStream out = fs.append(new Path(currentPath, "part-00000"));
+//		BufferedReader br = new BufferedReader(
+//				new InputStreamReader(fs.open(new Path(currentPath, "temp/part-00000"))));
+//		String line;
+//		do {
+//			line = br.readLine();
+//			if (line != null) {
+//				out.writeUTF(line);
+//			}
+//		} while (line != null);
+//		out.writeUTF("this is the append string");
+//		fs.close();
+		appendNewFiles(currentPath, params);
 	}
 
 }
