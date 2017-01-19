@@ -421,11 +421,11 @@ public class Indexer {
     in.close();
     wktOut.close();
     
-    Path permanentFile = new Path(outPath, "_partitioner." + sindex);
-    FSDataOutputStream out = outFs.create(permanentFile);
-	partitioner.write(out);
-	out.close();
-	System.out.println("Local indexing");
+//    Path permanentFile = new Path(outPath, "_partitioner." + sindex);
+//    FSDataOutputStream out = outFs.create(permanentFile);
+//	partitioner.write(out);
+//	out.close();
+//	System.out.println("Local indexing");
   }
   
   public static Job index(Path inPath, Path outPath, OperationsParams params)

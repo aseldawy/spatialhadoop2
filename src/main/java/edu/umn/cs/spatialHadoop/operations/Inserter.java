@@ -3,6 +3,8 @@ package edu.umn.cs.spatialHadoop.operations;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -204,21 +206,42 @@ public class Inserter {
 
 	private static void appendNewFiles(Path currentPath, OperationsParams params) throws IOException {
 		// Read master file to get all file names
-		ArrayList<Partition> partitions = new ArrayList<Partition>();
+		final byte[] NewLine = new byte[] {'\n'};
+		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> insertPartitions = new ArrayList<Partition>();
 		
 		Configuration conf = new Configuration();
 		FileSystem fs = FileSystem.get(conf);
-		Path masterPath = new Path(currentPath, "_master." + params.get("sindex"));
+		String sindex = params.get("sindex");
+		
+		Path currentMasterPath = new Path(currentPath, "_master." + sindex);
 		Text tempLine = new Text2();
-		LineReader in = new LineReader(fs.open(masterPath));
+		LineReader in = new LineReader(fs.open(currentMasterPath));
 		while (in.readLine(tempLine) > 0) {
 			Partition tempPartition = new Partition();
 			tempPartition.fromText(tempLine);
-			partitions.add(tempPartition);
+			currentPartitions.add(tempPartition);
+		}
+		
+		Path insertMasterPath = new Path(currentPath, "temp/_master." + sindex);
+		in = new LineReader(fs.open(insertMasterPath));
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			insertPartitions.add(tempPartition);
+		}
+		
+		for(Partition currentPartition: currentPartitions) {
+			for(Partition insertPartition: insertPartitions) {
+				if(currentPartition.cellId == insertPartition.cellId) {
+					currentPartition.recordCount += insertPartition.recordCount;
+					currentPartition.size += insertPartition.size;
+				}
+			}
 		}
 		
 		// Append files in temp directory to corresponding files in current path
-		for(Partition partition: partitions) {
+		for(Partition partition: currentPartitions) {
 			System.out.println(partition.filename);
 			FSDataOutputStream out = fs.append(new Path(currentPath, partition.filename));
 			BufferedReader br = new BufferedReader(
@@ -231,9 +254,28 @@ public class Inserter {
 				}
 			} while (line != null);
 		}
+		
+		Path currentWKTPath = new Path(currentPath, "_"+sindex+".wkt");
+		fs.delete(currentWKTPath);
+		fs.delete(currentMasterPath);
+		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
+        wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+		OutputStream masterOut = fs.create(currentMasterPath);
+		for(Partition currentPartition: currentPartitions) {
+			Text masterLine = new Text2();
+			currentPartition.toText(masterLine);
+			masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+			masterOut.write(NewLine);
+			wktOut.println(currentPartition.toWKT());
+		}
+		
+		
+		wktOut.close();
+		masterOut.close();
+		fs.delete(new Path(currentPath, "temp"));
 		fs.close();
 		
-		// Update metadata
+		// Update master and wkt file
 		
 	}
 
