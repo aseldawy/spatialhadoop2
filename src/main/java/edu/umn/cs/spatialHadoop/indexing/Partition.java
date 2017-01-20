@@ -29,17 +29,21 @@ public class Partition extends CellInfo {
   /**Total size of data in this partition in bytes (uncompressed)*/
   public long size;
   
+  public Rectangle cellMBR;
+  
   public Partition() {}
   
-  public Partition(String filename, CellInfo cell) {
+  public Partition(String filename, CellInfo cell, Rectangle cellMBR) {
     this.filename = filename;
     super.set(cell);
+    this.cellMBR= new Rectangle(cellMBR);
   }
   
   public Partition(Partition other) {
     this.filename = other.filename;
     this.recordCount = other.recordCount;
     this.size = other.size;
+    this.cellMBR.set(other.cellMBR);
     super.set((CellInfo)other);
   }
 
@@ -49,6 +53,7 @@ public class Partition extends CellInfo {
     out.writeUTF(filename);
     out.writeLong(recordCount);
     out.writeLong(size);
+    cellMBR.write(out);
   }
   
   @Override
@@ -57,6 +62,7 @@ public class Partition extends CellInfo {
     filename = in.readUTF();
     this.recordCount = in.readLong();
     this.size = in.readLong();
+    cellMBR.readFields(in);
   }
   
   @Override
@@ -67,6 +73,7 @@ public class Partition extends CellInfo {
     TextSerializerHelper.serializeLong(size, text, ',');
     byte[] temp = (filename == null? "" : filename).getBytes();
     text.append(temp, 0, temp.length);
+    // TODO 
     return text;
   }
   

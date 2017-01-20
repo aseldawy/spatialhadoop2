@@ -238,7 +238,7 @@ public class Inserter {
 			do {
 				line = br.readLine();
 				if (line != null) {
-					out.writeUTF(line);
+					out.writeUTF("\n" + line);
 				}
 			} while (line != null);
 			out.close();

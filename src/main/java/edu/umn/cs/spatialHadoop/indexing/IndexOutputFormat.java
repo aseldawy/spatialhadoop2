@@ -40,6 +40,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.LineReader;
 import org.apache.hadoop.util.Progressable;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
 
@@ -311,6 +312,7 @@ public class IndexOutputFormat<S extends Shape>
           tempFiles.put(id, tempFile);
         }
         partition.cellId = id;
+        partition.cellMBR = new Rectangle(partitioner.getPartition(id));
         // Set the rectangle to the opposite universe so that we can keep
         // expanding it to get the MBR of this partition
         partition.set(Double.MAX_VALUE, Double.MAX_VALUE,
