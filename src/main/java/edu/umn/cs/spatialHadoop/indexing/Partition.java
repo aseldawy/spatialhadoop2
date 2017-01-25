@@ -29,14 +29,15 @@ public class Partition extends CellInfo {
   /**Total size of data in this partition in bytes (uncompressed)*/
   public long size;
   
-  public Rectangle cellMBR;
+  /**The MBR of cell. This is different to the MBR of data which tightly fit to cell data*/
+  public Rectangle cellMBR = new Rectangle();
   
   public Partition() {}
   
   public Partition(String filename, CellInfo cell, Rectangle cellMBR) {
     this.filename = filename;
     super.set(cell);
-    this.cellMBR= new Rectangle(cellMBR);
+    this.cellMBR = new Rectangle(cellMBR);
   }
   
   public Partition(Partition other) {
@@ -69,10 +70,18 @@ public class Partition extends CellInfo {
   public Text toText(Text text) {
     super.toText(text);
     text.append(new byte[] {','}, 0, 1);
+    
+    Text cellMBRText = new Text();
+    cellMBR.toText(cellMBRText);
+    text.append(cellMBRText.getBytes(), 0, cellMBRText.getLength());
+    text.append(new byte[] {','}, 0, 1);
+    
     TextSerializerHelper.serializeLong(recordCount, text, ',');
     TextSerializerHelper.serializeLong(size, text, ',');
+    
     byte[] temp = (filename == null? "" : filename).getBytes();
     text.append(temp, 0, temp.length);
+    
     // TODO 
     return text;
   }
@@ -80,6 +89,8 @@ public class Partition extends CellInfo {
   @Override
   public void fromText(Text text) {
     super.fromText(text);
+    text.set(text.getBytes(), 1, text.getLength() - 1); // Skip comma
+    cellMBR.fromText(text);
     text.set(text.getBytes(), 1, text.getLength() - 1); // Skip comma
     this.recordCount = TextSerializerHelper.consumeLong(text, ',');
     this.size = TextSerializerHelper.consumeLong(text, ',');
