@@ -45,22 +45,20 @@ public class FilePartitioner extends Partitioner {
 	/**
 	 * Create this partitioner based on information from master file
 	 * @param inPath
-	 * @param outPath
 	 * @param params
 	 * @throws IOException
 	 */
-	public void createFromMasterFile(Path inPath, final Path outPath, OperationsParams params) throws IOException {
+	public void createFromMasterFile(Path inPath, OperationsParams params) throws IOException {
 		this.partitions = new ArrayList<Partition>();
 
 		Job job = Job.getInstance(params);
 		final Configuration conf = job.getConfiguration();
-
 		final String sindex = conf.get("sindex");
 
-		Path masterPath = new Path(outPath, "_master." + sindex);
-		FileSystem outFs = outPath.getFileSystem(params);
+		Path masterPath = new Path(inPath, "_master." + sindex);
+		FileSystem inFs = inPath.getFileSystem(params);
 		Text tempLine = new Text2();
-		LineReader in = new LineReader(outFs.open(masterPath));
+		LineReader in = new LineReader(inFs.open(masterPath));
 		while (in.readLine(tempLine) > 0) {
 			Partition tempPartition = new Partition();
 			tempPartition.fromText(tempLine);
@@ -72,7 +70,7 @@ public class FilePartitioner extends Partitioner {
 	public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
 		// TODO Auto-generated method stub
 		for(Partition p: this.partitions) {
-			if(p.isIntersected(shape)) {
+			if(p.cellMBR.isIntersected(shape)) {
 				matcher.collect(p.cellId);
 			}
 		}
@@ -82,7 +80,7 @@ public class FilePartitioner extends Partitioner {
 	public int overlapPartition(Shape shape) {
 		// TODO Auto-generated method stub
 		for(Partition p: this.partitions) {
-			if(p.isIntersected(shape)) {
+			if(p.cellMBR.isIntersected(shape)) {
 				return p.cellId;
 			}
 		}

@@ -82,7 +82,7 @@ public class Inserter {
 	public static class InserterMap extends Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
 
 		/** The partitioner used to partitioner the data across reducers */
-		private Partitioner partitioner;
+		private FilePartitioner partitioner = new FilePartitioner();
 		/**
 		 * Whether to replicate a record to all overlapping partitions or to
 		 * assign it to only one partition
@@ -92,7 +92,7 @@ public class Inserter {
 		@Override
 		protected void setup(Context context) throws IOException, InterruptedException {
 			super.setup(context);
-			this.partitioner = Partitioner.getPartitioner(context.getConfiguration());
+//			this.partitioner = FilePartitioner.getPartitioner(context.getConfiguration());
 			this.replicate = context.getConfiguration().getBoolean("replicate", false);
 		}
 
