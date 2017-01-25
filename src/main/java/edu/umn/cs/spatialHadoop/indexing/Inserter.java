@@ -82,7 +82,7 @@ public class Inserter {
 	public static class InserterMap extends Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
 
 		/** The partitioner used to partitioner the data across reducers */
-		private FilePartitioner partitioner = new FilePartitioner();
+		private Partitioner partitioner;
 		/**
 		 * Whether to replicate a record to all overlapping partitions or to
 		 * assign it to only one partition
@@ -92,7 +92,7 @@ public class Inserter {
 		@Override
 		protected void setup(Context context) throws IOException, InterruptedException {
 			super.setup(context);
-//			this.partitioner = FilePartitioner.getPartitioner(context.getConfiguration());
+			this.partitioner = Partitioner.getPartitioner(context.getConfiguration());
 			this.replicate = context.getConfiguration().getBoolean("replicate", false);
 		}
 
@@ -159,7 +159,9 @@ public class Inserter {
 		if (index == null)
 			throw new RuntimeException("Index type is not set");
 		setLocalIndexer(conf, index);
-		Partitioner partitioner = loadPartitioner(currentPath, conf, index);
+//		Partitioner partitioner = loadPartitioner(currentPath, conf, index);
+		FilePartitioner partitioner = new FilePartitioner();
+		partitioner.createFromMasterFile(currentPath, params);
 		Partitioner.setPartitioner(conf, partitioner);
 
 		// Set mapper and reducer
@@ -194,14 +196,14 @@ public class Inserter {
 
 	private static void appendNewFiles(Path currentPath, OperationsParams params) throws IOException {
 		// Read master file to get all file names
-		final byte[] NewLine = new byte[] {'\n'};
+		final byte[] NewLine = new byte[] { '\n' };
 		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
 		ArrayList<Partition> insertPartitions = new ArrayList<Partition>();
-		
+
 		Configuration conf = new Configuration();
 		FileSystem fs = FileSystem.get(conf);
 		String sindex = params.get("sindex");
-		
+
 		Path currentMasterPath = new Path(currentPath, "_master." + sindex);
 		Text tempLine = new Text2();
 		LineReader in = new LineReader(fs.open(currentMasterPath));
@@ -210,7 +212,7 @@ public class Inserter {
 			tempPartition.fromText(tempLine);
 			currentPartitions.add(tempPartition);
 		}
-		
+
 		Path insertMasterPath = new Path(currentPath, "temp/_master." + sindex);
 		in = new LineReader(fs.open(insertMasterPath));
 		while (in.readLine(tempLine) > 0) {
@@ -218,18 +220,18 @@ public class Inserter {
 			tempPartition.fromText(tempLine);
 			insertPartitions.add(tempPartition);
 		}
-		
-		for(Partition currentPartition: currentPartitions) {
-			for(Partition insertPartition: insertPartitions) {
-				if(currentPartition.cellId == insertPartition.cellId) {
+
+		for (Partition currentPartition : currentPartitions) {
+			for (Partition insertPartition : insertPartitions) {
+				if (currentPartition.cellId == insertPartition.cellId) {
 					currentPartition.recordCount += insertPartition.recordCount;
 					currentPartition.size += insertPartition.size;
 				}
 			}
 		}
-		
+
 		// Append files in temp directory to corresponding files in current path
-		for(Partition partition: currentPartitions) {
+		for (Partition partition : currentPartitions) {
 			System.out.println("Appending to " + partition.filename);
 			FSDataOutputStream out = fs.append(new Path(currentPath, partition.filename));
 			BufferedReader br = new BufferedReader(
@@ -243,25 +245,25 @@ public class Inserter {
 			} while (line != null);
 			out.close();
 		}
-		
+
 		// Update master and wkt file
-		
-		Path currentWKTPath = new Path(currentPath, "_"+sindex+".wkt");
-//		fs.delete(currentWKTPath);
-//		fs.delete(currentMasterPath);
+
+		Path currentWKTPath = new Path(currentPath, "_" + sindex + ".wkt");
+		// fs.delete(currentWKTPath);
+		// fs.delete(currentMasterPath);
 		fs.rename(currentWKTPath, new Path(currentWKTPath + ".std"));
 		fs.rename(currentMasterPath, new Path(currentMasterPath + ".std"));
 		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
-        wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+		wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
 		OutputStream masterOut = fs.create(currentMasterPath);
-		for(Partition currentPartition: currentPartitions) {
+		for (Partition currentPartition : currentPartitions) {
 			Text masterLine = new Text2();
 			currentPartition.toText(masterLine);
 			masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
 			masterOut.write(NewLine);
 			wktOut.println(currentPartition.toWKT());
 		}
-		
+
 		wktOut.close();
 		masterOut.close();
 		fs.delete(new Path(currentPath, "temp"));

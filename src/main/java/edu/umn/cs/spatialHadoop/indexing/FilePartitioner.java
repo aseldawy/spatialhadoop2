@@ -23,17 +23,34 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 public class FilePartitioner extends Partitioner {
 
 	protected ArrayList<Partition> partitions;
+	
+	public FilePartitioner() {
+		// TODO Auto-generated constructor stub
+		partitions = new ArrayList<Partition>();
+	}
 
 	@Override
 	public void write(DataOutput out) throws IOException {
 		// TODO Auto-generated method stub
-
+		String tempString = "";
+		for(Partition p: this.partitions) {
+			Text text = new Text();
+			p.toText(text);
+			tempString += text.toString() + "\n";
+		}
+		out.writeUTF(tempString);
 	}
 
 	@Override
 	public void readFields(DataInput in) throws IOException {
 		// TODO Auto-generated method stub
-
+		String tempString = in.readUTF();
+		String[] partitionTexts = tempString.split("\n");
+		for(String text: partitionTexts) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(new Text(text));
+			this.partitions.add(tempPartition);
+		}
 	}
 
 	@Override
