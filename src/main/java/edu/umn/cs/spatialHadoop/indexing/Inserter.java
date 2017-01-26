@@ -170,7 +170,7 @@ public class Inserter {
 		return job;
 	}
 
-	private static void appendNewFiles(Path currentPath, OperationsParams params) throws IOException {
+	private static void appendNewFiles(Path currentPath, OperationsParams params) throws IOException, InterruptedException {
 		// Read master file to get all file names
 		final byte[] NewLine = new byte[] { '\n' };
 		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
@@ -225,6 +225,10 @@ public class Inserter {
 			System.out.println(partition.filename + " have " + count + " lines");
 			writer.close();
 			out.close();
+			
+			// Re-compute MBRs
+			Partition newPartition = FileMBR.fileMBR(new Path(currentPath, partition.filename), params);
+			partition.set(newPartition.x1, newPartition.y1, newPartition.x2, newPartition.y2);
 		}
 
 		// Update master and wkt file
