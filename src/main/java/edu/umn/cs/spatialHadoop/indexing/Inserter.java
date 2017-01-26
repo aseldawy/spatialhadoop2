@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -39,34 +40,9 @@ import edu.umn.cs.spatialHadoop.operations.FileMBR;
 public class Inserter {
 
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
-
-	private static final Map<String, Class<? extends Partitioner>> PartitionerClasses;
 	private static final Map<String, Class<? extends LocalIndexer>> LocalIndexes;
-	private static final Map<String, Boolean> PartitionerReplicate;
 
 	static {
-		PartitionerClasses = new HashMap<String, Class<? extends Partitioner>>();
-		PartitionerClasses.put("grid", GridPartitioner.class);
-		PartitionerClasses.put("str", STRPartitioner.class);
-		PartitionerClasses.put("str+", STRPartitioner.class);
-		PartitionerClasses.put("rtree", STRPartitioner.class);
-		PartitionerClasses.put("r+tree", STRPartitioner.class);
-		PartitionerClasses.put("quadtree", QuadTreePartitioner.class);
-		PartitionerClasses.put("zcurve", ZCurvePartitioner.class);
-		PartitionerClasses.put("hilbert", HilbertCurvePartitioner.class);
-		PartitionerClasses.put("kdtree", KdTreePartitioner.class);
-
-		PartitionerReplicate = new HashMap<String, Boolean>();
-		PartitionerReplicate.put("grid", true);
-		PartitionerReplicate.put("str", false);
-		PartitionerReplicate.put("str+", true);
-		PartitionerReplicate.put("rtree", false);
-		PartitionerReplicate.put("r+tree", true);
-		PartitionerReplicate.put("quadtree", true);
-		PartitionerReplicate.put("zcurve", false);
-		PartitionerReplicate.put("hilbert", false);
-		PartitionerReplicate.put("kdtree", true);
-
 		LocalIndexes = new HashMap<String, Class<? extends LocalIndexer>>();
 		LocalIndexes.put("rtree", RTreeLocalIndexer.class);
 		LocalIndexes.put("r+tree", RTreeLocalIndexer.class);
@@ -143,6 +119,7 @@ public class Inserter {
 
 	private static Job insertMapReduce(Path currentPath, Path insertPath, OperationsParams params) throws IOException,
 			InterruptedException, ClassNotFoundException, InstantiationException, IllegalAccessException {
+		@SuppressWarnings("deprecation")
 		Job job = new Job(params, "Inserter");
 		Configuration conf = job.getConfiguration();
 		job.setJarByClass(Inserter.class);
@@ -159,7 +136,6 @@ public class Inserter {
 		if (index == null)
 			throw new RuntimeException("Index type is not set");
 		setLocalIndexer(conf, index);
-//		Partitioner partitioner = loadPartitioner(currentPath, conf, index);
 		FilePartitioner partitioner = new FilePartitioner();
 		partitioner.createFromMasterFile(currentPath, params);
 		Partitioner.setPartitioner(conf, partitioner);
@@ -237,22 +213,24 @@ public class Inserter {
 			BufferedReader br = new BufferedReader(
 					new InputStreamReader(fs.open(new Path(currentPath, "temp/" + partition.filename))));
 			String line;
+			PrintWriter writer = new PrintWriter(out);
+			int count = 0;
 			do {
 				line = br.readLine();
 				if (line != null) {
-					out.writeUTF("\n" + line);
+					writer.append("\n" + line);
+					count++;
 				}
 			} while (line != null);
+			System.out.println(partition.filename + " have " + count + " lines");
+			writer.close();
 			out.close();
 		}
 
 		// Update master and wkt file
-
 		Path currentWKTPath = new Path(currentPath, "_" + sindex + ".wkt");
-		// fs.delete(currentWKTPath);
-		// fs.delete(currentMasterPath);
-		fs.rename(currentWKTPath, new Path(currentWKTPath + ".std"));
-		fs.rename(currentMasterPath, new Path(currentMasterPath + ".std"));
+		fs.delete(currentWKTPath);
+		fs.delete(currentMasterPath);
 		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
 		wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
 		OutputStream masterOut = fs.create(currentMasterPath);
@@ -275,34 +253,6 @@ public class Inserter {
 	// OperationsParams params) {
 	//
 	// }
-
-	public static Partitioner loadPartitioner(Path currentPath, Configuration conf, String partitionerName)
-			throws InstantiationException, IllegalAccessException, IOException {
-		Partitioner partitioner;
-		Class<? extends Partitioner> partitionerClass = PartitionerClasses.get(partitionerName.toLowerCase());
-		if (partitionerClass == null) {
-			// Try to parse the name as a class name
-			try {
-				partitionerClass = Class.forName(partitionerName).asSubclass(Partitioner.class);
-			} catch (ClassNotFoundException e) {
-				throw new RuntimeException("Unknown index type '" + partitionerName + "'");
-			}
-		}
-
-		if (PartitionerReplicate.containsKey(partitionerName.toLowerCase())) {
-			boolean replicate = PartitionerReplicate.get(partitionerName.toLowerCase());
-			conf.setBoolean("replicate", replicate);
-		}
-		partitioner = partitionerClass.newInstance();
-
-		String sindex = conf.get("sindex");
-		Path permanentFile = new Path(currentPath, "_partitioner." + sindex);
-		FSDataInputStream in = FileSystem.get(conf).open(permanentFile);
-		partitioner.readFields(in);
-		in.close();
-
-		return partitioner;
-	}
 
 	/**
 	 * Set the local indexer for the given job configuration.

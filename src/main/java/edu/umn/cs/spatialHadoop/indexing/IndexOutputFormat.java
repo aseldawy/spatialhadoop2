@@ -451,13 +451,13 @@ public class IndexOutputFormat<S extends Shape>
         wktOut.close();
         destOut.close();
         
-        Path permanentFile = new Path(outPath, "_partitioner." + sindex);
-        if(!outFs.exists(permanentFile)) {
-        	FSDataOutputStream out = outFs.create(permanentFile);
-        	Partitioner partitioner = Partitioner.getPartitioner(conf);
-        	partitioner.write(out);
-        	out.close();
-        }
+//        Path permanentFile = new Path(outPath, "_partitioner." + sindex);
+//        if(!outFs.exists(permanentFile)) {
+//        	FSDataOutputStream out = outFs.create(permanentFile);
+//        	Partitioner partitioner = Partitioner.getPartitioner(conf);
+//        	partitioner.write(out);
+//        	out.close();
+//        }
       }
     }
   }
