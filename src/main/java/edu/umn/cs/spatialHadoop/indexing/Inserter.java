@@ -214,15 +214,12 @@ public class Inserter {
 					new InputStreamReader(fs.open(new Path(currentPath, "temp/" + partition.filename))));
 			String line;
 			PrintWriter writer = new PrintWriter(out);
-			int count = 0;
 			do {
 				line = br.readLine();
 				if (line != null) {
 					writer.append("\n" + line);
-					count++;
 				}
 			} while (line != null);
-			System.out.println(partition.filename + " have " + count + " lines");
 			writer.close();
 			out.close();
 			

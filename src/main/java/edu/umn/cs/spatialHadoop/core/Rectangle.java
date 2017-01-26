@@ -244,6 +244,10 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
     return new Point((x1 + x2) / 2, (y1 + y2)/2);
   }
   
+  public double getSize() {
+	  return Math.abs(this.y2 - this.y1) * Math.abs(this.x2 - this.x1);
+  }
+  
   /**
    * Compute the intersection of a line segment with the rectangle border.
    * It is assumed that p1 lies inside the rectangle while p2 is outside it.
