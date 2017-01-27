@@ -159,7 +159,7 @@ public class DynamicRepartitioner {
 				for(IntersectionInfo intersection: pp.intersections) {
 					Partition tempPartition = new Partition();
 					tempPartition.set(intersection.getCell());
-					filePartitioner.partitions.add(tempPartition);
+					filePartitioner.cells.add(tempPartition);
 				}
 				Partitioner.setPartitioner(conf, filePartitioner);
 				
@@ -238,8 +238,6 @@ public class DynamicRepartitioner {
 		for(PotentialPartition pp: potentialPartitions) {
 			boolean keep = false;
 			for(IntersectionInfo intersection: pp.intersections) {
-//				System.out.println("ID = " + intersection.getCell().cellId);
-//				System.out.println("JS = " + intersection.getJsValue());
 				if(intersection.getJsValue() >= jsimValue) {
 					keep = true;
 				}

@@ -22,20 +22,20 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 
 public class FilePartitioner extends Partitioner {
 
-	protected ArrayList<Partition> partitions;
+	protected ArrayList<CellInfo> cells;
 	
 	public FilePartitioner() {
 		// TODO Auto-generated constructor stub
-		partitions = new ArrayList<Partition>();
+		cells = new ArrayList<CellInfo>();
 	}
 
 	@Override
 	public void write(DataOutput out) throws IOException {
 		// TODO Auto-generated method stub
 		String tempString = "";
-		for(Partition p: this.partitions) {
+		for(CellInfo cell: this.cells) {
 			Text text = new Text();
-			p.toText(text);
+			cell.toText(text);
 			tempString += text.toString() + "\n";
 		}
 		out.writeUTF(tempString);
@@ -45,11 +45,11 @@ public class FilePartitioner extends Partitioner {
 	public void readFields(DataInput in) throws IOException {
 		// TODO Auto-generated method stub
 		String tempString = in.readUTF();
-		String[] partitionTexts = tempString.split("\n");
-		for(String text: partitionTexts) {
-			Partition tempPartition = new Partition();
-			tempPartition.fromText(new Text(text));
-			this.partitions.add(tempPartition);
+		String[] cellTexts = tempString.split("\n");
+		for(String text: cellTexts) {
+			CellInfo tempCellInfo = new CellInfo();
+			tempCellInfo.fromText(new Text(text));
+			this.cells.add(tempCellInfo);
 		}
 	}
 
@@ -66,7 +66,7 @@ public class FilePartitioner extends Partitioner {
 	 * @throws IOException
 	 */
 	public void createFromMasterFile(Path inPath, OperationsParams params) throws IOException {
-		this.partitions = new ArrayList<Partition>();
+		this.cells = new ArrayList<CellInfo>();
 
 		Job job = Job.getInstance(params);
 		final Configuration conf = job.getConfiguration();
@@ -79,16 +79,19 @@ public class FilePartitioner extends Partitioner {
 		while (in.readLine(tempLine) > 0) {
 			Partition tempPartition = new Partition();
 			tempPartition.fromText(tempLine);
-			this.partitions.add(tempPartition);
+			CellInfo tempCellInfo = new CellInfo();
+			tempCellInfo.cellId = tempPartition.cellId;
+			tempCellInfo.set(tempPartition.cellMBR);
+			this.cells.add(tempCellInfo);
 		}
 	}
 
 	@Override
 	public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
 		// TODO Auto-generated method stub
-		for(Partition p: this.partitions) {
-			if(p.cellMBR.isIntersected(shape)) {
-				matcher.collect(p.cellId);
+		for(CellInfo cell: this.cells) {
+			if(cell.isIntersected(shape)) {
+				matcher.collect(cell.cellId);
 			}
 		}
 	}
@@ -96,9 +99,9 @@ public class FilePartitioner extends Partitioner {
 	@Override
 	public int overlapPartition(Shape shape) {
 		// TODO Auto-generated method stub
-		for(Partition p: this.partitions) {
-			if(p.cellMBR.isIntersected(shape)) {
-				return p.cellId;
+		for(CellInfo cell: this.cells) {
+			if(cell.isIntersected(shape)) {
+				return cell.cellId;
 			}
 		}
 		return 0;
@@ -107,26 +110,26 @@ public class FilePartitioner extends Partitioner {
 	@Override
 	public CellInfo getPartition(int partitionID) {
 		// TODO Auto-generated method stub
-		Partition partition = null;
-		for (Partition p : this.partitions) {
-			if (p.cellId == partitionID) {
-				partition = p;
+		CellInfo result = null;
+		for (CellInfo cell: this.cells) {
+			if (cell.cellId == partitionID) {
+				result = cell;
 				break;
 			}
 		}
-		return partition;
+		return result;
 	}
 
 	@Override
 	public CellInfo getPartitionAt(int index) {
 		// TODO Auto-generated method stub
-		return this.partitions.get(index);
+		return this.cells.get(index);
 	}
 
 	@Override
 	public int getPartitionCount() {
 		// TODO Auto-generated method stub
-		return this.partitions.size();
+		return this.cells.size();
 	}
 
 }
