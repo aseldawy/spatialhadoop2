@@ -2,7 +2,9 @@ package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -151,53 +153,56 @@ public class DynamicRepartitioner {
 			long t2 = System.currentTimeMillis();
 			System.out.println("Total time for space subdivision in millis: " + (t2 - t1));
 			
-			ArrayList<PotentialPartition> partitionsToSplit = getPartitionsToSplit(inPath, partitioner, params);
+			PotentialPartition[] partitionsToSplit = getPartitionsToSplit(inPath, partitioner, params);
+			for(PotentialPartition pp: partitionsToSplit) {
+				System.out.println("partition to split " + pp.filename);
+			}
 			
 			// Split partition
-			for(PotentialPartition pp: partitionsToSplit) {
-				FilePartitioner filePartitioner = new FilePartitioner();
-				for(IntersectionInfo intersection: pp.intersections) {
-					Partition tempPartition = new Partition();
-					tempPartition.set(intersection.getCell());
-					filePartitioner.cells.add(tempPartition);
-				}
-				Partitioner.setPartitioner(conf, filePartitioner);
-				
-				// Set mapper and reducer
-			    Shape shape = OperationsParams.getShape(conf, "shape");
-			    job.setMapperClass(DynamicRepartitionerMap.class);
-			    job.setMapOutputKeyClass(IntWritable.class);
-			    job.setMapOutputValueClass(shape.getClass());
-			    job.setReducerClass(DynamicRepartitionerReduce.class);
-			    // Set input and output
-			    job.setInputFormatClass(SpatialInputFormat3.class);
-			    SpatialInputFormat3.setInputPaths(job, new Path(inPath, pp.filename));
-			    job.setOutputFormatClass(IndexOutputFormat.class);
-				IndexOutputFormat.setOutputPath(job, tempPath);
-			    // Set number of reduce tasks according to cluster status
-			    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-			    job.setNumReduceTasks(Math.max(1, Math.min(partitioner.getPartitionCount(),
-			        (clusterStatus.getMaxReduceTasks() * 9) / 10)));
-
-			    // Use multithreading in case the job is running locally
-			    conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
-			    
-			    // Start the job
-			    if (conf.getBoolean("background", false)) {
-			      // Run in background
-			      job.submit();
-			    } else {
-			      job.waitForCompletion(conf.getBoolean("verbose", false));
-			    }
-			}
+//			for(PotentialPartition pp: partitionsToSplit) {
+//				FilePartitioner filePartitioner = new FilePartitioner();
+//				for(IntersectionInfo intersection: pp.intersections) {
+//					Partition tempPartition = new Partition();
+//					tempPartition.set(intersection.getCell());
+//					filePartitioner.cells.add(tempPartition);
+//				}
+//				Partitioner.setPartitioner(conf, filePartitioner);
+//				
+//				// Set mapper and reducer
+//			    Shape shape = OperationsParams.getShape(conf, "shape");
+//			    job.setMapperClass(DynamicRepartitionerMap.class);
+//			    job.setMapOutputKeyClass(IntWritable.class);
+//			    job.setMapOutputValueClass(shape.getClass());
+//			    job.setReducerClass(DynamicRepartitionerReduce.class);
+//			    // Set input and output
+//			    job.setInputFormatClass(SpatialInputFormat3.class);
+//			    SpatialInputFormat3.setInputPaths(job, new Path(inPath, pp.filename));
+//			    job.setOutputFormatClass(IndexOutputFormat.class);
+//				IndexOutputFormat.setOutputPath(job, tempPath);
+//			    // Set number of reduce tasks according to cluster status
+//			    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+//			    job.setNumReduceTasks(Math.max(1, Math.min(partitioner.getPartitionCount(),
+//			        (clusterStatus.getMaxReduceTasks() * 9) / 10)));
+//
+//			    // Use multithreading in case the job is running locally
+//			    conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+//			    
+//			    // Start the job
+//			    if (conf.getBoolean("background", false)) {
+//			      // Run in background
+//			      job.submit();
+//			    } else {
+//			      job.waitForCompletion(conf.getBoolean("verbose", false));
+//			    }
+//			}
 		}
 
 		return job;
 	}
 
-	private static ArrayList<PotentialPartition> getPartitionsToSplit(Path inPath, final Partitioner partitioner, OperationsParams params) throws IOException {
+	private static PotentialPartition[] getPartitionsToSplit(Path inPath, final Partitioner partitioner, OperationsParams params) throws IOException {
 		final ArrayList<PotentialPartition> potentialPartitions = new ArrayList<PotentialPartition>();
-		ArrayList<PotentialPartition> partitionsToSplit = new ArrayList<PotentialPartition>();
+		Set<PotentialPartition> partitionsToSplit = new HashSet<PotentialPartition>();
 		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
 		
 		Configuration conf = new Configuration();
@@ -247,7 +252,7 @@ public class DynamicRepartitioner {
 			}
 		}
 		
-		return partitionsToSplit;
+		return partitionsToSplit.toArray(new PotentialPartition[partitionsToSplit.size()]);
 	}
 
 	private static void printUsage() {
