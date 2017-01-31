@@ -200,8 +200,7 @@ public class Inserter {
 		for (Partition currentPartition : currentPartitions) {
 			for (Partition insertPartition : insertPartitions) {
 				if (currentPartition.cellId == insertPartition.cellId) {
-					currentPartition.recordCount += insertPartition.recordCount;
-					currentPartition.size += insertPartition.size;
+					currentPartition.expand(insertPartition);
 				}
 			}
 		}
@@ -222,10 +221,6 @@ public class Inserter {
 			} while (line != null);
 			writer.close();
 			out.close();
-			
-			// Re-compute MBRs
-			Partition newPartition = FileMBR.fileMBR(new Path(currentPath, partition.filename), params);
-			partition.set(newPartition.x1, newPartition.y1, newPartition.x2, newPartition.y2);
 		}
 
 		// Update master and wkt file
