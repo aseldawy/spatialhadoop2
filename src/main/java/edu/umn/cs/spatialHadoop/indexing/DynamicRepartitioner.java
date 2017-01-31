@@ -224,6 +224,7 @@ public class DynamicRepartitioner {
 
 		// Sampling to get current standard partitions
 		for(final Partition p: currentPartitions) {
+			final PotentialPartition potentialPartition = new PotentialPartition(p);
 			partitioner.overlapPartitions(p, new ResultCollector<Integer>() {
 				@Override
 				public void collect(Integer r) {
@@ -232,11 +233,10 @@ public class DynamicRepartitioner {
 					Rectangle intersectionArea = p.getIntersection(overlappedCell);
 					double unionAreaSize = p.getSize() + overlappedCell.getSize() - intersectionArea.getSize();
 					double jsValue = intersectionArea.getSize() / unionAreaSize;
-					PotentialPartition potentialPartition = new PotentialPartition(p);
 					potentialPartition.intersections.add(new IntersectionInfo(overlappedCell, jsValue));
-					potentialPartitions.add(potentialPartition);
 				}
 			});
+			potentialPartitions.add(potentialPartition);
 		}
 		
 		// Iterate the list of potential partitions to get the partitions to split
@@ -245,6 +245,7 @@ public class DynamicRepartitioner {
 			for(IntersectionInfo intersection: pp.intersections) {
 				if(intersection.getJsValue() >= jsimValue) {
 					keep = true;
+					break;
 				}
 			}
 			if(!keep) {
