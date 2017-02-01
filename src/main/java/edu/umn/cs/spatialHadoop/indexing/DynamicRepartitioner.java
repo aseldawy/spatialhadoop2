@@ -35,9 +35,9 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 
 public class DynamicRepartitioner {
-	
+
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
-	
+
 	/**
 	 * The map function that partitions the data using the configured
 	 * partitioner. Refer from Indexer class
@@ -45,7 +45,8 @@ public class DynamicRepartitioner {
 	 * @author Tin Vu
 	 *
 	 */
-	public static class DynamicRepartitionerMap extends Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
+	public static class DynamicRepartitionerMap
+			extends Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
 
 		/** The partitioner used to partitioner the data across reducers */
 		private Partitioner partitioner;
@@ -91,7 +92,8 @@ public class DynamicRepartitioner {
 		}
 	}
 
-	public static class DynamicRepartitionerReduce<S extends Shape> extends Reducer<IntWritable, Shape, IntWritable, Shape> {
+	public static class DynamicRepartitionerReduce<S extends Shape>
+			extends Reducer<IntWritable, Shape, IntWritable, Shape> {
 
 		@Override
 		protected void reduce(IntWritable partitionID, Iterable<Shape> shapes, Context context)
@@ -121,17 +123,17 @@ public class DynamicRepartitioner {
 				return path.getName().contains("part-");
 			}
 		});
-		
-		if(resultFiles.length == 0) {
+
+		if (resultFiles.length == 0) {
 			LOG.warn("Input data is empty.");
 		} else {
 			List<Path> inFileList = new ArrayList<Path>();
 			for (FileStatus f : resultFiles) {
 				inFileList.add(f.getPath());
 			}
-			
+
 			Path[] inFiles = inFileList.toArray(new Path[inFileList.size()]);
-			
+
 			// Set input file MBR if not already set
 			Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
 			if (inputMBR == null) {
@@ -148,63 +150,57 @@ public class DynamicRepartitioner {
 			// setLocalIndexer(conf, index);
 			Path tempPath = new Path(inPath, "temp");
 			Partitioner partitioner = Indexer.createPartitioner(inFiles, tempPath, conf, index);
-			Partitioner.setPartitioner(conf, partitioner);
-
 			long t2 = System.currentTimeMillis();
 			System.out.println("Total time for space subdivision in millis: " + (t2 - t1));
-			
+
 			PotentialPartition[] partitionsToSplit = getPartitionsToSplit(inPath, partitioner, params);
-			for(PotentialPartition pp: partitionsToSplit) {
-				System.out.println("partition to split " + pp.filename);
+			FilePartitioner filePartitioner = createFilePartitioner(inPath, partitionsToSplit, params);
+			Partitioner.setPartitioner(conf, filePartitioner);
+
+			// Split partition
+			Path[] splitFiles = new Path[partitionsToSplit.length];
+			for(int i = 0; i < partitionsToSplit.length; i++) {
+				splitFiles[i] = new Path(inPath, partitionsToSplit[i].filename);
 			}
 			
-			// Split partition
-//			for(PotentialPartition pp: partitionsToSplit) {
-//				FilePartitioner filePartitioner = new FilePartitioner();
-//				for(IntersectionInfo intersection: pp.intersections) {
-//					Partition tempPartition = new Partition();
-//					tempPartition.set(intersection.getCell());
-//					filePartitioner.cells.add(tempPartition);
-//				}
-//				Partitioner.setPartitioner(conf, filePartitioner);
-//				
-//				// Set mapper and reducer
-//			    Shape shape = OperationsParams.getShape(conf, "shape");
-//			    job.setMapperClass(DynamicRepartitionerMap.class);
-//			    job.setMapOutputKeyClass(IntWritable.class);
-//			    job.setMapOutputValueClass(shape.getClass());
-//			    job.setReducerClass(DynamicRepartitionerReduce.class);
-//			    // Set input and output
-//			    job.setInputFormatClass(SpatialInputFormat3.class);
-//			    SpatialInputFormat3.setInputPaths(job, new Path(inPath, pp.filename));
-//			    job.setOutputFormatClass(IndexOutputFormat.class);
-//				IndexOutputFormat.setOutputPath(job, tempPath);
-//			    // Set number of reduce tasks according to cluster status
-//			    ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-//			    job.setNumReduceTasks(Math.max(1, Math.min(partitioner.getPartitionCount(),
-//			        (clusterStatus.getMaxReduceTasks() * 9) / 10)));
-//
-//			    // Use multithreading in case the job is running locally
-//			    conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
-//			    
-//			    // Start the job
-//			    if (conf.getBoolean("background", false)) {
-//			      // Run in background
-//			      job.submit();
-//			    } else {
-//			      job.waitForCompletion(conf.getBoolean("verbose", false));
-//			    }
-//			}
+			// Set mapper and reducer
+			Shape shape = OperationsParams.getShape(conf, "shape");
+			job.setMapperClass(DynamicRepartitionerMap.class);
+			job.setMapOutputKeyClass(IntWritable.class);
+			job.setMapOutputValueClass(shape.getClass());
+			job.setReducerClass(DynamicRepartitionerReduce.class);
+			// Set input and output
+			job.setInputFormatClass(SpatialInputFormat3.class);
+			SpatialInputFormat3.setInputPaths(job, splitFiles);
+			job.setOutputFormatClass(IndexOutputFormat.class);
+			IndexOutputFormat.setOutputPath(job, tempPath);
+			// Set number of reduce tasks according to cluster status
+			ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+			job.setNumReduceTasks(Math.max(1,
+					Math.min(partitioner.getPartitionCount(), (clusterStatus.getMaxReduceTasks() * 9) / 10)));
+
+			// Use multithreading in case the job is running locally
+			conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+
+			// Start the job
+			if (conf.getBoolean("background", false)) {
+				// Run in background
+				job.submit();
+			} else {
+				job.waitForCompletion(conf.getBoolean("verbose", false));
+			}
 		}
 
 		return job;
 	}
 
-	private static PotentialPartition[] getPartitionsToSplit(Path inPath, final Partitioner partitioner, OperationsParams params) throws IOException {
+	private static PotentialPartition[] getPartitionsToSplit(Path inPath, final Partitioner partitioner,
+			OperationsParams params) throws IOException {
 		final ArrayList<PotentialPartition> potentialPartitions = new ArrayList<PotentialPartition>();
 		Set<PotentialPartition> partitionsToSplit = new HashSet<PotentialPartition>();
+		Set<PotentialPartition> partitionsToKeep = new HashSet<PotentialPartition>();
 		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
-		
+
 		Configuration conf = new Configuration();
 		FileSystem fs = FileSystem.get(conf);
 		String sindex = params.get("sindex");
@@ -223,13 +219,14 @@ public class DynamicRepartitioner {
 		in.close();
 
 		// Sampling to get current standard partitions
-		for(final Partition p: currentPartitions) {
+		for (final Partition p : currentPartitions) {
 			final PotentialPartition potentialPartition = new PotentialPartition(p);
 			partitioner.overlapPartitions(p, new ResultCollector<Integer>() {
 				@Override
 				public void collect(Integer r) {
 					CellInfo overlappedCell = partitioner.getPartition(r);
-					// Compute Jaccard Similarity between current partition and overlapped partition
+					// Compute Jaccard Similarity between current partition and
+					// overlapped partition
 					Rectangle intersectionArea = p.getIntersection(overlappedCell);
 					double unionAreaSize = p.getSize() + overlappedCell.getSize() - intersectionArea.getSize();
 					double jsValue = intersectionArea.getSize() / unionAreaSize;
@@ -238,22 +235,78 @@ public class DynamicRepartitioner {
 			});
 			potentialPartitions.add(potentialPartition);
 		}
-		
-		// Iterate the list of potential partitions to get the partitions to split
-		for(PotentialPartition pp: potentialPartitions) {
+
+		// Iterate the list of potential partitions to get the partitions to
+		// split
+		for (PotentialPartition pp : potentialPartitions) {
 			boolean keep = false;
-			for(IntersectionInfo intersection: pp.intersections) {
-				if(intersection.getJsValue() >= jsimValue) {
+			for (IntersectionInfo intersection : pp.intersections) {
+				if (intersection.getJsValue() >= jsimValue) {
 					keep = true;
 					break;
 				}
 			}
-			if(!keep) {
+			if (!keep) {
 				partitionsToSplit.add(pp);
+			} else {
+				partitionsToKeep.add(pp);
 			}
 		}
-		
+
+		// for(CellInfo cell: splitCells) {
+		// boolean hasOverlap = false;
+		// for(PotentialPartition keepPartition: partitionsToKeep) {
+		// if(cell.isIntersected(keepPartition.cellMBR)) {
+		// hasOverlap = true;
+		// break;
+		// }
+		// }
+		// System.out.println("cell = " + cell.toString() + " has overlap = " +
+		// hasOverlap);
+		// }
+
 		return partitionsToSplit.toArray(new PotentialPartition[partitionsToSplit.size()]);
+	}
+
+	private static FilePartitioner createFilePartitioner(Path inPath, PotentialPartition[] partitionsToSplit,
+			OperationsParams params) throws IOException {
+		FilePartitioner filePartitioner = new FilePartitioner();
+
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+		String sindex = params.get("sindex");
+
+		// Find max cell ID
+		int maxCellId = 0;
+		Path masterPath = new Path(inPath, "_master." + sindex);
+		Text tempLine = new Text2();
+		LineReader in = new LineReader(fs.open(masterPath));
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			if (maxCellId < tempPartition.cellId) {
+				maxCellId = tempPartition.cellId;
+			}
+		}
+		in.close();
+
+		System.out.println("max cell id = " + maxCellId);
+
+		// Get list of split rectangles
+		Set<CellInfo> splitCells = new HashSet<CellInfo>();
+		for (PotentialPartition splitPartition : partitionsToSplit) {
+			for (IntersectionInfo intersection : splitPartition.intersections) {
+				splitCells.add(intersection.getCell());
+			}
+		}
+
+		for (CellInfo splitCell : splitCells) {
+			maxCellId += 1;
+			splitCell.cellId = maxCellId;
+			filePartitioner.cells.add(splitCell);
+		}
+
+		return filePartitioner;
 	}
 
 	private static void printUsage() {
