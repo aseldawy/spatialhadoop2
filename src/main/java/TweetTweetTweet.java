@@ -78,7 +78,8 @@ public class TweetTweetTweet implements Shape {
 
   @Override
   public Rectangle getMBR() {
-    Rectangle mbr = new Rectangle(tweet1.x, tweet1.y, tweet2.x, tweet2.y);
+    Rectangle mbr = new Rectangle(tweet1.x, tweet1.y, tweet1.x, tweet1.y);
+    mbr.expand(tweet2.x, tweet2.y);
     mbr.expand(tweet3.x, tweet3.y);
     return mbr;
   }

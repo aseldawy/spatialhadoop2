@@ -21,6 +21,7 @@ import java.util.Stack;
 import java.util.TreeSet;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.util.Parallel;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
@@ -583,9 +584,9 @@ public class SpatialAlgorithms {
    * @param threshold
    * @return
    */
-  public static Point[] deduplicatePoints(Point[] allPoints, final float threshold) {
-    BitArray duplicates = new BitArray(allPoints.length);
-    int numDuplicates = 0;
+  public static Point[] deduplicatePoints(final Point[] allPoints, final float threshold) {
+    final BitArray duplicates = new BitArray(allPoints.length);
+    int totalNumDuplicates = 0;
     LOG.debug("Deduplicating a list of "+allPoints.length+" points");
     // Remove duplicates to ensure correctness
     Arrays.sort(allPoints, new Comparator<Point>() {
@@ -598,26 +599,39 @@ public class SpatialAlgorithms {
       }
     });
 
-    for (int i = 0; i < allPoints.length; i++) {
-      int j = i + 1;
-      boolean duplicate = false;
-      while (!duplicate && j < allPoints.length && allPoints[i].x + threshold > allPoints[j].x) {
-        double dy = Math.abs(allPoints[j].y - allPoints[i].y);
-        if (dy < threshold)
-          duplicate = true;
-        else
-          j++;
-      }
-      if (duplicate) {
-        duplicates.set(i, true);
-        numDuplicates++;
-      }
+    try {
+      List<Integer> numsOfDuplicates = Parallel.forEach(allPoints.length - 1, new Parallel.RunnableRange<Integer>() {
+        @Override
+        public Integer run(int i1, int i2) {
+          int numOfDuplicates = 0;
+          for (int i = i1; i < i2; i++) {
+            int j = i + 1;
+            boolean duplicate = false;
+            while (!duplicate && j < i2 && allPoints[i].x + threshold > allPoints[j].x) {
+              double dy = Math.abs(allPoints[j].y - allPoints[i].y);
+              if (dy < threshold)
+                duplicate = true;
+              else
+                j++;
+            }
+            if (duplicate) {
+              duplicates.set(i, true);
+              numOfDuplicates++;
+            }
+          }
+          return numOfDuplicates;
+        }
+      });
+      for (int numOfDuplicates : numsOfDuplicates)
+        totalNumDuplicates += numOfDuplicates;
+    } catch (InterruptedException e) {
+      e.printStackTrace();
     }
 
-    if (numDuplicates > 0) {
+    if (totalNumDuplicates > 0) {
       LOG.debug("Shrinking the array");
       // Shrinking the array
-      Point[] newAllPoints = new Point[allPoints.length - numDuplicates];
+      final Point[] newAllPoints = new Point[allPoints.length - totalNumDuplicates];
       int newI = 0, oldI1 = 0;
       while (oldI1 < allPoints.length) {
         // Advance to the first non-duplicate point (start of range to be copied)
@@ -634,7 +648,7 @@ public class SpatialAlgorithms {
           oldI1 = oldI2;
         }
       }
-      allPoints = newAllPoints;
+      return newAllPoints;
     }
     return allPoints;
   }
