@@ -95,8 +95,8 @@ public class TileIndex implements WritableComparable<TileIndex> {
     int fraction = 1 << this.level;
     double tileWidth = spaceMBR.getWidth() / fraction;
     double tileHeight = spaceMBR.getHeight() / fraction;
-    double x1 = tileWidth * this.x;
-    double y1 = tileWidth * this.y;
+    double x1 = spaceMBR.x1 + tileWidth * this.x;
+    double y1 = spaceMBR.y1 + tileWidth * this.y;
     return new Rectangle(x1, y1, x1 + tileWidth, y1 + tileHeight);
   }
 }

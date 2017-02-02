@@ -59,4 +59,14 @@ public class TileIndexTest extends TestCase {
     assertTrue("Expected MBR of "+ti+" to be "+expectedMBR+" but found to be "+tileMBR,
         expectedMBR.equals(tileMBR));
   }
+
+  public void testWithNonZeroOriginal() {
+    Rectangle spaceMBR = new Rectangle(1024, 1024, 2048, 2048);
+    TileIndex ti = new TileIndex(0, 0 ,0);
+    Rectangle tileMBR = ti.getMBR(spaceMBR);
+    Rectangle expectedMBR = spaceMBR;
+    assertTrue("Expected MBR of "+ti+" to be "+expectedMBR+" but found to be "+tileMBR,
+        expectedMBR.equals(tileMBR));
+  }
+
 }
