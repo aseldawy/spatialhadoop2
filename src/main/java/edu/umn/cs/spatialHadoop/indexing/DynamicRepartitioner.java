@@ -153,16 +153,18 @@ public class DynamicRepartitioner {
 			long t2 = System.currentTimeMillis();
 			System.out.println("Total time for space subdivision in millis: " + (t2 - t1));
 
-			PotentialPartition[] partitionsToSplit = getPartitionsToSplit(inPath, partitioner, params);
-			FilePartitioner filePartitioner = createFilePartitioner(inPath, partitionsToSplit, params);
+			List<List<PotentialPartition>> classifiedPartitions = classifyPartitions(inPath, partitioner, params);
+			ArrayList<PotentialPartition> partitionsToSplit = (ArrayList<PotentialPartition>) classifiedPartitions.get(0);
+			ArrayList<PotentialPartition> partitionsToKeep = (ArrayList<PotentialPartition>) classifiedPartitions.get(1);
+			FilePartitioner filePartitioner = createFilePartitioner(inPath, partitionsToSplit, partitionsToKeep, params);
 			Partitioner.setPartitioner(conf, filePartitioner);
 
 			// Split partition
-			Path[] splitFiles = new Path[partitionsToSplit.length];
-			for(int i = 0; i < partitionsToSplit.length; i++) {
-				splitFiles[i] = new Path(inPath, partitionsToSplit[i].filename);
+			Path[] splitFiles = new Path[partitionsToSplit.size()];
+			for (int i = 0; i < partitionsToSplit.size(); i++) {
+				splitFiles[i] = new Path(inPath, partitionsToSplit.get(i).filename);
 			}
-			
+
 			// Set mapper and reducer
 			Shape shape = OperationsParams.getShape(conf, "shape");
 			job.setMapperClass(DynamicRepartitionerMap.class);
@@ -194,8 +196,9 @@ public class DynamicRepartitioner {
 		return job;
 	}
 
-	private static PotentialPartition[] getPartitionsToSplit(Path inPath, final Partitioner partitioner,
+	private static List<List<PotentialPartition>> classifyPartitions(Path inPath, final Partitioner partitioner,
 			OperationsParams params) throws IOException {
+		List<List<PotentialPartition>> result = new ArrayList<List<PotentialPartition>>();
 		final ArrayList<PotentialPartition> potentialPartitions = new ArrayList<PotentialPartition>();
 		Set<PotentialPartition> partitionsToSplit = new HashSet<PotentialPartition>();
 		Set<PotentialPartition> partitionsToKeep = new HashSet<PotentialPartition>();
@@ -241,6 +244,7 @@ public class DynamicRepartitioner {
 		for (PotentialPartition pp : potentialPartitions) {
 			boolean keep = false;
 			for (IntersectionInfo intersection : pp.intersections) {
+				System.out.println("partition " + pp.filename + ", js = " + intersection.getJsValue());
 				if (intersection.getJsValue() >= jsimValue) {
 					keep = true;
 					break;
@@ -253,23 +257,22 @@ public class DynamicRepartitioner {
 			}
 		}
 
-		// for(CellInfo cell: splitCells) {
-		// boolean hasOverlap = false;
-		// for(PotentialPartition keepPartition: partitionsToKeep) {
-		// if(cell.isIntersected(keepPartition.cellMBR)) {
-		// hasOverlap = true;
-		// break;
-		// }
-		// }
-		// System.out.println("cell = " + cell.toString() + " has overlap = " +
-		// hasOverlap);
-		// }
+		ArrayList<PotentialPartition> partitionsToSplitList = new ArrayList<PotentialPartition>();
+		for (PotentialPartition pp : partitionsToSplit) {
+			partitionsToSplitList.add(pp);
+		}
+		ArrayList<PotentialPartition> partitionsToKeepList = new ArrayList<PotentialPartition>();
+		for (PotentialPartition pp : partitionsToKeep) {
+			partitionsToKeepList.add(pp);
+		}
+		result.add(partitionsToSplitList);
+		result.add(partitionsToKeepList);
 
-		return partitionsToSplit.toArray(new PotentialPartition[partitionsToSplit.size()]);
+		return result;
 	}
 
-	private static FilePartitioner createFilePartitioner(Path inPath, PotentialPartition[] partitionsToSplit,
-			OperationsParams params) throws IOException {
+	private static FilePartitioner createFilePartitioner(Path inPath, ArrayList<PotentialPartition> partitionsToSplit,
+			ArrayList<PotentialPartition> partitionsToKeep, OperationsParams params) throws IOException {
 		FilePartitioner filePartitioner = new FilePartitioner();
 
 		Configuration conf = new Configuration();
@@ -293,20 +296,71 @@ public class DynamicRepartitioner {
 		System.out.println("max cell id = " + maxCellId);
 
 		// Get list of split rectangles
-		Set<CellInfo> splitCells = new HashSet<CellInfo>();
+		Set<Rectangle> splitRects = new HashSet<Rectangle>();
 		for (PotentialPartition splitPartition : partitionsToSplit) {
 			for (IntersectionInfo intersection : splitPartition.intersections) {
-				splitCells.add(intersection.getCell());
+				splitRects.add(intersection.getCell().getMBR());
 			}
 		}
 
-		for (CellInfo splitCell : splitCells) {
+		Set<Rectangle> keepRects = new HashSet<Rectangle>();
+		for (PotentialPartition keepPartition : partitionsToKeep) {
+			keepRects.add(keepPartition.getMBR());
+		}
+		
+		Set<Rectangle> finalSplitRects = clipCells(splitRects, keepRects);
+
+		for (Rectangle rect : finalSplitRects) {
 			maxCellId += 1;
+			CellInfo splitCell = new CellInfo();
+			splitCell.set(rect);
 			splitCell.cellId = maxCellId;
 			filePartitioner.cells.add(splitCell);
 		}
 
 		return filePartitioner;
+	}
+
+	/**
+	 * Clip split rectangles by keep rectangles to get a set of disjoint
+	 * rectangles
+	 * 
+	 * @param keepRects
+	 * @param splitRects
+	 * @return
+	 */
+	private static Set<Rectangle> clipCells(Set<Rectangle> splitRects, Set<Rectangle> keepRects) {
+		Set<Rectangle> results = new HashSet<Rectangle>();
+		for (Rectangle rect : splitRects) {
+			results.add(rect);
+		}
+
+		for (Rectangle keepRect : keepRects) {
+			Set<Rectangle> tempRects = new HashSet<Rectangle>();
+			for (Rectangle rect : results) {
+				tempRects.add(rect);
+			}
+
+			for (Rectangle rect : tempRects) {
+				if (rect.isIntersected(keepRect)) {
+					ArrayList<Rectangle> complementRects = rect.clip(keepRect);
+					// Find the rect to remove
+					Rectangle rectToRemove = null;
+					for (Rectangle r : results) {
+						if (r.equals(rect)) {
+							rectToRemove = r;
+							break;
+						}
+					}
+					if (rectToRemove != null) {
+						results.remove(rectToRemove);
+					}
+					results.addAll(complementRects);
+				}
+			}
+		}
+
+		return results;
 	}
 
 	private static void printUsage() {

@@ -252,9 +252,8 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
 		return Math.abs(this.y2 - this.y1) * Math.abs(this.x2 - this.x1);
 	}
 
-	// Return list of rectangles which are part of this rectangle but not part
-	// of s
-	public Rectangle[] clip(final Rectangle s) {
+	// Return list of rectangles which are part of this rectangle but not part of s
+	public ArrayList<Rectangle> clip(final Rectangle s) {
 		ArrayList<Rectangle> results = new ArrayList<Rectangle>();
 
 		if (this.isIntersected(s)) {
@@ -262,19 +261,19 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
 
 			if ((intersectedRect.x1 == this.x1) && (intersectedRect.x2 == this.x2) && (intersectedRect.y1 == this.y1)) {
 				results.add(new Rectangle(this.x1, intersectedRect.y2, this.x2, this.y2));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 			if ((intersectedRect.x1 == this.x1) && (intersectedRect.y1 == this.y1) && (intersectedRect.y2 == this.y2)) {
 				results.add(new Rectangle(intersectedRect.x2, this.y1, this.x2, this.y2));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 			if ((intersectedRect.x1 == this.x1) && (intersectedRect.x2 == this.x2) && (intersectedRect.y2 == this.y2)) {
 				results.add(new Rectangle(this.x1, this.y1, this.x2, intersectedRect.y1));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 			if ((intersectedRect.x2 == this.x2) && (intersectedRect.y1 == this.y1) && (intersectedRect.y2 == this.y2)) {
 				results.add(new Rectangle(this.x1, this.y1, intersectedRect.x1, this.y2));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 
 			if ((intersectedRect.x1 == this.x1) && (intersectedRect.y1 == this.y1) && (this.y1 < intersectedRect.y2)
@@ -282,28 +281,28 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
 					&& (intersectedRect.x2 < this.x2)) {
 				results.add(new Rectangle(this.x1, intersectedRect.y2, this.x2, this.y2));
 				results.add(new Rectangle(intersectedRect.x2, this.y1, this.x2, intersectedRect.y2));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 			if ((intersectedRect.x1 == this.x1) && (intersectedRect.y2 == this.y2) && (this.y1 < intersectedRect.y1)
 					&& (intersectedRect.y1 < this.y2) && (this.x1 < intersectedRect.x2)
 					&& (intersectedRect.x2 < this.x2)) {
 				results.add(new Rectangle(intersectedRect.x2, intersectedRect.y1, this.x2, this.y2));
 				results.add(new Rectangle(this.x1, this.y1, this.x2, intersectedRect.y1));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 			if ((intersectedRect.x2 == this.x2) && (intersectedRect.y2 == this.y2) && (this.y1 < intersectedRect.y1)
 					&& (intersectedRect.y1 < this.y2) && (this.x1 < intersectedRect.x1)
 					&& (intersectedRect.x1 < this.x2)) {
 				results.add(new Rectangle(this.x1, intersectedRect.y1, intersectedRect.x1, this.y2));
-				results.add(new Rectangle(intersectedRect.x2, this.y1, this.x2, intersectedRect.y2));
-				return (Rectangle[]) results.toArray();
+				results.add(new Rectangle(this.x1, this.y1, this.x2, intersectedRect.y1));
+				return results;
 			}
 			if ((intersectedRect.x2 == this.x2) && (intersectedRect.y1 == this.y1) && (this.y1 < intersectedRect.y2)
 					&& (intersectedRect.y2 < this.y2) && (this.x1 < intersectedRect.x1)
 					&& (intersectedRect.x1 < this.x2)) {
 				results.add(new Rectangle(this.x1, this.y1, intersectedRect.x1, intersectedRect.y2));
 				results.add(new Rectangle(this.x1, intersectedRect.y2, this.x2, this.y2));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 
 			if ((intersectedRect.y1 == this.y1) && (this.x1 < intersectedRect.x1) && (intersectedRect.x1 < this.x2)
@@ -311,28 +310,28 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
 				results.add(new Rectangle(this.x1, this.y1, intersectedRect.x1, intersectedRect.y2));
 				results.add(new Rectangle(intersectedRect.x2, intersectedRect.y1, this.x2, intersectedRect.y2));
 				results.add(new Rectangle(this.x1, intersectedRect.y2, this.x2, this.y2));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 			if ((intersectedRect.x1 == this.x1) && (this.y1 < intersectedRect.y1) && (intersectedRect.y1 < this.y2)
 					&& (this.y1 < intersectedRect.y2) && (intersectedRect.y2 < this.y2)) {
 				results.add(new Rectangle(intersectedRect.x1, intersectedRect.y2, intersectedRect.x2, this.y2));
-				results.add(new Rectangle(this.x1, this.y1, intersectedRect.x2, this.y1));
+				results.add(new Rectangle(this.x1, this.y1, intersectedRect.x2, intersectedRect.y1));
 				results.add(new Rectangle(intersectedRect.x2, this.y1, this.x2, this.y2));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 			if ((intersectedRect.y2 == this.y2) && (this.x1 < intersectedRect.x1) && (intersectedRect.x1 < this.x2)
 					&& (this.x1 < intersectedRect.x2) && (intersectedRect.x2 < this.x2)) {
 				results.add(new Rectangle(this.x1, intersectedRect.y1, intersectedRect.x1, this.y2));
 				results.add(new Rectangle(intersectedRect.x2, intersectedRect.y1, this.x2, this.y2));
 				results.add(new Rectangle(this.x1, this.y1, this.x2, intersectedRect.y1));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 			if ((intersectedRect.x2 == this.x2) && (this.y1 < intersectedRect.y1) && (intersectedRect.y1 < this.y2)
 					&& (this.y1 < intersectedRect.y2) && (intersectedRect.y2 < this.y2)) {
 				results.add(new Rectangle(this.x1, this.y1, intersectedRect.x1, this.y2));
 				results.add(new Rectangle(intersectedRect.x1, intersectedRect.y2, this.x2, this.y2));
 				results.add(new Rectangle(intersectedRect.x1, this.y1, this.x2, intersectedRect.y1));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 
 			if ((this.x1 < intersectedRect.x1) && (intersectedRect.x1 < this.x2) && (this.x1 < intersectedRect.x2)
@@ -343,13 +342,13 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
 				results.add(new Rectangle(this.x1, intersectedRect.y1, intersectedRect.x1, intersectedRect.y2));
 				results.add(new Rectangle(intersectedRect.x2, intersectedRect.y1, this.x2, intersectedRect.y2));
 				results.add(new Rectangle(this.x1, this.y1, this.x2, intersectedRect.y1));
-				return (Rectangle[]) results.toArray();
+				return results;
 			}
 		} else {
 			return null;
 		}
 
-		return (Rectangle[]) results.toArray();
+		return results;
 	}
 
 	/**
