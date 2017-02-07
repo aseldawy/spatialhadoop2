@@ -1,6 +1,8 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -155,41 +157,46 @@ public class DynamicRepartitioner {
 
 			List<List<PotentialPartition>> classifiedPartitions = classifyPartitions(inPath, partitioner, params);
 			ArrayList<PotentialPartition> partitionsToSplit = (ArrayList<PotentialPartition>) classifiedPartitions.get(0);
-			ArrayList<PotentialPartition> partitionsToKeep = (ArrayList<PotentialPartition>) classifiedPartitions.get(1);
-			FilePartitioner filePartitioner = createFilePartitioner(inPath, partitionsToSplit, partitionsToKeep, params);
-			Partitioner.setPartitioner(conf, filePartitioner);
+			if(partitionsToSplit.size() > 0) {
+				ArrayList<PotentialPartition> partitionsToKeep = (ArrayList<PotentialPartition>) classifiedPartitions.get(1);
+				FilePartitioner filePartitioner = createFilePartitioner(inPath, partitionsToSplit, partitionsToKeep, params);
+				Partitioner.setPartitioner(conf, filePartitioner);
 
-			// Split partition
-			Path[] splitFiles = new Path[partitionsToSplit.size()];
-			for (int i = 0; i < partitionsToSplit.size(); i++) {
-				splitFiles[i] = new Path(inPath, partitionsToSplit.get(i).filename);
-			}
+				// Split partition
+				Path[] splitFiles = new Path[partitionsToSplit.size()];
+				for (int i = 0; i < partitionsToSplit.size(); i++) {
+					splitFiles[i] = new Path(inPath, partitionsToSplit.get(i).filename);
+					inFs.deleteOnExit(splitFiles[i]);
+				}
 
-			// Set mapper and reducer
-			Shape shape = OperationsParams.getShape(conf, "shape");
-			job.setMapperClass(DynamicRepartitionerMap.class);
-			job.setMapOutputKeyClass(IntWritable.class);
-			job.setMapOutputValueClass(shape.getClass());
-			job.setReducerClass(DynamicRepartitionerReduce.class);
-			// Set input and output
-			job.setInputFormatClass(SpatialInputFormat3.class);
-			SpatialInputFormat3.setInputPaths(job, splitFiles);
-			job.setOutputFormatClass(IndexOutputFormat.class);
-			IndexOutputFormat.setOutputPath(job, tempPath);
-			// Set number of reduce tasks according to cluster status
-			ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
-			job.setNumReduceTasks(Math.max(1,
-					Math.min(partitioner.getPartitionCount(), (clusterStatus.getMaxReduceTasks() * 9) / 10)));
+				// Set mapper and reducer
+				Shape shape = OperationsParams.getShape(conf, "shape");
+				job.setMapperClass(DynamicRepartitionerMap.class);
+				job.setMapOutputKeyClass(IntWritable.class);
+				job.setMapOutputValueClass(shape.getClass());
+				job.setReducerClass(DynamicRepartitionerReduce.class);
+				// Set input and output
+				job.setInputFormatClass(SpatialInputFormat3.class);
+				SpatialInputFormat3.setInputPaths(job, splitFiles);
+				job.setOutputFormatClass(IndexOutputFormat.class);
+				IndexOutputFormat.setOutputPath(job, tempPath);
+				// Set number of reduce tasks according to cluster status
+				ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+				job.setNumReduceTasks(Math.max(1,
+						Math.min(partitioner.getPartitionCount(), (clusterStatus.getMaxReduceTasks() * 9) / 10)));
 
-			// Use multithreading in case the job is running locally
-			conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+				// Use multithreading in case the job is running locally
+				conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
 
-			// Start the job
-			if (conf.getBoolean("background", false)) {
-				// Run in background
-				job.submit();
+				// Start the job
+				if (conf.getBoolean("background", false)) {
+					// Run in background
+					job.submit();
+				} else {
+					job.waitForCompletion(conf.getBoolean("verbose", false));
+				}
 			} else {
-				job.waitForCompletion(conf.getBoolean("verbose", false));
+				System.out.println("Indexes still satisfies performance. Dont repartition.");
 			}
 		}
 
@@ -362,6 +369,92 @@ public class DynamicRepartitioner {
 
 		return results;
 	}
+	
+	private static void mergeFiles(Path inPath, OperationsParams params, Job job) throws IOException {
+		final byte[] NewLine = new byte[] { '\n' };
+		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> newPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> finalPartitions = new ArrayList<Partition>();
+
+		FileSystem inFs = inPath.getFileSystem(job.getConfiguration());
+		inFs.close();
+		
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+		String sindex = params.get("sindex");
+		
+		FileStatus[] resultFiles = fs.listStatus(inPath, new PathFilter() {
+			@Override
+			public boolean accept(Path path) {
+				return path.getName().contains("part-");
+			}
+		});
+
+		if (resultFiles.length == 0) {
+			LOG.warn("Input data is empty.");
+		} else {
+			List<Path> inFileList = new ArrayList<Path>();
+			for (FileStatus f : resultFiles) {
+				inFileList.add(f.getPath());
+			}
+			
+			Path currentMasterPath = new Path(inPath, "_master." + sindex);
+			Text tempLine = new Text2();
+			LineReader in = new LineReader(fs.open(currentMasterPath));
+			while (in.readLine(tempLine) > 0) {
+				Partition tempPartition = new Partition();
+				tempPartition.fromText(tempLine);
+				currentPartitions.add(tempPartition);
+			}
+			
+			Path newMasterPath = new Path(inPath, "temp/_master." + sindex);
+			in = new LineReader(fs.open(newMasterPath));
+			while (in.readLine(tempLine) > 0) {
+				Partition tempPartition = new Partition();
+				tempPartition.fromText(tempLine);
+				newPartitions.add(tempPartition);
+			}
+			
+			for(Partition partition: currentPartitions) {
+				boolean deleted = true;
+				for(Path path: inFileList) {
+					if(path.getName().equals(partition.filename)) {
+						deleted = false;
+					}
+				}
+				
+				if(!deleted) {
+					finalPartitions.add(partition);
+				}
+			}
+			
+			// Move files from temp path to current path
+			for(Partition partition: newPartitions) {
+				fs.rename(new Path(inPath, "temp/" + partition.filename), new Path(inPath, partition.filename));
+			}
+			fs.delete(new Path(inPath, "temp"));
+			finalPartitions.addAll(newPartitions);
+			
+			// Update master and wkt file
+			Path currentWKTPath = new Path(inPath, "_" + sindex + ".wkt");
+			fs.delete(currentMasterPath);
+			fs.delete(currentWKTPath);
+			OutputStream masterOut = fs.create(currentMasterPath);
+			PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
+			wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+			for (Partition partition : finalPartitions) {
+				Text masterLine = new Text2();
+				partition.toText(masterLine);
+				masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+				masterOut.write(NewLine);
+				wktOut.println(partition.toWKT());
+			}
+			
+			wktOut.close();
+			masterOut.close();			
+			fs.close();
+		}
+	}
 
 	private static void printUsage() {
 		System.out.println("Dynamic repartition indexed files with low cost");
@@ -382,7 +475,8 @@ public class DynamicRepartitioner {
 
 		Path inPath = inputFiles[0];
 		System.out.println("Input path: " + inPath);
-		repartitionMapReduce(inPath, params);
+		Job job = repartitionMapReduce(inPath, params);
+		mergeFiles(inPath, params, job);
 	}
 
 }
