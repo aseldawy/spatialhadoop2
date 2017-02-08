@@ -196,7 +196,8 @@ public class DynamicRepartitioner {
 					job.waitForCompletion(conf.getBoolean("verbose", false));
 				}
 			} else {
-				System.out.println("Indexes still satisfies performance. Dont repartition.");
+				System.out.println("Indexes still satisfies performance. Dont repartition!");
+				return null;
 			}
 		}
 
@@ -476,7 +477,9 @@ public class DynamicRepartitioner {
 		Path inPath = inputFiles[0];
 		System.out.println("Input path: " + inPath);
 		Job job = repartitionMapReduce(inPath, params);
-		mergeFiles(inPath, params, job);
+		if(job != null) {
+			mergeFiles(inPath, params, job);
+		}
 	}
 
 }
