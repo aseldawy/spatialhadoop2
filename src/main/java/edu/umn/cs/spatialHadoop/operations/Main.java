@@ -140,6 +140,8 @@ public class Main {
       
       pgd.addClass("repartition", DynamicRepartitioner.class, "Dynamic repartition indexed files with low cost");
       
+      pgd.addClass("benchmark", Benchmark.class, "Benchmark query performance");
+      
       pgd.driver(args);
       
       // Success
