@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
+import java.util.Random;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -34,14 +35,19 @@ public class Benchmark {
 		String query = params.get("query", "rangequery");
 		int count = Integer.parseInt(params.get("count", "5"));
 		if(query.equals("rangequery")) {
-			params.set("rect", "1000,1000,2000,2000");
+			Random rand = new Random();
 			long t1 = System.currentTimeMillis();
 			for(int i = 0; i < count; i++) {
+				int randomX = rand.nextInt(1000000);
+				int randomY = rand.nextInt(1000000);
+				String rect = String.format("%d,%d,%d,%d", randomX, randomY, randomX + 20000, randomY + 20000);
+				System.out.println("rect = " + rect);
+				params.set("rect", rect);
 				Path queryOutPath = new Path(outPath, Integer.toString(i));
 				RangeQuery.rangeQueryMapReduce(inPath, queryOutPath, params);
 			}
 			long t2 = System.currentTimeMillis();
-			System.out.println("Total time: " + (t2 - t1) + "ms");
+			System.out.println("Count = " + count + ", total time: " + (t2 - t1) + "ms");
 		} else {
 			printUsage();
 			System.exit(1);
