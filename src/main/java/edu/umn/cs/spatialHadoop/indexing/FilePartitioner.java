@@ -110,7 +110,7 @@ public class FilePartitioner extends Partitioner {
 	@Override
 	public CellInfo getPartition(int partitionID) {
 		// TODO Auto-generated method stub
-		CellInfo result = null;
+		CellInfo result = new CellInfo(partitionID, 0, 0, 0, 0);
 		for (CellInfo cell: this.cells) {
 			if (cell.cellId == partitionID) {
 				result = cell;

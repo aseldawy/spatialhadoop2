@@ -474,12 +474,15 @@ public class DynamicRepartitioner {
 			System.exit(1);
 		}
 
+		long t1 = System.currentTimeMillis();
 		Path inPath = inputFiles[0];
 		System.out.println("Input path: " + inPath);
 		Job job = repartitionMapReduce(inPath, params);
 		if(job != null) {
 			mergeFiles(inPath, params, job);
 		}
+		long t2 = System.currentTimeMillis();
+	    System.out.println("Total repartitioning time in millis "+(t2-t1));
 	}
 
 }
