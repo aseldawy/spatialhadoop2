@@ -34,6 +34,7 @@ def downloadFiles(files_to_download, downloadPath, error_files)
   partitions << files_to_download.size
   download_threads = []
   $ParallelSize.times do |thread_id|
+    cookiefile = "cookiefile_#{thread_id}"
     first, last = partitions[thread_id, 2]
     download_threads << Thread.new(first, last) { |_first, _last|
       (_first..._last).each do |file_id|
@@ -41,8 +42,8 @@ def downloadFiles(files_to_download, downloadPath, error_files)
         snapshot_date = File.basename(File.dirname(url_to_download))
         output_dir = File.join(downloadPath, snapshot_date)
         temp_download_file = File.join($TempDownloadPath, File.basename(url_to_download))
-  
-        system("curl -sf '#{url_to_download}' -o '#{temp_download_file}'")
+
+        system("curl -sf -n -L -c #{cookiefile} -b #{cookiefile} '#{url_to_download}' -o '#{temp_download_file}'")
         if $?.success?
           Dir.mkdir(output_dir) unless File.exists?(output_dir)
           if system("mv #{temp_download_file} #{output_dir}")
