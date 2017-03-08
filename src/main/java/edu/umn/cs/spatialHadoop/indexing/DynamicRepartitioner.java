@@ -156,10 +156,13 @@ public class DynamicRepartitioner {
 			System.out.println("Total time for space subdivision in millis: " + (t2 - t1));
 
 			List<List<PotentialPartition>> classifiedPartitions = classifyPartitions(inPath, partitioner, params);
-			ArrayList<PotentialPartition> partitionsToSplit = (ArrayList<PotentialPartition>) classifiedPartitions.get(0);
-			if(partitionsToSplit.size() > 0) {
-				ArrayList<PotentialPartition> partitionsToKeep = (ArrayList<PotentialPartition>) classifiedPartitions.get(1);
-				FilePartitioner filePartitioner = createFilePartitioner(inPath, partitionsToSplit, partitionsToKeep, params);
+			ArrayList<PotentialPartition> partitionsToSplit = (ArrayList<PotentialPartition>) classifiedPartitions
+					.get(0);
+			if (partitionsToSplit.size() > 0) {
+				ArrayList<PotentialPartition> partitionsToKeep = (ArrayList<PotentialPartition>) classifiedPartitions
+						.get(1);
+				FilePartitioner filePartitioner = createFilePartitioner(inPath, partitionsToSplit, partitionsToKeep,
+						params);
 				Partitioner.setPartitioner(conf, filePartitioner);
 
 				// Split partition
@@ -315,7 +318,7 @@ public class DynamicRepartitioner {
 		for (PotentialPartition keepPartition : partitionsToKeep) {
 			keepRects.add(keepPartition.getMBR());
 		}
-		
+
 		Set<Rectangle> finalSplitRects = clipCells(splitRects, keepRects);
 
 		for (Rectangle rect : finalSplitRects) {
@@ -370,8 +373,8 @@ public class DynamicRepartitioner {
 
 		return results;
 	}
-	
-	private static void mergeFiles(Path inPath, OperationsParams params, Job job) throws IOException {
+
+	public static void mergeFiles(Path inPath, OperationsParams params, Job job) throws IOException {
 		final byte[] NewLine = new byte[] { '\n' };
 		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
 		ArrayList<Partition> newPartitions = new ArrayList<Partition>();
@@ -379,11 +382,11 @@ public class DynamicRepartitioner {
 
 		FileSystem inFs = inPath.getFileSystem(job.getConfiguration());
 		inFs.close();
-		
+
 		Configuration conf = new Configuration();
 		FileSystem fs = FileSystem.get(conf);
 		String sindex = params.get("sindex");
-		
+
 		FileStatus[] resultFiles = fs.listStatus(inPath, new PathFilter() {
 			@Override
 			public boolean accept(Path path) {
@@ -391,70 +394,66 @@ public class DynamicRepartitioner {
 			}
 		});
 
-		if (resultFiles.length == 0) {
-			LOG.warn("Input data is empty.");
-		} else {
-			List<Path> inFileList = new ArrayList<Path>();
-			for (FileStatus f : resultFiles) {
-				inFileList.add(f.getPath());
-			}
-			
-			Path currentMasterPath = new Path(inPath, "_master." + sindex);
-			Text tempLine = new Text2();
-			LineReader in = new LineReader(fs.open(currentMasterPath));
-			while (in.readLine(tempLine) > 0) {
-				Partition tempPartition = new Partition();
-				tempPartition.fromText(tempLine);
-				currentPartitions.add(tempPartition);
-			}
-			
-			Path newMasterPath = new Path(inPath, "temp/_master." + sindex);
-			in = new LineReader(fs.open(newMasterPath));
-			while (in.readLine(tempLine) > 0) {
-				Partition tempPartition = new Partition();
-				tempPartition.fromText(tempLine);
-				newPartitions.add(tempPartition);
-			}
-			
-			for(Partition partition: currentPartitions) {
-				boolean deleted = true;
-				for(Path path: inFileList) {
-					if(path.getName().equals(partition.filename)) {
-						deleted = false;
-					}
-				}
-				
-				if(!deleted) {
-					finalPartitions.add(partition);
-				}
-			}
-			
-			// Move files from temp path to current path
-			for(Partition partition: newPartitions) {
-				fs.rename(new Path(inPath, "temp/" + partition.filename), new Path(inPath, partition.filename));
-			}
-			fs.delete(new Path(inPath, "temp"));
-			finalPartitions.addAll(newPartitions);
-			
-			// Update master and wkt file
-			Path currentWKTPath = new Path(inPath, "_" + sindex + ".wkt");
-			fs.delete(currentMasterPath);
-			fs.delete(currentWKTPath);
-			OutputStream masterOut = fs.create(currentMasterPath);
-			PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
-			wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
-			for (Partition partition : finalPartitions) {
-				Text masterLine = new Text2();
-				partition.toText(masterLine);
-				masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
-				masterOut.write(NewLine);
-				wktOut.println(partition.toWKT());
-			}
-			
-			wktOut.close();
-			masterOut.close();			
-			fs.close();
+		List<Path> inFileList = new ArrayList<Path>();
+		for (FileStatus f : resultFiles) {
+			inFileList.add(f.getPath());
 		}
+
+		Path currentMasterPath = new Path(inPath, "_master." + sindex);
+		Text tempLine = new Text2();
+		LineReader in = new LineReader(fs.open(currentMasterPath));
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			currentPartitions.add(tempPartition);
+		}
+
+		Path newMasterPath = new Path(inPath, "temp/_master." + sindex);
+		in = new LineReader(fs.open(newMasterPath));
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			newPartitions.add(tempPartition);
+		}
+
+		for (Partition partition : currentPartitions) {
+			boolean deleted = true;
+			for (Path path : inFileList) {
+				if (path.getName().equals(partition.filename)) {
+					deleted = false;
+				}
+			}
+
+			if (!deleted) {
+				finalPartitions.add(partition);
+			}
+		}
+
+		// Move files from temp path to current path
+		for (Partition partition : newPartitions) {
+			fs.rename(new Path(inPath, "temp/" + partition.filename), new Path(inPath, partition.filename));
+		}
+		fs.delete(new Path(inPath, "temp"));
+		finalPartitions.addAll(newPartitions);
+
+		// Update master and wkt file
+		Path currentWKTPath = new Path(inPath, "_" + sindex + ".wkt");
+		fs.delete(currentMasterPath);
+		fs.delete(currentWKTPath);
+		OutputStream masterOut = fs.create(currentMasterPath);
+		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
+		wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+		for (Partition partition : finalPartitions) {
+			Text masterLine = new Text2();
+			partition.toText(masterLine);
+			masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+			masterOut.write(NewLine);
+			wktOut.println(partition.toWKT());
+		}
+
+		wktOut.close();
+		masterOut.close();
+		fs.close();
 	}
 
 	private static void printUsage() {
@@ -478,11 +477,11 @@ public class DynamicRepartitioner {
 		Path inPath = inputFiles[0];
 		System.out.println("Input path: " + inPath);
 		Job job = repartitionMapReduce(inPath, params);
-		if(job != null) {
+		if (job != null) {
 			mergeFiles(inPath, params, job);
 		}
 		long t2 = System.currentTimeMillis();
-	    System.out.println("Total repartitioning time in millis "+(t2-t1));
+		System.out.println("Total repartitioning time in millis " + (t2 - t1));
 	}
 
 }

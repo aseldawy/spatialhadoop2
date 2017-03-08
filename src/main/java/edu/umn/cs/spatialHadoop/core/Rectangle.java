@@ -350,6 +350,21 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
 
 		return results;
 	}
+	
+	// Split to 2 equal rectangles with minimum total margin
+	public  Rectangle[] split() {
+		Rectangle[] rects = new Rectangle[2];
+		
+		if(Math.abs(x2 - x1) > Math.abs(y2 - y1)) {
+			rects[0] = new Rectangle(x1, y1, (x2 + x1)/2, y2);
+			rects[1] = new Rectangle((x2 + x1)/2, y1, x2, y2);
+		} else {
+			rects[0] = new Rectangle(x1, y1, x2, (y2 + y1) / 2);
+			rects[1] = new Rectangle(x1, (y2 + y1) / 2, x2, y2);
+		}
+		
+		return rects;
+	}
 
 	/**
 	 * Compute the intersection of a line segment with the rectangle border. It

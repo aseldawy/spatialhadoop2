@@ -13,6 +13,7 @@ import org.apache.hadoop.util.ProgramDriver;
 
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
+import edu.umn.cs.spatialHadoop.indexing.BinarySpaceRepartitioner;
 import edu.umn.cs.spatialHadoop.indexing.DynamicRepartitioner;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.indexing.Inserter;
@@ -139,6 +140,8 @@ public class Main {
       pgd.addClass("insert", Inserter.class, "Insert data from a file to another file with same type of shape");
       
       pgd.addClass("repartition", DynamicRepartitioner.class, "Dynamic repartition indexed files with low cost");
+      
+      pgd.addClass("binaryrepartition", BinarySpaceRepartitioner.class, "Binary repartition indexed files");
       
       pgd.addClass("benchmark", Benchmark.class, "Benchmark query performance");
       
