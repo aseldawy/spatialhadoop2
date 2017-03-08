@@ -176,24 +176,24 @@ public class Triangulation implements Writable {
      * Draw as SVG Rasem commands.
      */
   public void draw(PrintStream out, Rectangle mbr, double scale) {
-    System.out.println("group {");
+    out.println("group {");
     Text text = new Text();
     for (Point s : sites) {
       text.clear();
-      System.out.printf("circle %f, %f, 0.5 # %s\n", (s.x - mbr.x1) * scale,
+      out.printf("circle %f, %f, 0.5 # %s\n", (s.x - mbr.x1) * scale,
           (s.y - mbr.y1) * scale, s.toText(text).toString());
     }
-    System.out.println("}");
-    System.out.println("group {");
+    out.println("}");
+    out.println("group {");
     for (int i = 0; i < edgeStarts.length; i++) {
       if (edgeStarts[i] < edgeEnds[i])
-        System.out.printf("line %f, %f, %f, %f\n",
+        out.printf("line %f, %f, %f, %f\n",
             (sites[edgeStarts[i]].x - mbr.x1) * scale,
             (sites[edgeStarts[i]].y - mbr.y1) * scale,
             (sites[edgeEnds[i]].x - mbr.x1) * scale,
             (sites[edgeEnds[i]].y - mbr.y1) * scale);
     }
-    System.out.println("}");
+    out.println("}");
   }
 
   /**
