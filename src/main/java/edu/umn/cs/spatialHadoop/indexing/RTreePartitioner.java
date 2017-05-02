@@ -31,24 +31,20 @@ public class RTreePartitioner extends Partitioner {
 	@Override
 	public void write(DataOutput out) throws IOException {
 		// TODO Auto-generated method stub
-		String tempString = "";
+		out.writeInt(cells.size());
 		for(CellInfo cell: this.cells) {
-			Text text = new Text();
-			cell.toText(text);
-			tempString += text.toString() + "\n";
+			cell.write(out);
 		}
-		out.writeUTF(tempString);
 	}
 
 	@Override
 	public void readFields(DataInput in) throws IOException {
-		// TODO Auto-generated method stub
-		String tempString = in.readUTF();
-		String[] cellTexts = tempString.split("\n");
-		for(String text: cellTexts) {
-			CellInfo tempCellInfo = new CellInfo();
-			tempCellInfo.fromText(new Text(text));
-			this.cells.add(tempCellInfo);
+		int cellsSize = in.readInt();
+		cells = new ArrayList<CellInfo>(cellsSize);
+		for (int i = 0; i < cellsSize; i++) {
+			CellInfo cellInfo = new CellInfo();
+			cellInfo.readFields(in);
+			cells.add(cellInfo);
 		}
 	}
 
@@ -63,7 +59,7 @@ public class RTreePartitioner extends Partitioner {
 
 		tree = RTree.star().maxChildren(capacity).create();
 		tree = tree.add(entries);
-		tree.visualize(1500, 360).save("test.png");
+		tree.visualize(1500, 750).save("test.png");
 		
 		// Get list of all leaf nodes
 		Node<Integer, Geometry> node = tree.root().get();
@@ -74,27 +70,36 @@ public class RTreePartitioner extends Partitioner {
 			cells.add(new CellInfo(cellId, r));
 			cellId++;
 		}
+//		cells.add(new CellInfo(cellId, mbr));
 	}
 
 	@Override
 	public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
 		// TODO Auto-generated method stub
-		for(CellInfo cell: this.cells) {
+		boolean found = false;
+		int size = this.cells.size();
+		for(CellInfo cell: this.cells.subList(0, size - 1)) {
 			if(cell.isIntersected(shape)) {
 				matcher.collect(cell.cellId);
+				found = true;
 			}
+		}
+		if(!found) {
+			matcher.collect(this.cells.get(size - 1).cellId);
 		}
 	}
 
 	@Override
 	public int overlapPartition(Shape shape) {
 		// TODO Auto-generated method stub
-		for(CellInfo cell: this.cells) {
+		int size = this.cells.size();
+		for(CellInfo cell: this.cells.subList(0, size - 1)) {
 			if(cell.isIntersected(shape)) {
 				return cell.cellId;
 			}
 		}
-		return 0;
+		
+		return this.cells.get(size - 1).cellId;
 	}
 
 	@Override
