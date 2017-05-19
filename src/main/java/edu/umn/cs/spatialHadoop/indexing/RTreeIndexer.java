@@ -25,7 +25,6 @@ import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.Reducer.Context;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
@@ -33,14 +32,13 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.indexing.Inserter.InserterMap;
-import edu.umn.cs.spatialHadoop.indexing.Inserter.InserterReduce;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 
 public class RTreeIndexer {
 	
+	private static final int BUFFER_LINES = 10000;
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
 	private static final Map<String, Class<? extends LocalIndexer>> LocalIndexes;
 
@@ -137,7 +135,7 @@ public class RTreeIndexer {
 		String index = conf.get("sindex");
 		if (index == null)
 			throw new RuntimeException("Index type is not set");
-		setLocalIndexer(conf, index);
+//		setLocalIndexer(conf, index);
 		RTreeFilePartitioner partitioner = new RTreeFilePartitioner();
 		partitioner.createFromMasterFile(currentPath, params);
 		Partitioner.setPartitioner(conf, partitioner);
@@ -243,25 +241,46 @@ public class RTreeIndexer {
 		wktOut.close();
 		masterOut.close();
 		fs.delete(new Path(currentPath, "temp"));
-		fs.close();
+//		fs.close();
 		System.out.println("Complete!");
 	}
 
 	// Read the input by buffer then put them to a temporary input
-	private static void readInputByBuffer(Path inputPath) throws IOException {
+	private static void insertByBuffer(Path inputPath, Path outputPath, OperationsParams params) throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException, InterruptedException {
 		FileSystem fs = FileSystem.get(new Configuration());
+		Path tempInputPath = new Path("./", "temp.input");
+		FSDataOutputStream out = fs.create(tempInputPath, true);
 		BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(inputPath)));
 		String line;
-		line = br.readLine();
-		int n = 0;
-		while (line != null) {
-			System.out.println(line);
-			n++;
-			if(n == 2) {
-				break;
-			}
+		PrintWriter writer = new PrintWriter(out);
+		int count = 0;
+		do {
 			line = br.readLine();
-		}
+			if (line != null) {
+				count++;
+				writer.append(line);
+				if(count == BUFFER_LINES) {
+					writer.close();
+					out.close();
+					insertMapReduce(outputPath, tempInputPath, params);
+					appendNewFiles(outputPath, params);
+					fs = FileSystem.get(new Configuration());
+					out = fs.create(tempInputPath, true);
+					writer = new PrintWriter(out);
+					count = 0;
+				}
+				else {
+					writer.append("\n");
+				}
+			} 
+			else {
+				writer.close();
+				out.close();
+				insertMapReduce(outputPath, tempInputPath, params);
+				appendNewFiles(outputPath, params);
+			}
+		} while (line != null);
+		fs.close();
 	}
 	
 	private static void createEmptyPartition(Path outputPath, OperationsParams params) throws IOException {
@@ -273,7 +292,7 @@ public class RTreeIndexer {
 		fs.create(new Path(outputPath, emptyPartitionName), true);
 		fs.create(new Path(outputPath, "_rtree.wkt"), true);
 		FSDataOutputStream os = fs.create(new Path(outputPath, "_master.rtree"), true);
-		Text emptyPartitionMetadata = new Text2("0," + mbr + ",0,0," + emptyPartitionName);
+		Text emptyPartitionMetadata = new Text2("0," + mbr + "," + mbr + ",0,0," + emptyPartitionName);
 		os.write(emptyPartitionMetadata.getBytes(), 0, emptyPartitionMetadata.getLength());
 		fs.close();
 	}
@@ -315,6 +334,7 @@ public class RTreeIndexer {
 		System.out.println("Input path: " + inputPath);
 		System.out.println("Output path: " + outputPath);
 		createEmptyPartition(outputPath, params);
+		insertByBuffer(inputPath, outputPath, params);
 		long t2 = System.currentTimeMillis();
 		System.out.println("Total indexing time in millis " + (t2 - t1));
 	}

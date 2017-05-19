@@ -78,6 +78,7 @@ public class RTreeFilePartitioner extends Partitioner {
 		LineReader in = new LineReader(inFs.open(masterPath));
 		while (in.readLine(tempLine) > 0) {
 			Partition tempPartition = new Partition();
+			System.out.println("templine is " + tempLine);
 			tempPartition.fromText(tempLine);
 			CellInfo tempCellInfo = new CellInfo();
 			tempCellInfo.cellId = tempPartition.cellId;
