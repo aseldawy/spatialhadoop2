@@ -26,7 +26,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 public class RTreePartitioner extends Partitioner {
 
 	private RTree<Integer, Geometry> tree;
-	private ArrayList<CellInfo> cells = new ArrayList<CellInfo>();
+	public ArrayList<CellInfo> cells = new ArrayList<CellInfo>();
 
 	@Override
 	public void write(DataOutput out) throws IOException {

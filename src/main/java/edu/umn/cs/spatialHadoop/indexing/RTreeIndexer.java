@@ -8,14 +8,17 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.ClusterStatus;
@@ -28,7 +31,12 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.LineReader;
 
+import com.github.davidmoten.rtree.RTree;
+import com.github.davidmoten.rtree.geometry.Geometry;
+
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -40,13 +48,6 @@ public class RTreeIndexer {
 	
 	private static final int BUFFER_LINES = 10000;
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
-	private static final Map<String, Class<? extends LocalIndexer>> LocalIndexes;
-
-	static {
-		LocalIndexes = new HashMap<String, Class<? extends LocalIndexer>>();
-		LocalIndexes.put("rtree", RTreeLocalIndexer.class);
-		LocalIndexes.put("r+tree", RTreeLocalIndexer.class);
-	}
 	
 	/**
 	 * The map function that partitions the data using the configured
@@ -131,11 +132,11 @@ public class RTreeIndexer {
 			OperationsParams.setShape(conf, "mbr", inputMBR);
 		}
 
-		// Load the partitioner from file
 		String index = conf.get("sindex");
 		if (index == null)
 			throw new RuntimeException("Index type is not set");
 //		setLocalIndexer(conf, index);
+		// Load the partitioner from file
 		RTreeFilePartitioner partitioner = new RTreeFilePartitioner();
 		partitioner.createFromMasterFile(currentPath, params);
 		Partitioner.setPartitioner(conf, partitioner);
@@ -200,7 +201,9 @@ public class RTreeIndexer {
 		for (Partition currentPartition : currentPartitions) {
 			for (Partition insertPartition : insertPartitions) {
 				if (currentPartition.cellId == insertPartition.cellId) {
-					currentPartition.expand(insertPartition);
+//					currentPartition.expand(insertPartition);
+					currentPartition.size += insertPartition.size;
+					currentPartition.recordCount += insertPartition.recordCount;
 				}
 			}
 		}
@@ -209,17 +212,21 @@ public class RTreeIndexer {
 		for (Partition partition : currentPartitions) {
 			System.out.println("Appending to " + partition.filename);
 			FSDataOutputStream out = fs.append(new Path(currentPath, partition.filename));
-			BufferedReader br = new BufferedReader(
-					new InputStreamReader(fs.open(new Path(currentPath, "temp/" + partition.filename))));
-			String line;
-			PrintWriter writer = new PrintWriter(out);
-			do {
-				line = br.readLine();
-				if (line != null) {
-					writer.append("\n" + line);
+			for(Partition insertPartition: insertPartitions) {
+				if (partition.cellId == insertPartition.cellId) {
+					BufferedReader br = new BufferedReader(
+							new InputStreamReader(fs.open(new Path(currentPath, "temp/" + insertPartition.filename))));
+					String line;
+					PrintWriter writer = new PrintWriter(out);
+					do {
+						line = br.readLine();
+						if (line != null) {
+							writer.append("\n" + line);
+						}
+					} while (line != null);
+					writer.close();
 				}
-			} while (line != null);
-			writer.close();
+			}
 			out.close();
 		}
 
@@ -264,6 +271,10 @@ public class RTreeIndexer {
 					out.close();
 					insertMapReduce(outputPath, tempInputPath, params);
 					appendNewFiles(outputPath, params);
+					ArrayList<Partition> partitions = getPartitions(outputPath, params);
+					if(partitions.size() > 0) {
+						reorganizeWithRTreeSplitter(outputPath, partitions, params);
+					}
 					fs = FileSystem.get(new Configuration());
 					out = fs.create(tempInputPath, true);
 					writer = new PrintWriter(out);
@@ -290,23 +301,103 @@ public class RTreeIndexer {
 		String emptyPartitionName = "part-00000";
 		System.out.println("mbr: " + mbr);
 		fs.create(new Path(outputPath, emptyPartitionName), true);
-		fs.create(new Path(outputPath, "_rtree.wkt"), true);
-		FSDataOutputStream os = fs.create(new Path(outputPath, "_master.rtree"), true);
+		fs.create(new Path(outputPath, "_rtree2.wkt"), true);
+		FSDataOutputStream os = fs.create(new Path(outputPath, "_master.rtree2"), true);
 		Text emptyPartitionMetadata = new Text2("0," + mbr + "," + mbr + ",0,0," + emptyPartitionName);
 		os.write(emptyPartitionMetadata.getBytes(), 0, emptyPartitionMetadata.getLength());
 		fs.close();
 	}
 	
-	/**
-	 * Set the local indexer for the given job configuration.
-	 * 
-	 * @param job
-	 * @param sindex
-	 */
-	private static void setLocalIndexer(Configuration conf, String sindex) {
-		Class<? extends LocalIndexer> localIndexerClass = LocalIndexes.get(sindex);
-		if (localIndexerClass != null)
-			conf.setClass(LocalIndexer.LocalIndexerClass, localIndexerClass, LocalIndexer.class);
+	// Read master file and return the list of overflow partitions
+	private static ArrayList<Partition> getPartitions(Path path, OperationsParams params) throws IOException {
+		ArrayList<Partition> partitions = new ArrayList<Partition>();
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+		String sindex = params.get("sindex");
+
+		Path masterPath = new Path(path, "_master." + sindex);
+		Text tempLine = new Text2();
+		LineReader in = new LineReader(fs.open(masterPath));
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			partitions.add(tempPartition);
+		}
+		
+		return partitions;
+	}
+	
+	// Reorganize index with R-Tree splitting mechanism
+	private static void reorganizeWithRTreeSplitter(Path path, ArrayList<Partition> partitions, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+		final byte[] NewLine = new byte[] { '\n' };
+		ArrayList<Partition> reorganizedPartitions = new ArrayList<Partition>();
+		Job job = new Job(params, "Reorganizer");
+	    Configuration conf = job.getConfiguration();
+		FileSystem fs = FileSystem.get(conf);
+		int blockSize = Integer.parseInt(conf.get("dfs.blocksize"));
+		double overflowRate = Double.parseDouble(params.get("overflow_rate"));
+		double overflowSize = blockSize * overflowRate;
+		String sindex = params.get("sindex");
+		
+		int maxCellId = -1;
+		for(Partition partition: partitions) {
+			if(partition.cellId > maxCellId) {
+				maxCellId = partition.cellId;
+			}
+		}
+		
+		// Iterate all overflow partitions to split
+		for(Partition partition: partitions) {
+			reorganizedPartitions.add(partition);
+			if(partition.size >= overflowSize) {
+				System.out.println("Overflow--------------------");
+				Path tempOutputPath = new Path("./", "temp.output");
+				OperationsParams params2 = new OperationsParams(conf);
+//				Text mbrText = new Text2();
+//				partition.getMBR().toText(mbrText);
+				Rectangle inputMBR = FileMBR.fileMBR(new Path(path, partition.filename), new OperationsParams(conf));
+				params2.setShape(conf, "mbr", inputMBR);
+				Indexer.index(new Path(path, partition.filename), tempOutputPath, params2);
+				reorganizedPartitions.remove(partition);
+				fs.delete(new Path(path, partition.filename));
+				LineReader in = new LineReader(fs.open(new Path(tempOutputPath, "_master." + sindex)));
+				Text tempLine = new Text2();
+				while (in.readLine(tempLine) > 0) {
+					Partition tempPartition = new Partition();
+					tempPartition.fromText(tempLine);
+					maxCellId++;
+					tempPartition.cellId = maxCellId;
+					String oldFileName = tempPartition.filename;
+					tempPartition.filename = tempPartition.filename + "_split_" + tempPartition.cellId;
+					fs.rename(new Path(tempOutputPath, oldFileName), new Path(path, tempPartition.filename));
+					reorganizedPartitions.add(tempPartition);
+				}
+				fs.delete(tempOutputPath);
+			}
+		}
+		// Update master and wkt file
+		Path currentMasterPath = new Path(path, "_master." + sindex);
+		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
+		fs.delete(currentMasterPath);
+		fs.delete(currentWKTPath);
+		OutputStream masterOut = fs.create(currentMasterPath);
+		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
+		wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+		for (Partition partition : reorganizedPartitions) {
+			Text masterLine = new Text2();
+			partition.toText(masterLine);
+			masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+			masterOut.write(NewLine);
+			wktOut.println(partition.toWKT());
+		}
+
+		wktOut.close();
+		masterOut.close();
+	}
+	
+	private static void merge(Path outputPath, Path tempOutputPath, ArrayList<Partition> partitions, OperationsParams params) {
+		// Remove all overflow partitions
+		
 	}
 
 	private static void printUsage() {
@@ -331,8 +422,6 @@ public class RTreeIndexer {
 
 		// The spatial index to use
 		long t1 = System.currentTimeMillis();
-		System.out.println("Input path: " + inputPath);
-		System.out.println("Output path: " + outputPath);
 		createEmptyPartition(outputPath, params);
 		insertByBuffer(inputPath, outputPath, params);
 		long t2 = System.currentTimeMillis();
