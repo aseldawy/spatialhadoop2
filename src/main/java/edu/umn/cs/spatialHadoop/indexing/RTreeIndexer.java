@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -261,6 +262,7 @@ public class RTreeIndexer {
 		String line;
 		PrintWriter writer = new PrintWriter(out);
 		int count = 0;
+		int reorganizeCount = 0;
 		do {
 			line = br.readLine();
 			if (line != null) {
@@ -273,7 +275,8 @@ public class RTreeIndexer {
 					appendNewFiles(outputPath, params);
 					ArrayList<Partition> partitions = getPartitions(outputPath, params);
 					if(partitions.size() > 0) {
-						reorganizeWithRTreeSplitter(outputPath, partitions, params);
+						reorganizeCount++;
+						reorganizeWithRTreeSplitter(outputPath, partitions, params, reorganizeCount);
 					}
 					fs = FileSystem.get(new Configuration());
 					out = fs.create(tempInputPath, true);
@@ -328,7 +331,7 @@ public class RTreeIndexer {
 	}
 	
 	// Reorganize index with R-Tree splitting mechanism
-	private static void reorganizeWithRTreeSplitter(Path path, ArrayList<Partition> partitions, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+	private static void reorganizeWithRTreeSplitter(Path path, ArrayList<Partition> partitions, OperationsParams params, int reorganizeCount) throws IOException, ClassNotFoundException, InterruptedException {
 		final byte[] NewLine = new byte[] { '\n' };
 		ArrayList<Partition> reorganizedPartitions = new ArrayList<Partition>();
 		Job job = new Job(params, "Reorganizer");
@@ -353,8 +356,6 @@ public class RTreeIndexer {
 				System.out.println("Overflow--------------------");
 				Path tempOutputPath = new Path("./", "temp.output");
 				OperationsParams params2 = new OperationsParams(conf);
-//				Text mbrText = new Text2();
-//				partition.getMBR().toText(mbrText);
 				Rectangle inputMBR = FileMBR.fileMBR(new Path(path, partition.filename), new OperationsParams(conf));
 				params2.setShape(conf, "mbr", inputMBR);
 				Indexer.index(new Path(path, partition.filename), tempOutputPath, params2);
@@ -378,7 +379,8 @@ public class RTreeIndexer {
 		// Update master and wkt file
 		Path currentMasterPath = new Path(path, "_master." + sindex);
 		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
-		fs.delete(currentMasterPath);
+		fs.rename(currentMasterPath, new Path("./" + reorganizeCount + ".txt"));
+//		fs.delete(currentMasterPath);
 		fs.delete(currentWKTPath);
 		OutputStream masterOut = fs.create(currentMasterPath);
 		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));

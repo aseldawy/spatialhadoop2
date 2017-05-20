@@ -105,7 +105,20 @@ public class RTreeFilePartitioner extends Partitioner {
 				return cell.cellId;
 			}
 		}
-		return 0;
+		
+		ArrayList<CellInfo> tempCells = new ArrayList<CellInfo>();
+		for(CellInfo cell: this.cells) {
+			CellInfo tempCell = new CellInfo(cell);
+			tempCell.expand(shape);
+			tempCells.add(tempCell);
+		}
+		CellInfo minimumTempCell = tempCells.get(0);
+		for(CellInfo cell: this.cells) {
+			if(cell.getSize() < minimumTempCell.getSize()) {
+				minimumTempCell = cell;
+			}
+		}
+		return minimumTempCell.cellId;
 	}
 
 	@Override
