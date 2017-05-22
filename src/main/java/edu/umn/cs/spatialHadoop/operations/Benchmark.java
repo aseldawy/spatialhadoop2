@@ -45,8 +45,8 @@ public class Benchmark {
 			Random rand = new Random();
 			long t1 = System.currentTimeMillis();
 			for(int i = 0; i < count; i++) {
-				int randomX = -90 - rand.nextInt(30);
-				int randomY = 30 + rand.nextInt(10);
+				int randomX = -70 - rand.nextInt(50);
+				int randomY = 20 + rand.nextInt(20);
 				String rect = String.format("%.5f,%.5f,%.5f,%.5f", (double)randomX, (double)randomY, (double)(randomX + ratio * 170), (double)(randomY + ratio * 70));
 				System.out.println("rect = " + rect);
 				params.set("rect", rect);
