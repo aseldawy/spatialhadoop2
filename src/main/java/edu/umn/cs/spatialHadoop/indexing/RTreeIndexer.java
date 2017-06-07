@@ -399,10 +399,11 @@ public class RTreeIndexer {
 		return reorganizeCount;
 	}
 	
-	private static void merge(Path outputPath, Path tempOutputPath, ArrayList<Partition> partitions, OperationsParams params) {
-		// Remove all overflow partitions
-		
-	}
+//	@SuppressWarnings("unused")
+//	private static void merge(Path outputPath, Path tempOutputPath, ArrayList<Partition> partitions, OperationsParams params) {
+//		// Remove all overflow partitions
+//		
+//	}
 
 	private static void printUsage() {
 		System.out.println("Index data using R-Tree splitting mechanism");
