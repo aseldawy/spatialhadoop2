@@ -607,7 +607,7 @@ public class SpatialAlgorithms {
           for (int i = i1; i < i2; i++) {
             int j = i + 1;
             boolean duplicate = false;
-            while (!duplicate && j < i2 && allPoints[i].x + threshold > allPoints[j].x) {
+            while (!duplicate && j < allPoints.length && allPoints[i].x + threshold > allPoints[j].x) {
               double dy = Math.abs(allPoints[j].y - allPoints[i].y);
               if (dy < threshold)
                 duplicate = true;
