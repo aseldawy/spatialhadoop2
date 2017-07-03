@@ -243,7 +243,7 @@ public class GSDTAlgorithm {
           }
         }, null);
         if (!correct.get())
-          return false;
+          return true; // true means incorrect
 
         // Test if all the lines of the convex hull are edges
         boolean collinear_ch = true;
@@ -259,7 +259,7 @@ public class GSDTAlgorithm {
             int d = convexHull[(i+1)%convexHull.length];
             if (!neighbors[s].contains(d)) {
               System.out.printf("Edge %d, %d on the convex hull but not found in the DT\n", s, d);
-              return false;
+              return true; // true means incorrect
             }
           }
         }
@@ -315,7 +315,7 @@ public class GSDTAlgorithm {
               if (!neighbors[n1].contains(n2)) {
                 System.out.printf("An incomplete triangle (%d,%d,%d)\n",
                     i, n1, n2);
-                return true; // Incorrect
+                return true; // true means incorrect
               }
             }
           }
@@ -324,10 +324,10 @@ public class GSDTAlgorithm {
 
       } catch (IOException e) {
         e.printStackTrace();
-        return true; // Incorrect
+        return true; // true means incorrect
       }
 
-      return false; // Correct
+      return false; // false means correct
     }
 
     public Rectangle getMBR() {
