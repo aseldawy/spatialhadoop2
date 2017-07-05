@@ -306,6 +306,13 @@ public class HDFRasterLayer extends Canvas {
    * @param waterMask
    */
   public void recoverHoles(BitArray waterMask) {
+    for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++) {
+      if (waterMask.get(y * width + x))
+        count[x][y] = 0;
+    }
+
+
     // Store the status of each value
     // 0 - the corresponding entry originally contained a value
     // 1 - the entry did not contain a value and still does not contain one
