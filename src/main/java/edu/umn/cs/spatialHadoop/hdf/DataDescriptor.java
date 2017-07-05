@@ -8,6 +8,9 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.hdf;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -20,6 +23,7 @@ import java.io.InputStream;
  *
  */
 public abstract class DataDescriptor {
+  private static final Log LOG = LogFactory.getLog(DataDescriptor.class);
   
   /**Whether the information has been loaded from file or not*/
   protected boolean loaded;
@@ -173,6 +177,7 @@ public abstract class DataDescriptor {
         if (chunkObject == null) {
           // TODO fill in the array with fillValue
           extendedLength += chunk_size * nt_size; // Skip this part in the array
+          LOG.warn("Skipping "+chunkedID);
         } else {
           byte[] dataInChunk = chunkObject.getData();
           // Append to the allData
