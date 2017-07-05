@@ -207,7 +207,7 @@ public final class HDFConstants {
     int ch1 = bytes[offset];
     int ch2 = bytes[offset+1];
     if (ch1 < 0) ch1 += 256; // Remove the effect of two's complement
-    if (ch2 < 0) ch1 += 256; // Remove the effect of two's complement
+    if (ch2 < 0) ch2 += 256; // Remove the effect of two's complement
     return (ch1 << 8) + (ch2 << 0);
   }
 
@@ -215,7 +215,7 @@ public final class HDFConstants {
     int ch1 = bytes[offset];
     int ch2 = bytes[offset+1];
     if (ch1 < 0) ch1 += 256; // Remove the effect of two's complement
-    if (ch2 < 0) ch1 += 256; // Remove the effect of two's complement
+    if (ch2 < 0) ch2 += 256; // Remove the effect of two's complement
     return (short)((ch1 << 8) + (ch2 << 0));
   }
   
