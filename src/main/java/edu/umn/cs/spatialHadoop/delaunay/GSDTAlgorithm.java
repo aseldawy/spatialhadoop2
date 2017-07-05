@@ -178,8 +178,22 @@ public class GSDTAlgorithm {
     /**
      * Perform some sanity checks to see if the current triangulation could
      * be incorrect. This can be used to find as early as possible when the
-     * output becomes bad.
-     * @return
+     * output becomes bad. Notice that it is named 'isIncorrect' rather than
+     * 'isCorrect' for sanity. If the function returns <code>true</code> it
+     * indicates for sure that there is some error. If it returns <code>false</code>
+     * the underlying triangulation might or might not be correct.
+     *
+     * In particular, this method checks for three types of errors:
+     * <ul>
+     *   <li>Intersection: No two segments in the triangulation should intersect</li>
+     *   <li>Convex hull: All edges of the convex hull should be part of the Delaunay triangulation</li>
+     *   <li>Triangulation: Edges should form triangles. There should not be any areas with
+     *   polygons of more than three edges. To test this feature, each vertex is considered. The
+     *   neighbors of this vertex are sorted in CCW order. Then, we check that each two consecutive
+     *   neighbors that form less than 180 degrees are also neighbors.</li>
+     * </ul>
+     * @return <code>true</code> if a violation of the Delaunay triangulation was
+     * found; <code>false</code> if no errors were found.
      */
     public boolean isIncorrect() {
       // Test if there are any overlapping edges
@@ -204,14 +218,21 @@ public class GSDTAlgorithm {
         }
       }
 
-      Edge[] aredges = edges.toArray(new Edge[edges.size()]);
+      Edge[] arEdges = edges.toArray(new Edge[edges.size()]);
       final BooleanWritable correct = new BooleanWritable(true);
 
       try {
-        SpatialAlgorithms.SelfJoin_rectangles(aredges, new OutputCollector<Edge, Edge>() {
+        SpatialAlgorithms.SelfJoin_rectangles(arEdges, new OutputCollector<Edge, Edge>() {
           static final double Threshold = 1E-5;
           @Override
           public void collect(Edge e1, Edge e2) throws IOException {
+            if (e1.source == e2.source || e1.source == e2.destination ||
+                e1.destination == e2.source || e1.destination == e2.destination) {
+              // Skip the test if the two edges share an end point.
+              // If they share an end point they have to be intersected but it
+              // is not considered a violation of the triangulation property.
+              return;
+            }
             // Do a refine step where we compare the actual lines
             double x1 = xs[e1.source];
             double y1 = ys[e1.source];
@@ -233,8 +254,12 @@ public class GSDTAlgorithm {
             double maxx2 = Math.max(x3, x4);
             double miny2 = Math.min(y3, y4);
             double maxy2 = Math.max(y3, y4);
-            if ((ix - minx1 > Threshold && ix - maxx1 < -Threshold) && (iy - miny1 > Threshold && iy - maxy1 < -Threshold) &&
-                (ix - minx2 > Threshold && ix - maxx2 < -Threshold) && (iy - miny2 > Threshold && iy - maxy2 < -Threshold)) {
+            // Make sure that the intersection is on the two line segments.
+            // The intersection has to be in the x and y ranges of the two line
+            // segments. A threshold is used to avoid precision error where the
+            // intersection is off by a little bit due to calculation errors.
+            if ((ix > minx1 + Threshold && ix < maxx1-Threshold) && (iy > miny1 + Threshold && iy < maxy1-Threshold) &&
+                (ix > minx2 + Threshold && ix < maxx2-Threshold) && (iy > miny2 + Threshold && iy < maxy2-Threshold)) {
               System.out.printf("line %f, %f, %f, %f\n", x1, y1, x2, y2);
               System.out.printf("line %f, %f, %f, %f\n", x3, y3, x4, y4);
               System.out.printf("circle %f, %f, 0.5\n", ix, iy);
