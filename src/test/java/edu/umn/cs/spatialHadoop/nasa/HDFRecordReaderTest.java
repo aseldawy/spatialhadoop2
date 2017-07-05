@@ -138,4 +138,37 @@ public class HDFRecordReaderTest extends TestCase {
     assertTrue(wmBits.get(3));
   }
 
+  public void testClearWaterValues() {
+    short[] values = {
+        10, 10, 10, 10,
+        10, 10, 10, 10,
+        10, 10, 10, 10,
+        10, 10, 10, 10,
+    };
+    byte[] waterMask = {
+        0, 1, 1, 0,
+        1, 0, 0, 1,
+        1, 1, 0, 1,
+        0, 1, 1, 0,
+    };
+    // Convert the data above to formats compatible with the calee
+    ByteBuffer valuesBytes = ByteBuffer.allocate(values.length * 2);
+    BitArray waterMaskBits = new BitArray(waterMask.length);
+    for (int i = 0; i < values.length; i++) {
+      valuesBytes.putShort(2*i, values[i]);
+      waterMaskBits.set(i, waterMask[i] == 1);
+    }
+
+    short fillValue = 0;
+    HDFRecordReader.recoverXYShorts(valuesBytes, fillValue, waterMaskBits);
+
+    assertEquals(10, valuesBytes.getShort(2*0));
+    assertEquals(10, valuesBytes.getShort(2*3));
+    assertEquals(10, valuesBytes.getShort(2*5));
+
+    assertEquals(0, valuesBytes.getShort(2*1));
+    assertEquals(0, valuesBytes.getShort(2*2));
+    assertEquals(0, valuesBytes.getShort(2*9));
+
+  }
 }

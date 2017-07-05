@@ -14,6 +14,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
 
 /**
@@ -22,6 +25,8 @@ import org.apache.hadoop.fs.FSDataInputStream;
  *
  */
 public class HDFFile implements Closeable {
+
+  private static final Log LOG = LogFactory.getLog(HDFFile.class);
   
   /**Special marker for HDF files*/
   private static final byte[] HDFMagicNumber = {0x0E, 0x03, 0x13, 0x01};
@@ -57,6 +62,7 @@ public class HDFFile implements Closeable {
         blockSize = inStream.readShort();
       }
     } while (nextBlock > 0);
+    LOG.debug("Read an HDF file with "+this.dataDescriptors.size()+" data descriptors");
   }
 
   /**
