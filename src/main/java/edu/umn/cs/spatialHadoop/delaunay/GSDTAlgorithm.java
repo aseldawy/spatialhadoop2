@@ -296,19 +296,20 @@ public class GSDTAlgorithm {
           final IntArray ineighbors = neighbors[i];
           if (ineighbors.size() == 1)
             continue;
-          final Point center = points[i];
-          Comparator<Point> ccw_comparator = new Comparator<Point>() {
+          final int center = i;
+          //final Point center = points[i];
+          Comparator<Integer> ccw_comparator = new Comparator<Integer>() {
             @Override
-            public int compare(Point a, Point b) {
-              if (a.x - center.x >= 0 && b.x - center.x < 0)
+            public int compare(Integer a, Integer b) {
+              if (xs[a] - xs[center] >= 0 && xs[b] - xs[center] < 0)
                 return 1;
-              if (a.x - center.x < 0 && b.x - center.x >= 0)
+              if (xs[a] - xs[center] < 0 && xs[b] - xs[center] >= 0)
                 return -1;
-              if (a.x - center.x == 0 && b.x - center.x == 0)
-                return Double.compare(b.y - center.y, a.y - center.y);
+              if (xs[a] - xs[center] == 0 && xs[b] - xs[center] == 0)
+                return Double.compare(ys[b] - ys[center], ys[a] - ys[center]);
 
               // compute the cross product of vectors (center -> a) x (center -> b)
-              double det = (a.x - center.x) * (b.y - center.y) - (b.x - center.x) * (a.y - center.y);
+              double det = (xs[a] - xs[center]) * (ys[b] - ys[center]) - (xs[b] - xs[center]) * (ys[a] - ys[center]);
               if (det < 0)
                 return -1;
               if (det > 0)
@@ -319,8 +320,8 @@ public class GSDTAlgorithm {
           for (int n1 = ineighbors.size() - 1; n1 >= 0 ; n1--) {
             for (int n2 = 0; n2 < n1; n2++) {
               // Compare neighbors n2 and n2+1
-              final Point a = points[ineighbors.get(n2)];
-              final Point b = points[ineighbors.get(n2+1)];
+              final int a = ineighbors.get(n2);
+              final int b = ineighbors.get(n2+1);
               if (ccw_comparator.compare(a, b) > 0)
                 ineighbors.swap(n2, n2+1);
             }
@@ -331,10 +332,10 @@ public class GSDTAlgorithm {
             int n1 = ineighbors.get(j1);
             int n2 = ineighbors.get(j2);
             // Check if the triangle (i, n1, n1+1) can be reported
-            double a_x = points[n1].x - points[i].x;
-            double a_y = points[n1].y - points[i].y;
-            double b_x = points[n2].x - points[i].x;
-            double b_y = points[n2].y - points[i].y;
+            double a_x = xs[n1] - xs[i];
+            double a_y = ys[n1] - ys[i];
+            double b_x = xs[n2] - xs[i];
+            double b_y = ys[n2] - ys[i];
             if (a_x * b_y - a_y * b_x < 0) {
               // Triangle is correct. Now make sure that the edge n1-n2 exists
               if (!neighbors[n1].contains(n2)) {
@@ -365,10 +366,13 @@ public class GSDTAlgorithm {
 
     public void draw(PrintStream out) {
       Rectangle mbr = getMBR();
+      this.draw(out, mbr);
+    }
+
+    public void draw(PrintStream out, Rectangle mbr) {
       double scale = 1000 / Math.max(mbr.getWidth(), mbr.getHeight());
       this.draw(out, mbr, scale);
     }
-
     public void draw(PrintStream out, Rectangle mbr, double scale) {
       // Draw to rasem
       out.println("=begin");
