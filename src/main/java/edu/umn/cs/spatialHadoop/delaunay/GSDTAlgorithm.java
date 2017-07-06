@@ -1244,15 +1244,30 @@ public class GSDTAlgorithm {
   /**
    * Returns true if p4 is inside the circumcircle of the three points
    * p1, p2, and p3
-   * If the p4 is exactly on the circumference of the circle, it returns false.
+   * If p4 is exactly on the circumference of the circle, it returns false.
    * See Guibas and Stolfi (1985) p.107.
    * @return true iff p4 is inside the circle (p1, p2, p3)
    */
   boolean inCircle(int p1, int p2, int p3, int p4) {
-    return (xs[p1]*xs[p1] + ys[p1]*ys[p1]) * triArea(p2, p3, p4) -
-        (xs[p2] * xs[p2] + ys[p2]*ys[p2]) * triArea(p1, p3, p4) +
-        (xs[p3]*xs[p3] + ys[p3]*ys[p3]) * triArea(p1, p2, p4) -
-        (xs[p4]*xs[p4] + ys[p4]*ys[p4]) * triArea(p1, p2, p3) > 0;
+    double sum = 0;
+
+    double area = triArea(p2, p3, p4);
+    sum+= xs[p1]*xs[p1] * area;
+    sum+= ys[p1]*ys[p1] * area;
+
+    area = triArea(p1, p3, p4);
+    sum+= -xs[p2] * xs[p2] * area;
+    sum+= -ys[p2]*ys[p2] * area;
+
+    area = triArea(p1, p2, p4);
+    sum+= xs[p3]*xs[p3] * area;
+    sum+= ys[p3]*ys[p3] * area;
+
+    area = triArea(p1, p2, p3);
+    sum+= -xs[p4]*xs[p4] * area;
+    sum+= -ys[p4]*ys[p4] * area;
+
+    return sum > 0;
   }
 
 

@@ -59,18 +59,18 @@ public class GSImprovedAlgorithmTest extends TestCase {
             else
               i++;
           }
-          assertTrue(String.format("Triangle (%d, %d, %d) not expected in the answer",
+          assertTrue(String.format("Triangle (%d, %d, %d) not expected in the answer of '%s'",
               Arrays.binarySearch(points, triangle[0]),
               Arrays.binarySearch(points, triangle[1]),
-              Arrays.binarySearch(points, triangle[2])), found);
+              Arrays.binarySearch(points, triangle[2]), datasetName), found);
         }
         for (Point[] triangle : correctTriangulation) {
-          System.out.printf("Triangle (%d, %d, %d) expected but not found\n",
+          System.out.printf("Triangle (%d, %d, %d) expected in '%s' but not found\n",
               Arrays.binarySearch(points, triangle[0]),
               Arrays.binarySearch(points, triangle[1]),
-              Arrays.binarySearch(points, triangle[2]));
+              Arrays.binarySearch(points, triangle[2]), datasetName);
         }
-        assertTrue(String.format("%d triangles not found", correctTriangulation.size()),
+        assertTrue(String.format("%d triangles not found in '%s'", correctTriangulation.size(), datasetName),
             correctTriangulation.isEmpty());
       }
     } catch (IOException e) {
