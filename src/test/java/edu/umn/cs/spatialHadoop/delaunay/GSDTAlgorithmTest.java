@@ -147,6 +147,13 @@ public class GSDTAlgorithmTest extends TestCase {
     }
   }
 
+  public static<T> int indexOf(T[] array, T value) {
+    for (int i = 0; i < array.length; i++)
+      if (value.equals(array[i]))
+        return i;
+    return -1;
+  }
+
   /**
    * Test Delaunay Triangulation for the datasets stored under 'test/resources'
    */
@@ -173,19 +180,19 @@ public class GSDTAlgorithmTest extends TestCase {
             else
               i++;
           }
-          assertTrue(String.format("Triangle (%d, %d, %d) not expected in the answer",
-              Arrays.binarySearch(points, triangle[0]),
-              Arrays.binarySearch(points, triangle[1]),
-              Arrays.binarySearch(points, triangle[2])), found);
+          assertTrue(String.format("Triangle (%d, %d, %d) not expected in the answer of '%s'",
+              indexOf(points, triangle[0]),
+              indexOf(points, triangle[1]),
+              indexOf(points, triangle[2]), datasetName), found);
           iTriangle++;
         }
         for (Point[] triangle : correctTriangulation) {
-          System.out.printf("Triangle (%d, %d, %d) expected but not found\n",
-              Arrays.binarySearch(points, triangle[0]),
-              Arrays.binarySearch(points, triangle[1]),
-              Arrays.binarySearch(points, triangle[2]));
+          System.out.printf("Triangle (%d, %d, %d) expected in '%s' but not found\n",
+              indexOf(points, triangle[0]),
+              indexOf(points, triangle[1]),
+              indexOf(points, triangle[2]), datasetName);
         }
-        assertTrue(String.format("%d triangles not found", correctTriangulation.size()),
+        assertTrue(String.format("%d triangles not found in '%s'", correctTriangulation.size(), datasetName),
             correctTriangulation.isEmpty());
       }
     } catch (IOException e) {
@@ -257,9 +264,9 @@ public class GSDTAlgorithmTest extends TestCase {
         }
 
         assertTrue(String.format("Safe triangle (%d, %d, %d) not found",
-            Arrays.binarySearch(points, safeTriangle[0]),
-            Arrays.binarySearch(points, safeTriangle[1]),
-            Arrays.binarySearch(points, safeTriangle[2])), found);
+            indexOf(points, safeTriangle[0]),
+            indexOf(points, safeTriangle[1]),
+            indexOf(points, safeTriangle[2])), found);
       }
       // For unsafe triangles, invert the reportedSites to report all sites that
       // have never been reported before.
@@ -277,15 +284,15 @@ public class GSDTAlgorithmTest extends TestCase {
         }
 
         assertTrue(String.format("Unsafe triangle (%d, %d, %d) not found",
-            Arrays.binarySearch(points, unsafeTriangle[0]),
-            Arrays.binarySearch(points, unsafeTriangle[1]),
-            Arrays.binarySearch(points, unsafeTriangle[2])), found);
+            indexOf(points, unsafeTriangle[0]),
+            indexOf(points, unsafeTriangle[1]),
+            indexOf(points, unsafeTriangle[2])), found);
       }
       for (Point[] triangle : allTriangles) {
         System.out.printf("Triangle not found (%d, %d, %d)\n",
-            Arrays.binarySearch(points, triangle[0]),
-            Arrays.binarySearch(points, triangle[1]),
-            Arrays.binarySearch(points, triangle[2])
+            indexOf(points, triangle[0]),
+            indexOf(points, triangle[1]),
+            indexOf(points, triangle[2])
         );
       }
       assertTrue(String.format("%d triangles not found", allTriangles.size()),
@@ -329,9 +336,9 @@ public class GSDTAlgorithmTest extends TestCase {
         }
 
         assertTrue(String.format("Safe triangle (%d, %d, %d) not found",
-            Arrays.binarySearch(points, safeTriangle[0]),
-            Arrays.binarySearch(points, safeTriangle[1]),
-            Arrays.binarySearch(points, safeTriangle[2])), found);
+            indexOf(points, safeTriangle[0]),
+            indexOf(points, safeTriangle[1]),
+            indexOf(points, safeTriangle[2])), found);
       }
 
       // Repeat the same thing for the right half.
@@ -359,9 +366,9 @@ public class GSDTAlgorithmTest extends TestCase {
         }
 
         assertTrue(String.format("Safe triangle (%d, %d, %d) not found",
-            Arrays.binarySearch(points, safeTriangle[0]),
-            Arrays.binarySearch(points, safeTriangle[1]),
-            Arrays.binarySearch(points, safeTriangle[2])), found);
+            indexOf(points, safeTriangle[0]),
+            indexOf(points, safeTriangle[1]),
+            indexOf(points, safeTriangle[2])), found);
       }
 
       // Merge the unsafe parts from the left and right to finalize
@@ -381,16 +388,16 @@ public class GSDTAlgorithmTest extends TestCase {
         }
 
         assertTrue(String.format("Safe triangle (%d, %d, %d) not found",
-            Arrays.binarySearch(points, safeTriangle[0]),
-            Arrays.binarySearch(points, safeTriangle[1]),
-            Arrays.binarySearch(points, safeTriangle[2])), found);
+            indexOf(points, safeTriangle[0]),
+            indexOf(points, safeTriangle[1]),
+            indexOf(points, safeTriangle[2])), found);
       }
 
       for (Point[] triangle : allTriangles) {
         System.out.printf("Triangle not found (%d, %d, %d)\n",
-            Arrays.binarySearch(points, triangle[0]),
-            Arrays.binarySearch(points, triangle[1]),
-            Arrays.binarySearch(points, triangle[2])
+            indexOf(points, triangle[0]),
+            indexOf(points, triangle[1]),
+            indexOf(points, triangle[2])
         );
       }
       assertTrue(String.format("%d triangles not found", allTriangles.size()),

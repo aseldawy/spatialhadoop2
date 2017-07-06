@@ -87,10 +87,6 @@ public class GSImprovedAlgorithm extends GSDTAlgorithm {
     while (!toPartition.isEmpty()) {
       if (progress != null)
         progress.progress();
-      if (System.currentTimeMillis() - reportedTime > 1000) {
-        reportedTime = System.currentTimeMillis();
-        LOG.debug(String.format("%d to partition, %d to merge", toPartition.size(), toMerge.size()));
-      }
       Part currentPart = toPartition.pop();
       if (currentPart == null) {
         // Merge the top two triangulations
