@@ -66,10 +66,10 @@ public class HDFRecordReaderTest extends TestCase {
        0,80, 0,  0,
     };
     byte[] waterMask = {
-      0, 1, 1, 0,
-      1, 0, 0, 1,
-      1, 1, 0, 1,
-      0, 1, 1, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
     };
     // Convert the data above to formats compatible with the calee
     ByteBuffer valuesBytes = ByteBuffer.allocate(values.length * 2);
@@ -103,10 +103,10 @@ public class HDFRecordReaderTest extends TestCase {
        0, 0, 0, 0,
     };
     byte[] waterMask = {
-      1, 1, 1, 1,
-      1, 1, 1, 1,
-      1, 1, 1, 1,
-      1, 1, 1, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
     };
     // Convert the data above to formats compatible with the calee
     ByteBuffer valuesBytes = ByteBuffer.allocate(values.length * 2);
@@ -145,6 +145,7 @@ public class HDFRecordReaderTest extends TestCase {
         10, 10, 10, 10,
         10, 10, 10, 10,
     };
+    // Water mask. Values with one correspond to water areas.
     byte[] waterMask = {
         0, 1, 1, 0,
         1, 0, 0, 1,

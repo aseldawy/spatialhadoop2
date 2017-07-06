@@ -439,6 +439,12 @@ public class HDFRecordReader<S extends NASAShape>
    * and <code>false</code> values for land areas.
    */
   public static void recoverXYShorts(ByteBuffer values, short fillValue, BitArray waterMask) {
+    // Reset all values in water to the fill value even if they are already set
+    for (int i = 0; i < values.limit(); i += 2) {
+      if (waterMask.get(i/2))
+        values.putShort(i, fillValue);
+    }
+
     // Resolution of the dataset which is the size of each of its two dimensions
     // e.g., 1200x1200, 2400x2400, or 4800x4800
     int resolution = (int) Math.sqrt(values.limit() / 2);
