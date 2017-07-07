@@ -73,7 +73,7 @@ public class GSDTAlgorithm {
   protected Progressable progress;
 
   /**A temporary array used to compute sums accurately using {@link IFastSum}*/
-  private transient double[] values = new double[16];
+  private transient double[] values = new double[17];
 
 
   /**
@@ -1239,14 +1239,6 @@ public class GSDTAlgorithm {
   }
 
   /**
-   * Returns twice the area of the oriented triangle (a, b, c), i.e., the
-   * area is positive if the triangle is oriented counterclockwise.
-   */
-  double triArea(int p1, int p2, int p3) {
-    return (xs[p2] - xs[p1])*(ys[p3] - ys[p1]) - (ys[p2] - ys[p1])*(xs[p3] - xs[p1]);
-  }
-
-  /**
    * Returns true if p4 is inside the circumcircle of the three points
    * p1, p2, and p3
    * If p4 is exactly on the circumference of the circle, it returns false.
@@ -1255,23 +1247,49 @@ public class GSDTAlgorithm {
    */
   boolean inCircle(int p1, int p2, int p3, int p4) {
 
-    double area = triArea(p2, p3, p4);
-    values[1] = xs[p1]*xs[p1] * area;
-    values[2] = ys[p1]*ys[p1] * area;
+    // The calculations might seem too complicated. They were originally written
+    // in a very simple way but they resulted in round-off errors in very
+    // degenerate cases. After some investigation and tests, I ended up rewriting
+    // them in the way below. I had to inline the calculation of the area of
+    // a triangle and integrate it in the higher level to be able to reach the
+    // expressions below. The original expressions were:
+    // triArea(a,b,c) = (b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x)
+    // norm2(a) = a.x^2 + a.y^2
+    // inCircle(p1,p2,p3,p4) = triArea(p2,p3,p4)*norm2(p1) - triArea(p1,p3,p4)*norm2(p2)
+    //                        +triArea(p1,p2,p4)*norm2(p3) - triArea(p1,p2,p3)*norm2(p4);
 
-    area = triArea(p1, p3, p4);
-    values[3] = -xs[p2] * xs[p2] * area;
-    values[4] = -ys[p2]*ys[p2] * area;
+    double v1 = (xs[p3] - xs[p2]) * (ys[p4] - ys[p2]);
+    double v2 = (ys[p3] - ys[p2]) * (xs[p4] - xs[p2]);
+    values[1]  = v1 * xs[p1] * xs[p1];
+    values[2]  = -v2 * xs[p1] * xs[p1];
+    values[3]  =  v1 * ys[p1] * ys[p1];
+    values[4]  = -v2 * ys[p1] * ys[p1];
 
-    area = triArea(p1, p2, p4);
-    values[5] = xs[p3]*xs[p3] * area;
-    values[6] = ys[p3]*ys[p3] * area;
+    v1 = (xs[p3] - xs[p1]) * (ys[p4] - ys[p1]);
+    v2 = (ys[p3] - ys[p1]) * (xs[p4] - xs[p1]);
+    values[5]  = -v1 * xs[p2] * xs[p2];
+    values[6]  =  v2 * xs[p2] * xs[p2];
+    values[7]  = -v1 * ys[p2] * ys[p2];
+    values[8]  =  v2 * ys[p2] * ys[p2];
 
-    area = triArea(p1, p2, p3);
-    values[7] = -xs[p4]*xs[p4] * area;
-    values[8] = -ys[p4]*ys[p4] * area;
+    v1 = (xs[p2] - xs[p1]) * (ys[p4] - ys[p1]);
+    v2 = (ys[p2] - ys[p1]) * (xs[p4] - xs[p1]);
 
-    return IFastSum.iFastSum(values, 8) > 0;
+    values[9]  =  v1 * xs[p3] * xs[p3];
+    values[10] = -v2 * xs[p3] * xs[p3];
+    values[11] =  v1 * ys[p3] * ys[p3];
+    values[12] = -v2 * ys[p3] * ys[p3];
+
+    v1 = (xs[p2] - xs[p1]) * (ys[p3] - ys[p1]);
+    v2 = (ys[p2] - ys[p1]) * (xs[p3] - xs[p1]);
+
+    values[13] = -v1 * xs[p4] * xs[p4];
+    values[14] =  v2 * xs[p4] * xs[p4];
+    values[15] = -v1 * ys[p4] * ys[p4];
+    values[16] =  v2 * ys[p4] * ys[p4];
+
+    IFastSum.r_c = 0;
+    return IFastSum.iFastSum(values, 16) > 0;
   }
 
 

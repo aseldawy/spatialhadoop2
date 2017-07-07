@@ -163,8 +163,8 @@ public class GSDTAlgorithmTest extends TestCase {
         "test_dt5", "test_dt6", "test_dt7", "test_dt8", "test_dt10", "test_dt12"};
     try {
       for (String datasetName : datasetNames) {
-        Point[] points = readPoints("src/test/resources/"+datasetName+".points");
-        List<Point[]> correctTriangulation = readTriangles("src/test/resources/"+datasetName+".triangles", points);
+        Point[] points = readPoints("src/test/resources/Delaunay/"+datasetName+".points");
+        List<Point[]> correctTriangulation = readTriangles("src/test/resources/Delaunay/"+datasetName+".triangles", points);
 
         GSDTAlgorithm algo = new GSDTAlgorithm(points, null);
         Triangulation answer = algo.getFinalTriangulation();
@@ -212,7 +212,7 @@ public class GSDTAlgorithmTest extends TestCase {
       // A flag that is set to true when the first error is found
       final BooleanWritable errorFound = new BooleanWritable(false);
       for (String datasetName : datasetNames) {
-        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
+        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/Delaunay/"+datasetName+".points");
 
         GSDTAlgorithm algo = new GSDTAlgorithm(points, null) {
           @Override
@@ -242,8 +242,8 @@ public class GSDTAlgorithmTest extends TestCase {
    */
   public void testPartitioning() {
     try {
-      Point[] points = readPoints("src/test/resources/test_dt3.points");
-      List<Point[]> allTriangles = readTriangles("src/test/resources/test_dt3.triangles", points);
+      Point[] points = readPoints("src/test/resources/Delaunay/test_dt3.points");
+      List<Point[]> allTriangles = readTriangles("src/test/resources/Delaunay/test_dt3.triangles", points);
 
       // Split into a final and non-final graphs and check that we get the same
       // set of triangles from the two of them together
@@ -308,8 +308,8 @@ public class GSDTAlgorithmTest extends TestCase {
    */
   public void testMerge() {
     try {
-      Point[] points = readPoints("src/test/resources/test_dt3.points");
-      List<Point[]> allTriangles = readTriangles("src/test/resources/test_dt3.triangles", points);
+      Point[] points = readPoints("src/test/resources/Delaunay/test_dt3.points");
+      List<Point[]> allTriangles = readTriangles("src/test/resources/Delaunay/test_dt3.triangles", points);
       // Split the input set of points vertically, compute each DT separately,
       // then merge them and make sure that we get the same answer
       // Points are already sorted on the x-axis

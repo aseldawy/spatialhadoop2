@@ -38,8 +38,8 @@ public class DwyersAlgorithmTest extends TestCase {
     String[] datasetNames = {"test_dt2"};
     try {
       for (String datasetName : datasetNames) {
-        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
-        List<Point[]> correctTriangulation = GSDTAlgorithmTest.readTriangles("src/test/resources/"+datasetName+".triangles", points);
+        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/Delaunay/"+datasetName+".points");
+        List<Point[]> correctTriangulation = GSDTAlgorithmTest.readTriangles("src/test/resources/Delaunay/"+datasetName+".triangles", points);
 
         DwyersAlgorithm algo = new DwyersAlgorithm(points, null);
         Triangulation answer = algo.getFinalTriangulation();

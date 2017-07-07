@@ -43,8 +43,8 @@ public class GSImprovedAlgorithmTest extends TestCase {
         "test_dt5", "test_dt6", "test_dt7", "test_dt8", "test_dt10", "test_dt12"};
     try {
       for (String datasetName : datasetNames) {
-        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
-        List<Point[]> correctTriangulation = GSDTAlgorithmTest.readTriangles("src/test/resources/"+datasetName+".triangles", points);
+        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/Delaunay/"+datasetName+".points");
+        List<Point[]> correctTriangulation = GSDTAlgorithmTest.readTriangles("src/test/resources/Delaunay/"+datasetName+".triangles", points);
 
         GSImprovedAlgorithm algo = new GSImprovedAlgorithm(points, null);
         Triangulation answer = algo.getFinalTriangulation();
@@ -85,12 +85,12 @@ public class GSImprovedAlgorithmTest extends TestCase {
    * - Two intersecting edges in the triangulation
    */
   public void testTriangulationsNoGroundTruth() {
-    String[] datasetNames = {"test_dt9", "test_dt13", "test_dt14", "test_dt15", "test_dt16"};
+    String[] datasetNames = {"test_dt9", "test_dt13", "test_dt14", "test_dt15", "test_dt16", "test_dt17", };
     try {
       // A flag that is set to true when the first error is found
       final BooleanWritable errorFound = new BooleanWritable(false);
       for (String datasetName : datasetNames) {
-        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/"+datasetName+".points");
+        Point[] points = GSDTAlgorithmTest.readPoints("src/test/resources/Delaunay/"+datasetName+".points");
 
         GSImprovedAlgorithm algo = new GSImprovedAlgorithm(points, null) {
           @Override
