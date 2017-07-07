@@ -85,7 +85,7 @@ public class GSImprovedAlgorithmTest extends TestCase {
    * - Two intersecting edges in the triangulation
    */
   public void testTriangulationsNoGroundTruth() {
-    String[] datasetNames = {"test_dt9", "test_dt13", "test_dt14", "test_dt15"};
+    String[] datasetNames = {"test_dt9", "test_dt13", "test_dt14", "test_dt15", "test_dt16"};
     try {
       // A flag that is set to true when the first error is found
       final BooleanWritable errorFound = new BooleanWritable(false);

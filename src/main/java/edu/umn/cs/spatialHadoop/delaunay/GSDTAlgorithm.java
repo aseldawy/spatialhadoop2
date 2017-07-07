@@ -11,6 +11,7 @@ import java.util.Stack;
 import java.util.Vector;
 
 import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
+import edu.umn.cs.spatialHadoop.util.IFastSum;
 import edu.umn.cs.spatialHadoop.util.MergeSorter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -70,6 +71,10 @@ public class GSDTAlgorithm {
    * Use to report progress to avoid mapper or reducer timeout
    */
   protected Progressable progress;
+
+  /**A temporary array used to compute sums accurately using {@link IFastSum}*/
+  private transient double[] values = new double[16];
+
 
   /**
    * A class that stores a set of triangles for part of the sites.
@@ -1249,25 +1254,24 @@ public class GSDTAlgorithm {
    * @return true iff p4 is inside the circle (p1, p2, p3)
    */
   boolean inCircle(int p1, int p2, int p3, int p4) {
-    double sum = 0;
 
     double area = triArea(p2, p3, p4);
-    sum+= xs[p1]*xs[p1] * area;
-    sum+= ys[p1]*ys[p1] * area;
+    values[1] = xs[p1]*xs[p1] * area;
+    values[2] = ys[p1]*ys[p1] * area;
 
     area = triArea(p1, p3, p4);
-    sum+= -xs[p2] * xs[p2] * area;
-    sum+= -ys[p2]*ys[p2] * area;
+    values[3] = -xs[p2] * xs[p2] * area;
+    values[4] = -ys[p2]*ys[p2] * area;
 
     area = triArea(p1, p2, p4);
-    sum+= xs[p3]*xs[p3] * area;
-    sum+= ys[p3]*ys[p3] * area;
+    values[5] = xs[p3]*xs[p3] * area;
+    values[6] = ys[p3]*ys[p3] * area;
 
     area = triArea(p1, p2, p3);
-    sum+= -xs[p4]*xs[p4] * area;
-    sum+= -ys[p4]*ys[p4] * area;
+    values[7] = -xs[p4]*xs[p4] * area;
+    values[8] = -ys[p4]*ys[p4] * area;
 
-    return sum > 0;
+    return IFastSum.iFastSum(values, 8) > 0;
   }
 
 
