@@ -1,9 +1,9 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -36,10 +36,10 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 
-public class DynamicRepartitioner {
-
+public class GreedyRepartitioner {
+	
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
-
+	
 	/**
 	 * The map function that partitions the data using the configured
 	 * partitioner. Refer from Indexer class
@@ -47,7 +47,7 @@ public class DynamicRepartitioner {
 	 * @author Tin Vu
 	 *
 	 */
-	public static class DynamicRepartitionerMap
+	public static class GreedyRepartitionerMap
 			extends Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
 
 		/** The partitioner used to partitioner the data across reducers */
@@ -94,7 +94,7 @@ public class DynamicRepartitioner {
 		}
 	}
 
-	public static class DynamicRepartitionerReduce<S extends Shape>
+	public static class GreedyRepartitionerReduce<S extends Shape>
 			extends Reducer<IntWritable, Shape, IntWritable, Shape> {
 
 		@Override
@@ -110,12 +110,12 @@ public class DynamicRepartitioner {
 			LOG.info("Done with partition #" + partitionID);
 		}
 	}
-
+	
 	private static Job repartitionMapReduce(Path inPath, OperationsParams params)
 			throws IOException, InterruptedException, ClassNotFoundException {
 		Job job = new Job(params, "DynamicRepartitioner");
 		Configuration conf = job.getConfiguration();
-		job.setJarByClass(DynamicRepartitioner.class);
+		job.setJarByClass(GreedyRepartitioner.class);
 
 		// Get list of data files
 		FileSystem inFs = inPath.getFileSystem(conf);
@@ -161,7 +161,7 @@ public class DynamicRepartitioner {
 			if (partitionsToSplit.size() > 0) {
 				ArrayList<PotentialPartition> partitionsToKeep = (ArrayList<PotentialPartition>) classifiedPartitions
 						.get(1);
-				FilePartitioner filePartitioner = createFilePartitioner(inPath, partitionsToSplit, partitionsToKeep,
+				FilePartitioner filePartitioner = DynamicRepartitioner.createFilePartitioner(inPath, partitionsToSplit, partitionsToKeep,
 						params);
 				Partitioner.setPartitioner(conf, filePartitioner);
 
@@ -174,10 +174,10 @@ public class DynamicRepartitioner {
 
 				// Set mapper and reducer
 				Shape shape = OperationsParams.getShape(conf, "shape");
-				job.setMapperClass(DynamicRepartitionerMap.class);
+				job.setMapperClass(GreedyRepartitionerMap.class);
 				job.setMapOutputKeyClass(IntWritable.class);
 				job.setMapOutputValueClass(shape.getClass());
-				job.setReducerClass(DynamicRepartitionerReduce.class);
+				job.setReducerClass(GreedyRepartitionerReduce.class);
 				// Set input and output
 				job.setInputFormatClass(SpatialInputFormat3.class);
 				SpatialInputFormat3.setInputPaths(job, splitFiles);
@@ -206,7 +206,7 @@ public class DynamicRepartitioner {
 
 		return job;
 	}
-
+	
 	private static List<List<PotentialPartition>> classifyPartitions(Path inPath, final Partitioner partitioner,
 			OperationsParams params) throws IOException {
 		List<List<PotentialPartition>> result = new ArrayList<List<PotentialPartition>>();
@@ -218,8 +218,7 @@ public class DynamicRepartitioner {
 		Configuration conf = new Configuration();
 		FileSystem fs = FileSystem.get(conf);
 		String sindex = params.get("sindex");
-		String jsim = params.get("jsim");
-		double jsimValue = Double.parseDouble(jsim);
+		double cost = Double.parseDouble(params.get("cost")) * 1024 * 1024;
 
 		// Load current partitions
 		Path masterPath = new Path(inPath, "_master." + sindex);
@@ -232,37 +231,34 @@ public class DynamicRepartitioner {
 		}
 		in.close();
 
-		// Sampling to get current standard partitions
+		// Compute independent quality of each partition with total area as the quality metric
 		for (final Partition p : currentPartitions) {
 			final PotentialPartition potentialPartition = new PotentialPartition(p);
+			potentialPartition.overlappingArea = 0;
 			partitioner.overlapPartitions(p, new ResultCollector<Integer>() {
 				@Override
 				public void collect(Integer r) {
 					CellInfo overlappedCell = partitioner.getPartition(r);
-					// Compute Jaccard Similarity between current partition and
-					// overlapped partition
 					Rectangle intersectionArea = p.getIntersection(overlappedCell);
-					double unionAreaSize = p.getSize() + overlappedCell.getSize() - intersectionArea.getSize();
-					double jsValue = intersectionArea.getSize() / unionAreaSize;
-					potentialPartition.intersections.add(new IntersectionInfo(overlappedCell, jsValue));
+					potentialPartition.overlappingArea += intersectionArea.getSize();
 				}
 			});
 			potentialPartitions.add(potentialPartition);
 		}
 
-		// Iterate the list of potential partitions to get the partitions to
-		// split
+		// Sort partitions by density of quality, then iterate the list of potential partitions to get the partitions to split
+		Collections.sort(potentialPartitions, new Comparator<PotentialPartition>() {
+			@Override
+	        public int compare(PotentialPartition pp1, PotentialPartition pp2) {
+	            return (int) (pp2.overlappingArea / pp2.size - pp1.overlappingArea / pp1.size);
+	        }
+	       });
+		
+		double totalCost = 0;
 		for (PotentialPartition pp : potentialPartitions) {
-			boolean keep = false;
-			for (IntersectionInfo intersection : pp.intersections) {
-				System.out.println("partition " + pp.filename + ", js = " + intersection.getJsValue());
-				if (intersection.getJsValue() >= jsimValue) {
-					keep = true;
-					break;
-				}
-			}
-			if (!keep) {
+			if(totalCost < cost) {
 				partitionsToSplit.add(pp);
+				totalCost += pp.size;
 			} else {
 				partitionsToKeep.add(pp);
 			}
@@ -281,185 +277,12 @@ public class DynamicRepartitioner {
 
 		return result;
 	}
-
-	public static FilePartitioner createFilePartitioner(Path inPath, ArrayList<PotentialPartition> partitionsToSplit,
-			ArrayList<PotentialPartition> partitionsToKeep, OperationsParams params) throws IOException {
-		FilePartitioner filePartitioner = new FilePartitioner();
-
-		Configuration conf = new Configuration();
-		FileSystem fs = FileSystem.get(conf);
-		String sindex = params.get("sindex");
-
-		// Find max cell ID
-		int maxCellId = 0;
-		Path masterPath = new Path(inPath, "_master." + sindex);
-		Text tempLine = new Text2();
-		LineReader in = new LineReader(fs.open(masterPath));
-		while (in.readLine(tempLine) > 0) {
-			Partition tempPartition = new Partition();
-			tempPartition.fromText(tempLine);
-			if (maxCellId < tempPartition.cellId) {
-				maxCellId = tempPartition.cellId;
-			}
-		}
-		in.close();
-
-		System.out.println("max cell id = " + maxCellId);
-
-		// Get list of split rectangles
-		Set<Rectangle> splitRects = new HashSet<Rectangle>();
-		for (PotentialPartition splitPartition : partitionsToSplit) {
-			for (IntersectionInfo intersection : splitPartition.intersections) {
-				splitRects.add(intersection.getCell().getMBR());
-			}
-		}
-
-		Set<Rectangle> keepRects = new HashSet<Rectangle>();
-		for (PotentialPartition keepPartition : partitionsToKeep) {
-			keepRects.add(keepPartition.getMBR());
-		}
-
-		Set<Rectangle> finalSplitRects = clipCells(splitRects, keepRects);
-
-		for (Rectangle rect : finalSplitRects) {
-			maxCellId += 1;
-			CellInfo splitCell = new CellInfo();
-			splitCell.set(rect);
-			splitCell.cellId = maxCellId;
-			filePartitioner.cells.add(splitCell);
-		}
-
-		return filePartitioner;
-	}
-
-	/**
-	 * Clip split rectangles by keep rectangles to get a set of disjoint
-	 * rectangles
-	 * 
-	 * @param keepRects
-	 * @param splitRects
-	 * @return
-	 */
-	private static Set<Rectangle> clipCells(Set<Rectangle> splitRects, Set<Rectangle> keepRects) {
-		Set<Rectangle> results = new HashSet<Rectangle>();
-		for (Rectangle rect : splitRects) {
-			results.add(rect);
-		}
-
-		for (Rectangle keepRect : keepRects) {
-			Set<Rectangle> tempRects = new HashSet<Rectangle>();
-			for (Rectangle rect : results) {
-				tempRects.add(rect);
-			}
-
-			for (Rectangle rect : tempRects) {
-				if (rect.isIntersected(keepRect)) {
-					ArrayList<Rectangle> complementRects = rect.clip(keepRect);
-					// Find the rect to remove
-					Rectangle rectToRemove = null;
-					for (Rectangle r : results) {
-						if (r.equals(rect)) {
-							rectToRemove = r;
-							break;
-						}
-					}
-					if (rectToRemove != null) {
-						results.remove(rectToRemove);
-					}
-					results.addAll(complementRects);
-				}
-			}
-		}
-
-		return results;
-	}
-
-	public static void mergeFiles(Path inPath, OperationsParams params, Job job) throws IOException {
-		final byte[] NewLine = new byte[] { '\n' };
-		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
-		ArrayList<Partition> newPartitions = new ArrayList<Partition>();
-		ArrayList<Partition> finalPartitions = new ArrayList<Partition>();
-
-		FileSystem inFs = inPath.getFileSystem(job.getConfiguration());
-		inFs.close();
-
-		Configuration conf = new Configuration();
-		FileSystem fs = FileSystem.get(conf);
-		String sindex = params.get("sindex");
-
-		FileStatus[] resultFiles = fs.listStatus(inPath, new PathFilter() {
-			@Override
-			public boolean accept(Path path) {
-				return path.getName().contains("part-");
-			}
-		});
-
-		List<Path> inFileList = new ArrayList<Path>();
-		for (FileStatus f : resultFiles) {
-			inFileList.add(f.getPath());
-		}
-
-		Path currentMasterPath = new Path(inPath, "_master." + sindex);
-		Text tempLine = new Text2();
-		LineReader in = new LineReader(fs.open(currentMasterPath));
-		while (in.readLine(tempLine) > 0) {
-			Partition tempPartition = new Partition();
-			tempPartition.fromText(tempLine);
-			currentPartitions.add(tempPartition);
-		}
-
-		Path newMasterPath = new Path(inPath, "temp/_master." + sindex);
-		in = new LineReader(fs.open(newMasterPath));
-		while (in.readLine(tempLine) > 0) {
-			Partition tempPartition = new Partition();
-			tempPartition.fromText(tempLine);
-			newPartitions.add(tempPartition);
-		}
-
-		for (Partition partition : currentPartitions) {
-			boolean deleted = true;
-			for (Path path : inFileList) {
-				if (path.getName().equals(partition.filename)) {
-					deleted = false;
-				}
-			}
-
-			if (!deleted) {
-				finalPartitions.add(partition);
-			}
-		}
-
-		// Move files from temp path to current path
-		for (Partition partition : newPartitions) {
-			fs.rename(new Path(inPath, "temp/" + partition.filename), new Path(inPath, partition.filename));
-		}
-		fs.delete(new Path(inPath, "temp"));
-		finalPartitions.addAll(newPartitions);
-
-		// Update master and wkt file
-		Path currentWKTPath = new Path(inPath, "_" + sindex + ".wkt");
-		fs.delete(currentMasterPath);
-		fs.delete(currentWKTPath);
-		OutputStream masterOut = fs.create(currentMasterPath);
-		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
-		wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
-		for (Partition partition : finalPartitions) {
-			Text masterLine = new Text2();
-			partition.toText(masterLine);
-			masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
-			masterOut.write(NewLine);
-			wktOut.println(partition.toWKT());
-		}
-
-		wktOut.close();
-		masterOut.close();
-		fs.close();
-	}
-
+	
 	private static void printUsage() {
-		System.out.println("Dynamic repartition indexed files with low cost");
+		System.out.println("Greedy repartition indexed files with fixed cost");
 		System.out.println("Parameters (* marks required parameters):");
 		System.out.println("<input file> - (*) Path to input file");
+		System.out.println("<cost> - (*) Cost threshold in MB for repartitioning process");
 		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
 
@@ -478,10 +301,9 @@ public class DynamicRepartitioner {
 		System.out.println("Input path: " + inPath);
 		Job job = repartitionMapReduce(inPath, params);
 		if (job != null) {
-			mergeFiles(inPath, params, job);
+			DynamicRepartitioner.mergeFiles(inPath, params, job);
 		}
 		long t2 = System.currentTimeMillis();
 		System.out.println("Total repartitioning time in millis " + (t2 - t1));
 	}
-
 }

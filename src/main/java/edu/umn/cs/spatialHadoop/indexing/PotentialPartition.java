@@ -7,6 +7,7 @@ import edu.umn.cs.spatialHadoop.core.CellInfo;
 public class PotentialPartition extends Partition {
 
 	public ArrayList<IntersectionInfo> intersections;
+	public double overlappingArea = 0;
 
 	public PotentialPartition(Partition other) {
 		this.filename = other.filename;
