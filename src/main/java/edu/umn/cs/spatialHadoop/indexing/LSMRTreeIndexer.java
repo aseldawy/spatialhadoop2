@@ -29,9 +29,9 @@ import edu.umn.cs.spatialHadoop.operations.FileMBR;
 public class LSMRTreeIndexer {
 
 	private static final int COMPACTION_MIN_COMPONENT = 3;
-	private static final int COMPACTION_MAX_COMPONENT = 10;
+	private static final int COMPACTION_MAX_COMPONENT = 5;
 	private static final double COMPACTION_RATIO = 1.0;
-	private static final int BUFFER_LINES = 10000;
+	private static final int BUFFER_LINES = 100000;
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
 
 	static class RTreeComponent {
@@ -161,8 +161,15 @@ public class LSMRTreeIndexer {
 		for (String component : components) {
 			rtreeComponents.add(new RTreeComponent(component,
 					new Double(fs.getContentSummary(new Path(path, component)).getSpaceConsumed())));
+			if(rtreeComponents.size() > COMPACTION_MAX_COMPONENT) {
+				break;
+			}
 		}
-
+		
+		if(rtreeComponents.size() < COMPACTION_MIN_COMPONENT) {
+			rtreeComponents.clear();
+		}
+		
 		return rtreeComponents;
 	}
 
