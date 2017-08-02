@@ -161,6 +161,7 @@ public class GreedyRepartitioner {
 			if (partitionsToSplit.size() > 0) {
 				ArrayList<PotentialPartition> partitionsToKeep = (ArrayList<PotentialPartition>) classifiedPartitions
 						.get(1);
+				System.out.println("Number of partition to split: " + partitionsToSplit.size());
 				FilePartitioner filePartitioner = DynamicRepartitioner.createFilePartitioner(inPath, partitionsToSplit, partitionsToKeep,
 						params);
 				Partitioner.setPartitioner(conf, filePartitioner);
@@ -241,18 +242,34 @@ public class GreedyRepartitioner {
 					CellInfo overlappedCell = partitioner.getPartition(r);
 					Rectangle intersectionArea = p.getIntersection(overlappedCell);
 					potentialPartition.overlappingArea += intersectionArea.getSize();
+					potentialPartition.intersections.add(new IntersectionInfo(overlappedCell, 0));
 				}
 			});
 			potentialPartitions.add(potentialPartition);
 		}
+		
+		ArrayList<PotentialPartition> pps = new ArrayList<PotentialPartition>();
+		for(PotentialPartition pp: potentialPartitions) {
+			pps.add(pp);
+		}
 
 		// Sort partitions by density of quality, then iterate the list of potential partitions to get the partitions to split
-		Collections.sort(potentialPartitions, new Comparator<PotentialPartition>() {
+		Collections.sort(pps, new Comparator<PotentialPartition>() {
 			@Override
 	        public int compare(PotentialPartition pp1, PotentialPartition pp2) {
-	            return (int) (pp2.overlappingArea / pp2.size - pp1.overlappingArea / pp1.size);
+	            if (pp2.overlappingArea / pp2.size > pp1.overlappingArea / pp1.size) {
+	            	return 1;
+	            } else if (pp2.overlappingArea / pp2.size == pp1.overlappingArea / pp1.size) {
+	            	return 0;
+	            } else {
+	            	return -1;
+	            }
 	        }
 	       });
+		System.out.println("Potential partition after sorting process:");
+		for(PotentialPartition pp: pps) {
+			System.out.println(pp.toString() + pp.overlappingArea / pp.size);
+		}
 		
 		double totalCost = 0;
 		for (PotentialPartition pp : potentialPartitions) {
@@ -264,9 +281,11 @@ public class GreedyRepartitioner {
 			}
 		}
 
+		System.out.println("Total split partition = " + partitionsToSplit.size());
 		ArrayList<PotentialPartition> partitionsToSplitList = new ArrayList<PotentialPartition>();
 		for (PotentialPartition pp : partitionsToSplit) {
 			partitionsToSplitList.add(pp);
+			System.out.println(pp.toString());
 		}
 		ArrayList<PotentialPartition> partitionsToKeepList = new ArrayList<PotentialPartition>();
 		for (PotentialPartition pp : partitionsToKeep) {

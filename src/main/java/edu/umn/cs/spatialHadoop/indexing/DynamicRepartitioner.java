@@ -307,19 +307,23 @@ public class DynamicRepartitioner {
 		System.out.println("max cell id = " + maxCellId);
 
 		// Get list of split rectangles
+		System.out.println("Number of partition to split: " + partitionsToSplit.size());
 		Set<Rectangle> splitRects = new HashSet<Rectangle>();
 		for (PotentialPartition splitPartition : partitionsToSplit) {
 			for (IntersectionInfo intersection : splitPartition.intersections) {
 				splitRects.add(intersection.getCell().getMBR());
 			}
 		}
+		System.out.println("Number of split rects: " + splitRects.size());
 
 		Set<Rectangle> keepRects = new HashSet<Rectangle>();
 		for (PotentialPartition keepPartition : partitionsToKeep) {
 			keepRects.add(keepPartition.getMBR());
 		}
+		System.out.println("Number of keep rects: " + keepRects.size());
 
 		Set<Rectangle> finalSplitRects = clipCells(splitRects, keepRects);
+		System.out.println("Number of final rects: " + finalSplitRects.size());
 
 		for (Rectangle rect : finalSplitRects) {
 			maxCellId += 1;
@@ -328,6 +332,8 @@ public class DynamicRepartitioner {
 			splitCell.cellId = maxCellId;
 			filePartitioner.cells.add(splitCell);
 		}
+		
+		System.out.println("Total number of cells in FilePartitioner: " + filePartitioner.cells.size());
 
 		return filePartitioner;
 	}
