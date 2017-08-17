@@ -257,9 +257,17 @@ public class GreedyRepartitioner {
 		Collections.sort(pps, new Comparator<PotentialPartition>() {
 			@Override
 	        public int compare(PotentialPartition pp1, PotentialPartition pp2) {
-	            if (pp2.overlappingArea / pp2.size > pp1.overlappingArea / pp1.size) {
+//	            if (pp2.overlappingArea / pp2.size > pp1.overlappingArea / pp1.size) {
+//	            	return 1;
+//	            } else if (pp2.overlappingArea / pp2.size == pp1.overlappingArea / pp1.size) {
+//	            	return 0;
+//	            } else {
+//	            	return -1;
+//	            }
+				long blockSize = 16777216;
+				if (pp2.getRepartitionBenefit(blockSize) > pp1.getRepartitionBenefit(blockSize)) {
 	            	return 1;
-	            } else if (pp2.overlappingArea / pp2.size == pp1.overlappingArea / pp1.size) {
+	            } else if (pp2.getRepartitionBenefit(blockSize) == pp1.getRepartitionBenefit(blockSize)) {
 	            	return 0;
 	            } else {
 	            	return -1;

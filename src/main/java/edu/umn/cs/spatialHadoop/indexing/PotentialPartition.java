@@ -17,4 +17,24 @@ public class PotentialPartition extends Partition {
 		super.set((CellInfo) other);
 		intersections = new ArrayList<IntersectionInfo>();
 	}
+	
+	public double getRepartitionBenefit(long blockSize) {
+		int currentBlocks = (int)(this.size / blockSize);
+		double currentValue = this.getSize() * currentBlocks;
+		
+		double overlappingValue = 0;
+		for(IntersectionInfo inter: this.intersections) {
+			double sizeRatio = inter.getCell().getSize() / this.getSize();
+			double interBlocks = (double)(sizeRatio * currentBlocks);
+			if(interBlocks < 1) {
+				interBlocks = 1;
+			} else {
+				interBlocks = Math.ceil(interBlocks);
+			}
+			double interValue = inter.getCell().getSize() * interBlocks;
+			overlappingValue += interValue;
+		}
+		
+		return (currentValue - overlappingValue) / currentBlocks;
+	}
 }
