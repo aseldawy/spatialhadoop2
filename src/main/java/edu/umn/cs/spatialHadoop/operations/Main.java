@@ -16,6 +16,7 @@ import edu.umn.cs.spatialHadoop.ReadFile;
 import edu.umn.cs.spatialHadoop.indexing.BinarySpaceRepartitioner;
 import edu.umn.cs.spatialHadoop.indexing.DynamicRepartitioner;
 import edu.umn.cs.spatialHadoop.indexing.GreedyRepartitioner;
+import edu.umn.cs.spatialHadoop.indexing.GreedyRepartitioner2;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.indexing.Inserter;
 import edu.umn.cs.spatialHadoop.indexing.LSMRTreeIndexer;
@@ -150,7 +151,7 @@ public class Main {
       
       pgd.addClass("binaryrepartition", BinarySpaceRepartitioner.class, "Binary repartition indexed files");
       
-      pgd.addClass("greedyrepartition", GreedyRepartitioner.class, "Greedy repartition indexed files");
+      pgd.addClass("greedyrepartition", GreedyRepartitioner2.class, "Greedy repartition indexed files");
       
       pgd.addClass("benchmark", Benchmark.class, "Benchmark query performance");
       
