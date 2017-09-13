@@ -161,8 +161,12 @@ public class Indexer {
         Context context) throws IOException, InterruptedException {
       LOG.info("Working on partition #"+partitionID);
       for (Shape shape : shapes) {
-        context.write(partitionID, shape);
-        context.progress();
+        if(shape != null) {
+        	context.write(partitionID, shape);
+            context.progress();
+        } else {
+        	LOG.info("Shape is null");
+        }
       }
       // Indicate end of partition to close the file
       context.write(new IntWritable(-partitionID.get()-1), null);

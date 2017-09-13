@@ -22,10 +22,13 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import rx.Observable;
 
 public class RTreePartitioner extends Partitioner {
 
+	private static final double MINIMUM_EXPANSION = 1000000.0;
 	private RTree<Integer, Geometry> tree;
+//	private RTree<Integer, Geometry> treeOfLeafs;
 	public ArrayList<CellInfo> cells = new ArrayList<CellInfo>();
 
 	@Override
@@ -58,8 +61,8 @@ public class RTreePartitioner extends Partitioner {
 		}
 
 		tree = RTree.star().maxChildren(capacity).create();
+//		tree = RTree.maxChildren(capacity).create();
 		tree = tree.add(entries);
-		tree.visualize(1500, 750).save("test.png");
 		
 		// Get list of all leaf nodes
 		Node<Integer, Geometry> node = tree.root().get();
@@ -71,35 +74,67 @@ public class RTreePartitioner extends Partitioner {
 			cellId++;
 		}
 //		cells.add(new CellInfo(cellId, mbr));
+		
+		// Build the tree of leafs
+//		List<Entry<Integer, Geometry>> leafEntries = new ArrayList<Entry<Integer, Geometry>>();
+//		for(int i = 0; i < rects.size(); i++) {
+//			Rectangle rect = rects.get(i);
+//			leafEntries.add(new EntryDefault<Integer, Geometry>(i, Geometries.rectangle(rect.x1, rect.y1, rect.x2, rect.y2)));
+//		}
+//		treeOfLeafs = RTree.star().maxChildren(capacity).create();
+//		treeOfLeafs = treeOfLeafs.add(leafEntries);
 	}
 
 	@Override
 	public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
 		// TODO Auto-generated method stub
 		boolean found = false;
-		int size = this.cells.size();
-		for(CellInfo cell: this.cells.subList(0, size - 1)) {
+		for(CellInfo cell: this.cells) {
 			if(cell.isIntersected(shape)) {
 				matcher.collect(cell.cellId);
 				found = true;
 			}
 		}
 		if(!found) {
-			matcher.collect(this.cells.get(size - 1).cellId);
+//			double minimumExpansion = MINIMUM_EXPANSION;
+//			CellInfo minimumCell = this.cells.get(0);
+//			for(CellInfo cell: this.cells) {
+//				CellInfo tempCell = new CellInfo(cell);
+//				tempCell.expand(shape);
+//				double expansionArea = tempCell.getSize() - cell.getSize();
+//				if(expansionArea < minimumExpansion) {
+//					minimumExpansion = expansionArea;
+//					minimumCell = cell;
+//				}
+//			}
+//			matcher.collect(minimumCell.cellId);
+			matcher.collect(this.cells.get(0).cellId);
 		}
 	}
 
 	@Override
 	public int overlapPartition(Shape shape) {
-		// TODO Auto-generated method stub
-		int size = this.cells.size();
-		for(CellInfo cell: this.cells.subList(0, size - 1)) {
+		for(CellInfo cell: this.cells) {
 			if(cell.isIntersected(shape)) {
 				return cell.cellId;
 			}
 		}
 		
-		return this.cells.get(size - 1).cellId;
+		// If there is no overlapping partitions
+//		double minimumExpansion = MINIMUM_EXPANSION;
+//		CellInfo minimumCell = this.cells.get(0);
+//		for(CellInfo cell: this.cells) {
+//			CellInfo tempCell = new CellInfo(cell);
+//			tempCell.expand(shape);
+//			double expansionArea = tempCell.getSize() - cell.getSize();
+//			if(expansionArea < minimumExpansion) {
+//				minimumExpansion = expansionArea;
+//				minimumCell = cell;
+//			}
+//		}
+//		
+//		return minimumCell.cellId;
+		return this.cells.get(0).cellId;
 	}
 
 	@Override

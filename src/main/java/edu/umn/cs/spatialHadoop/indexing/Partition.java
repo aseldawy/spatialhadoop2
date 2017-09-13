@@ -117,6 +117,7 @@ public class Partition extends CellInfo {
   public void expand(Partition p) {
     super.expand(p);
     // accumulate size
+    this.cellMBR.expand(p.cellMBR);
     this.size += p.size;
     this.recordCount += p.recordCount;
   }

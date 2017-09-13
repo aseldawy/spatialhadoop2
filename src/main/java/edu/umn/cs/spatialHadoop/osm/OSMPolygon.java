@@ -67,14 +67,18 @@ public class OSMPolygon extends OGCJTSShape implements WritableComparable<OSMPol
   
   @Override
   public void readFields(DataInput in) throws IOException {
-    id = in.readLong();
-    super.readFields(in);
-    tags.clear();
-    int size = in.readInt();
-    while (size-- > 0) {
-      String key = in.readUTF();
-      String value = in.readUTF();
-      tags.put(key, value);
+    try {
+    	id = in.readLong();
+        super.readFields(in);
+        tags.clear();
+        int size = in.readInt();
+        while (size-- > 0) {
+          String key = in.readUTF();
+          String value = in.readUTF();
+          tags.put(key, value);
+        }
+    } catch (Exception e) {
+    	
     }
   }
   

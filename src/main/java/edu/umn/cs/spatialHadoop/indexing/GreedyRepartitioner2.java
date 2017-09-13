@@ -1,6 +1,8 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -164,11 +166,36 @@ public class GreedyRepartitioner2 {
 			List<List<PotentialPartition>> classifiedPartitions = classifyPartitions(inPath, params);
 			ArrayList<PotentialPartition> partitionsToSplit = (ArrayList<PotentialPartition>) classifiedPartitions
 					.get(0);
-			System.out.println("Number of partition to split = " + partitionsToSplit.size());
 			if (partitionsToSplit.size() > 0) {
 				ArrayList<PotentialPartition> partitionsToKeep = (ArrayList<PotentialPartition>) classifiedPartitions
 						.get(1);
 				System.out.println("Number of partition to split: " + partitionsToSplit.size());
+				System.out.println("Number of partition to keep: " + partitionsToKeep.size());
+				// Save to files
+				// Update master and wkt file
+				final byte[] NewLine = new byte[] { '\n' };
+				Path splitPath = new Path("split.master");
+				OutputStream splitOut = inFs.create(splitPath);
+				for (Partition partition : partitionsToSplit) {
+					Text masterLine = new Text2();
+					partition.toText(masterLine);
+					splitOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+					splitOut.write(NewLine);
+				}
+				
+				Path keepPath = new Path("keep.master");
+				OutputStream keepOut = inFs.create(keepPath);
+				for (Partition partition : partitionsToKeep) {
+					Text masterLine = new Text2();
+					partition.toText(masterLine);
+					keepOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+					keepOut.write(NewLine);
+				}
+
+				splitOut.close();
+				keepOut.close();
+				inFs.close();
+
 				FilePartitioner filePartitioner = DynamicRepartitioner.createFilePartitioner(inPath, partitionsToSplit,
 						partitionsToKeep, params);
 				Partitioner.setPartitioner(conf, filePartitioner);
@@ -241,8 +268,11 @@ public class GreedyRepartitioner2 {
 		}
 		in.close();
 
+		currentPartitions.remove(currentPartitions.size() - 1);
+		System.out.println("Number of current partitions = " + currentPartitions.size());
 		SimpleWeightedGraph<Node, DefaultWeightedEdge> graph = mapPartitionsToGraph(currentPartitions);
-		Set<Node> selectedNodes = GraphUtils.findMaximalMultipleWeightedSubgraphs(graph, budget);
+//		Set<Node> selectedNodes = GraphUtils.findMaximalWeightedSubgraph(graph, budget);
+		Set<Node> selectedNodes = GraphUtils.findMaximalMultipleWeightedSubgraphs2(graph, budget);
 		for (int i = 0; i < currentPartitions.size(); i++) {
 			boolean split = false;
 			for (Node node : selectedNodes) {
@@ -277,7 +307,7 @@ public class GreedyRepartitioner2 {
 	 * @param partitions
 	 * @return
 	 */
-	private static SimpleWeightedGraph<Node, DefaultWeightedEdge> mapPartitionsToGraph(
+	public static SimpleWeightedGraph<Node, DefaultWeightedEdge> mapPartitionsToGraph(
 			ArrayList<Partition> partitions) {
 		SimpleWeightedGraph<Node, DefaultWeightedEdge> graph = new SimpleWeightedGraph<Node, DefaultWeightedEdge>(
 				DefaultWeightedEdge.class);
@@ -285,7 +315,8 @@ public class GreedyRepartitioner2 {
 		int numberOfNode = partitions.size();
 		List<Node> nodes = new ArrayList<Node>();
 		for (int i = 0; i < numberOfNode; i++) {
-			Node node = new Node(Integer.toString(i), partitions.get(i).size);
+//			Node node = new Node(Integer.toString(i), partitions.get(i).size);
+			Node node = new Node(Integer.toString(i), partitions.get(i).size, partitions.get(i).getSize() / partitions.get(i).size);
 			nodes.add(node);
 		}
 
@@ -334,9 +365,9 @@ public class GreedyRepartitioner2 {
 		Path inPath = inputFiles[0];
 		System.out.println("Input path: " + inPath);
 		Job job = repartitionMapReduce(inPath, params);
-		if (job != null) {
-			DynamicRepartitioner.mergeFiles(inPath, params, job);
-		}
+//		if (job != null) {
+//			DynamicRepartitioner.mergeFiles(inPath, params, job);
+//		}
 		long t2 = System.currentTimeMillis();
 		System.out.println("Total repartitioning time in millis " + (t2 - t1));
 	}

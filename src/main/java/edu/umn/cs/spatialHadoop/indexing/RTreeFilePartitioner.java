@@ -22,6 +22,7 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 
 public class RTreeFilePartitioner extends Partitioner {
 
+	private static final double MINIMUM_EXPANSION = 1000000.0;
 	protected ArrayList<CellInfo> cells;
 	
 	public RTreeFilePartitioner() {
@@ -90,10 +91,26 @@ public class RTreeFilePartitioner extends Partitioner {
 	@Override
 	public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
 		// TODO Auto-generated method stub
+		boolean found = false;
 		for(CellInfo cell: this.cells) {
 			if(cell.isIntersected(shape)) {
 				matcher.collect(cell.cellId);
+				found = true;
 			}
+		}
+		if(!found) {
+			double minimumExpansion = MINIMUM_EXPANSION;
+			CellInfo minimumCell = this.cells.get(0);
+			for(CellInfo cell: this.cells) {
+				CellInfo tempCell = new CellInfo(cell);
+				tempCell.expand(shape);
+				double expansionArea = tempCell.getSize() - cell.getSize();
+				if(expansionArea < minimumExpansion) {
+					minimumExpansion = expansionArea;
+					minimumCell = cell;
+				}
+			}
+			matcher.collect(minimumCell.cellId);
 		}
 	}
 
@@ -106,19 +123,33 @@ public class RTreeFilePartitioner extends Partitioner {
 			}
 		}
 		
-		ArrayList<CellInfo> tempCells = new ArrayList<CellInfo>();
+		double minimumExpansion = MINIMUM_EXPANSION;
+		CellInfo minimumCell = this.cells.get(0);
 		for(CellInfo cell: this.cells) {
 			CellInfo tempCell = new CellInfo(cell);
 			tempCell.expand(shape);
-			tempCells.add(tempCell);
-		}
-		CellInfo minimumTempCell = tempCells.get(0);
-		for(CellInfo cell: this.cells) {
-			if(cell.getSize() < minimumTempCell.getSize()) {
-				minimumTempCell = cell;
+			double expansionArea = tempCell.getSize() - cell.getSize();
+			if(expansionArea < minimumExpansion) {
+				minimumExpansion = expansionArea;
+				minimumCell = cell;
 			}
 		}
-		return minimumTempCell.cellId;
+		
+		return minimumCell.cellId;
+		
+//		ArrayList<CellInfo> tempCells = new ArrayList<CellInfo>();
+//		for(CellInfo cell: this.cells) {
+//			CellInfo tempCell = new CellInfo(cell);
+//			tempCell.expand(shape);
+//			tempCells.add(tempCell);
+//		}
+//		CellInfo minimumTempCell = tempCells.get(0);
+//		for(CellInfo cell: this.cells) {
+//			if(cell.getSize() < minimumTempCell.getSize()) {
+//				minimumTempCell = cell;
+//			}
+//		}
+//		return minimumTempCell.cellId;
 	}
 
 	@Override

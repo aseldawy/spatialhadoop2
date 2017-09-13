@@ -5,12 +5,29 @@ public class Node {
 	private double weight;
 	private double totalEdgeWeight;
 	private double weightRatio;
+	private double density;
 	
 	public Node(String label, double weight) {
 		this.setLabel(label);
 		this.setWeight(weight);
 		this.setTotalEdgeWeight(0);
 		this.setWeightRatio(0);
+	}
+	
+	public Node(String label, double weight, double density) {
+		this.setLabel(label);
+		this.setWeight(weight);
+		this.density = density;
+		this.setTotalEdgeWeight(0);
+		this.setWeightRatio(0);
+	}
+
+	public double getDensity() {
+		return density;
+	}
+
+	public void setDensity(double density) {
+		this.density = density;
 	}
 
 	public String getLabel() {

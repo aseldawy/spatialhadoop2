@@ -230,14 +230,17 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
 
 	public void expand(final Shape s) {
 		Rectangle r = s.getMBR();
-		if (r.x1 < this.x1)
-			this.x1 = r.x1;
-		if (r.x2 > this.x2)
-			this.x2 = r.x2;
-		if (r.y1 < this.y1)
-			this.y1 = r.y1;
-		if (r.y2 > this.y2)
-			this.y2 = r.y2;
+		
+		if(r != null) {
+			if (r.x1 < this.x1)
+				this.x1 = r.x1;
+			if (r.x2 > this.x2)
+				this.x2 = r.x2;
+			if (r.y1 < this.y1)
+				this.y1 = r.y1;
+			if (r.y2 > this.y2)
+				this.y2 = r.y2;
+		}
 	}
 
 	public boolean contains(double rx1, double ry1, double rx2, double ry2) {

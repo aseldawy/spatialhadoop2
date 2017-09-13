@@ -20,6 +20,7 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -109,6 +110,27 @@ public class LSMRTreeIndexer {
 		} while (line != null);
 		fs.close();
 	}
+	
+	private static void insertMapReduce(Path currentPath, Path appendPath, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
+		// Create a new component with R-Tree index
+		int maxComponentId = getMaxComponentId(currentPath);
+		System.out.println("max compoment id = " + maxComponentId);
+		int componentId = maxComponentId + 1;
+		Path componentPath = new Path(currentPath, String.format("%d", componentId));
+		OperationsParams params2 = params;
+		params2.set("sindex", "rtree2");
+		Rectangle tempInputMBR = FileMBR.fileMBR(appendPath, params);
+		params2.set("mbr", String.format("%f,%f,%f,%f", tempInputMBR.x1, tempInputMBR.y1, tempInputMBR.x2,
+				tempInputMBR.y2));
+		params2.setBoolean("local", true);
+		Indexer.index(appendPath, componentPath, params2);
+		
+		// Check policy to merge
+		ArrayList<RTreeComponent> componentsToMerge = checkPolicy(currentPath);
+		if (componentsToMerge.size() > 0) {
+			merge(currentPath, componentsToMerge, params);
+		}
+	}
 
 	private static ArrayList<RTreeComponent> checkPolicy(Path path) throws IOException {
 		ArrayList<RTreeComponent> componentsToMerge = new ArrayList<LSMRTreeIndexer.RTreeComponent>();
@@ -172,6 +194,54 @@ public class LSMRTreeIndexer {
 		
 		return rtreeComponents;
 	}
+	
+	private static int getMaxComponentId(Path path) throws IOException {
+		ArrayList<RTreeComponent> rtreeComponents = new ArrayList<LSMRTreeIndexer.RTreeComponent>();
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+
+		HashSet<String> components = new HashSet<String>();
+
+		// the second boolean parameter here sets the recursion to true
+		RemoteIterator<LocatedFileStatus> fileStatusListIterator = fs.listFiles(path, true);
+		while (fileStatusListIterator.hasNext()) {
+			LocatedFileStatus fileStatus = fileStatusListIterator.next();
+			String filePath = fileStatus.getPath().toString();
+			String componentPath = filePath.substring(0, filePath.lastIndexOf("/"));
+			String component = componentPath.substring(componentPath.lastIndexOf("/") + 1);
+			components.add(component);
+		}
+
+		int maxComponentId = -1;
+		for (String component : components) {
+			int componentId = Integer.parseInt(component);
+			if(maxComponentId < componentId) {
+				maxComponentId = componentId;
+			}
+		}
+		
+		return maxComponentId;
+	}
+	
+	public static HashSet<String> getComponentList(Path path) throws IOException {
+		ArrayList<RTreeComponent> rtreeComponents = new ArrayList<LSMRTreeIndexer.RTreeComponent>();
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+
+		HashSet<String> components = new HashSet<String>();
+
+		// the second boolean parameter here sets the recursion to true
+		RemoteIterator<LocatedFileStatus> fileStatusListIterator = fs.listFiles(path, true);
+		while (fileStatusListIterator.hasNext()) {
+			LocatedFileStatus fileStatus = fileStatusListIterator.next();
+			String filePath = fileStatus.getPath().toString();
+			String componentPath = filePath.substring(0, filePath.lastIndexOf("/"));
+			String component = componentPath.substring(componentPath.lastIndexOf("/") + 1);
+			components.add(component);
+		}
+		
+		return components;
+	}
 
 	private static void merge(Path path, ArrayList<RTreeComponent> componentsToMerge, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
 		Configuration conf = new Configuration();
@@ -206,7 +276,7 @@ public class LSMRTreeIndexer {
 		}
 		
 		OperationsParams params2 = params;
-		params2.set("sindex", "str");
+		params2.set("sindex", "rtree2");
 		Rectangle tempInputMBR = FileMBR.fileMBR(tempMergePath, params);
 		params2.set("mbr", String.format("%f,%f,%f,%f", tempInputMBR.x1, tempInputMBR.y1, tempInputMBR.x2,
 				tempInputMBR.y2));
@@ -226,21 +296,43 @@ public class LSMRTreeIndexer {
 
 	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException,
 			InstantiationException, IllegalAccessException {
+//		OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+//
+//		if (!params.checkInputOutput(true)) {
+//			printUsage();
+//			return;
+//		}
+//
+//		Path inputPath = params.getInputPath();
+//		Path outputPath = params.getOutputPath();
+//
+//		// The spatial index to use
+//		long t1 = System.currentTimeMillis();
+//		insertByBuffer(inputPath, outputPath, params);
+//		// checkPolicy(inputPath);
+//		long t2 = System.currentTimeMillis();
+//		System.out.println("Total indexing time in millis " + (t2 - t1));
+		
 		OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
 
-		if (!params.checkInputOutput(true)) {
-			printUsage();
-			return;
-		}
+		String currentPathString = params.get("current");
+		String appendPathString = params.get("append");
+		Path currentPath = new Path(currentPathString);
+		Path appendPath = new Path(appendPathString);
 
-		Path inputPath = params.getInputPath();
-		Path outputPath = params.getOutputPath();
+		System.out.println("Current index path: " + currentPath);
+		System.out.println("Append data path: " + appendPath);
 
 		// The spatial index to use
 		long t1 = System.currentTimeMillis();
-		insertByBuffer(inputPath, outputPath, params);
-		// checkPolicy(inputPath);
+		// Append new data to old data
+		insertMapReduce(currentPath, appendPath, params);
+//		checkPolicy(currentPath);
 		long t2 = System.currentTimeMillis();
-		System.out.println("Total indexing time in millis " + (t2 - t1));
+		
+		long t3 = System.currentTimeMillis();
+		System.out.println("Total appending time in millis " + (t2 - t1));
+		System.out.println("Total repartitioning time in millis " + (t3 - t2));
+		System.out.println("Total time in millis " + (t3 - t1));
 	}
 }

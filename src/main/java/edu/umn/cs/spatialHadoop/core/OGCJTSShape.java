@@ -74,9 +74,11 @@ public class OGCJTSShape implements Shape {
 
   @Override
   public void write(DataOutput out) throws IOException {
-    byte[] wkb = wkbWriter.write(geom);
-    out.writeInt(wkb.length);
-    out.write(wkb);
+    if(geom != null) {
+    	byte[] wkb = wkbWriter.write(geom);
+        out.writeInt(wkb.length);
+        out.write(wkb);
+    }
   }
 
   @Override
@@ -87,7 +89,7 @@ public class OGCJTSShape implements Shape {
       geom = wkbReader.read(wkb);
     } catch (ParseException e) {
       e.printStackTrace();
-      throw new IOException(e);
+//      throw new IOException(e);
     }
   }
 
