@@ -143,9 +143,14 @@ public class Indexer {
             }
           });
         } else {
+//          LOG.info("shape = " + shape.toString());
           partitionID.set(partitioner.overlapPartition(shape));
-          if (partitionID.get() >= 0)
-            context.write(partitionID, shape);
+          if (partitionID.get() >= 0) {
+//        	  LOG.info("partition ID = " + partitionID.toString());
+        	  context.write(partitionID, shape);
+          } else {
+        	  LOG.info("no partition ID");
+          }
         }
         context.progress();
       }
@@ -327,7 +332,7 @@ public class Indexer {
     }
   }
 
-  private static void indexLocal(Path inPath, final Path outPath,
+  public static void indexLocal(Path inPath, final Path outPath,
       OperationsParams params) throws IOException, InterruptedException {
     Job job = Job.getInstance(params);
     final Configuration conf = job.getConfiguration();

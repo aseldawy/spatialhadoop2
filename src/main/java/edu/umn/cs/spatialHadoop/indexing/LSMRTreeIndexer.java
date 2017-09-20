@@ -149,10 +149,13 @@ public class LSMRTreeIndexer {
 		for (int i = rtreeComponents.size() - 1; i >= 0; i--) {
 			RTreeComponent currentComponent = rtreeComponents.get(i);
 			double sum = 0;
-			for (int j = i - 1; j >= 0; j--) {
-				sum += rtreeComponents.get(j).getSize();
+			if(i >= 1) {
+				for (int j = i - 1; j >= 0; j--) {
+					sum += rtreeComponents.get(j).getSize();
+				}
 			}
 			if (currentComponent.getSize() < COMPACTION_RATIO * sum) {
+				componentsToMerge.clear();
 				for (int k = i; k >= 0; k--) {
 					componentsToMerge.add(rtreeComponents.get(k));
 				}
@@ -183,15 +186,15 @@ public class LSMRTreeIndexer {
 		for (String component : components) {
 			rtreeComponents.add(new RTreeComponent(component,
 					new Double(fs.getContentSummary(new Path(path, component)).getSpaceConsumed())));
-			if(rtreeComponents.size() > COMPACTION_MAX_COMPONENT) {
-				break;
-			}
+//			if(rtreeComponents.size() > COMPACTION_MAX_COMPONENT) {
+//				break;
+//			}
 		}
 		
-		if(rtreeComponents.size() < COMPACTION_MIN_COMPONENT) {
-			rtreeComponents.clear();
-		}
-		
+//		if(rtreeComponents.size() < COMPACTION_MIN_COMPONENT) {
+//			rtreeComponents.clear();
+//		}
+//		
 		return rtreeComponents;
 	}
 	

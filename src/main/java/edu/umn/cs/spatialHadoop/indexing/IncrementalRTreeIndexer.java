@@ -293,7 +293,7 @@ public class IncrementalRTreeIndexer {
 				Rectangle inputMBR = FileMBR.fileMBR(new Path(path, partition.filename), new OperationsParams(conf));
 				params2.setShape(conf, "mbr", inputMBR);
 				params2.setBoolean("local", false);
-				Indexer.index(new Path(path, partition.filename), tempOutputPath, params2);
+				Indexer.indexLocal(new Path(path, partition.filename), tempOutputPath, params2);
 				reorganizedPartitions.remove(partition);
 				fs.delete(new Path(path, partition.filename));
 				LineReader in = new LineReader(fs.open(new Path(tempOutputPath, "_master." + sindex)));
@@ -331,7 +331,8 @@ public class IncrementalRTreeIndexer {
 		masterOut.close();
 	}
 
-	private static void greedyReorganizeWithRTreeSplitter(Path path, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
+	private static void greedyReorganizeWithRTreeSplitter(Path path, OperationsParams params)
+			throws IOException, InterruptedException, ClassNotFoundException {
 		final byte[] NewLine = new byte[] { '\n' };
 		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
 		ArrayList<Partition> splittingPartitions = new ArrayList<Partition>();
@@ -364,47 +365,64 @@ public class IncrementalRTreeIndexer {
 		}
 
 		// Map partitions to graph then find the dense clusters
+		ArrayList<ArrayList<Partition>> groups = new ArrayList<ArrayList<Partition>>();
+
 		SimpleWeightedGraph<Node, DefaultWeightedEdge> graph = GreedyRepartitioner2
 				.mapPartitionsToGraph(currentPartitions);
-		Set<Node> selectedNodes = GraphUtils.findMaximalMultipleWeightedSubgraphs2(graph, budget);
-		for (int i = 0; i < currentPartitions.size(); i++) {
-			for (Node node : selectedNodes) {
-				if (node.getLabel().equals(Integer.toString(i))) {
-					splittingPartitions.add(currentPartitions.get(i));
+		ArrayList<Set<Node>> selectedNodeSets = GraphUtils.findMaximalMultipleWeightedSubgraphs3(graph, budget);
+
+		for (Set<Node> nodeSet : selectedNodeSets) {
+			ArrayList<Partition> group = new ArrayList<Partition>();
+			for (int i = 0; i < currentPartitions.size(); i++) {
+				for (Node node : nodeSet) {
+					if (node.getLabel().equals(Integer.toString(i))) {
+						group.add(currentPartitions.get(i));
+						splittingPartitions.add(currentPartitions.get(i));
+					}
 				}
 			}
+			groups.add(group);
 		}
 
 		// Split selected partitions
 		// Iterate all overflow partitions to split
-		for (Partition partition : currentPartitions) {
-			reorganizedPartitions.add(partition);
-			if (splittingPartitions.contains(partition) && partition.size >= overflowSize) {
-				System.out.println("Splitting--------------------");
-				Path tempOutputPath = new Path("./", "temp.output");
-				OperationsParams params2 = new OperationsParams(conf);
-				Rectangle inputMBR = FileMBR.fileMBR(new Path(path, partition.filename), new OperationsParams(conf));
-				params2.setShape(conf, "mbr", inputMBR);
-				params2.setBoolean("local", false);
-				Indexer.index(new Path(path, partition.filename), tempOutputPath, params2);
-				reorganizedPartitions.remove(partition);
-				fs.delete(new Path(path, partition.filename));
-				LineReader in = new LineReader(fs.open(new Path(tempOutputPath, "_master." + sindex)));
-				Text tempLine = new Text2();
-				while (in.readLine(tempLine) > 0) {
-					Partition tempPartition = new Partition();
-					tempPartition.fromText(tempLine);
-					maxCellId++;
-					tempPartition.cellId = maxCellId;
-					String oldFileName = tempPartition.filename;
-					tempPartition.filename = String.format("part-%05d", tempPartition.cellId);
-					fs.rename(new Path(tempOutputPath, oldFileName), new Path(path, tempPartition.filename));
-					reorganizedPartitions.add(tempPartition);
-				}
-				fs.delete(tempOutputPath);
+		for(ArrayList<Partition> group: groups) {
+			Path tempInputPath = new Path("./", "temp.input");
+			Path tempOutputPath = new Path("./", "temp.output");
+			
+			// Move all partitions of this group to temporary input
+			fs.mkdirs(tempInputPath);
+			for(Partition p: group) {
+				fs.rename(new Path(path, p.filename), new Path(tempInputPath, p.filename));
 			}
+			
+			Rectangle inputMBR = FileMBR.fileMBR(tempInputPath, new OperationsParams(conf));
+			
+			OperationsParams params2 = new OperationsParams(conf);
+			params2.setShape(conf, "mbr", inputMBR);
+			params2.setBoolean("local", false);
+			
+			Indexer.index(tempInputPath, tempOutputPath, params2);
+			
+			LineReader in = new LineReader(fs.open(new Path(tempOutputPath, "_master." + sindex)));
+			Text tempLine = new Text2();
+			while (in.readLine(tempLine) > 0) {
+				Partition tempPartition = new Partition();
+				tempPartition.fromText(tempLine);
+				maxCellId++;
+				tempPartition.cellId = maxCellId;
+				String oldFileName = tempPartition.filename;
+				tempPartition.filename = String.format("part-%05d", tempPartition.cellId);
+				fs.rename(new Path(tempOutputPath, oldFileName), new Path(path, tempPartition.filename));
+				reorganizedPartitions.add(tempPartition);
+			}
+			fs.delete(tempInputPath);
+			fs.delete(tempOutputPath);
 		}
 		
+		currentPartitions.removeAll(splittingPartitions);
+		reorganizedPartitions.addAll(currentPartitions);
+
 		// Update master and wkt file
 		currentMasterPath = new Path(path, "_master." + sindex);
 		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
@@ -461,8 +479,16 @@ public class IncrementalRTreeIndexer {
 		insertMapReduce(currentPath, appendPath, params);
 		appendNewFiles(currentPath, params);
 		long t2 = System.currentTimeMillis();
-//		reorganizeWithRTreeSplitter(currentPath, params);
-		greedyReorganizeWithRTreeSplitter(currentPath, params);
+
+		String splitType = params.get("splittype");
+		if (splitType.equals("rtree2")) {
+			System.out.println("R-Tree splitting");
+			reorganizeWithRTreeSplitter(currentPath, params);
+		} else if (splitType.equals("greedy")) {
+			System.out.println("Greedy splitting");
+			greedyReorganizeWithRTreeSplitter(currentPath, params);
+		}
+
 		long t3 = System.currentTimeMillis();
 		System.out.println("Total appending time in millis " + (t2 - t1));
 		System.out.println("Total repartitioning time in millis " + (t3 - t2));

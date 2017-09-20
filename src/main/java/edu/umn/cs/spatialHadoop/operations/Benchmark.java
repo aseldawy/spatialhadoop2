@@ -84,42 +84,41 @@ public class Benchmark {
 		// System.exit(1);
 		// }
 
-		// generateBenchmarkQueries(new Rectangle(-180,-90,180,83), 0.1, 1000);
-		// generateBenchmarkQueries(new Rectangle(-180,-90,180,83), 0.01, 1000);
-		// generateBenchmarkQueries(new Rectangle(-180,-90,180,83), 0.001,
-		// 1000);
-		// generateBenchmarkQueries(new Rectangle(-180,-90,180,83), 0.0001,
-		// 1000);
+		 generateBenchmarkQueries(new Rectangle(-180,-90,180,83), 0.1, 1000);
+		 generateBenchmarkQueries(new Rectangle(-180,-90,180,83), 0.01, 1000);
+		 generateBenchmarkQueries(new Rectangle(-180,-90,180,83), 0.001,
+		 1000);
+		 generateBenchmarkQueries(new Rectangle(-180,-90,180,83), 0.0001, 1000);
 
-		Path inPath = inputFiles[0];
-		Path outPath = inputFiles[1];
-		System.out.println("Input path: " + inPath);
-		System.out.println("Output path: " + outPath);
-		String query = params.get("query", "rangequery");
-		int count = Integer.parseInt(params.get("count", "5"));
-		final Shape shape = params.getShape("shape");
-		double ratio = Double.parseDouble(params.get("ratio", "0.0001"));
-		if (query.equals("rangequery")) {
-			long t1 = System.currentTimeMillis();
-			Path benchmarkPath = new Path(String.format("benchmarks/benchmark_%f_%d.txt", ratio, 1000));
-			LineReader in = new LineReader(fs.open(benchmarkPath));
-			Text tempLine = new Text2();
-			for (int i = 0; i < count; i++) {
-				if (in.readLine(tempLine) > 0) {
-					Rectangle rect = new Rectangle();
-					rect.fromText(tempLine);
-					ResultCollector<Shape> collector = null;
-					// long resultCount = RangeQuery.rangeQueryLocal(inPath, rect, shape, params, collector);
-					long resultCount = lsmRangeQuery(inPath, rect, shape, params, collector);
-					System.out.println("Result count = " + resultCount);
-				}
-			}
-
-			long t2 = System.currentTimeMillis();
-			System.out.println("Number of queries = " + count + ", total time: " + (t2 - t1) + "ms");
-		} else {
-			printUsage();
-			System.exit(1);
-		}
+//		Path inPath = inputFiles[0];
+//		Path outPath = inputFiles[1];
+//		System.out.println("Input path: " + inPath);
+//		System.out.println("Output path: " + outPath);
+//		String query = params.get("query", "rangequery");
+//		int count = Integer.parseInt(params.get("count", "5"));
+//		final Shape shape = params.getShape("shape");
+//		double ratio = Double.parseDouble(params.get("ratio", "0.0001"));
+//		if (query.equals("rangequery")) {
+//			long t1 = System.currentTimeMillis();
+//			Path benchmarkPath = new Path(String.format("benchmarks/benchmark_%f_%d.txt", ratio, 1000));
+//			LineReader in = new LineReader(fs.open(benchmarkPath));
+//			Text tempLine = new Text2();
+//			for (int i = 0; i < count; i++) {
+//				if (in.readLine(tempLine) > 0) {
+//					Rectangle rect = new Rectangle();
+//					rect.fromText(tempLine);
+//					ResultCollector<Shape> collector = null;
+//					// long resultCount = RangeQuery.rangeQueryLocal(inPath, rect, shape, params, collector);
+//					long resultCount = lsmRangeQuery(inPath, rect, shape, params, collector);
+//					System.out.println("Result count = " + resultCount);
+//				}
+//			}
+//
+//			long t2 = System.currentTimeMillis();
+//			System.out.println("Number of queries = " + count + ", total time: " + (t2 - t1) + "ms");
+//		} else {
+//			printUsage();
+//			System.exit(1);
+//		}
 	}
 }

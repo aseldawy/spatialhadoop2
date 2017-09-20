@@ -181,6 +181,8 @@ public class STRPartitioner extends Partitioner {
 
   @Override
   public CellInfo getPartition(int id) {
+	if(id == ySplits.length) 
+		id -= 1;
     int col = id / rows;
     int row = id % rows;
     double y2 = ySplits[id];

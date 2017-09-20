@@ -4,9 +4,11 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.io.Text;
+import org.hsqldb.lib.Collection;
 
 import com.github.davidmoten.rtree.Entry;
 import com.github.davidmoten.rtree.Leaf;
@@ -27,6 +29,7 @@ import rx.Observable;
 public class RTreePartitioner extends Partitioner {
 
 	private static final double MINIMUM_EXPANSION = 1000000.0;
+	private static final int MAXIMUM_POINTS = 50000;
 	private RTree<Integer, Geometry> tree;
 //	private RTree<Integer, Geometry> treeOfLeafs;
 	public ArrayList<CellInfo> cells = new ArrayList<CellInfo>();
@@ -54,15 +57,39 @@ public class RTreePartitioner extends Partitioner {
 	@Override
 	public void createFromPoints(Rectangle mbr, Point[] points, int capacity) throws IllegalArgumentException {
 		// TODO Auto-generated method stub
+		long t1 = System.currentTimeMillis();
 		List<Entry<Integer, Geometry>> entries = new ArrayList<Entry<Integer, Geometry>>();
-		for (int i = 0; i < points.length; i++) {
-			Point p = points[i];
-			entries.add(new EntryDefault<Integer, Geometry>(i, Geometries.point(p.x, p.y)));
+		
+		System.out.println("Creating tree from points. Number of points = " + points.length);
+		
+		List<Point> pointList = new ArrayList<Point>();
+		if(points.length > MAXIMUM_POINTS) {
+			for (int i = 0; i < points.length; i++) {
+				Point p = points[i];
+				pointList.add(p);
+			}
+			Collections.shuffle(pointList);
+			for (int i = 0; i < MAXIMUM_POINTS; i++) {
+				Point p = pointList.get(i);
+				entries.add(new EntryDefault<Integer, Geometry>(i, Geometries.point(p.x, p.y)));
+			}
+		} else {
+			for (int i = 0; i < points.length; i++) {
+				Point p = points[i];
+				entries.add(new EntryDefault<Integer, Geometry>(i, Geometries.point(p.x, p.y)));
+			}
 		}
+		
+		double capacityDouble = (double)MAXIMUM_POINTS / (double)points.length * (double)capacity;
+		capacity = points.length > MAXIMUM_POINTS ? (int) Math.ceil(capacityDouble) : capacity;
+		System.out.println("capacity = " + capacity);
 
 		tree = RTree.star().maxChildren(capacity).create();
 //		tree = RTree.maxChildren(capacity).create();
 		tree = tree.add(entries);
+		
+		long t2 = System.currentTimeMillis();
+		System.out.println("Total adding entries time in millis "+(t2-t1));
 		
 		// Get list of all leaf nodes
 		Node<Integer, Geometry> node = tree.root().get();
@@ -73,6 +100,10 @@ public class RTreePartitioner extends Partitioner {
 			cells.add(new CellInfo(cellId, r));
 			cellId++;
 		}
+		
+		long t3 = System.currentTimeMillis();
+		System.out.println("Total making cell time in millis "+(t3-t1));
+		
 //		cells.add(new CellInfo(cellId, mbr));
 		
 		// Build the tree of leafs
