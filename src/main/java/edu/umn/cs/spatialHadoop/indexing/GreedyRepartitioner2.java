@@ -315,8 +315,8 @@ public class GreedyRepartitioner2 {
 		int numberOfNode = partitions.size();
 		List<Node> nodes = new ArrayList<Node>();
 		for (int i = 0; i < numberOfNode; i++) {
-//			Node node = new Node(Integer.toString(i), partitions.get(i).size);
-			Node node = new Node(Integer.toString(i), partitions.get(i).size, partitions.get(i).getSize() / partitions.get(i).size);
+			Node node = new Node(Integer.toString(partitions.get(i).cellId), partitions.get(i).size);
+//			Node node = new Node(Integer.toString(i), partitions.get(i).size, partitions.get(i).getSize() / partitions.get(i).size);
 			nodes.add(node);
 		}
 
@@ -339,8 +339,32 @@ public class GreedyRepartitioner2 {
 				}
 			}
 		}
+		
+		for(Node node: graph.vertexSet()) {
+			System.out.println("Node with label = " + node.getLabel());
+		}
 
 		return graph;
+	}
+	
+	public static ArrayList<Partition> getOneBlockPartitions(ArrayList<Partition> partitions, float blockSize) {
+		ArrayList<Partition> oneBlockPartitions = new ArrayList<>();
+		
+		for(Partition partition: partitions) {
+			int numberOfBlocks = partition.getNumberOfBlock(blockSize);
+			for(int i = 0; i < numberOfBlocks; i++) {
+				Partition p = new Partition(partition);
+				p.filename = String.format("block%d", i);
+				p.size = (long)blockSize;
+				oneBlockPartitions.add(p);
+			}
+		}
+		
+		for(Partition p: oneBlockPartitions) {
+			System.out.println("partition " + p.cellId + " with name " + p.filename);
+		}
+		
+		return oneBlockPartitions;
 	}
 
 	private static void printUsage() {

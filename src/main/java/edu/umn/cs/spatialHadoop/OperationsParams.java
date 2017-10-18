@@ -449,7 +449,7 @@ public class OperationsParams extends Configuration {
 
 	private String[] getArray(String key) {
 		String val = get(key);
-		return val == null ? null : val.split("a");
+		return val == null ? null : val.split("\n");
 	}
 
 	public long getSize(String key) {

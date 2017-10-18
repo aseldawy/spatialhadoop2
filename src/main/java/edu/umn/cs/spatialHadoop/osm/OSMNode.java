@@ -118,7 +118,7 @@ public class OSMNode extends EvalFunc<Tuple> {
       nodeSchema.add(new Schema.FieldSchema("visible", DataType.BOOLEAN));
       nodeSchema.add(new Schema.FieldSchema("version", DataType.INTEGER));
       nodeSchema.add(new Schema.FieldSchema("changeset", DataType.INTEGER));
-      nodeSchema.add(new Schema.FieldSchema("timestamp", DataType.CHARARRAY));
+      nodeSchema.add(new Schema.FieldSchema("timestamp", DataType.DATETIME));
       Schema tagSchema = new Schema();
       tagSchema.add(new Schema.FieldSchema("value", DataType.CHARARRAY));
       FieldSchema temp = new Schema.FieldSchema("tags", tagSchema);

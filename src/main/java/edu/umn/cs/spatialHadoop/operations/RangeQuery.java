@@ -206,6 +206,10 @@ public class RangeQuery {
     final Path inPath = params.getInputPath();
     final Path outPath = params.getOutputPath();
     final Rectangle[] queryRanges = params.getShapes("rect", new Rectangle());
+    System.out.println("Query range size = " + queryRanges.length);
+    for(Rectangle r: queryRanges) {
+    	System.out.println(r.toString());
+    }
 
     // All running jobs
     final Vector<Long> resultsCounts = new Vector<Long>();

@@ -20,11 +20,14 @@ import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
+import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 
 public class LSMRTreeIndexer {
@@ -110,8 +113,9 @@ public class LSMRTreeIndexer {
 		} while (line != null);
 		fs.close();
 	}
-	
-	private static void insertMapReduce(Path currentPath, Path appendPath, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
+
+	private static void insertMapReduce(Path currentPath, Path appendPath, OperationsParams params)
+			throws IOException, InterruptedException, ClassNotFoundException {
 		// Create a new component with R-Tree index
 		int maxComponentId = getMaxComponentId(currentPath);
 		System.out.println("max compoment id = " + maxComponentId);
@@ -120,11 +124,11 @@ public class LSMRTreeIndexer {
 		OperationsParams params2 = params;
 		params2.set("sindex", "rtree2");
 		Rectangle tempInputMBR = FileMBR.fileMBR(appendPath, params);
-		params2.set("mbr", String.format("%f,%f,%f,%f", tempInputMBR.x1, tempInputMBR.y1, tempInputMBR.x2,
-				tempInputMBR.y2));
-		params2.setBoolean("local", true);
+		params2.set("mbr",
+				String.format("%f,%f,%f,%f", tempInputMBR.x1, tempInputMBR.y1, tempInputMBR.x2, tempInputMBR.y2));
+//		params2.setBoolean("local", false);
 		Indexer.index(appendPath, componentPath, params2);
-		
+
 		// Check policy to merge
 		ArrayList<RTreeComponent> componentsToMerge = checkPolicy(currentPath);
 		if (componentsToMerge.size() > 0) {
@@ -138,30 +142,55 @@ public class LSMRTreeIndexer {
 		for (RTreeComponent component : rtreeComponents) {
 			System.out.println("component " + component.name + " has size " + component.size);
 		}
+
+		if (rtreeComponents.size() < COMPACTION_MIN_COMPONENT || rtreeComponents.size() > COMPACTION_MAX_COMPONENT) {
+			componentsToMerge.clear();
+			return componentsToMerge;
+		}
+
 		Collections.sort(rtreeComponents, new Comparator<RTreeComponent>() {
 			@Override
 			public int compare(RTreeComponent o1, RTreeComponent o2) {
-				return o2.getSize().compareTo(o1.getSize());
+				return Integer.parseInt(o1.getName()) - Integer.parseInt(o2.getName());
 			}
 		});
 		System.out.println("sorted components:");
+		for (RTreeComponent component : rtreeComponents) {
+			System.out.println("component " + component.name + " has size " + component.size);
+		}
 
-		for (int i = rtreeComponents.size() - 1; i >= 0; i--) {
+		for (int i = 0; i < rtreeComponents.size(); i++) {
 			RTreeComponent currentComponent = rtreeComponents.get(i);
 			double sum = 0;
-			if(i >= 1) {
-				for (int j = i - 1; j >= 0; j--) {
-					sum += rtreeComponents.get(j).getSize();
-				}
+			for (int j = i + 1; j < rtreeComponents.size(); j++) {
+				sum += rtreeComponents.get(j).getSize();
 			}
-			if (currentComponent.getSize() < COMPACTION_RATIO * sum) {
+			if (currentComponent.getSize() < COMPACTION_RATIO * sum
+					&& (rtreeComponents.size() - i >= COMPACTION_MIN_COMPONENT)
+					&& (rtreeComponents.size() - i <= COMPACTION_MAX_COMPONENT)) {
 				componentsToMerge.clear();
-				for (int k = i; k >= 0; k--) {
-					componentsToMerge.add(rtreeComponents.get(k));
+				for (int j = i; j < rtreeComponents.size(); j++) {
+					componentsToMerge.add(rtreeComponents.get(j));
 				}
-				break;
 			}
 		}
+
+		// for (int i = rtreeComponents.size() - 1; i >= 0; i--) {
+		// RTreeComponent currentComponent = rtreeComponents.get(i);
+		// double sum = 0;
+		// if(i >= 1) {
+		// for (int j = i - 1; j >= 0; j--) {
+		// sum += rtreeComponents.get(j).getSize();
+		// }
+		// }
+		// if (currentComponent.getSize() < COMPACTION_RATIO * sum) {
+		// componentsToMerge.clear();
+		// for (int k = i; k >= 0; k--) {
+		// componentsToMerge.add(rtreeComponents.get(k));
+		// }
+		// break;
+		// }
+		// }
 
 		return componentsToMerge;
 	}
@@ -186,18 +215,18 @@ public class LSMRTreeIndexer {
 		for (String component : components) {
 			rtreeComponents.add(new RTreeComponent(component,
 					new Double(fs.getContentSummary(new Path(path, component)).getSpaceConsumed())));
-//			if(rtreeComponents.size() > COMPACTION_MAX_COMPONENT) {
-//				break;
-//			}
+			// if(rtreeComponents.size() > COMPACTION_MAX_COMPONENT) {
+			// break;
+			// }
 		}
-		
-//		if(rtreeComponents.size() < COMPACTION_MIN_COMPONENT) {
-//			rtreeComponents.clear();
-//		}
-//		
+
+		// if(rtreeComponents.size() < COMPACTION_MIN_COMPONENT) {
+		// rtreeComponents.clear();
+		// }
+		//
 		return rtreeComponents;
 	}
-	
+
 	private static int getMaxComponentId(Path path) throws IOException {
 		ArrayList<RTreeComponent> rtreeComponents = new ArrayList<LSMRTreeIndexer.RTreeComponent>();
 		Configuration conf = new Configuration();
@@ -218,14 +247,14 @@ public class LSMRTreeIndexer {
 		int maxComponentId = -1;
 		for (String component : components) {
 			int componentId = Integer.parseInt(component);
-			if(maxComponentId < componentId) {
+			if (maxComponentId < componentId) {
 				maxComponentId = componentId;
 			}
 		}
-		
+
 		return maxComponentId;
 	}
-	
+
 	public static HashSet<String> getComponentList(Path path) throws IOException {
 		ArrayList<RTreeComponent> rtreeComponents = new ArrayList<LSMRTreeIndexer.RTreeComponent>();
 		Configuration conf = new Configuration();
@@ -242,24 +271,31 @@ public class LSMRTreeIndexer {
 			String component = componentPath.substring(componentPath.lastIndexOf("/") + 1);
 			components.add(component);
 		}
-		
+
 		return components;
 	}
 
-	private static void merge(Path path, ArrayList<RTreeComponent> componentsToMerge, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+	private static void merge(Path path, ArrayList<RTreeComponent> componentsToMerge, OperationsParams params)
+			throws IOException, ClassNotFoundException, InterruptedException {
 		Configuration conf = new Configuration();
 		FileSystem fs = FileSystem.get(conf);
+		
+		String sindex = params.get("sindex");
 
 		System.out.println("merging following components:");
 		double maxsize = componentsToMerge.get(0).getSize();
 		String maxsizeComponent = componentsToMerge.get(0).getName();
 		for (RTreeComponent component : componentsToMerge) {
-			if(component.getSize() > maxsize) {
+			if (component.getSize() > maxsize) {
 				maxsizeComponent = component.getName();
 			}
 		}
 
+		Rectangle tempInputMBR = new Rectangle(0, 0, 0, 0);
 		Path tempMergePath = new Path("./", "temp.merge");
+		if(fs.exists(tempMergePath)) {
+			fs.delete(tempMergePath);
+		}
 		fs.mkdirs(tempMergePath);
 		for (RTreeComponent component : componentsToMerge) {
 			FileStatus[] dataFiles = fs.listStatus(new Path(path, component.getName()), new PathFilter() {
@@ -268,24 +304,37 @@ public class LSMRTreeIndexer {
 					return path.getName().contains("part-");
 				}
 			});
+			
+			// Read master file to get MBR
+//			ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
+			Path currentMasterPath = new Path(new Path(path, component.getName()), "_master." + sindex);
+			Text tempLine = new Text2();
+			LineReader in = new LineReader(fs.open(currentMasterPath));
+			while (in.readLine(tempLine) > 0) {
+				Partition tempPartition = new Partition();
+				tempPartition.fromText(tempLine);
+				tempInputMBR.expand(tempPartition);
+//				currentPartitions.add(tempPartition);
+			}
+			
 			for (FileStatus file : dataFiles) {
 				// Move file to temp merge directory
-				System.out.println(file.getPath());
+//				System.out.println(file.getPath());
 				String filePath = file.getPath().toString();
 				fs.rename(file.getPath(), new Path(tempMergePath,
 						filePath.substring(filePath.lastIndexOf("/") + 1) + "-" + component.getName()));
 			}
 			fs.delete(new Path(path, component.getName()));
 		}
-		
+
 		OperationsParams params2 = params;
 		params2.set("sindex", "rtree2");
-		Rectangle tempInputMBR = FileMBR.fileMBR(tempMergePath, params);
-		params2.set("mbr", String.format("%f,%f,%f,%f", tempInputMBR.x1, tempInputMBR.y1, tempInputMBR.x2,
-				tempInputMBR.y2));
-		params2.setBoolean("local", true);
+//		Rectangle tempInputMBR = FileMBR.fileMBR(tempMergePath, params);
+		params2.set("mbr",
+				String.format("%f,%f,%f,%f", tempInputMBR.x1, tempInputMBR.y1, tempInputMBR.x2, tempInputMBR.y2));
+//		params2.setBoolean("local", true);
 		Indexer.index(tempMergePath, new Path(path, maxsizeComponent), params2);
-		
+
 		fs.delete(tempMergePath);
 	}
 
@@ -299,23 +348,24 @@ public class LSMRTreeIndexer {
 
 	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException,
 			InstantiationException, IllegalAccessException {
-//		OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-//
-//		if (!params.checkInputOutput(true)) {
-//			printUsage();
-//			return;
-//		}
-//
-//		Path inputPath = params.getInputPath();
-//		Path outputPath = params.getOutputPath();
-//
-//		// The spatial index to use
-//		long t1 = System.currentTimeMillis();
-//		insertByBuffer(inputPath, outputPath, params);
-//		// checkPolicy(inputPath);
-//		long t2 = System.currentTimeMillis();
-//		System.out.println("Total indexing time in millis " + (t2 - t1));
-		
+		// OperationsParams params = new OperationsParams(new
+		// GenericOptionsParser(args));
+		//
+		// if (!params.checkInputOutput(true)) {
+		// printUsage();
+		// return;
+		// }
+		//
+		// Path inputPath = params.getInputPath();
+		// Path outputPath = params.getOutputPath();
+		//
+		// // The spatial index to use
+		// long t1 = System.currentTimeMillis();
+		// insertByBuffer(inputPath, outputPath, params);
+		// // checkPolicy(inputPath);
+		// long t2 = System.currentTimeMillis();
+		// System.out.println("Total indexing time in millis " + (t2 - t1));
+
 		OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
 
 		String currentPathString = params.get("current");
@@ -330,9 +380,9 @@ public class LSMRTreeIndexer {
 		long t1 = System.currentTimeMillis();
 		// Append new data to old data
 		insertMapReduce(currentPath, appendPath, params);
-//		checkPolicy(currentPath);
+		// checkPolicy(currentPath);
 		long t2 = System.currentTimeMillis();
-		
+
 		long t3 = System.currentTimeMillis();
 		System.out.println("Total appending time in millis " + (t2 - t1));
 		System.out.println("Total repartitioning time in millis " + (t3 - t2));

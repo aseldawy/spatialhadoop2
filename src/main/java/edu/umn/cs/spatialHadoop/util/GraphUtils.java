@@ -88,6 +88,87 @@ public class GraphUtils {
 		return solution;
 	}
 	
+	public static Set<Node> findMaximalWeightedSubgraph2(SimpleWeightedGraph<Node, DefaultWeightedEdge> graph,
+			double budget) {
+		Set<Node> solution = new HashSet<Node>();
+		int numberOfNodes = graph.vertexSet().size();
+		List<List<Node>> plots = new ArrayList<List<Node>>(numberOfNodes);
+
+		for (Node v : graph.vertexSet()) {
+			Set<Node> F = new HashSet<Node>();
+			F.add(v);
+			List<Node> plot = new ArrayList<Node>();
+			v.setWeightRatio(0);
+			plot.add(v);
+
+			while (getTotalNodeWeight(F) < budget) {
+				// Find all neighbors of F
+				Set<Node> neighborsF = new HashSet<Node>();
+				for (Node u : F) {
+					List<Node> neighborsU = Graphs.neighborListOf(graph, u);
+					for (Node w : neighborsU) {
+						if (!F.contains(w)) {
+							neighborsF.add(w);
+						}
+					}
+				}
+
+				if(neighborsF.size() > 0) {
+					// Compute total edge's weights of all neighbor of F
+					for (Node w : neighborsF) {
+						double totalEdgeWeight = 0;
+						for (Node u : F) {
+							if (graph.containsEdge(u, w)) {
+								totalEdgeWeight += graph.getEdgeWeight(graph.getEdge(u, w));
+							}
+						}
+						w.setTotalEdgeWeight(totalEdgeWeight);
+					}
+
+					// Find the node with highest ratio of total edge's weights over
+					// node's density
+					Node selectedNode = new Node("", 1, 1);
+					selectedNode.setTotalEdgeWeight(0);
+					for (Node w : neighborsF) {
+//						if (selectedNode.getTotalEdgeWeight() / selectedNode.getWeight() < w.getTotalEdgeWeight()
+//								/ w.getWeight()) {
+//							selectedNode = w;
+//						}
+						if (selectedNode.getTotalEdgeWeight() / selectedNode.getDensity() < w.getTotalEdgeWeight()
+								/ w.getDensity()) {
+							selectedNode = w;
+						}
+					}
+					if(getTotalNodeWeight(F) + selectedNode.getWeight() <= budget) {
+						F.add(selectedNode);
+						Node cloneNode = new Node(selectedNode.getLabel(), selectedNode.getWeight(), selectedNode.getDensity());
+						cloneNode.setWeightRatio(getTotalEdgeWeight(graph, F) / getTotalNodeDensity(F));
+						plot.add(cloneNode);
+					} else {
+						break;
+					}
+				} else {
+					break;
+				}
+			}
+			plots.add(plot);
+		}
+
+		// Find the plot with maximal value of weight ratio
+		List<Node> maximalPlot = plots.get(0);
+		for (List<Node> p : plots) {
+			if (maximalPlot.get(maximalPlot.size() - 1).getWeightRatio() < p.get(p.size() - 1).getWeightRatio()) {
+				maximalPlot = p;
+			}
+		}
+		
+		for(Node node: maximalPlot) {
+			solution.add(node);
+		}
+
+		return solution;
+	}
+	
 	public static Set<Node> findMaximalMultipleWeightedSubgraphs(SimpleWeightedGraph<Node, DefaultWeightedEdge> graph,
 			double budget) {
 		Set<Node> solution = new HashSet<Node>();
@@ -344,22 +425,22 @@ public class GraphUtils {
 
 						// Find the node with highest ratio of total edge's weights over
 						// node's density
-						Node selectedNode = new Node("", 1, 1);
+						Node selectedNode = new Node("", 1);
 						selectedNode.setTotalEdgeWeight(0);
 						for (Node w : neighborsF) {
-//							if (selectedNode.getTotalEdgeWeight() / selectedNode.getWeight() < w.getTotalEdgeWeight()
-//									/ w.getWeight()) {
-//								selectedNode = w;
-//							}
-							if (selectedNode.getTotalEdgeWeight() / selectedNode.getDensity() < w.getTotalEdgeWeight()
-									/ w.getDensity()) {
+							if (selectedNode.getTotalEdgeWeight() / selectedNode.getWeight() < w.getTotalEdgeWeight()
+									/ w.getWeight()) {
 								selectedNode = w;
 							}
+//							if (selectedNode.getTotalEdgeWeight() / selectedNode.getDensity() < w.getTotalEdgeWeight()
+//									/ w.getDensity()) {
+//								selectedNode = w;
+//							}
 						}
 						if(getTotalNodeWeight(F) + selectedNode.getWeight() <= budget) {
 							F.add(selectedNode);
-							Node cloneNode = new Node(selectedNode.getLabel(), selectedNode.getWeight(), selectedNode.getDensity());
-							cloneNode.setWeightRatio(getTotalEdgeWeight(graph, F) / getTotalNodeDensity(F));
+							Node cloneNode = new Node(selectedNode.getLabel(), selectedNode.getWeight());
+							cloneNode.setWeightRatio(getTotalEdgeWeight(graph, F) / getTotalNodeWeight(F));
 							plot.add(cloneNode);
 						} else {
 							break;

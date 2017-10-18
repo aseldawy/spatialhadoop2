@@ -14,6 +14,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
@@ -34,6 +35,8 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.indexing.Indexer.PartitionerMap;
+import edu.umn.cs.spatialHadoop.indexing.Indexer.PartitionerReduce;
 import edu.umn.cs.spatialHadoop.indexing.RTreeIndexer.InserterMap;
 import edu.umn.cs.spatialHadoop.indexing.RTreeIndexer.InserterReduce;
 import edu.umn.cs.spatialHadoop.io.Text2;
@@ -73,6 +76,8 @@ public class IncrementalRTreeIndexer {
 		@Override
 		protected void map(Rectangle key, Iterable<? extends Shape> shapes, final Context context)
 				throws IOException, InterruptedException {
+			Partition p = (Partition) key;
+			LOG.info("map partition = " + p.cellId + " and filename: " + p.filename);
 			final IntWritable partitionID = new IntWritable();
 			for (final Shape shape : shapes) {
 				if (replicate) {
@@ -90,6 +95,7 @@ public class IncrementalRTreeIndexer {
 						}
 					});
 				} else {
+//					LOG.info("overlapPartition");
 					partitionID.set(partitioner.overlapPartition(shape));
 					if (partitionID.get() >= 0)
 						context.write(partitionID, shape);
@@ -99,8 +105,140 @@ public class IncrementalRTreeIndexer {
 		}
 	}
 
-	public static class InserterReduce<S extends Shape> extends Reducer<IntWritable, Shape, IntWritable, Shape> {
+	/**
+	 * The map function that partitions the data using the configured
+	 * partitioner
+	 * 
+	 * @author Eldawy
+	 *
+	 */
+	public static class IncrementalPartitionerMap
+			extends Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
 
+		/** The partitioner used to partitioner the data across reducers */
+		private IncrementalRTreeFilePartitioner partitioner;
+		/**
+		 * Whether to replicate a record to all overlapping partitions or to
+		 * assign it to only one partition
+		 */
+		private boolean replicate;
+
+		@Override
+		protected void setup(Context context) throws IOException, InterruptedException {
+			super.setup(context);
+			this.partitioner = (IncrementalRTreeFilePartitioner) Partitioner.getPartitioner(context.getConfiguration());
+			this.replicate = context.getConfiguration().getBoolean("replicate", false);
+		}
+
+		@Override
+		protected void map(Rectangle key, Iterable<? extends Shape> shapes, final Context context)
+				throws IOException, InterruptedException {
+			Partition p = (Partition) key;
+			LOG.info("map partition = " + p.cellId + " and filename: " + p.filename);
+			final IntWritable partitionID = new IntWritable();
+			for (final Shape shape : shapes) {
+				if (replicate) {
+					partitioner.overlapPartitions(p.filename, shape, new ResultCollector<Integer>() {
+						@Override
+						public void collect(Integer r) {
+							partitionID.set(r);
+							try {
+								context.write(partitionID, shape);
+							} catch (IOException e) {
+								LOG.warn("Error checking overlapping partitions", e);
+							} catch (InterruptedException e) {
+								LOG.warn("Error checking overlapping partitions", e);
+							}
+						}
+					});
+				} else {
+					partitionID.set(partitioner.overlapPartition(p.filename, shape));
+					if (partitionID.get() >= 0) {
+						context.write(partitionID, shape);
+					} else {
+						LOG.info("no partition ID");
+					}
+				}
+				context.progress();
+			}
+		}
+	}
+
+	public static class IncrementalPartitionerReduce<S extends Shape>
+			extends Reducer<IntWritable, Shape, IntWritable, Shape> {
+
+		@Override
+		protected void reduce(IntWritable partitionID, Iterable<Shape> shapes, Context context)
+				throws IOException, InterruptedException {
+			LOG.info("Working on partition #" + partitionID);
+			for (Shape shape : shapes) {
+				if (shape != null) {
+					context.write(partitionID, shape);
+					context.progress();
+				} else {
+					LOG.info("Shape is null");
+				}
+			}
+			// Indicate end of partition to close the file
+			context.write(new IntWritable(-partitionID.get() - 1), null);
+			LOG.info("Done with partition #" + partitionID);
+		}
+	}
+
+	public static class GreedyRTreePartitionerMap
+			extends Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
+
+		/** The partitioner used to partitioner the data across reducers */
+		private GreedyRTreePartitioner partitioner;
+		/**
+		 * Whether to replicate a record to all overlapping partitions or to
+		 * assign it to only one partition
+		 */
+		private boolean replicate;
+
+		@Override
+		protected void setup(Context context) throws IOException, InterruptedException {
+			super.setup(context);
+			this.partitioner = (GreedyRTreePartitioner) Partitioner.getPartitioner(context.getConfiguration());
+			this.replicate = context.getConfiguration().getBoolean("replicate", false);
+		}
+
+		@Override
+		protected void map(Rectangle key, Iterable<? extends Shape> shapes, final Context context)
+				throws IOException, InterruptedException {
+			Partition p = (Partition) key;
+			LOG.info("map partition = " + p.cellId + " and filename: " + p.filename);
+			final IntWritable partitionID = new IntWritable();
+			for (final Shape shape : shapes) {
+				if (replicate) {
+					partitioner.overlapPartitions(p.filename, shape, new ResultCollector<Integer>() {
+						@Override
+						public void collect(Integer r) {
+							partitionID.set(r);
+							try {
+								context.write(partitionID, shape);
+							} catch (IOException e) {
+								LOG.warn("Error checking overlapping partitions", e);
+							} catch (InterruptedException e) {
+								LOG.warn("Error checking overlapping partitions", e);
+							}
+						}
+					});
+				} else {
+					partitionID.set(partitioner.overlapPartition(p.filename, shape));
+					if (partitionID.get() >= 0) {
+						context.write(partitionID, shape);
+					} else {
+						LOG.info("no partition ID");
+					}
+				}
+				context.progress();
+			}
+		}
+	}
+
+	public static class InserterReduce<S extends Shape> extends Reducer<IntWritable, Shape, IntWritable, Shape> {
+	
 		@Override
 		protected void reduce(IntWritable partitionID, Iterable<Shape> shapes, Context context)
 				throws IOException, InterruptedException {
@@ -110,7 +248,28 @@ public class IncrementalRTreeIndexer {
 					context.write(partitionID, shape);
 					context.progress();
 				} catch (Exception e) {
+	
+				}
+			}
+			// Indicate end of partition to close the file
+			context.write(new IntWritable(-partitionID.get() - 1), null);
+			LOG.info("Done with partition #" + partitionID);
+		}
+	}
 
+	public static class GreedyRTreePartitionerReduce<S extends Shape>
+			extends Reducer<IntWritable, Shape, IntWritable, Shape> {
+
+		@Override
+		protected void reduce(IntWritable partitionID, Iterable<Shape> shapes, Context context)
+				throws IOException, InterruptedException {
+			LOG.info("Working on partition #" + partitionID);
+			for (Shape shape : shapes) {
+				if (shape != null) {
+					context.write(partitionID, shape);
+					context.progress();
+				} else {
+					LOG.info("Shape is null");
 				}
 			}
 			// Indicate end of partition to close the file
@@ -210,7 +369,7 @@ public class IncrementalRTreeIndexer {
 
 		// Append files in temp directory to corresponding files in current path
 		for (Partition partition : currentPartitions) {
-			System.out.println("Appending to " + partition.filename);
+//			System.out.println("Appending to " + partition.filename);
 			FSDataOutputStream out = fs.append(new Path(currentPath, partition.filename));
 			for (Partition insertPartition : insertPartitions) {
 				if (partition.cellId == insertPartition.cellId) {
@@ -287,7 +446,7 @@ public class IncrementalRTreeIndexer {
 		for (Partition partition : currentPartitions) {
 			reorganizedPartitions.add(partition);
 			if (partition.size >= overflowSize) {
-				System.out.println("Overflow--------------------");
+//				System.out.println("Overflow--------------------");
 				Path tempOutputPath = new Path("./", "temp.output");
 				OperationsParams params2 = new OperationsParams(conf);
 				Rectangle inputMBR = FileMBR.fileMBR(new Path(path, partition.filename), new OperationsParams(conf));
@@ -331,7 +490,423 @@ public class IncrementalRTreeIndexer {
 		masterOut.close();
 	}
 
-	private static void greedyReorganizeWithRTreeSplitter(Path path, OperationsParams params)
+	private static Job reorganizeWithRTreeSplitter2(Path path, OperationsParams params)
+			throws IOException, ClassNotFoundException, InterruptedException {
+		final byte[] NewLine = new byte[] { '\n' };
+		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> reorganizedPartitions = new ArrayList<Partition>();
+
+		Job job = new Job(params, "Reorganizer");
+		Configuration conf = job.getConfiguration();
+		FileSystem fs = FileSystem.get(conf);
+		double blockSize = Double.parseDouble(conf.get("dfs.blocksize"));
+		double overflowRate = Double.parseDouble(params.get("overflow_rate"));
+		double overflowSize = blockSize * overflowRate;
+		String sindex = params.get("sindex");
+
+		Path currentMasterPath = new Path(path, "_master." + sindex);
+		Text tempLine1 = new Text2();
+		LineReader in1 = new LineReader(fs.open(currentMasterPath));
+		while (in1.readLine(tempLine1) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine1);
+			currentPartitions.add(tempPartition);
+		}
+
+		int maxCellId = -1;
+		for (Partition partition : currentPartitions) {
+			if (partition.cellId > maxCellId) {
+				maxCellId = partition.cellId;
+			}
+		}
+
+		// Iterate all overflow partitions to split
+		Path tempInputPath = new Path("./", "temp.incrtree.input");
+		Path tempOutputPath = new Path("./", "temp.incrtree.output");
+
+		if (fs.exists(tempInputPath)) {
+			fs.delete(tempInputPath);
+		}
+		fs.mkdirs(tempInputPath);
+		if (fs.exists(tempOutputPath)) {
+			fs.delete(tempOutputPath);
+		}
+
+		long totalSplitSize = 0;
+		int totalSplitBlocks = 0;
+		ArrayList<Partition> splitPartitions = new ArrayList<Partition>();
+		for (Partition partition : currentPartitions) {
+			reorganizedPartitions.add(partition);
+			if (partition.size >= overflowSize) {
+				splitPartitions.add(partition);
+				totalSplitSize += partition.size;
+				totalSplitBlocks += partition.getNumberOfBlock(blockSize);
+				reorganizedPartitions.remove(partition);
+				FileUtil.copy(fs, new Path(path, partition.filename), fs, new Path(tempInputPath, partition.filename),
+						false, true, conf);
+			}
+		}
+
+		System.out.println("Total split partitions = " + splitPartitions.size());
+		System.out.println("Total split size = " + totalSplitSize);
+		System.out.println("Total split blocks = " + totalSplitBlocks);
+
+		// Save split partitions and keep partitions to file
+		Path splitPath = new Path(path, "rects.split");
+		Path keepPath = new Path(path, "rects.keep");
+		OutputStream splitOut = fs.create(splitPath);
+		OutputStream keepOut = fs.create(keepPath);
+		for (Partition partition : splitPartitions) {
+			Text splitLine = new Text2();
+			partition.toText(splitLine);
+			splitOut.write(splitLine.getBytes(), 0, splitLine.getLength());
+			splitOut.write(NewLine);
+		}
+		currentPartitions.removeAll(splitPartitions);
+		for (Partition partition : currentPartitions) {
+			Text keepLine = new Text2();
+			partition.toText(keepLine);
+			keepOut.write(keepLine.getBytes(), 0, keepLine.getLength());
+			keepOut.write(NewLine);
+		}
+		splitOut.close();
+		keepOut.close();
+
+		IncrementalRTreeFilePartitioner partitioner = new IncrementalRTreeFilePartitioner();
+		partitioner.createFromInputFile(path, tempOutputPath, params);
+//		for (Partition p : partitioner.cells) {
+//			System.out.println("cell info = " + p.toString());
+//		}
+		Partitioner.setPartitioner(conf, partitioner);
+
+		// Set mapper and reducer
+		Shape shape = OperationsParams.getShape(conf, "shape");
+		job.setMapperClass(IncrementalPartitionerMap.class);
+		job.setMapOutputKeyClass(IntWritable.class);
+		job.setMapOutputValueClass(shape.getClass());
+		job.setReducerClass(IncrementalPartitionerReduce.class);
+		// Set input and output
+		job.setInputFormatClass(SpatialInputFormat3.class);
+		SpatialInputFormat3.setInputPaths(job, tempInputPath);
+		job.setOutputFormatClass(IndexOutputFormat.class);
+		IndexOutputFormat.setOutputPath(job, tempOutputPath);
+		// Set number of reduce tasks according to cluster status
+		ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+		job.setNumReduceTasks(
+				Math.max(1, Math.min(partitioner.getPartitionCount(), (clusterStatus.getMaxReduceTasks() * 9) / 10)));
+
+		// Use multithreading in case the job is running locally
+		conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+
+		// Start the job
+		if (conf.getBoolean("background", false)) {
+			// Run in background
+			job.submit();
+		} else {
+			job.waitForCompletion(conf.getBoolean("verbose", false));
+		}
+
+		// Merge
+		ArrayList<Partition> tempPartitions = new ArrayList<Partition>();
+		Path tempMasterPath = new Path(tempOutputPath, "_master." + sindex);
+		Text tempLine = new Text2();
+		LineReader in = new LineReader(fs.open(tempMasterPath));
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			tempPartitions.add(tempPartition);
+		}
+
+		for (Partition p : tempPartitions) {
+			fs.rename(new Path(tempOutputPath, p.filename), new Path(path, p.filename));
+		}
+
+		reorganizedPartitions.addAll(tempPartitions);
+
+		// Update master and wkt file
+		currentMasterPath = new Path(path, "_master." + sindex);
+		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
+		fs.delete(currentMasterPath);
+		fs.delete(currentWKTPath);
+		OutputStream masterOut = fs.create(currentMasterPath);
+		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
+		wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+		for (Partition partition : reorganizedPartitions) {
+			Text masterLine = new Text2();
+			partition.toText(masterLine);
+			masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+			masterOut.write(NewLine);
+			wktOut.println(partition.toWKT());
+		}
+
+		wktOut.close();
+		masterOut.close();
+
+		fs.delete(tempInputPath);
+		fs.delete(tempOutputPath);
+
+		for (Partition p : splitPartitions) {
+			fs.delete(new Path(path, p.filename));
+		}
+
+		return job;
+	}
+
+	private static Job greedyReorganizeWithRTreeSplitter(Path path, OperationsParams params)
+			throws IOException, InterruptedException, ClassNotFoundException {
+		final byte[] NewLine = new byte[] { '\n' };
+		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> splittingPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> reorganizedPartitions = new ArrayList<Partition>();
+
+		Job job = new Job(params, "Reorganizer");
+		Configuration conf = job.getConfiguration();
+		FileSystem fs = FileSystem.get(conf);
+		int blockSize = Integer.parseInt(conf.get("dfs.blocksize"));
+		String sindex = params.get("sindex");
+		double budget = Double.parseDouble(params.get("budget")) * 1024 * 1024;
+
+		// Load current partitions
+		Path currentMasterPath = new Path(path, "_master." + sindex);
+		Text tempLine1 = new Text2();
+		LineReader in1 = new LineReader(fs.open(currentMasterPath));
+		while (in1.readLine(tempLine1) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine1);
+			currentPartitions.add(tempPartition);
+		}
+
+		int maxCellId = -1;
+		for (Partition partition : currentPartitions) {
+			if (partition.cellId > maxCellId) {
+				maxCellId = partition.cellId;
+			}
+		}
+
+		// Map partitions to graph then find the dense clusters
+		ArrayList<ArrayList<Partition>> groups = new ArrayList<ArrayList<Partition>>();
+
+		ArrayList<Partition> oneBlockPartitions = GreedyRepartitioner2.getOneBlockPartitions(currentPartitions, blockSize);
+		System.out.println("Number of one block partitions = " + oneBlockPartitions.size());
+		SimpleWeightedGraph<Node, DefaultWeightedEdge> graph = GreedyRepartitioner2
+				.mapPartitionsToGraph(oneBlockPartitions);
+		System.out.println("Number of node in mapped graph = " + graph.vertexSet().size());
+		ArrayList<Set<Node>> selectedNodeSets = GraphUtils.findMaximalMultipleWeightedSubgraphs3(graph, budget);
+		System.out.println("Number of selected groups = " + selectedNodeSets.size());
+
+		long totalSplitSize = 0;
+		int totalSplitBlocks = 0;
+		
+		for (Set<Node> nodeSet : selectedNodeSets) {
+			System.out.println("Set of node");
+			for(Node node: nodeSet) {
+				System.out.println("Node label = " + node.getLabel());
+			}
+			ArrayList<Partition> group = new ArrayList<Partition>();
+			for (int i = 0; i < currentPartitions.size(); i++) {
+				for (Node node : nodeSet) {
+					if (node.getLabel().equals(Integer.toString(i))) {
+						if(!isContainedIn(currentPartitions.get(i), group)) {
+							group.add(currentPartitions.get(i));
+							splittingPartitions.add(currentPartitions.get(i));
+							totalSplitSize += currentPartitions.get(i).size;
+							totalSplitBlocks += currentPartitions.get(i).getNumberOfBlock(blockSize);
+						}
+					}
+				}
+			}
+			groups.add(group);
+		}
+
+		System.out.println("Total split partitions = " + splittingPartitions.size());
+		System.out.println("Total split size = " + totalSplitSize);
+		System.out.println("Total split blocks = " + totalSplitBlocks);
+
+		// Save split partitions and keep partitions to file
+		Path splitPath = new Path(path, "rects.split");
+		Path keepPath = new Path(path, "rects.keep");
+		OutputStream splitOut = fs.create(splitPath);
+		OutputStream keepOut = fs.create(keepPath);
+		for (Partition partition : splittingPartitions) {
+			Text splitLine = new Text2();
+			partition.toText(splitLine);
+			splitOut.write(splitLine.getBytes(), 0, splitLine.getLength());
+			splitOut.write(NewLine);
+		}
+		currentPartitions.removeAll(splittingPartitions);
+		for (Partition partition : currentPartitions) {
+			Text keepLine = new Text2();
+			partition.toText(keepLine);
+			keepOut.write(keepLine.getBytes(), 0, keepLine.getLength());
+			keepOut.write(NewLine);
+		}
+		splitOut.close();
+		keepOut.close();
+
+		// Split selected partitions
+		// Iterate all overflow partitions to split
+		int groupId = 0;
+		ArrayList<RTreePartitioner> partitioners = new ArrayList<RTreePartitioner>();
+		for (ArrayList<Partition> group : groups) {
+			groupId++;
+			Path groupInputPath = new Path("./", "temp.greedy.input" + groupId);
+			Path groupOutputPath = new Path("./", "temp.greedy.output" + groupId);
+
+			// Move all partitions of this group to temporary input
+			if (fs.exists(groupInputPath)) {
+				fs.delete(groupInputPath);
+			}
+			fs.mkdirs(groupInputPath);
+
+			if (fs.exists(groupOutputPath)) {
+				fs.delete(groupOutputPath);
+			}
+
+			Rectangle inputMBR = new Rectangle(group.get(0));
+			for (Partition p : group) {
+				fs.rename(new Path(path, p.filename), new Path(groupInputPath, p.filename));
+				inputMBR.expand(p);
+			}
+
+			OperationsParams params2 = new OperationsParams(conf);
+			params2.setShape(conf, "mbr", inputMBR);
+			params2.setBoolean("local", false);
+
+			// Indexer.index(tempInputPath, tempOutputPath, params2);
+			Job job2 = new Job(params2, "Sampler");
+			Configuration conf2 = job2.getConfiguration();
+			RTreePartitioner groupPartitioner = (RTreePartitioner) Indexer.createPartitioner(groupInputPath,
+					groupOutputPath, conf2, sindex);
+			partitioners.add(groupPartitioner);
+
+			// LineReader in = new LineReader(fs.open(new Path(tempOutputPath,
+			// "_master." + sindex)));
+			// Text tempLine = new Text2();
+			// while (in.readLine(tempLine) > 0) {
+			// Partition tempPartition = new Partition();
+			// tempPartition.fromText(tempLine);
+			// maxCellId++;
+			// tempPartition.cellId = maxCellId;
+			// String oldFileName = tempPartition.filename;
+			// tempPartition.filename = String.format("part-%05d",
+			// tempPartition.cellId);
+			// fs.rename(new Path(tempOutputPath, oldFileName), new Path(path,
+			// tempPartition.filename));
+			// reorganizedPartitions.add(tempPartition);
+			// }
+			// fs.delete(tempInputPath);
+			// fs.delete(tempOutputPath);
+		}
+
+		currentPartitions.removeAll(splittingPartitions);
+		reorganizedPartitions.addAll(currentPartitions);
+		
+		GreedyRTreePartitioner greedyPartitioner = new GreedyRTreePartitioner(partitioners, maxCellId);
+		Partitioner.setPartitioner(conf, greedyPartitioner);
+
+		// Set mapper and reducer
+		Path[] tempInputPaths = new Path[groupId];
+		Path tempOutputPath = new Path("./", "temp.greedy.output");
+		for(int i = 0; i < groupId; i++) {
+			Path groupInputPath = new Path("./", "temp.greedy.input" + (i + 1));	
+			tempInputPaths[i] = groupInputPath;
+		}
+		
+		Shape shape = OperationsParams.getShape(conf, "shape");
+		job.setMapperClass(GreedyRTreePartitionerMap.class);
+		job.setMapOutputKeyClass(IntWritable.class);
+		job.setMapOutputValueClass(shape.getClass());
+		job.setReducerClass(GreedyRTreePartitionerReduce.class);
+		// Set input and output
+		job.setInputFormatClass(SpatialInputFormat3.class);
+		SpatialInputFormat3.setInputPaths(job, tempInputPaths);
+		job.setOutputFormatClass(IndexOutputFormat.class);
+		IndexOutputFormat.setOutputPath(job, tempOutputPath);
+		// Set number of reduce tasks according to cluster status
+		ClusterStatus clusterStatus = new JobClient(new JobConf()).getClusterStatus();
+		job.setNumReduceTasks(
+				Math.max(1, Math.min(greedyPartitioner.getPartitionCount(), (clusterStatus.getMaxReduceTasks() * 9) / 10)));
+
+		// Use multithreading in case the job is running locally
+		conf.setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+
+		// Start the job
+		if (conf.getBoolean("background", false)) {
+			// Run in background
+			job.submit();
+		} else {
+			job.waitForCompletion(conf.getBoolean("verbose", false));
+		}
+
+		// Merge
+		ArrayList<Partition> tempPartitions = new ArrayList<Partition>();
+		Path tempMasterPath = new Path(tempOutputPath, "_master." + sindex);
+		Text tempLine = new Text2();
+		LineReader in = new LineReader(fs.open(tempMasterPath));
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			tempPartitions.add(tempPartition);
+		}
+
+		for (Partition p : tempPartitions) {
+			fs.rename(new Path(tempOutputPath, p.filename), new Path(path, p.filename));
+		}
+
+		reorganizedPartitions.addAll(tempPartitions);
+
+		// Update master and wkt file
+		currentMasterPath = new Path(path, "_master." + sindex);
+		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
+		fs.delete(currentMasterPath);
+		fs.delete(currentWKTPath);
+		OutputStream masterOut = fs.create(currentMasterPath);
+		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
+		wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+		for (Partition partition : reorganizedPartitions) {
+			Text masterLine = new Text2();
+			partition.toText(masterLine);
+			masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+			masterOut.write(NewLine);
+			wktOut.println(partition.toWKT());
+		}
+
+		wktOut.close();
+		masterOut.close();
+
+		for(int i = 1; i <= groupId; i++) {
+			Path groupInputPath = new Path("./", "temp.greedy.input" + i);	
+			fs.delete(groupInputPath);
+		}
+		fs.delete(tempOutputPath);
+
+		for (Partition p : splittingPartitions) {
+			fs.delete(new Path(path, p.filename));
+		}
+
+		return job;
+
+//		// Update master and wkt file
+//		currentMasterPath = new Path(path, "_master." + sindex);
+//		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
+//		fs.delete(currentMasterPath);
+//		fs.delete(currentWKTPath);
+//		OutputStream masterOut = fs.create(currentMasterPath);
+//		PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
+//		wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+//		for (Partition partition : reorganizedPartitions) {
+//			Text masterLine = new Text2();
+//			partition.toText(masterLine);
+//			masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
+//			masterOut.write(NewLine);
+//			wktOut.println(partition.toWKT());
+//		}
+//
+//		wktOut.close();
+//		masterOut.close();
+	}
+
+	private static void greedyReorganizeWithRTreeSplitter2(Path path, OperationsParams params)
 			throws IOException, InterruptedException, ClassNotFoundException {
 		final byte[] NewLine = new byte[] { '\n' };
 		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
@@ -365,62 +940,93 @@ public class IncrementalRTreeIndexer {
 		}
 
 		// Map partitions to graph then find the dense clusters
-		ArrayList<ArrayList<Partition>> groups = new ArrayList<ArrayList<Partition>>();
-
+		ArrayList<Partition> oneBlockPartitions = GreedyRepartitioner2.getOneBlockPartitions(currentPartitions, blockSize);
 		SimpleWeightedGraph<Node, DefaultWeightedEdge> graph = GreedyRepartitioner2
-				.mapPartitionsToGraph(currentPartitions);
-		ArrayList<Set<Node>> selectedNodeSets = GraphUtils.findMaximalMultipleWeightedSubgraphs3(graph, budget);
+				.mapPartitionsToGraph(oneBlockPartitions);
+		Set<Node> selectedNodes = GraphUtils.findMaximalWeightedSubgraph2(graph, budget);
 
-		for (Set<Node> nodeSet : selectedNodeSets) {
-			ArrayList<Partition> group = new ArrayList<Partition>();
-			for (int i = 0; i < currentPartitions.size(); i++) {
-				for (Node node : nodeSet) {
-					if (node.getLabel().equals(Integer.toString(i))) {
-						group.add(currentPartitions.get(i));
+		long totalSplitSize = 0;
+		int totalSplitBlocks = 0;
+		for (int i = 0; i < currentPartitions.size(); i++) {
+			for (Node node : selectedNodes) {
+				if (node.getLabel().equals(Integer.toString(i))) {
+					if(!isContainedIn(currentPartitions.get(i), splittingPartitions)) {
 						splittingPartitions.add(currentPartitions.get(i));
+						totalSplitSize += currentPartitions.get(i).size;
+						totalSplitBlocks += currentPartitions.get(i).getNumberOfBlock(blockSize);
 					}
 				}
 			}
-			groups.add(group);
 		}
+
+		System.out.println("Total split partitions = " + splittingPartitions.size());
+		System.out.println("Total split size = " + totalSplitSize);
+		System.out.println("Total split blocks = " + totalSplitBlocks);
+
+		// Save split partitions and keep partitions to file
+		Path splitPath = new Path(path, "rects.split");
+		Path keepPath = new Path(path, "rects.keep");
+		OutputStream splitOut = fs.create(splitPath);
+		OutputStream keepOut = fs.create(keepPath);
+		for (Partition partition : splittingPartitions) {
+			Text splitLine = new Text2();
+			partition.toText(splitLine);
+			splitOut.write(splitLine.getBytes(), 0, splitLine.getLength());
+			splitOut.write(NewLine);
+		}
+		currentPartitions.removeAll(splittingPartitions);
+		for (Partition partition : currentPartitions) {
+			Text keepLine = new Text2();
+			partition.toText(keepLine);
+			keepOut.write(keepLine.getBytes(), 0, keepLine.getLength());
+			keepOut.write(NewLine);
+		}
+		splitOut.close();
+		keepOut.close();
 
 		// Split selected partitions
 		// Iterate all overflow partitions to split
-		for(ArrayList<Partition> group: groups) {
-			Path tempInputPath = new Path("./", "temp.input");
-			Path tempOutputPath = new Path("./", "temp.output");
-			
-			// Move all partitions of this group to temporary input
-			fs.mkdirs(tempInputPath);
-			for(Partition p: group) {
-				fs.rename(new Path(path, p.filename), new Path(tempInputPath, p.filename));
-			}
-			
-			Rectangle inputMBR = FileMBR.fileMBR(tempInputPath, new OperationsParams(conf));
-			
-			OperationsParams params2 = new OperationsParams(conf);
-			params2.setShape(conf, "mbr", inputMBR);
-			params2.setBoolean("local", false);
-			
-			Indexer.index(tempInputPath, tempOutputPath, params2);
-			
-			LineReader in = new LineReader(fs.open(new Path(tempOutputPath, "_master." + sindex)));
-			Text tempLine = new Text2();
-			while (in.readLine(tempLine) > 0) {
-				Partition tempPartition = new Partition();
-				tempPartition.fromText(tempLine);
-				maxCellId++;
-				tempPartition.cellId = maxCellId;
-				String oldFileName = tempPartition.filename;
-				tempPartition.filename = String.format("part-%05d", tempPartition.cellId);
-				fs.rename(new Path(tempOutputPath, oldFileName), new Path(path, tempPartition.filename));
-				reorganizedPartitions.add(tempPartition);
-			}
+		Path tempInputPath = new Path("./", "temp.greedy2.input");
+		Path tempOutputPath = new Path("./", "temp.greedy2.output");
+
+		// Move all partitions of this group to temporary input
+		if (fs.exists(tempInputPath)) {
 			fs.delete(tempInputPath);
+		}
+		fs.mkdirs(tempInputPath);
+
+		if (fs.exists(tempOutputPath)) {
 			fs.delete(tempOutputPath);
 		}
-		
-		currentPartitions.removeAll(splittingPartitions);
+
+		Rectangle inputMBR = new Rectangle(splittingPartitions.get(0));
+		for (Partition p : splittingPartitions) {
+			fs.rename(new Path(path, p.filename), new Path(tempInputPath, p.filename));
+			inputMBR.expand(p);
+		}
+
+		OperationsParams params2 = new OperationsParams(conf);
+		params2.setShape(conf, "mbr", inputMBR);
+		params2.setBoolean("local", false);
+
+		Indexer.index(tempInputPath, tempOutputPath, params2);
+
+		LineReader in = new LineReader(fs.open(new Path(tempOutputPath, "_master." + sindex)));
+		Text tempLine = new Text2();
+		while (in.readLine(tempLine) > 0) {
+			Partition tempPartition = new Partition();
+			tempPartition.fromText(tempLine);
+			maxCellId++;
+			tempPartition.cellId = maxCellId;
+			String oldFileName = tempPartition.filename;
+			tempPartition.filename = String.format("part-%05d", tempPartition.cellId);
+			fs.rename(new Path(tempOutputPath, oldFileName), new Path(path, tempPartition.filename));
+			reorganizedPartitions.add(tempPartition);
+		}
+		fs.delete(tempInputPath);
+		fs.delete(tempOutputPath);
+
+		// currentPartitions.removeAll(splittingPartitions);
 		reorganizedPartitions.addAll(currentPartitions);
 
 		// Update master and wkt file
@@ -441,6 +1047,16 @@ public class IncrementalRTreeIndexer {
 
 		wktOut.close();
 		masterOut.close();
+	}
+	
+	private static boolean isContainedIn(Partition p, ArrayList<Partition> partitions) {
+		for(Partition partition: partitions) {
+			if(p.cellId == partition.cellId) {
+				return true;
+			}
+		}
+		
+		return false;
 	}
 
 	private static void printUsage() {
@@ -479,18 +1095,22 @@ public class IncrementalRTreeIndexer {
 		insertMapReduce(currentPath, appendPath, params);
 		appendNewFiles(currentPath, params);
 		long t2 = System.currentTimeMillis();
+		System.out.println("Total appending time in millis " + (t2 - t1));
 
 		String splitType = params.get("splittype");
 		if (splitType.equals("rtree2")) {
 			System.out.println("R-Tree splitting");
-			reorganizeWithRTreeSplitter(currentPath, params);
+			Job job = reorganizeWithRTreeSplitter2(currentPath, params);
+
 		} else if (splitType.equals("greedy")) {
-			System.out.println("Greedy splitting");
+			System.out.println("Greedy splitting: multiple cluster");
 			greedyReorganizeWithRTreeSplitter(currentPath, params);
+		} else if (splitType.equals("greedysingle")) {
+			System.out.println("Greedy splitting: single cluster");
+			greedyReorganizeWithRTreeSplitter2(currentPath, params);
 		}
 
 		long t3 = System.currentTimeMillis();
-		System.out.println("Total appending time in millis " + (t2 - t1));
 		System.out.println("Total repartitioning time in millis " + (t3 - t2));
 		System.out.println("Total time in millis " + (t3 - t1));
 	}

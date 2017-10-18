@@ -5,40 +5,36 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.util.LineReader;
-
-import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.io.Text2;
 
-public class FilePartitioner extends Partitioner {
+public class GreedyRTreePartitioner extends Partitioner {
 
-	protected ArrayList<CellInfo> cells;
+	private static final double MINIMUM_EXPANSION = Double.MAX_VALUE;
+	ArrayList<RTreePartitioner> partitioners = new ArrayList<RTreePartitioner>();
+	public ArrayList<CellInfo> cells = new ArrayList<CellInfo>();
 	
-	public FilePartitioner() {
+	public GreedyRTreePartitioner(){}
+
+	public GreedyRTreePartitioner(ArrayList<RTreePartitioner> partitioners, int maxCellId) {
 		// TODO Auto-generated constructor stub
-		cells = new ArrayList<CellInfo>();
+		this.partitioners = partitioners;
+		for (RTreePartitioner partitioner : partitioners) {
+			for (CellInfo cell : partitioner.cells) {
+				maxCellId++;
+				cell.cellId = maxCellId;
+				CellInfo cellInfo = new CellInfo(cell);
+				this.cells.add(cellInfo);
+			}
+		}
 	}
 
 	@Override
 	public void write(DataOutput out) throws IOException {
 		// TODO Auto-generated method stub
-//		String tempString = "";
-//		for(CellInfo cell: this.cells) {
-//			Text text = new Text();
-//			cell.toText(text);
-//			tempString += text.toString() + "\n";
-//		}
-//		out.writeUTF(tempString);
 		out.writeInt(cells.size());
 		for (CellInfo cell : this.cells) {
 			cell.write(out);
@@ -48,13 +44,7 @@ public class FilePartitioner extends Partitioner {
 	@Override
 	public void readFields(DataInput in) throws IOException {
 		// TODO Auto-generated method stub
-//		String tempString = in.readUTF();
-//		String[] cellTexts = tempString.split("\n");
-//		for(String text: cellTexts) {
-//			CellInfo tempCellInfo = new CellInfo();
-//			tempCellInfo.fromText(new Text(text));
-//			this.cells.add(tempCellInfo);
-//		}
+		// TODO Auto-generated method stub
 		int cellsSize = in.readInt();
 		cells = new ArrayList<CellInfo>(cellsSize);
 		for (int i = 0; i < cellsSize; i++) {
@@ -70,59 +60,72 @@ public class FilePartitioner extends Partitioner {
 
 	}
 
-	/**
-	 * Create this partitioner based on information from master file
-	 * @param inPath
-	 * @param params
-	 * @throws IOException
-	 */
-	public void createFromMasterFile(Path inPath, OperationsParams params) throws IOException {
-		this.cells = new ArrayList<CellInfo>();
-
-		Job job = Job.getInstance(params);
-		final Configuration conf = job.getConfiguration();
-		final String sindex = conf.get("sindex");
-
-		Path masterPath = new Path(inPath, "_master." + sindex);
-		FileSystem inFs = inPath.getFileSystem(params);
-		Text tempLine = new Text2();
-		LineReader in = new LineReader(inFs.open(masterPath));
-		while (in.readLine(tempLine) > 0) {
-			Partition tempPartition = new Partition();
-			tempPartition.fromText(tempLine);
-			CellInfo tempCellInfo = new CellInfo();
-			tempCellInfo.cellId = tempPartition.cellId;
-			tempCellInfo.set(tempPartition.cellMBR);
-			this.cells.add(tempCellInfo);
-		}
-	}
-
 	@Override
 	public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
 		// TODO Auto-generated method stub
+
+	}
+
+	public void overlapPartitions(String filename, Shape shape, ResultCollector<Integer> matcher) {
+		// TODO Auto-generated method stub
+
+		boolean found = false;
 		for(CellInfo cell: this.cells) {
 			if(cell.isIntersected(shape)) {
 				matcher.collect(cell.cellId);
+				found = true;
 			}
+		}
+		if(!found) {
+			double minimumExpansion = MINIMUM_EXPANSION;
+			CellInfo minimumCell = this.cells.get(0);
+			for(CellInfo cell: this.cells) {
+				CellInfo tempCell = new CellInfo(cell);
+				tempCell.expand(shape);
+				double expansionArea = tempCell.getSize() - cell.getSize();
+				if(expansionArea < minimumExpansion) {
+					minimumExpansion = expansionArea;
+					minimumCell = cell;
+				}
+			}
+			matcher.collect(minimumCell.cellId);
 		}
 	}
 
-	@Override
-	public int overlapPartition(Shape shape) {
+	public int overlapPartition(String filename, Shape shape) {
 		// TODO Auto-generated method stub
 		for(CellInfo cell: this.cells) {
 			if(cell.isIntersected(shape)) {
 				return cell.cellId;
 			}
 		}
-		return 0;
+		
+		double minimumExpansion = MINIMUM_EXPANSION;
+		CellInfo minimumCell = this.cells.get(0);
+		for(CellInfo cell: this.cells) {
+			CellInfo tempCell = new CellInfo(cell);
+			tempCell.expand(shape);
+			double expansionArea = tempCell.getSize() - cell.getSize();
+			if(expansionArea < minimumExpansion) {
+				minimumExpansion = expansionArea;
+				minimumCell = cell;
+			}
+		}
+		
+		return minimumCell.cellId;
+	}
+
+	@Override
+	public int overlapPartition(Shape shape) {
+		// TODO Auto-generated method stub
+		return 1;
 	}
 
 	@Override
 	public CellInfo getPartition(int partitionID) {
 		// TODO Auto-generated method stub
 		CellInfo result = new CellInfo(partitionID, 0, 0, 0, 0);
-		for (CellInfo cell: this.cells) {
+		for (CellInfo cell : this.cells) {
 			if (cell.cellId == partitionID) {
 				result = cell;
 				break;

@@ -122,6 +122,11 @@ public class Partition extends CellInfo {
     this.recordCount += p.recordCount;
   }
   
+  public int getNumberOfBlock(double blockSize) {
+	  double nblocks = (double)this.size / blockSize;
+	  return (int)Math.ceil(nblocks);
+  }
+  
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, double scale) {
