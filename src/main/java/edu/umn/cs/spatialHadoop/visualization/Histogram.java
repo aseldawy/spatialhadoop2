@@ -31,8 +31,8 @@ public class Histogram {
 	/**Logger for FileMBR*/
 	private static final Log LOG = LogFactory.getLog(Histogram.class);
 	
-	private static final String HistogramWidth = "width";
-	private static final String HistogramHeight = "height";
+	private static final String HistogramWidth = "hist.width";
+	private static final String HistogramHeight = "hist.height";
 	
 	public static class HistogramMapper<S extends Shape>
     extends Mapper<Rectangle, Iterable<S>, NullWritable, GridHistogram>{
@@ -145,8 +145,8 @@ public class Histogram {
 		System.out.println("Parameters: (* marks required parameters)");
 		System.out.println("<input file>: (*) Path to input file");
 		System.out.println("shape:<input shape>: (*) Input file format");
-		System.out.println("width:<num of columns>: Number of columns in the histogram (1024)");
-		System.out.println("height:<num of rows>: Number of rows in the histogram (1024)");
+		System.out.println("hist.width:<num of columns>: Number of columns in the histogram (1024)");
+		System.out.println("hist.height:<num of rows>: Number of rows in the histogram (1024)");
 		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
 

@@ -4,12 +4,19 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Writable;
+
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 
 public class GridHistogram implements Writable {
 	
@@ -97,6 +104,48 @@ public class GridHistogram implements Writable {
 				values[y*width + x] = bbuffer.getLong();
 			}
 		}
+	}
+
+	public static GridHistogram readFromFile(FileSystem fs, Path path) throws FileNotFoundException, IOException {
+		FileStatus[] listStatus = fs.listStatus(path, SpatialSite.NonHiddenFileFilter);
+		FSDataInputStream inputStream = fs.open(listStatus[0].getPath());
+		GridHistogram hist = new GridHistogram();
+		hist.readFields(inputStream);
+		inputStream.close();
+		return hist;
+	}
+
+	public long getSum(int x, int y, int tileWidth, int tileHeight) {
+		long sum = 0;
+		for (int row = 0; row < tileHeight; row++) {
+			for (int column = 0; column < tileWidth; column++) {
+				int offset = (column + x) + (row + y) * this.width;
+				sum += values[offset];
+			}
+		}
+		return sum;
+	}
+
+	public void vflip() {
+		long[] newValues = new long[values.length];
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				newValues[y*width + x] = values[(height - y - 1)* width + x];
+			}
+		}
+		this.values = newValues;
+	}
+	
+	@Override
+	public String toString() {
+		String str = String.format("Histogram (%d, %d)\n", width, height);
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				str += values[y*width + x] +", ";
+			}
+			str += "\n";
+		}
+		return str;
 	}
 
 }

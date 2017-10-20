@@ -34,7 +34,7 @@ public class TigerShape extends OGCJTSShape {
   
   @Override
   public Text toText(Text text) {
-    text.set(originalText);
+    text.append(originalText.getBytes(), 0, originalText.length());
     return text;
   }
   

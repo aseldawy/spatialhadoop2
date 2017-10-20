@@ -99,4 +99,10 @@ public class TileIndex implements WritableComparable<TileIndex> {
     double y1 = spaceMBR.y1 + tileWidth * this.y;
     return new Rectangle(x1, y1, x1 + tileWidth, y1 + tileHeight);
   }
+  
+  public void moveToParent() {
+	this.x /= 2;
+	this.y /= 2;
+	this.level--;
+  }
 }

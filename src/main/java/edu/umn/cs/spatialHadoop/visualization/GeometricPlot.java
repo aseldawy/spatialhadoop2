@@ -112,7 +112,11 @@ public class GeometricPlot {
   public static Job plot(Path[] inFiles, Path outFile, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
     if (params.getBoolean("pyramid", false)) {
-      return MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+    	if (params.getBoolean("adaptive", false)) {
+    		return AdaptiveMultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+    	} else { 
+    		return MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+    	}
     } else {
       return SingleLevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
     }
