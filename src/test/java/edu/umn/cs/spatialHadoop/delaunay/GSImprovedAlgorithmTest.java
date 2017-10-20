@@ -99,6 +99,7 @@ public class GSImprovedAlgorithmTest extends TestCase {
             if (!errorFound.get()) {
               // No error found so far, test for errors
               if (partialAnswer.isIncorrect()) {
+                partialAnswer.draw(System.out);
                 System.out.println("Found an error while merging "+L+" and "+R);
                 errorFound.set(true);
               }

@@ -1238,11 +1238,18 @@ public class GSDTAlgorithm {
     return new Point(ix, iy);
   }
 
+    double triArea(int p1, int p2, int p3) {
+        return (xs[p2] - xs[p1])*(ys[p3] - ys[p1]) - (ys[p2] - ys[p1])*(xs[p3] - xs[p1]);
+      }
+
+
   /**
    * Returns true if p4 is inside the circumcircle of the three points
    * p1, p2, and p3
    * If p4 is exactly on the circumference of the circle, it returns false.
    * See Guibas and Stolfi (1985) p.107.
+   * See https://math.stackexchange.com/questions/1579756/check-if-a-point-lies-in-a-circle-defined-by-three-other-points
+   * See https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html
    * @return true iff p4 is inside the circle (p1, p2, p3)
    */
   boolean inCircle(int p1, int p2, int p3, int p4) {
@@ -1256,7 +1263,7 @@ public class GSDTAlgorithm {
     // triArea(a,b,c) = (b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x)
     // norm2(a) = a.x^2 + a.y^2
     // inCircle(p1,p2,p3,p4) = triArea(p2,p3,p4)*norm2(p1) - triArea(p1,p3,p4)*norm2(p2)
-    //                        +triArea(p1,p2,p4)*norm2(p3) - triArea(p1,p2,p3)*norm2(p4);
+    //                        +triArea(p1,p2,p4)*norm2(p3) - triArea(p1,p2,p3)*norm2(p4) > 0;
 
     double v1 = (xs[p3] - xs[p2]) * (ys[p4] - ys[p2]);
     double v2 = (ys[p3] - ys[p2]) * (xs[p4] - xs[p2]);
@@ -1288,8 +1295,52 @@ public class GSDTAlgorithm {
     values[15] = -v1 * ys[p4] * ys[p4];
     values[16] =  v2 * ys[p4] * ys[p4];
 
-    IFastSum.r_c = 0;
-    return IFastSum.iFastSum(values, 16) > 0;
+    boolean test1 = IFastSum.iFastSum(values, 16) > 0;
+
+    double sum = 0;
+
+    double area = triArea(p2, p3, p4);
+    sum+= xs[p1]*xs[p1] * area;
+    sum+= ys[p1]*ys[p1] * area;
+
+    area = triArea(p1, p3, p4);
+    sum+= -xs[p2] * xs[p2] * area;
+    sum+= -ys[p2]*ys[p2] * area;
+
+    area = triArea(p1, p2, p4);
+    sum+= xs[p3]*xs[p3] * area;
+    sum+= ys[p3]*ys[p3] * area;
+
+    area = triArea(p1, p2, p3);
+    sum+= -xs[p4]*xs[p4] * area;
+    sum+= -ys[p4]*ys[p4] * area;
+
+    boolean test2 = sum > 0;
+
+    area = triArea(p2, p3, p4);
+    values[1] = xs[p1]*xs[p1] * area;
+    values[2] = ys[p1]*ys[p1] * area;
+
+    area = triArea(p1, p3, p4);
+    values[3] = -xs[p2] * xs[p2] * area;
+    values[4] = -ys[p2]*ys[p2] * area;
+
+    area = triArea(p1, p2, p4);
+    values[5] = xs[p3]*xs[p3] * area;
+    values[6] = ys[p3]*ys[p3] * area;
+
+    area = triArea(p1, p2, p3);
+    values[7] = -xs[p4]*xs[p4] * area;
+    values[8] = -ys[p4]*ys[p4] * area;
+
+    boolean test3 = IFastSum.iFastSum(values, 8) > 0;
+
+    // Do a majority vote between the three tests
+    if (test1 == test2)
+      return test1;
+    if (test1 == test3)
+      return test1;
+    return test2;
   }
 
 
