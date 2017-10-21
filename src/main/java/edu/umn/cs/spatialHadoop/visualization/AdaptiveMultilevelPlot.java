@@ -140,6 +140,7 @@ public class AdaptiveMultilevelPlot {
             	throw new RuntimeException("Unknown tiles to process "+conf.get(TilesToProcess));
             Path histogramFile = new Path(conf.get(HistogramFileName));
             histogram = GridHistogram.readFromFile(histogramFile.getFileSystem(conf), histogramFile);
+            histogram.computePrefixSums();
             this.dataTileThreshold = conf.getLong(DataTileThreshold, 1024 * 1024);
         }
 
@@ -170,7 +171,7 @@ public class AdaptiveMultilevelPlot {
                         		int histTileHeight = histogram.getHeight() / (1 << key.level);
                         		int x1 = key.x * histTileWidth;
                         		int y1 = key.y * histTileHeight;
-                        		long size = histogram.getSum(x1, y1, histTileWidth, histTileHeight);
+                        		long size = histogram.getSumOrderOne(x1, y1, histTileWidth, histTileHeight);
                         		if (size <= dataTileThreshold) {
                         			// Check the parent as well. If the parent is also below the threshold, then
                         			// this tile is an empty tile. Otherwise, it is a data tile
@@ -178,7 +179,7 @@ public class AdaptiveMultilevelPlot {
                         			histTileHeight *= 2;
                         			x1 = (key.x / 2) * histTileWidth;
                         			y1 = (key.y / 2) * histTileHeight;
-                        			size = histogram.getSum(x1, y1, histTileWidth, histTileHeight);
+                        			size = histogram.getSumOrderOne(x1, y1, histTileWidth, histTileHeight);
                         			if (size <= dataTileThreshold) {
                         				// Parent is also below the threshold. Then this tile is empty.
                         				tile = null;
@@ -432,6 +433,7 @@ public class AdaptiveMultilevelPlot {
             this.tileHeight = conf.getInt("tileheight", 256);
             Path histogramFile = new Path(conf.get(HistogramFileName));
 			histogram = GridHistogram.readFromFile(histogramFile.getFileSystem(conf), histogramFile);
+			histogram.computePrefixSums();
 			this.dataTileThreshold = conf.getLong(DataTileThreshold, 1024 * 1024);
         }
 
@@ -497,7 +499,7 @@ public class AdaptiveMultilevelPlot {
                         		int histTileHeight = histogram.getHeight() / (1 << key.level);
                         		int x1 = key.x * histTileWidth;
                         		int y1 = key.y * histTileHeight;
-                        		long size = histogram.getSum(x1, y1, histTileWidth, histTileHeight);
+                        		long size = histogram.getSumOrderOne(x1, y1, histTileWidth, histTileHeight);
                         		if (size <= dataTileThreshold) {
                         			// Check the parent as well. If the parent is also below the threshold, then
                         			// this tile is an empty tile. Otherwise, it is a data tile
@@ -505,7 +507,7 @@ public class AdaptiveMultilevelPlot {
                         			histTileHeight *= 2;
                         			x1 = (key.x / 2) * histTileWidth;
                         			y1 = (key.y / 2) * histTileHeight;
-                        			size = histogram.getSum(x1, y1, histTileWidth, histTileHeight);
+                        			size = histogram.getSumOrderOne(x1, y1, histTileWidth, histTileHeight);
                         			if (size <= dataTileThreshold) {
                         				// Parent is also below the threshold. Then this tile is empty.
                         				tile = null;

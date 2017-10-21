@@ -126,16 +126,32 @@ public class GridHistogram implements Writable {
 		return sum;
 	}
 
-	public void vflip() {
-		long[] newValues = new long[values.length];
+	public long getSumOrderOne(int x, int y, int tileWidth, int tileHeight) {
+		int x2 = x + tileWidth - 1;
+		int y2 = y + tileHeight - 1;
+		long sum = values[y2 * width + x2];
+		if (x != 0)
+			sum -= values[y2 * width + (x-1)];
+		if (y != 0)
+			sum -= values[(y-1) * width + x2];
+		if (x != 0 && y != 0)
+			sum += values[(y-1) * width + (x-1)];
+		return sum;
+	}
+
+	public void computePrefixSums() {
 		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-				newValues[y*width + x] = values[(height - y - 1)* width + x];
+			for (int x = 1; x < width; x++) {
+				values[y*width + x] += values[y*width + x - 1];
 			}
 		}
-		this.values = newValues;
+		for (int x = 0; x < width; x++) {
+			for (int y = 1; y < height; y++) {
+				values[y*width + x] += values[(y-1)*width + x];
+			}
+		}
 	}
-	
+
 	@Override
 	public String toString() {
 		String str = String.format("Histogram (%d, %d)\n", width, height);
