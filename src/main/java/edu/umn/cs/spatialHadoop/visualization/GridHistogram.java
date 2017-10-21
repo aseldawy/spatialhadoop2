@@ -126,9 +126,9 @@ public class GridHistogram implements Writable {
 		return sum;
 	}
 
-	public long getSumOrderOne(int x, int y, int tileWidth, int tileHeight) {
-		int x2 = x + tileWidth - 1;
-		int y2 = y + tileHeight - 1;
+	public long getSumOrderOne(int x, int y, float tileWidth, float tileHeight) {
+		int x2 = (int) Math.ceil(x + tileWidth - 1);
+		int y2 = (int) Math.ceil(y + tileHeight - 1);
 		long sum = values[y2 * width + x2];
 		if (x != 0)
 			sum -= values[y2 * width + (x-1)];
@@ -136,6 +136,10 @@ public class GridHistogram implements Writable {
 			sum -= values[(y-1) * width + x2];
 		if (x != 0 && y != 0)
 			sum += values[(y-1) * width + (x-1)];
+		if (tileWidth < 1)
+			sum *= tileWidth;
+		if (tileHeight < 1)
+			sum *= tileHeight;
 		return sum;
 	}
 

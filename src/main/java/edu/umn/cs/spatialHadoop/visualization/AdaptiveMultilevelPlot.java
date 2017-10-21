@@ -171,18 +171,18 @@ public class AdaptiveMultilevelPlot {
                         		tile = pyramid.get(key);
                         	} else {
                         		// First time to encounter the tile
-                            	int histTileWidth = histogram.getWidth() / (1 << key.level);
-                        		int histTileHeight = histogram.getHeight() / (1 << key.level);
-                        		int x1 = key.x * histTileWidth;
-                        		int y1 = key.y * histTileHeight;
+                            	float histTileWidth = histogram.getWidth() / (float)(1 << key.level);
+                            	float histTileHeight = histogram.getHeight() / (float)(1 << key.level);
+                        		int x1 = (int) (key.x * histTileWidth);
+                        		int y1 = (int) (key.y * histTileHeight);
                         		long size = histogram.getSumOrderOne(x1, y1, histTileWidth, histTileHeight);
                         		if (size <= dataTileThreshold) {
                         			// Check the parent as well. If the parent is also below the threshold, then
                         			// this tile is an empty tile. Otherwise, it is a data tile
                         			histTileWidth *= 2;
                         			histTileHeight *= 2;
-                        			x1 = (key.x / 2) * histTileWidth;
-                        			y1 = (key.y / 2) * histTileHeight;
+                        			x1 = (int) ((key.x / 2) * histTileWidth);
+                        			y1 = (int) ((key.y / 2) * histTileHeight);
                         			size = histogram.getSumOrderOne(x1, y1, histTileWidth, histTileHeight);
                         			if (size <= dataTileThreshold) {
                         				// Parent is also below the threshold. Then this tile is empty.
@@ -501,18 +501,18 @@ public class AdaptiveMultilevelPlot {
                         		tile = pyramid.get(key);
                         	} else {
                         		// First time to encounter this tile
-                        		int histTileWidth = histogram.getWidth() / (1 << key.level);
-                        		int histTileHeight = histogram.getHeight() / (1 << key.level);
-                        		int x1 = key.x * histTileWidth;
-                        		int y1 = key.y * histTileHeight;
+                        		float histTileWidth = histogram.getWidth() / (float)(1 << key.level);
+                            	float histTileHeight = histogram.getHeight() / (float)(1 << key.level);
+                        		int x1 = (int) (key.x * histTileWidth);
+                        		int y1 = (int) (key.y * histTileHeight);
                         		long size = histogram.getSumOrderOne(x1, y1, histTileWidth, histTileHeight);
                         		if (size <= dataTileThreshold) {
                         			// Check the parent as well. If the parent is also below the threshold, then
                         			// this tile is an empty tile. Otherwise, it is a data tile
                         			histTileWidth *= 2;
                         			histTileHeight *= 2;
-                        			x1 = (key.x / 2) * histTileWidth;
-                        			y1 = (key.y / 2) * histTileHeight;
+                        			x1 = (int) ((key.x / 2) * histTileWidth);
+                        			y1 = (int) ((key.y / 2) * histTileHeight);
                         			size = histogram.getSumOrderOne(x1, y1, histTileWidth, histTileHeight);
                         			if (size <= dataTileThreshold) {
                         				// Parent is also below the threshold. Then this tile is empty.
