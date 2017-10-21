@@ -150,7 +150,7 @@ public class AdaptiveMultilevelPlot {
             if (smooth)
                 shapes = plotter.smooth(shapes);
             TileIndex key = new TileIndex();
-            Map<TileIndex, Writable> flat = new HashMap<TileIndex, Writable>();
+            Map<TileIndex, Writable> pyramid = new HashMap<TileIndex, Writable>();
            // Map <TileIndex, StringBuffer> 
             int i = 0; // Counter to report progress often
             for (Shape shape : shapes) {
@@ -165,8 +165,12 @@ public class AdaptiveMultilevelPlot {
                         for (key.y = overlappingCells.y; key.y < overlappingCells.y
                                 + overlappingCells.height; key.y++) {
                             //Canvas canvasLayer = canvasLayers.get(key);
-                        	Writable tile=flat.get(key);
-                            if (tile == null) {
+                        	Writable tile;
+                        	if (pyramid.containsKey(key)) {
+                        		// The tile was encountered before
+                        		tile = pyramid.get(key);
+                        	} else {
+                        		// First time to encounter the tile
                             	int histTileWidth = histogram.getWidth() / (1 << key.level);
                         		int histTileHeight = histogram.getHeight() / (1 << key.level);
                         		int x1 = key.x * histTileWidth;
@@ -185,11 +189,12 @@ public class AdaptiveMultilevelPlot {
                         				tile = null;
                         			} else {
                         				// It should be processed as a data tile
-                        				if (tilesToProcess == DataTile) {
+                        				if (tilesToProcess == DataTile)
                         					tile = new Text2();
-                        					flat.put(key.clone(), tile);
-                        				}
+                        				else
+                        					tile = null;
                         			}
+                        			pyramid.put(key.clone(), tile);
                         		} else{
                         			// It is supposed to be an image tile
                         			if (tilesToProcess == ImageTile) {
@@ -201,18 +206,17 @@ public class AdaptiveMultilevelPlot {
                         				tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
                         				tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y + 1))
                         						/ gridSize;
-                        				Canvas canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-                        				flat.put(key.clone(), canvasLayer);
-                        			}
+                        				tile = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+                        			} else
+                        				tile = null;
+                        			pyramid.put(key.clone(), tile);
                         		}
                             }
-                            if (tile== null){
+                            if (tile == null){
 
-                            }
-                            else if (tile  instanceof  Canvas){
+                            } else if (tile  instanceof  Canvas){
                             	plotter.plot((Canvas) tile, shape);
-                            }
-                            else {
+                            } else {
                             	Text text = (Text) tile;
                             	shape.toText(text);
                             	text.append(NewLine, 0, NewLine.length);
@@ -234,8 +238,9 @@ public class AdaptiveMultilevelPlot {
                     context.progress();
             }
             // Write all created layers to the output
-            for (Map.Entry<TileIndex, Writable> entry : flat.entrySet()) {
-                context.write(entry.getKey(), entry.getValue());
+            for (Map.Entry<TileIndex, Writable> entry : pyramid.entrySet()) {
+            	if (entry.getValue() != null)
+            		context.write(entry.getKey(), entry.getValue());
             }
         }
     }
@@ -490,11 +495,12 @@ public class AdaptiveMultilevelPlot {
                     for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
                         for (key.y = overlappingCells.y; key.y < overlappingCells.y
                                 + overlappingCells.height; key.y++) {
-                        	Writable tile = pyramid.get(key);
-                        	if (tile == null) {
-//                        		if (key.level == 4 &&  key.x == 7 && key.y == 12) {
-//                        			System.out.println("Breakpoint "+key);
-//                        		}
+                        	Writable tile;
+                        	if (pyramid.containsKey(key)) {
+                        		// Tile was encountered before
+                        		tile = pyramid.get(key);
+                        	} else {
+                        		// First time to encounter this tile
                         		int histTileWidth = histogram.getWidth() / (1 << key.level);
                         		int histTileHeight = histogram.getHeight() / (1 << key.level);
                         		int x1 = key.x * histTileWidth;
@@ -513,8 +519,8 @@ public class AdaptiveMultilevelPlot {
                         				tile = null;
                         			} else {
                         				tile = new Text2();
-                        				pyramid.put(key.clone(), tile);
                         			}
+                    				pyramid.put(key.clone(), tile);
                         		} else {
                         			// Initialize an image tile
                                     Rectangle tileMBR = new Rectangle();
@@ -525,8 +531,8 @@ public class AdaptiveMultilevelPlot {
                                     tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
                                     tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y + 1))
                                             / gridSize;
-                                    Canvas canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-                                    pyramid.put(key.clone(), canvasLayer);
+                                    tile = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+                                    pyramid.put(key.clone(), tile);
                         		}
                         	}
                             
@@ -559,7 +565,8 @@ public class AdaptiveMultilevelPlot {
             context.setStatus("Writing " + pyramid.size() + " tiles");
             // Write all created layers to the output as images
             for (Map.Entry<TileIndex, Writable> entry : pyramid.entrySet()) {
-                context.write(entry.getKey(), entry.getValue());
+            	if (entry.getValue() != null)
+            		context.write(entry.getKey(), entry.getValue());
             }
         }
     }
