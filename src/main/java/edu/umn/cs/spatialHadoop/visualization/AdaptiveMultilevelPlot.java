@@ -47,6 +47,7 @@ import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
@@ -74,8 +75,13 @@ public class AdaptiveMultilevelPlot {
     public static final String HistogramFileName = "MultilevelPlot.HistogramFileName";
     
     public static final String DataTileThreshold = "threshold";
+    
+    public static final String TilesToProcess = "AdaptiveMultilevelPlot.TilesToProcess";
 
-    public static class FlatPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Canvas> {
+	private static final int DataTile = 0;
+	private static final int ImageTile = 1;
+
+    public static class FlatPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Writable> {
         /** Minimum and maximum levels of the pyramid to plot (inclusive and zero-based) */
         private int minLevel, maxLevel;
 
@@ -101,6 +107,11 @@ public class AdaptiveMultilevelPlot {
 
         /** Whether the configured plotter supports smooth or not */
         private boolean smooth;
+        private GridHistogram histogram;
+		private long dataTileThreshold;
+		private final byte[] NewLine = "\n".getBytes();
+		
+		private int tilesToProcess;
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
@@ -121,6 +132,15 @@ public class AdaptiveMultilevelPlot {
             this.tileHeight = conf.getInt("tileheight", 256);
             this.plotter = Plotter.getPlotter(conf);
             this.smooth = plotter.isSmooth();
+            if (conf.get(TilesToProcess).equalsIgnoreCase("data"))
+            	tilesToProcess = DataTile;
+            else if (conf.get(TilesToProcess).equalsIgnoreCase("image"))
+            	tilesToProcess = ImageTile;
+            else
+            	throw new RuntimeException("Unknown tiles to process "+conf.get(TilesToProcess));
+            Path histogramFile = new Path(conf.get(HistogramFileName));
+            histogram = GridHistogram.readFromFile(histogramFile.getFileSystem(conf), histogramFile);
+            this.dataTileThreshold = conf.getLong(DataTileThreshold, 1024 * 1024);
         }
 
         @Override
@@ -129,7 +149,8 @@ public class AdaptiveMultilevelPlot {
             if (smooth)
                 shapes = plotter.smooth(shapes);
             TileIndex key = new TileIndex();
-            Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
+            Map<TileIndex, Writable> flat = new HashMap<TileIndex, Writable>();
+           // Map <TileIndex, StringBuffer> 
             int i = 0; // Counter to report progress often
             for (Shape shape : shapes) {
                 Rectangle shapeMBR = shape.getMBR();
@@ -142,20 +163,60 @@ public class AdaptiveMultilevelPlot {
                     for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
                         for (key.y = overlappingCells.y; key.y < overlappingCells.y
                                 + overlappingCells.height; key.y++) {
-                            Canvas canvasLayer = canvasLayers.get(key);
-                            if (canvasLayer == null) {
-                                Rectangle tileMBR = new Rectangle();
-                                int gridSize = 1 << key.level;
-                                tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
-                                tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x + 1))
-                                        / gridSize;
-                                tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
-                                tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y + 1))
-                                        / gridSize;
-                                canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-                                canvasLayers.put(key.clone(), canvasLayer);
+                            //Canvas canvasLayer = canvasLayers.get(key);
+                        	Writable tile=flat.get(key);
+                            if (tile == null) {
+                            	int histTileWidth = histogram.getWidth() / (1 << key.level);
+                        		int histTileHeight = histogram.getHeight() / (1 << key.level);
+                        		int x1 = key.x * histTileWidth;
+                        		int y1 = key.y * histTileHeight;
+                        		long size = histogram.getSum(x1, y1, histTileWidth, histTileHeight);
+                        		if (size <= dataTileThreshold) {
+                        			// Check the parent as well. If the parent is also below the threshold, then
+                        			// this tile is an empty tile. Otherwise, it is a data tile
+                        			histTileWidth *= 2;
+                        			histTileHeight *= 2;
+                        			x1 = (key.x / 2) * histTileWidth;
+                        			y1 = (key.y / 2) * histTileHeight;
+                        			size = histogram.getSum(x1, y1, histTileWidth, histTileHeight);
+                        			if (size <= dataTileThreshold) {
+                        				// Parent is also below the threshold. Then this tile is empty.
+                        				tile = null;
+                        			} else {
+                        				// It should be processed as a data tile
+                        				if (tilesToProcess == DataTile) {
+                        					tile = new Text2();
+                        					flat.put(key.clone(), tile);
+                        				}
+                        			}
+                        		} else{
+                        			// It is supposed to be an image tile
+                        			if (tilesToProcess == ImageTile) {
+                        				Rectangle tileMBR = new Rectangle();
+                        				int gridSize = 1 << key.level;
+                        				tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
+                        				tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x + 1))
+                        						/ gridSize;
+                        				tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
+                        				tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y + 1))
+                        						/ gridSize;
+                        				Canvas canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+                        				flat.put(key.clone(), canvasLayer);
+                        			}
+                        		}
                             }
-                            plotter.plot(canvasLayer, shape);
+                            if (tile== null){
+
+                            }
+                            else if (tile  instanceof  Canvas){
+                            	plotter.plot((Canvas) tile, shape);
+                            }
+                            else {
+                            	Text text = (Text) tile;
+                            	shape.toText(text);
+                            	text.append(NewLine, 0, NewLine.length);
+                            }
+
                         }
                     }
                     // Update overlappingCells for the higher level
@@ -172,13 +233,13 @@ public class AdaptiveMultilevelPlot {
                     context.progress();
             }
             // Write all created layers to the output
-            for (Map.Entry<TileIndex, Canvas> entry : canvasLayers.entrySet()) {
+            for (Map.Entry<TileIndex, Writable> entry : flat.entrySet()) {
                 context.write(entry.getKey(), entry.getValue());
             }
         }
     }
 
-    public static class FlatPartitionReduce extends Reducer<TileIndex, Canvas, TileIndex, Canvas> {
+    public static class FlatPartitionReduce extends Reducer<TileIndex, Writable, TileIndex, Writable> {
         /** Minimum and maximum levels of the pyramid to plot (inclusive and zero-based) */
         private int minLevel, maxLevel;
 
@@ -196,6 +257,9 @@ public class AdaptiveMultilevelPlot {
 
         /** Fixed height for one tile */
         private int tileHeight;
+        
+        /** Type of tiles that this function is supposed to process*/
+        private int tilesToProcess;
 
         @Override
         protected void setup(Context context) throws IOException, InterruptedException {
@@ -215,26 +279,43 @@ public class AdaptiveMultilevelPlot {
             this.tileWidth = conf.getInt("tilewidth", 256);
             this.tileHeight = conf.getInt("tileheight", 256);
             this.plotter = Plotter.getPlotter(conf);
+            if (conf.get(TilesToProcess).equalsIgnoreCase("data"))
+            	tilesToProcess = DataTile;
+            else if (conf.get(TilesToProcess).equalsIgnoreCase("image"))
+            	tilesToProcess = ImageTile;
+            else
+            	throw new RuntimeException("Unknown tiles to process "+conf.get(TilesToProcess));
         }
 
         @Override
-        protected void reduce(TileIndex tileID, Iterable<Canvas> interLayers, Context context)
+        protected void reduce(TileIndex tileID, Iterable<Writable> interTiles, Context context)
                 throws IOException, InterruptedException {
-            Rectangle tileMBR = new Rectangle();
-            int gridSize = 1 << tileID.level;
-            tileMBR.x1 = (inputMBR.x1 * (gridSize - tileID.x) + inputMBR.x2 * tileID.x) / gridSize;
-            tileMBR.x2 = (inputMBR.x1 * (gridSize - (tileID.x + 1)) + inputMBR.x2 * (tileID.x + 1)) / gridSize;
-            tileMBR.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
-            tileMBR.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y + 1)) / gridSize;
+        	if (tilesToProcess == ImageTile) {
+        		// It's an image tile
+                Rectangle tileMBR = new Rectangle();
+                int gridSize = 1 << tileID.level;
+                tileMBR.x1 = (inputMBR.x1 * (gridSize - tileID.x) + inputMBR.x2 * tileID.x) / gridSize;
+                tileMBR.x2 = (inputMBR.x1 * (gridSize - (tileID.x + 1)) + inputMBR.x2 * (tileID.x + 1)) / gridSize;
+                tileMBR.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
+                tileMBR.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y + 1)) / gridSize;
 
-            Canvas finalLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-            for (Canvas interLayer : interLayers) {
-                plotter.merge(finalLayer, interLayer);
-                context.progress();
-            }
-
-            context.write(tileID, finalLayer);
+                Canvas finalLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+                for (Writable intermediateCanvas : interTiles) {
+                	plotter.merge(finalLayer, (Canvas) intermediateCanvas);
+                }
+                
+                context.write(tileID, finalLayer);
+        	} else { // tilesToProcess == DataTile
+        		// It's a data tile (Text)
+        		Text finalTile = new Text2();
+        		for (Writable intermediateText : interTiles) {
+        			finalTile.append(((Text)intermediateText).getBytes(), 0, ((Text)intermediateText).getLength());
+        		}
+        		context.write(tileID, finalTile);
+        	}
+        	
         }
+        
     }
 
     public static class PyramidPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Shape> {
@@ -351,10 +432,6 @@ public class AdaptiveMultilevelPlot {
             this.tileHeight = conf.getInt("tileheight", 256);
             Path histogramFile = new Path(conf.get(HistogramFileName));
 			histogram = GridHistogram.readFromFile(histogramFile.getFileSystem(conf), histogramFile);
-			System.out.println(histogram);
-			if (conf.getBoolean("vflip", true))
-				histogram.vflip();
-			System.out.println(histogram);
 			this.dataTileThreshold = conf.getLong(DataTileThreshold, 1024 * 1024);
         }
 
@@ -413,27 +490,27 @@ public class AdaptiveMultilevelPlot {
                                 + overlappingCells.height; key.y++) {
                         	Writable tile = pyramid.get(key);
                         	if (tile == null) {
-                        		if (key.level == 4 &&  key.x == 7 && key.y == 12) {
-                        			System.out.println("Breakpoint "+key);
-                        		}
-                        		int tileWidth = histogram.getWidth() / (1 << key.level);
-                        		int tileHeight = histogram.getHeight() / (1 << key.level);
-                        		int x1 = key.x * tileWidth;
-                        		int y1 = key.y * tileHeight;
-                        		long size = histogram.getSum(x1, y1, tileWidth, tileHeight);
+//                        		if (key.level == 4 &&  key.x == 7 && key.y == 12) {
+//                        			System.out.println("Breakpoint "+key);
+//                        		}
+                        		int histTileWidth = histogram.getWidth() / (1 << key.level);
+                        		int histTileHeight = histogram.getHeight() / (1 << key.level);
+                        		int x1 = key.x * histTileWidth;
+                        		int y1 = key.y * histTileHeight;
+                        		long size = histogram.getSum(x1, y1, histTileWidth, histTileHeight);
                         		if (size <= dataTileThreshold) {
                         			// Check the parent as well. If the parent is also below the threshold, then
                         			// this tile is an empty tile. Otherwise, it is a data tile
-                        			tileWidth *= 2;
-                        			tileHeight *= 2;
-                        			x1 = (key.x / 2) * tileWidth;
-                        			y1 = (key.y / 2) * tileHeight;
-                        			size = histogram.getSum(x1, y1, tileWidth, tileHeight);
+                        			histTileWidth *= 2;
+                        			histTileHeight *= 2;
+                        			x1 = (key.x / 2) * histTileWidth;
+                        			y1 = (key.y / 2) * histTileHeight;
+                        			size = histogram.getSum(x1, y1, histTileWidth, histTileHeight);
                         			if (size <= dataTileThreshold) {
                         				// Parent is also below the threshold. Then this tile is empty.
                         				tile = null;
                         			} else {
-                        				tile = new Text();
+                        				tile = new Text2();
                         				pyramid.put(key.clone(), tile);
                         			}
                         		} else {
@@ -522,7 +599,10 @@ public class AdaptiveMultilevelPlot {
         
         // Compute the histogram
         Path histogramFile = new Path(outFile.getParent(), "Histogram_"+(int)(Math.random() * 1000000));
+        long t1 = System.currentTimeMillis();
         Histogram.histogram(inFiles, histogramFile, params);
+        long t2 = System.currentTimeMillis();
+        LOG.info("Computed the histogram in "+(t2-t1)/1000.0+" seconds");
         conf.set(HistogramFileName, histogramFile.toString());
 
         // Set input and output
@@ -541,7 +621,12 @@ public class AdaptiveMultilevelPlot {
             // Use flat partitioning
             job.setMapperClass(FlatPartitionMap.class);
             job.setMapOutputKeyClass(TileIndex.class);
-            job.setMapOutputValueClass(plotter.getCanvasClass());
+            if (job.getConfiguration().get(TilesToProcess).equalsIgnoreCase("image"))
+            	job.setMapOutputValueClass(plotter.getCanvasClass());
+            else if (job.getConfiguration().get(TilesToProcess).equalsIgnoreCase("data"))
+            	job.setMapOutputValueClass(Text2.class);
+            else
+            	throw new RuntimeException("Unidentified tiles to process: "+job.getConfiguration().get(TilesToProcess));
             job.setReducerClass(FlatPartitionReduce.class);
         } else if (partitionTechnique.equalsIgnoreCase("pyramid")) {
             // Use pyramid partitioning
@@ -833,13 +918,22 @@ public class AdaptiveMultilevelPlot {
             // Plot local
             plotLocal(inPaths, outPath, plotterClass, params);
         } else {
-            int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 2);
+            int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 4);
             if (minLevel <= maxLevelWithFlatPartitioning) {
-                OperationsParams flatPartitioning = new OperationsParams(params);
-                flatPartitioning.set("levels", minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel));
-                flatPartitioning.set("partition", "flat");
-                LOG.info("Using flat partitioning in levels " + flatPartitioning.get("levels"));
-                runningJob = plotMapReduce(inPaths, new Path(outPath, "flat"), plotterClass, flatPartitioning);
+            	// First job for image tiles
+            	OperationsParams flatPartitioningImage = new OperationsParams(params);
+                flatPartitioningImage.set("levels", minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel));
+                flatPartitioningImage.set("partition", "flat");
+                flatPartitioningImage.set(TilesToProcess, "image");
+                LOG.info("Using flat partitioning in levels " + flatPartitioningImage.get("levels"));
+                runningJob = plotMapReduce(inPaths, new Path(outPath, "flat_images"), plotterClass, flatPartitioningImage);
+                // Second job for data tiles
+                OperationsParams flatPartitioningData = new OperationsParams(params);
+                flatPartitioningData.set("levels", minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel));
+                flatPartitioningData.set("partition", "flat");
+                flatPartitioningData.set(TilesToProcess, "data");
+                LOG.info("Using flat partitioning in levels " + flatPartitioningData.get("levels"));
+                runningJob = plotMapReduce(inPaths, new Path(outPath, "flat_data"), plotterClass, flatPartitioningData);
             }
             if (maxLevel > maxLevelWithFlatPartitioning) {
                 OperationsParams pyramidPartitioning = new OperationsParams(params);

@@ -168,7 +168,7 @@ public class Histogram {
 		histogram(inputFiles, outputFile, params);
 		long t2 = System.currentTimeMillis();
 
-		System.out.println("Total processing time: "+(t2-t1)+" millis");
+		System.out.println("Computed histogram in: "+(t2-t1)/1000.0+" seconds");
 	}
 
 }
