@@ -578,12 +578,9 @@ public class AdaptiveMultilevelPlot {
         // Set plotter
         Configuration conf = job.getConfiguration();
         Plotter.setPlotter(conf, plotterClass);
-        // Set input file MBR
-        Rectangle inputMBR = (Rectangle) params.getShape("mbr");
-        if (inputMBR == null)
-            inputMBR = FileMBR.fileMBR(inFiles, params);
 
         // Adjust width and height if aspect ratio is to be kept
+        Rectangle inputMBR = (Rectangle) params.getShape("mbr");
         if (params.getBoolean("keepratio", true)) {
             // Expand input file to a rectangle for compatibility with the pyramid
             // structure
@@ -597,14 +594,6 @@ public class AdaptiveMultilevelPlot {
         }
         OperationsParams.setShape(conf, InputMBR, inputMBR);
         
-        // Compute the histogram
-        Path histogramFile = new Path(outFile.getParent(), "Histogram_"+(int)(Math.random() * 1000000));
-        long t1 = System.currentTimeMillis();
-        Histogram.histogram(inFiles, histogramFile, params);
-        long t2 = System.currentTimeMillis();
-        LOG.info("Computed the histogram in "+(t2-t1)/1000.0+" seconds");
-        conf.set(HistogramFileName, histogramFile.toString());
-
         // Set input and output
         job.setInputFormatClass(SpatialInputFormat3.class);
         SpatialInputFormat3.setInputPaths(job, inFiles);
@@ -649,7 +638,6 @@ public class AdaptiveMultilevelPlot {
         } else {
             job.waitForCompletion(false);
         }
-        histogramFile.getFileSystem(conf).deleteOnExit(histogramFile);
         return job;
     }
 
@@ -913,35 +901,60 @@ public class AdaptiveMultilevelPlot {
         FileSystem outFS = outPath.getFileSystem(params);
         outFS.mkdirs(outPath);
 
+        // Set input file MBR
+        Rectangle inputMBR = (Rectangle) params.getShape("mbr");
+        if (inputMBR == null) {
+        	OperationsParams fileMBRParams = new OperationsParams(params);
+        	fileMBRParams.setBoolean("background", false);
+        	inputMBR = FileMBR.fileMBR(inPaths, fileMBRParams);
+        	OperationsParams.setShape(params, InputMBR, inputMBR);
+        }
+        
+        // Compute the histogram
+        Path histogramFile = new Path(outPath.getParent(), "Histogram_"+(int)(Math.random() * 1000000));
+        long t1 = System.currentTimeMillis();
+        Histogram.histogram(inPaths, histogramFile, params);
+        long t2 = System.currentTimeMillis();
+        LOG.info("Computed the histogram in "+(t2-t1)/1000.0+" seconds");
+        params.set(HistogramFileName, histogramFile.toString());
+        
         Job runningJob = null;
         if (OperationsParams.isLocal(params, inPaths)) {
             // Plot local
             plotLocal(inPaths, outPath, plotterClass, params);
         } else {
             int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 4);
+            Job[] runningJobs = new Job[3];
             if (minLevel <= maxLevelWithFlatPartitioning) {
             	// First job for image tiles
             	OperationsParams flatPartitioningImage = new OperationsParams(params);
                 flatPartitioningImage.set("levels", minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel));
                 flatPartitioningImage.set("partition", "flat");
                 flatPartitioningImage.set(TilesToProcess, "image");
+                flatPartitioningImage.setBoolean("background", true);
                 LOG.info("Using flat partitioning in levels " + flatPartitioningImage.get("levels"));
-                runningJob = plotMapReduce(inPaths, new Path(outPath, "flat_images"), plotterClass, flatPartitioningImage);
+                runningJobs[0] = plotMapReduce(inPaths, new Path(outPath, "flat_images"), plotterClass, flatPartitioningImage);
                 // Second job for data tiles
                 OperationsParams flatPartitioningData = new OperationsParams(params);
                 flatPartitioningData.set("levels", minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel));
                 flatPartitioningData.set("partition", "flat");
                 flatPartitioningData.set(TilesToProcess, "data");
+                flatPartitioningData.setBoolean("background", true);
                 LOG.info("Using flat partitioning in levels " + flatPartitioningData.get("levels"));
-                runningJob = plotMapReduce(inPaths, new Path(outPath, "flat_data"), plotterClass, flatPartitioningData);
+                runningJobs[1] = plotMapReduce(inPaths, new Path(outPath, "flat_data"), plotterClass, flatPartitioningData);
             }
             if (maxLevel > maxLevelWithFlatPartitioning) {
                 OperationsParams pyramidPartitioning = new OperationsParams(params);
                 pyramidPartitioning.set("levels",
                         Math.max(minLevel, maxLevelWithFlatPartitioning + 1) + ".." + maxLevel);
                 pyramidPartitioning.set("partition", "pyramid");
+                pyramidPartitioning.setBoolean("background", true);
                 LOG.info("Using pyramid partitioning in levels " + pyramidPartitioning.get("levels"));
-                runningJob = plotMapReduce(inPaths, new Path(outPath, "pyramid"), plotterClass, pyramidPartitioning);
+                runningJobs[2] = plotMapReduce(inPaths, new Path(outPath, "pyramid"), plotterClass, pyramidPartitioning);
+            }
+            for (Job job : runningJobs) {
+            	if (job != null)
+            		job.waitForCompletion(false);
             }
             // Write a new HTML file that displays both parts of the pyramid
             // Add an HTML file that visualizes the result using Google Maps
@@ -962,7 +975,7 @@ public class AdaptiveMultilevelPlot {
             templateFileReader.close();
             htmlOut.close();
         }
-
+        histogramFile.getFileSystem(params).deleteOnExit(histogramFile);
         return runningJob;
     }
 }
