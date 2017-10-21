@@ -31,6 +31,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.LineReader;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+
 /**
  * An output format that is used to write either image tiles or data tiles.
  * @author Ahmed Eldawy
@@ -165,6 +168,19 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
       }
       templateFileReader.close();
       htmlOut.close();
+      
+      PrintStream confOut = new PrintStream(outFs.create(new Path(outPath,
+              "Configuration.txt")));
+      confOut.println("DirectoryName="+outPath.getName());
+      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
+      confOut.println("x1="+inputMBR.x1);
+      confOut.println("x2="+inputMBR.x2);
+      confOut.println("y1="+inputMBR.y1);
+      confOut.println("y2="+inputMBR.y2);
+      confOut.println("vflip="+conf.getBoolean("vflip", true));
+      confOut.println("Shape="+conf.get("shape"));
+      confOut.println("plotter="+conf.getClass(Plotter.PlotterClass, Plotter.class).getName());
+      confOut.close();
     }
   }
   

@@ -22,7 +22,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 public abstract class Plotter {
   
   /**Configuration line for the Plotter class*/
-  private static final String PlotterClass = "SingleLevelPlot.Plotter";
+  public static final String PlotterClass = "Visualizer.Plotter";
   
   /**The MBR of the input rectangle*/
   protected Rectangle inputMBR;
