@@ -582,14 +582,17 @@ public class AdaptiveMultilevelPlot {
             throw new RuntimeException("Error creating rastierizer", e);
         }
 
-        Job job = new Job(params, "MultilevelPlot");
-        job.setJarByClass(SingleLevelPlot.class);
+        Job job = Job.getInstance(params, "MultilevelPlot");
+        job.setJarByClass(AdaptiveMultilevelPlot.class);
         // Set plotter
         Configuration conf = job.getConfiguration();
         Plotter.setPlotter(conf, plotterClass);
 
         // Adjust width and height if aspect ratio is to be kept
         Rectangle inputMBR = (Rectangle) params.getShape("mbr");
+       // if (inputMBR == null)
+         //   inputMBR = FileMBR.fileMBR(inFiles, params);
+        
         if (params.getBoolean("keepratio", true)) {
             // Expand input file to a rectangle for compatibility with the pyramid
             // structure
@@ -608,7 +611,7 @@ public class AdaptiveMultilevelPlot {
         SpatialInputFormat3.setInputPaths(job, inFiles);
         if (conf.getBoolean("output", true)) {
             job.setOutputFormatClass(PyramidOutputFormat3.class);
-            PyramidOutputFormat2.setOutputPath(job, outFile);
+            PyramidOutputFormat3.setOutputPath(job, outFile);
         } else {
             job.setOutputFormatClass(NullOutputFormat.class);
         }
@@ -915,10 +918,23 @@ public class AdaptiveMultilevelPlot {
         if (inputMBR == null) {
         	OperationsParams fileMBRParams = new OperationsParams(params);
         	fileMBRParams.setBoolean("background", false);
+        	System.err.println("fileMBRParams"+fileMBRParams);
         	inputMBR = FileMBR.fileMBR(inPaths, fileMBRParams);
-        	OperationsParams.setShape(params, InputMBR, inputMBR);
         }
         
+        if (params.getBoolean("keepratio", true)) {
+            // Expand input file to a rectangle for compatibility with the pyramid
+            // structure
+            if (inputMBR.getWidth() > inputMBR.getHeight()) {
+                inputMBR.y1 -= (inputMBR.getWidth() - inputMBR.getHeight()) / 2;
+                inputMBR.y2 = inputMBR.y1 + inputMBR.getWidth();
+            } else {
+                inputMBR.x1 -= (inputMBR.getHeight() - inputMBR.getWidth()) / 2;
+                inputMBR.x2 = inputMBR.x1 + inputMBR.getHeight();
+            }
+        }
+        OperationsParams.setShape(params, InputMBR, inputMBR);
+
         // Compute the histogram
         Path histogramFile = new Path(outPath.getParent(), "Histogram_"+(int)(Math.random() * 1000000));
         long t1 = System.currentTimeMillis();

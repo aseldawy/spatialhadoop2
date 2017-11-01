@@ -110,6 +110,7 @@ public class Histogram {
 	private static Job histogramMapReduce(Path[] inputFiles, Path outputFile, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
 		Job job = Job.getInstance(params, "Histogram");
 
+		job.setJarByClass(Histogram.class);
 		job.setMapperClass(HistogramMapper.class);
 		job.setMapOutputKeyClass(NullWritable.class);
 		job.setMapOutputValueClass(GridHistogram.class);
