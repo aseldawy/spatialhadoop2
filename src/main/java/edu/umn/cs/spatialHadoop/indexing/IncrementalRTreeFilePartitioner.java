@@ -36,6 +36,8 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
+import java.awt.geom.*;
+
 public class IncrementalRTreeFilePartitioner extends Partitioner {
 
 	private static final double MINIMUM_EXPANSION = Double.MAX_VALUE;
@@ -60,8 +62,7 @@ public class IncrementalRTreeFilePartitioner extends Partitioner {
 
 	private List<Partition> getNearestCells(Shape shape, int maxCount) {
 //		System.out.println("Getting nearest cells");
-		ArrayList<Integer> nearestCellIds = new ArrayList<>();
-
+		ArrayList<Integer> nearestCellIds = new ArrayList<Integer>();
 		Rectangle r = shape.getMBR();
 		List<Entry<Integer, Geometry>> entries = this.cellsTree
 				.nearest(Geometries.rectangle(r.x1, r.y1, r.x2, r.y2), 50, maxCount).toList().toBlocking().single();
@@ -480,5 +481,35 @@ public class IncrementalRTreeFilePartitioner extends Partitioner {
 
 		return leafRects;
 	}
+	
+	private Rectangle2D.Double[] RStartTreePartitioning(Point2D.Double[] points, int numPartitions) {
+		List<Entry<Integer, Geometry>> entries = new ArrayList<Entry<Integer, Geometry>>();
+		int capacity = (int) Math.ceil((double) points.length / (double) numPartitions);
+		RTree<Integer, Geometry> tree = RTree.star().maxChildren(capacity).create();
+		for (int i = 0; i < points.length; i++) {
+			Point2D.Double p = points[i];
+			entries.add(new EntryDefault<Integer, Geometry>(i, Geometries.point(p.x, p.y)));
+		}
+		tree = tree.add(entries);
+		Node<Integer, Geometry> root = tree.root().get();
+		List<Rectangle2D.Double> rects = getLeafs(root);
+		return (java.awt.geom.Rectangle2D.Double[]) rects.toArray();
+	}
 
+	private static <T, S extends Geometry> List<Rectangle2D.Double> getLeafs(Node<T, S> node) {
+		List<Rectangle2D.Double> leafRects = new ArrayList<Rectangle2D.Double>();
+		if (node instanceof Leaf) {
+			final Leaf<T, S> leaf = (Leaf<T, S>) node;
+			Rectangle2D.Double rect = new Rectangle2D.Double(leaf.geometry().mbr().x1(), leaf.geometry().mbr().y1(),
+					leaf.geometry().mbr().x2() - leaf.geometry().mbr().x1(), leaf.geometry().mbr().y2() - leaf.geometry().mbr().y1());
+			leafRects.add(rect);
+		} else {
+			final NonLeaf<T, S> n = (NonLeaf<T, S>) node;
+			for (int i = 0; i < n.count(); i++) {
+				leafRects.addAll(getLeafs(n.child(i)));
+			}
+		}
+
+		return leafRects;
+	}
 }

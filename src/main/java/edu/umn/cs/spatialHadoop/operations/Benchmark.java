@@ -131,6 +131,8 @@ public class Benchmark {
 //		 generateBenchmarkQueries2(new Rectangle(-180,-90,180,83), 0.001,
 //		 1000);
 //		 generateBenchmarkQueries2(new Rectangle(-180,-90,180,83), 0.0001, 1000);
+//		 generateBenchmarkQueries2(new Rectangle(-180,-90,180,83), 0.00001, 1000);
+//		 generateBenchmarkQueries2(new Rectangle(-180,-90,180,83), 0.000001, 1000);
 	    
 	    final Path[] paths = params.getPaths();
 	    if (paths.length <= 1 && !params.checkInput()) {
@@ -164,16 +166,16 @@ public class Benchmark {
 				rectsBuilder.append(tempLine.toString());
 			}
 		}
-		System.out.println("rect = " + rectsBuilder.toString());
+//		System.out.println("rect = " + rectsBuilder.toString());
 		params.set("rect", rectsBuilder.toString());
 		
 	    final Path inPath = params.getInputPath();
 	    final Path outPath = params.getOutputPath();
 	    final Rectangle[] queryRanges = params.getShapes("rect", new Rectangle());
-	    System.out.println("Query range size = " + queryRanges.length);
-	    for(Rectangle r: queryRanges) {
-	    	System.out.println(r.toString());
-	    }
+//	    System.out.println("Query range size = " + queryRanges.length);
+//	    for(Rectangle r: queryRanges) {
+//	    	System.out.println(r.toString());
+//	    }
 
 	    // All running jobs
 	    final Vector<Long> resultsCounts = new Vector<Long>();
@@ -243,6 +245,9 @@ public class Benchmark {
 	      }
 	    }
 
+//	    for(Job job: jobs) {
+//	    	job.waitForCompletion(false);
+//	    }
 	    while (!jobs.isEmpty()) {
 	      Job firstJob = jobs.firstElement();
 	      firstJob.waitForCompletion(false);

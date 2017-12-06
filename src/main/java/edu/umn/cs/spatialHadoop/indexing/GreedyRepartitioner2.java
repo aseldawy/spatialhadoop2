@@ -348,7 +348,7 @@ public class GreedyRepartitioner2 {
 	}
 	
 	public static ArrayList<Partition> getOneBlockPartitions(ArrayList<Partition> partitions, float blockSize) {
-		ArrayList<Partition> oneBlockPartitions = new ArrayList<>();
+		ArrayList<Partition> oneBlockPartitions = new ArrayList<Partition>();
 		
 		for(Partition partition: partitions) {
 			int numberOfBlocks = partition.getNumberOfBlock(blockSize);

@@ -4,3 +4,4 @@ lib/ivy/**/*.jar
 /target
 *.classpath
 *.project
+/spatialhadoop.iml

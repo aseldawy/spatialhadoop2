@@ -58,7 +58,7 @@ public class RTreeFilePartitioner extends Partitioner {
 
 	private List<CellInfo> getNearestCells(Shape shape, int maxCount) {
 //		System.out.println("Getting nearest cells");
-		ArrayList<Integer> nearestCellIds = new ArrayList<>();
+		ArrayList<Integer> nearestCellIds = new ArrayList<Integer>();
 
 		Rectangle r = shape.getMBR();
 		List<Entry<Integer, Geometry>> entries = this.cellsTree

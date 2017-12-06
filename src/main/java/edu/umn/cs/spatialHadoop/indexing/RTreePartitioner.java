@@ -53,7 +53,7 @@ public class RTreePartitioner extends Partitioner {
 	
 	private List<CellInfo> getNearestCells(Shape shape, int maxCount) {
 //		System.out.println("Getting nearest cells");
-		ArrayList<Integer> nearestCellIds = new ArrayList<>();
+		ArrayList<Integer> nearestCellIds = new ArrayList<Integer>();
 
 		Rectangle r = shape.getMBR();
 		List<Entry<Integer, Geometry>> entries = this.cellsTree
@@ -72,7 +72,7 @@ public class RTreePartitioner extends Partitioner {
 	}
 	
 	private List<CellInfo> getOverlappingCells(Shape shape) {
-		ArrayList<Integer> overlappingCellIds = new ArrayList<>();
+		ArrayList<Integer> overlappingCellIds = new ArrayList<Integer>();
 		Rectangle r = shape.getMBR();
 		
 		List<Entry<Integer, Geometry>> entries = this.cellsTree.search(Geometries.rectangle(r.x1, r.y1, r.x2, r.y2))

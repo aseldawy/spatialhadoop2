@@ -49,6 +49,7 @@ public class RangeFilter extends DefaultBlockFilter {
       // Partitions that are totally contained in query range should not be
       // processed and should be copied to output directly
       numPartitions = 0;
+      int numBlocks = 0;
       for (Partition p : gIndex) {
         if (queryMBR.contains(p)) {
           // TODO partitions totally contained in query range should be copied
@@ -59,13 +60,16 @@ public class RangeFilter extends DefaultBlockFilter {
           if (p.isIntersected(queryRange)) {
             output.collect(p);
             numPartitions++;
+            numBlocks += p.getNumberOfBlock(33554432);
           }
         } else if (p.isIntersected(queryMBR) && p.isIntersected(queryRange)) {
           output.collect(p);
           numPartitions++;
+          numBlocks += p.getNumberOfBlock(33554432);
         }
       }
       RangeQuery.LOG.info("Selected "+numPartitions+" partitions on the perimeter of "+queryMBR);
+      System.out.println(numPartitions + "," + numBlocks);
     }
   }
 }
