@@ -14,6 +14,7 @@ import org.apache.hadoop.util.ProgramDriver;
 import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
 import edu.umn.cs.spatialHadoop.indexing.BinarySpaceRepartitioner;
+import edu.umn.cs.spatialHadoop.indexing.DynamicIndexer;
 import edu.umn.cs.spatialHadoop.indexing.DynamicRepartitioner;
 import edu.umn.cs.spatialHadoop.indexing.GreedyRepartitioner;
 import edu.umn.cs.spatialHadoop.indexing.GreedyRepartitioner2;
@@ -155,6 +156,8 @@ public class Main {
       pgd.addClass("greedyrepartition", GreedyRepartitioner2.class, "Greedy repartition indexed files");
       
       pgd.addClass("incindex", IncrementalRTreeIndexer.class, "Incrementally index data with R-Tree splitting mechanism");
+      
+      pgd.addClass("dindex", DynamicIndexer.class, "Dynamic index of spatial data with R-Tree splitting mechanism");
       
       pgd.addClass("benchmark", Benchmark.class, "Benchmark query performance");
       
