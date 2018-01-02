@@ -35,6 +35,12 @@ public class GridInfo extends Rectangle {
     this.rows = 0;
   }
 
+  public GridInfo(double x1, double y1, double x2, double y2, int columns, int rows) {
+    super(x1, y1, x2, y2);
+    this.columns = columns;
+    this.rows = rows;
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);
