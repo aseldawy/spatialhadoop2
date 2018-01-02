@@ -991,25 +991,6 @@ public class AdaptiveMultilevelPlot {
       }
       // Move all output files to one directory
       FSUtil.mergeAndFlattenPaths(outFS, flatImagesPath, flatDataPath, pyramidPath);
-
-      // Write a new HTML file that displays both parts of the pyramid
-      // Add an HTML file that visualizes the result using Google Maps
-      LineReader templateFileReader = new LineReader(AdaptiveMultilevelPlot.class.getResourceAsStream("/zoom_view.html"));
-      PrintStream htmlOut = new PrintStream(outFS.create(new Path(outPath, "index.html")));
-      Text line = new Text();
-      while (templateFileReader.readLine(line) > 0) {
-        String lineStr = line.toString();
-        lineStr = lineStr.replace("#{TILE_WIDTH}", Integer.toString(params.getInt("tilewidth", 256)));
-        lineStr = lineStr.replace("#{TILE_HEIGHT}", Integer.toString(params.getInt("tileheight", 256)));
-        lineStr = lineStr.replace("#{MAX_ZOOM}", Integer.toString(maxLevel));
-        lineStr = lineStr.replace("#{MIN_ZOOM}", Integer.toString(minLevel));
-        lineStr = lineStr.replace("#{TILE_URL}", "(zoom <= " + maxLevelWithFlatPartitioning
-            + "? 'flat' : 'pyramid')+('/tile-' + zoom + '-' + coord.x + '-' + coord.y + '.png')");
-
-        htmlOut.println(lineStr);
-      }
-      templateFileReader.close();
-      htmlOut.close();
     }
     histogramFile.getFileSystem(params).deleteOnExit(histogramFile);
     return runningJob;
