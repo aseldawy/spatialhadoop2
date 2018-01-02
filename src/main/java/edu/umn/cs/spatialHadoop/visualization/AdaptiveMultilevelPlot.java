@@ -22,6 +22,7 @@ import java.util.Vector;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.util.FSUtil;
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -950,7 +951,13 @@ public class AdaptiveMultilevelPlot {
     } else {
       int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 4);
       Job[] runningJobs = new Job[3];
+      Path flatImagesPath = new Path(outPath, "flat_images");
+      Path flatDataPath = new Path(outPath, "flat_data");
+      Path pyramidPath = new Path(outPath, "pyramid");
+
       if (minLevel <= maxLevelWithFlatPartitioning) {
+        // Generate the top levels using the non-spatial partitioning algorithm
+
         // First job for image tiles
         OperationsParams flatPartitioningImage = new OperationsParams(params);
         flatPartitioningImage.set("levels", minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel));
@@ -958,7 +965,7 @@ public class AdaptiveMultilevelPlot {
         flatPartitioningImage.set(TilesToProcess, "image");
         flatPartitioningImage.setBoolean("background", true);
         LOG.info("Using flat partitioning in levels " + flatPartitioningImage.get("levels"));
-        runningJobs[0] = plotMapReduce(inPaths, new Path(outPath, "flat_images"), plotterClass, flatPartitioningImage);
+        runningJobs[0] = plotMapReduce(inPaths, flatImagesPath, plotterClass, flatPartitioningImage);
         // Second job for data tiles
         OperationsParams flatPartitioningData = new OperationsParams(params);
         flatPartitioningData.set("levels", minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel));
@@ -966,21 +973,25 @@ public class AdaptiveMultilevelPlot {
         flatPartitioningData.set(TilesToProcess, "data");
         flatPartitioningData.setBoolean("background", true);
         LOG.info("Using flat partitioning in levels " + flatPartitioningData.get("levels"));
-        runningJobs[1] = plotMapReduce(inPaths, new Path(outPath, "flat_data"), plotterClass, flatPartitioningData);
+        runningJobs[1] = plotMapReduce(inPaths, flatDataPath, plotterClass, flatPartitioningData);
       }
       if (maxLevel > maxLevelWithFlatPartitioning) {
+        // Generate the bottom levels using the pyramid partitioning algorithm
         OperationsParams pyramidPartitioning = new OperationsParams(params);
         pyramidPartitioning.set("levels",
             Math.max(minLevel, maxLevelWithFlatPartitioning + 1) + ".." + maxLevel);
         pyramidPartitioning.set("partition", "pyramid");
         pyramidPartitioning.setBoolean("background", true);
         LOG.info("Using pyramid partitioning in levels " + pyramidPartitioning.get("levels"));
-        runningJobs[2] = plotMapReduce(inPaths, new Path(outPath, "pyramid"), plotterClass, pyramidPartitioning);
+        runningJobs[2] = plotMapReduce(inPaths, pyramidPath, plotterClass, pyramidPartitioning);
       }
       for (Job job : runningJobs) {
         if (job != null)
           job.waitForCompletion(false);
       }
+      // Move all output files to one directory
+      FSUtil.mergeAndFlattenPaths(outFS, flatImagesPath, flatDataPath, pyramidPath);
+
       // Write a new HTML file that displays both parts of the pyramid
       // Add an HTML file that visualizes the result using Google Maps
       LineReader templateFileReader = new LineReader(AdaptiveMultilevelPlot.class.getResourceAsStream("/zoom_view.html"));
