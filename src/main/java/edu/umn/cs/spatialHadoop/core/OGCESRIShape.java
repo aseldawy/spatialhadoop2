@@ -220,8 +220,8 @@ public class OGCESRIShape implements Shape {
         double py = path.getPoint(i).getY();
         
         // Transform a point in the polygon to image coordinates
-        xpoints[i] = (int) Math.round((px - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-        ypoints[i] = (int) Math.round((py - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+        xpoints[i] = (int) Math.floor((px - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+        ypoints[i] = (int) Math.floor((py - fileMBR.y1) * imageHeight / fileMBR.getHeight());
       }
       
       // Draw the polygon
@@ -246,8 +246,8 @@ public class OGCESRIShape implements Shape {
       int n = 0;
       for (int i = 0; i < n; i++) {
         OGCPoint point = linestring.pointN(i);
-        xs[n] = (int) Math.round(point.X() * xscale);
-        ys[n] = (int) Math.round(point.Y() * yscale);
+        xs[n] = (int) Math.floor(point.X() * xscale);
+        ys[n] = (int) Math.floor(point.Y() * yscale);
         // Increment number of point if this point is different than previous ones
         if (n == 0 || xs[n] != xs[n-1] || ys[n] != ys[n-1])
           n++;

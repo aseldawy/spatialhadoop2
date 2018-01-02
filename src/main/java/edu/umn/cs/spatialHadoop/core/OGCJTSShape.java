@@ -253,8 +253,8 @@ public class OGCJTSShape implements Shape {
         double py = line.getPointN(i).getY();
         
         // Transform a point in the polygon to image coordinates
-        xpoints[n] = (int) Math.round(px * xscale);
-        ypoints[n] = (int) Math.round(py * yscale);
+        xpoints[n] = (int) Math.floor(px * xscale);
+        ypoints[n] = (int) Math.floor(py * yscale);
         // Include this point only if first point or different than previous point
         if (n == 0 || xpoints[n] != xpoints[n-1] || ypoints[n] != ypoints[n-1])
           n++;
@@ -317,8 +317,8 @@ public class OGCJTSShape implements Shape {
         double py = line.getPointN(i).getY();
         
         // Transform a point in the polygon to image coordinates
-        xpoints[i] = (int) Math.round((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
-        ypoints[i] = (int) Math.round((py - fileMbr.y1) * imageHeight / fileMbr.getHeight());
+        xpoints[i] = (int) Math.floor((px - fileMbr.x1) * imageWidth / fileMbr.getWidth());
+        ypoints[i] = (int) Math.floor((py - fileMbr.y1) * imageHeight / fileMbr.getHeight());
       }
       
       // Draw the polygon

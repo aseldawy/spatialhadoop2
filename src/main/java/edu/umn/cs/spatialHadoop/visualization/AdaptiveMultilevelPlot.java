@@ -199,14 +199,7 @@ public class AdaptiveMultilevelPlot {
                 } else{
                   // It is supposed to be an image tile
                   if (tilesToProcess == ImageTile) {
-                    Rectangle tileMBR = new Rectangle();
-                    int gridSize = 1 << key.level;
-                    tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
-                    tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x + 1))
-                        / gridSize;
-                    tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
-                    tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y + 1))
-                        / gridSize;
+                    Rectangle tileMBR = key.getMBR(inputMBR);
                     tile = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
                   } else
                     tile = null;
@@ -524,14 +517,7 @@ public class AdaptiveMultilevelPlot {
                   pyramid.put(key.clone(), tile);
                 } else {
                   // Initialize an image tile
-                  Rectangle tileMBR = new Rectangle();
-                  gridSize = 1 << key.level;
-                  tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
-                  tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x + 1))
-                      / gridSize;
-                  tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
-                  tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y + 1))
-                      / gridSize;
+                  Rectangle tileMBR = key.getMBR(inputMBR);
                   tile = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
                   pyramid.put(key.clone(), tile);
                 }

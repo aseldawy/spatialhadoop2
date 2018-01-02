@@ -339,19 +339,19 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
       int imageHeight, double scale) {
-    int s_x1 = (int) Math.round((this.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int s_y1 = (int) Math.round((this.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
-    int s_x2 = (int) Math.round((this.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int s_y2 = (int) Math.round((this.y2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int s_x1 = (int) Math.floor((this.x1 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int s_y1 = (int) Math.floor((this.y1 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int s_x2 = (int) Math.floor((this.x2 - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int s_y2 = (int) Math.floor((this.y2 - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     g.fillRect(s_x1, s_y1, s_x2 - s_x1 + 1, s_y2 - s_y1 + 1);
   }
   
   @Override
   public void draw(Graphics g, double xscale, double yscale) {
-    int imgx1 = (int) Math.round(this.x1 * xscale);
-    int imgy1 = (int) Math.round(this.y1 * yscale);
-    int imgx2 = (int) Math.round(this.x2 * xscale);
-    int imgy2 = (int) Math.round(this.y2 * yscale);
+    int imgx1 = (int) Math.floor(this.x1 * xscale);
+    int imgy1 = (int) Math.floor(this.y1 * yscale);
+    int imgx2 = (int) Math.floor(this.x2 * xscale);
+    int imgy2 = (int) Math.floor(this.y2 * yscale);
     g.fillRect(imgx1, imgy1, imgx2 - imgx1 + 1, imgy2 - imgy1 + 1);
   }
   

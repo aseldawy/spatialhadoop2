@@ -166,15 +166,15 @@ public class Point implements Shape, Comparable<Point> {
   @Override
   public void draw(Graphics g, Rectangle fileMBR, int imageWidth,
   		int imageHeight, double scale) {
-    int imageX = (int) Math.round((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
-    int imageY = (int) Math.round((this.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
+    int imageX = (int) Math.floor((this.x - fileMBR.x1) * imageWidth / fileMBR.getWidth());
+    int imageY = (int) Math.floor((this.y - fileMBR.y1) * imageHeight / fileMBR.getHeight());
     g.fillRect(imageX, imageY, 1, 1);  	
   }
   
   @Override
   public void draw(Graphics g, double xscale, double yscale) {
-    int imgx = (int) Math.round(x * xscale);
-    int imgy = (int) Math.round(y * yscale);
+    int imgx = (int) Math.floor(x * xscale);
+    int imgy = (int) Math.floor(y * yscale);
     g.fillRect(imgx, imgy, 1, 1);
   }
 

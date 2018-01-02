@@ -140,14 +140,7 @@ public class MultilevelPlot {
                 + overlappingCells.height; key.y++) {
               Canvas canvasLayer = canvasLayers.get(key);
               if (canvasLayer == null) {
-                Rectangle tileMBR = new Rectangle();
-                int gridSize = 1 << key.level;
-                tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
-                tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x + 1))
-                    / gridSize;
-                tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
-                tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y + 1))
-                    / gridSize;
+                Rectangle tileMBR = key.getMBR(inputMBR);
                 canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
                 canvasLayers.put(key.clone(), canvasLayer);
               }
@@ -397,14 +390,7 @@ public class MultilevelPlot {
                 + overlappingCells.height; key.y++) {
               Canvas canvasLayer = canvasLayers.get(key);
               if (canvasLayer == null) {
-                Rectangle tileMBR = new Rectangle();
-                gridSize = 1 << key.level;
-                tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x) / gridSize;
-                tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1)) + inputMBR.x2 * (key.x + 1))
-                    / gridSize;
-                tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y) / gridSize;
-                tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1)) + inputMBR.y2 * (key.y + 1))
-                    / gridSize;
+                Rectangle tileMBR = key.getMBR(inputMBR);
                 canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
                 canvasLayers.put(key.clone(), canvasLayer);
               }
@@ -620,16 +606,7 @@ public class MultilevelPlot {
                     + overlappingCells.height; key.y++) {
                   Canvas canvas = canvases.get(key);
                   if (canvas == null) {
-                    Rectangle tileMBR = new Rectangle();
-                    int gridSize = 1 << key.level;
-                    tileMBR.x1 = (inputMBR.x1 * (gridSize - key.x) + inputMBR.x2 * key.x)
-                        / gridSize;
-                    tileMBR.x2 = (inputMBR.x1 * (gridSize - (key.x + 1))
-                        + inputMBR.x2 * (key.x + 1)) / gridSize;
-                    tileMBR.y1 = (inputMBR.y1 * (gridSize - key.y) + inputMBR.y2 * key.y)
-                        / gridSize;
-                    tileMBR.y2 = (inputMBR.y1 * (gridSize - (key.y + 1))
-                        + inputMBR.y2 * (key.y + 1)) / gridSize;
+                    Rectangle tileMBR = key.getMBR(inputMBR);
                     canvas = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
                     canvases.put(key.clone(), canvas);
                   }

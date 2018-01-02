@@ -99,7 +99,7 @@ public class MultilevelPlotTest extends TestCase {
           new Path(outFileName), GeometricPlot.GeometricRasterizer.class,
           params);
 
-      File outPath = new File(outFileName + "/pyramid");
+      File outPath = new File(outFileName);
       String[] list = outPath.list(new FilenameFilter() {
         @Override
         public boolean accept(File dir, String name) {
@@ -130,7 +130,7 @@ public class MultilevelPlotTest extends TestCase {
           new Path(outFileName), GeometricPlot.GeometricRasterizer.class,
           params);
 
-      File outPath = new File(outFileName + "/pyramid");
+      File outPath = new File(outFileName);
       List<String> list = Arrays.asList(outPath.list(new FilenameFilter() {
         @Override
         public boolean accept(File dir, String name) {
@@ -163,7 +163,7 @@ public class MultilevelPlotTest extends TestCase {
           new Path(outFileName), GeometricPlot.GeometricRasterizer.class,
           params);
 
-      File outPath = new File(outFileName + "/pyramid");
+      File outPath = new File(outFileName);
       List<String> list = Arrays.asList(outPath.list(new FilenameFilter() {
         @Override
         public boolean accept(File dir, String name) {

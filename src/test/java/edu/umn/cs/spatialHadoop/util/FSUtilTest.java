@@ -88,4 +88,30 @@ public class FSUtilTest extends TestCase {
     }
   }
 
+  public void testMergeAndFlattenPathsShouldSkipNonexistingPaths() {
+    try {
+      LocalFileSystem fs = FileSystem.getLocal(new Configuration());
+      Path tempDirectory = new Path(Math.random()+".tmp");
+      try {
+        Path p1 = new Path(tempDirectory, "path1");
+        Path p2 = new Path(tempDirectory, "path2");
+        fs.mkdirs(p1);
+        fs.mkdirs(p2);
+        fs.createNewFile(new Path(p1, "file1"));
+        fs.createNewFile(new Path(p1, "file2"));
+        fs.createNewFile(new Path(p1, "file3"));
+        fs.createNewFile(new Path(p2, "file1"));
+
+        FSUtil.mergeAndFlattenPaths(fs, p1, p2, new Path(tempDirectory, "none"));
+
+        FileStatus[] mergedFiles = fs.listStatus(tempDirectory);
+        assertEquals(3, mergedFiles.length);
+      } finally {
+        fs.delete(tempDirectory, true);
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+      fail("Could not create the local file system");
+    }
+  }
 }

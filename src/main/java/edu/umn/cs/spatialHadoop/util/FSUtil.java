@@ -25,7 +25,7 @@ public class FSUtil {
     int maxSize = 0;
     Path destinationPath = null;
     for (Path path : paths) {
-      if (path != null) {
+      if (path != null && fs.exists(path)) {
         int size = fs.listStatus(path).length;
         if (size > maxSize) {
           maxSize = size;
@@ -36,7 +36,7 @@ public class FSUtil {
 
     // Scan the paths again and move their contents to the destination path
     for (Path path : paths) {
-      if (path != null && path != destinationPath) {
+      if (path != null && path != destinationPath && fs.exists(path)) {
         // Scan all the contents of this path and move it to the destination path
         FileStatus[] files = fs.listStatus(path);
         for (FileStatus file : files) {

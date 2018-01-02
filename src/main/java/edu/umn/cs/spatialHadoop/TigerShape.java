@@ -8,10 +8,12 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop;
 
+import java.awt.Graphics;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import org.apache.hadoop.io.Text;
 
 import edu.umn.cs.spatialHadoop.core.OGCJTSShape;
@@ -60,5 +62,29 @@ public class TigerShape extends OGCJTSShape {
     c.originalText = this.originalText;
     c.geom = this.geom;
     return c;
+  }
+
+  @Override
+  public void draw(Graphics g, double xscale, double yscale) {
+    super.draw(g, xscale, yscale);
+    // Draw label if possible
+    // A label is possible to draw if its MBR is smaller than the MBR of the shape
+    // For simplicity, we just calculate the width and consider it possible if
+    // it the width is smaller than the width of the shape
+
+    // 1- Calculate string width
+    String label = originalText.split("\t")[2];
+    //String label = originalText.split("\t")[1];
+    int strWidth = g.getFontMetrics().stringWidth(label);
+
+    // 2- Calculate the shape width
+    Rectangle mbr = getMBR();
+    int mbrWidth = (int) Math.round(mbr.getWidth() * xscale);
+
+    if (strWidth < mbrWidth) {
+      g.drawString(label,
+          (int) Math.round(mbr.x1 * xscale - (mbrWidth - strWidth)),
+          (int) Math.round(mbr.y1 * yscale - g.getFontMetrics().getHeight() / 2));
+    }
   }
 }
