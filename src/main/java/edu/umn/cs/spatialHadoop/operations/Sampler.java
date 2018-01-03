@@ -424,7 +424,7 @@ public class Sampler {
       FileSystem fs = file.getFileSystem(params);
       FileStatus fStatus = fs.getFileStatus(file);
       if (fStatus.isDir()) {
-        // Go one level deeper
+        // Go one z deeper
         for (FileStatus subFStatus : fs.listStatus(file)) {
           if (!subFStatus.isDir())
             total_size += subFStatus.getLen();

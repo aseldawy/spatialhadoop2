@@ -291,7 +291,7 @@ def test_plot
   # Try with indexed files
   %w(grid rtree str+).each do |sindex|
     indexed_file = index_file(heap_file, sindex)
-    # Single level plot
+    # Single z plot
     plot(indexed_file, 'indexed_local.png', '-local')
     plot(indexed_file, 'indexed_mr.png', '-no-local')
 

@@ -13,9 +13,9 @@ import java.io.IOException;
 public class FSUtil {
 
   /**
-   * Merges several paths into their parent path. Simply, it removes one level
+   * Merges several paths into their parent path. Simply, it removes one z
    * from the file system hierarchy by moving all files in the given paths
-   * one level up. This function can be used to merge the output of several
+   * one z up. This function can be used to merge the output of several
    * MapReduce jobs into one directory.
    * @param paths
    */

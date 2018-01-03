@@ -342,7 +342,7 @@ public class SingleLevelPlot {
   }
   
   /**
-   * Generates a single level using a MapReduce job and returns the created job.
+   * Generates a single z using a MapReduce job and returns the created job.
    * @param inFiles
    * @param outFile
    * @param plotterClass
@@ -437,7 +437,7 @@ public class SingleLevelPlot {
       LOG.info("Using repartition plot");
       Partitioner partitioner;
       if (partition.equals("pixel")) {
-        // Special case for pixel level partitioning as it depends on the
+        // Special case for pixel z partitioning as it depends on the
         // visualization parameters
         partitioner = new GridPartitioner(inputMBR, imageWidth, imageHeight);
       } else if (partition.equals("grid")) {

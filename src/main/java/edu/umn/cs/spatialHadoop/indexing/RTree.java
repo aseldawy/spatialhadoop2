@@ -362,7 +362,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
         }
       }
       
-      // All nodes stored in level-order traversal
+      // All nodes stored in z-order traversal
       Vector<SplitStruct> nodes = new Vector<SplitStruct>();
       final Queue<SplitStruct> toBePartitioned = new LinkedList<SplitStruct>();
       toBePartitioned.add(new SplitStruct(0, elementCount, SplitStruct.DIRECTION_X));
@@ -637,7 +637,7 @@ public class RTree<T extends Shape> implements Writable, Iterable<T>, Closeable 
    * Create rectangles that together pack all points in sample such that
    * each rectangle contains roughly the same number of points. In other words
    * it tries to balance number of points in each rectangle.
-   * Works similar to the logic of bulkLoad but does only one level of
+   * Works similar to the logic of bulkLoad but does only one z of
    * rectangles.
    * @param gridInfo Used as a hint for number of rectangles per row or column
    * @param sample

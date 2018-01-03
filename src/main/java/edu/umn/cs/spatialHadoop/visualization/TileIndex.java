@@ -17,42 +17,42 @@ import org.apache.hadoop.io.WritableComparable;
 
 /**
  * An class that represents a position of a tile in the pyramid.
- * Level is the level of the tile starting with 0 at the top.
+ * Level is the z of the tile starting with 0 at the top.
  * x and y are the index of the column and row of the tile in the grid
- * at this level.
+ * at this z.
  * @author Ahmed Eldawy
  *
  */
 public class TileIndex implements WritableComparable<TileIndex> {
-  public int level, x, y;
+  public int z, x, y;
   
   public TileIndex() {}
   
-  public TileIndex(int level, int x, int y) {
+  public TileIndex(int z, int x, int y) {
     super();
-    this.level = level;
+    this.z = z;
     this.x = x;
     this.y = y;
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    level = in.readInt();
+    z = in.readInt();
     x = in.readInt();
     y = in.readInt();
   }
 
   @Override
   public void write(DataOutput out) throws IOException {
-    out.writeInt(level);
+    out.writeInt(z);
     out.writeInt(x);
     out.writeInt(y);
   }
 
   @Override
   public int compareTo(TileIndex a) {
-    if (this.level != a.level)
-      return this.level - a.level;
+    if (this.z != a.z)
+      return this.z - a.z;
     if (this.x != a.x)
       return this.x - a.x;
     return this.y - a.y;
@@ -60,12 +60,12 @@ public class TileIndex implements WritableComparable<TileIndex> {
   
   @Override
   public String toString() {
-    return "Level: "+level+" @("+x+","+y+")";
+    return "Level: "+ z +" @("+x+","+y+")";
   }
   
   @Override
   public int hashCode() {
-    return level * 31 + x * 25423 + y;
+    return z * 31 + x * 25423 + y;
   }
   
   @Override
@@ -73,16 +73,16 @@ public class TileIndex implements WritableComparable<TileIndex> {
     if (obj == null)
       return false;
     TileIndex b = (TileIndex) obj;
-    return this.level == b.level && this.x == b.x && this.y == b.y;
+    return this.z == b.z && this.x == b.x && this.y == b.y;
   }
   
   @Override
   public TileIndex clone() {
-    return new TileIndex(this.level, this.x, this.y);
+    return new TileIndex(this.z, this.x, this.y);
   }
 
   public String getImageFileName() {
-    return "tile-"+this.level+"-"+this.x+"-"+this.y;
+    return "tile-"+this.z +"-"+this.x+"-"+this.y;
   }
 
   /**
@@ -92,7 +92,7 @@ public class TileIndex implements WritableComparable<TileIndex> {
    * @return
    */
   public Rectangle getMBR(Rectangle spaceMBR) {
-    int fraction = 1 << this.level;
+    int fraction = 1 << this.z;
     double tileWidth = spaceMBR.getWidth() / fraction;
     double tileHeight = spaceMBR.getHeight() / fraction;
     double x1 = spaceMBR.x1 + tileWidth * this.x;
@@ -103,6 +103,6 @@ public class TileIndex implements WritableComparable<TileIndex> {
   public void moveToParent() {
 	this.x /= 2;
 	this.y /= 2;
-	this.level--;
+	this.z--;
   }
 }

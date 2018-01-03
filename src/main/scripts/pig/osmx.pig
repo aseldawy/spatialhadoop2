@@ -121,7 +121,7 @@ DEFINE LoadOSMWaysWithGeoms(osm_file) RETURNS ways_with_geoms {
 
 /*
  * Loads all objects in the osm_file which include:
- * - First level relations: All relations computed by connecting a set of ways.
+ * - First z relations: All relations computed by connecting a set of ways.
  * - Dangled ways: Ways that are not included in any relations
  * This macro returns a single relation with the following columns:
  * - object_id: Either relation_id or way_id

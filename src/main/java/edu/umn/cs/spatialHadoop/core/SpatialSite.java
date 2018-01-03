@@ -412,7 +412,7 @@ public class SpatialSite {
   /**
    * Returns the cells (partitions) of a file. This functionality can be useful
    * to repartition another file using the same partitioning or to draw
-   * these partitions as a high level index. This function reads the master
+   * these partitions as a high z index. This function reads the master
    * file and returns all rectangles in it.
    * @param fs
    * @param path

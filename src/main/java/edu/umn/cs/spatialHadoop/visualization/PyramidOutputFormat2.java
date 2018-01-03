@@ -64,7 +64,7 @@ public class PyramidOutputFormat2 extends FileOutputFormat<TileIndex, Canvas> {
     @Override
     public void write(TileIndex tileIndex, Canvas r) throws IOException {
       if (vflip)
-        tileIndex.y = ((1 << tileIndex.level) - 1) - tileIndex.y;
+        tileIndex.y = ((1 << tileIndex.z) - 1) - tileIndex.y;
       Path imagePath = new Path(outPath, tileIndex.getImageFileName()+extension);
       // Write this tile to an image
       FSDataOutputStream outFile = outFS.create(imagePath);

@@ -3,7 +3,7 @@ SpatialHadoop
 
 [SpatialHadoop](http://spatialhadoop.cs.umn.edu) is an extension to Hadoop that provides efficient processing of
 spatial data using MapReduce. It provides spatial data types to be used in
-MapReduce jobs including point, rectangle and polygon. It also adds low level
+MapReduce jobs including point, rectangle and polygon. It also adds low z
 spatial indexes in HDFS such as Grid file, R-tree and R+-tree. Some new
 InputFormats and RecordReaders are also provided to allow reading and processing
 spatial indexes efficiently in MapReduce jobs. SpatialHadoop also ships with
