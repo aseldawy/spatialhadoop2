@@ -70,4 +70,17 @@ public class SubPyramidTest extends TestCase {
     assertTrue(overlaps.width <= 0 || overlaps.height <= 0);
   }
 
+  public void testSetFromTileID() {
+    Rectangle mbr = new Rectangle(0,0,1024,1024);
+    SubPyramid subPyramid = new SubPyramid();
+    subPyramid.set(mbr, 3, 1, 3);
+
+    assertEquals(3, subPyramid.minimumLevel);
+    assertEquals(3, subPyramid.maximumLevel);
+    assertEquals(1, subPyramid.c1);
+    assertEquals(2, subPyramid.c2);
+    assertEquals(3, subPyramid.r1);
+    assertEquals(4, subPyramid.r2);
+  }
+
 }

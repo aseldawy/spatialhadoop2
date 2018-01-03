@@ -62,6 +62,27 @@ public class SubPyramid {
   }
 
   /**
+   * Set the sub-pyramid to cover only one tile
+   * @param mbr The MBR of the entire data set
+   * @param z The level of the given tile starting at zero
+   * @param c The column of the given tile
+   * @param r The row of the given tile
+   */
+  public void set(Rectangle mbr, int z, int c, int r) {
+    this.x1 = mbr.x1;
+    this.x2 = mbr.x2;
+    this.y1 = mbr.y1;
+    this.y2 = mbr.y2;
+    this.minimumLevel = this.maximumLevel = z;
+    this.c1 = c;
+    this.c2 = c + 1;
+    this.r1 = r;
+    this.r2 = r + 1;
+    this.tileWidth = (x2 - x1) / (1 << maximumLevel);
+    this.tileHeight = (y2 - y1) / (1 << maximumLevel);
+  }
+
+  /**
    * Returns the range of tiles that overlaps the given rectangle at
    * the maximum z
    * @param rect
