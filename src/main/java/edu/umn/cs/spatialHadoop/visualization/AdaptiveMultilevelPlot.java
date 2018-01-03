@@ -152,7 +152,6 @@ public class AdaptiveMultilevelPlot {
         shapes = plotter.smooth(shapes);
       TileIndex key = new TileIndex();
       Map<TileIndex, Writable> pyramid = new HashMap<TileIndex, Writable>();
-      // Map <TileIndex, StringBuffer>
       int i = 0; // Counter to report progress often
       for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
@@ -165,7 +164,6 @@ public class AdaptiveMultilevelPlot {
           for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
             for (key.y = overlappingCells.y; key.y < overlappingCells.y
                 + overlappingCells.height; key.y++) {
-              //Canvas canvasLayer = canvasLayers.get(key);
               Writable tile;
               if (pyramid.containsKey(key)) {
                 // The tile was encountered before

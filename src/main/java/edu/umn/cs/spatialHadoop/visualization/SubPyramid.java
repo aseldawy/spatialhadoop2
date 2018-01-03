@@ -29,6 +29,24 @@ public class SubPyramid {
 
   public SubPyramid(Rectangle mbr, int minLevel, int maxLevel,
                     int c1, int r1, int c2, int r2) {
+    this.set(mbr, minLevel, maxLevel, c1, r1, c2, r2);
+  }
+
+  public SubPyramid() {
+  }
+
+  /**
+   *
+   * @param mbr
+   * @param minLevel
+   * @param maxLevel
+   * @param c1
+   * @param r1
+   * @param c2
+   * @param r2
+   */
+  public void set(Rectangle mbr, int minLevel, int maxLevel,
+                  int c1, int r1, int c2, int r2) {
     this.x1 = mbr.x1;
     this.x2 = mbr.x2;
     this.y1 = mbr.y1;
@@ -62,6 +80,9 @@ public class SubPyramid {
     overlaps.height = (int) Math.ceil((rect.y2 - this.y1) / tileHeight) - overlaps.y;
     if (overlaps.y + overlaps.height > r2)
       overlaps.height = r2 - overlaps.y;
+  }
 
+  public Rectangle getInputMBR() {
+    return new Rectangle(x1, y1, x2, y2);
   }
 }

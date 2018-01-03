@@ -72,14 +72,8 @@ public class MultilevelPlot {
   public static final String FlatPartitioningLevelThreshold = "MultilevelPlot.FlatPartitioningLevelThreshold";
 
   public static class FlatPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Canvas> {
-    /** Minimum and maximum levels of the pyramid to plot (inclusive and zero-based) */
-    private int minLevel, maxLevel;
-
-    /** The grid at the bottom level (i.e., maxLevel) */
-    private GridInfo bottomGrid;
-
-    /** The MBR of the input area to draw */
-    private Rectangle inputMBR;
+    /** The subpyramid that defines the tiles of interest*/
+    private SubPyramid subPyramid;
 
     /** The plotter associated with this job */
     private Plotter plotter;
@@ -103,6 +97,7 @@ public class MultilevelPlot {
       super.setup(context);
       Configuration conf = context.getConfiguration();
       String[] strLevels = conf.get("levels", "7").split("\\.\\.");
+      int minLevel, maxLevel;
       if (strLevels.length == 1) {
         minLevel = 0;
         maxLevel = Integer.parseInt(strLevels[0]);
@@ -110,9 +105,8 @@ public class MultilevelPlot {
         minLevel = Integer.parseInt(strLevels[0]);
         maxLevel = Integer.parseInt(strLevels[1]);
       }
-      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
-      this.bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
-      this.bottomGrid.rows = bottomGrid.columns = 1 << maxLevel;
+      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
+      subPyramid = new SubPyramid(inputMBR, minLevel, maxLevel, 0, 0, 1 << maxLevel, 1 << maxLevel);
       this.tileWidth = conf.getInt("tilewidth", 256);
       this.tileHeight = conf.getInt("tileheight", 256);
       this.plotter = Plotter.getPlotter(conf);
@@ -124,42 +118,8 @@ public class MultilevelPlot {
         throws IOException, InterruptedException {
       if (smooth)
         shapes = plotter.smooth(shapes);
-      TileIndex key = new TileIndex();
       Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
-      int i = 0; // Counter to report progress often
-      for (Shape shape : shapes) {
-        Rectangle shapeMBR = shape.getMBR();
-        if (shapeMBR == null)
-          continue;
-        java.awt.Rectangle overlappingCells = bottomGrid
-            .getOverlappingCells(shapeMBR.buffer(bufferSizeXMaxLevel, bufferSizeYMaxLevel));
-        // Iterate over levels from bottom up
-        for (key.level = maxLevel; key.level >= minLevel; key.level--) {
-          for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
-            for (key.y = overlappingCells.y; key.y < overlappingCells.y
-                + overlappingCells.height; key.y++) {
-              Canvas canvasLayer = canvasLayers.get(key);
-              if (canvasLayer == null) {
-                Rectangle tileMBR = key.getMBR(inputMBR);
-                canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-                canvasLayers.put(key.clone(), canvasLayer);
-              }
-              plotter.plot(canvasLayer, shape);
-            }
-          }
-          // Update overlappingCells for the higher level
-          int updatedX1 = overlappingCells.x / 2;
-          int updatedY1 = overlappingCells.y / 2;
-          int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
-          int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
-          overlappingCells.x = updatedX1;
-          overlappingCells.y = updatedY1;
-          overlappingCells.width = updatedX2 - updatedX1 + 1;
-          overlappingCells.height = updatedY2 - updatedY1 + 1;
-        }
-        if (((++i) & 0xff) == 0)
-          context.progress();
-      }
+      createTiles(shapes, subPyramid, tileWidth, tileHeight, plotter, canvasLayers);
       // Write all created layers to the output
       for (Map.Entry<TileIndex, Canvas> entry : canvasLayers.entrySet()) {
         context.write(entry.getKey(), entry.getValue());
@@ -209,13 +169,7 @@ public class MultilevelPlot {
     @Override
     protected void reduce(TileIndex tileID, Iterable<Canvas> interLayers, Context context)
         throws IOException, InterruptedException {
-      Rectangle tileMBR = new Rectangle();
-      int gridSize = 1 << tileID.level;
-      tileMBR.x1 = (inputMBR.x1 * (gridSize - tileID.x) + inputMBR.x2 * tileID.x) / gridSize;
-      tileMBR.x2 = (inputMBR.x1 * (gridSize - (tileID.x + 1)) + inputMBR.x2 * (tileID.x + 1)) / gridSize;
-      tileMBR.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
-      tileMBR.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y + 1)) / gridSize;
-
+      Rectangle tileMBR = tileID.getMBR(inputMBR);
       Canvas finalLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
       for (Canvas interLayer : interLayers) {
         plotter.merge(finalLayer, interLayer);
@@ -228,13 +182,10 @@ public class MultilevelPlot {
 
   public static class PyramidPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Shape> {
 
-    private int minLevel, maxLevel;
-    /** Maximum level to replicate to */
-    private int maxLevelToReplicate;
-    private Rectangle inputMBR;
-    /** The grid of the lowest (deepest) level of the pyramid */
-    private GridInfo bottomGrid;
-    /** Maximum levels to generate per reducer */
+    /** The sub-pyramid that represents the tiles of interest */
+    private SubPyramid subPyramid;
+
+    /** Maximum number of levels to assign to one reducer (parameter k in the paper)*/
     private int maxLevelsPerReducer;
 
     @Override
@@ -242,6 +193,7 @@ public class MultilevelPlot {
       super.setup(context);
       Configuration conf = context.getConfiguration();
       String[] strLevels = conf.get("levels", "7").split("\\.\\.");
+      int minLevel, maxLevel;
       if (strLevels.length == 1) {
         minLevel = 0;
         maxLevel = Integer.parseInt(strLevels[0]);
@@ -250,44 +202,46 @@ public class MultilevelPlot {
         maxLevel = Integer.parseInt(strLevels[1]);
       }
       this.maxLevelsPerReducer = conf.getInt(MaxLevelsPerReducer, 3);
-      // Adjust maxLevelToReplicate so that the difference is multiple of maxLevelsPerReducer
-      this.maxLevelToReplicate = maxLevel - maxLevelsPerReducer + 1;
-      this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
-      this.bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
-      this.bottomGrid.rows = bottomGrid.columns = (1 << maxLevelToReplicate); // 2 ^ maxLevel
+      // Adjust the maximum level according to the maxLevelsPerReducer (k) parameter
+      // such that we cover the range of levels of interest and the minimum level
+      // to replicate to is the same as the minimum level of interest
+      maxLevel -= (maxLevel - minLevel) % maxLevelsPerReducer;
+      Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
+      subPyramid = new SubPyramid(inputMBR, minLevel, maxLevel, 0, 0, 1 << maxLevel, 1 << maxLevel);
     }
 
     @Override
     protected void map(Rectangle partition, Iterable<? extends Shape> shapes, Context context)
         throws IOException, InterruptedException {
+      java.awt.Rectangle overlaps = new java.awt.Rectangle();
       TileIndex outKey = new TileIndex();
       int i = 0;
       for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
           continue;
-        java.awt.Rectangle overlappingCells = bottomGrid.getOverlappingCells(shapeMBR);
+        subPyramid.getOverlappingTiles(shapeMBR, overlaps);
         // Iterate over levels from bottom up
-        outKey.level = maxLevelToReplicate;
-        do {
-          for (outKey.x = overlappingCells.x; outKey.x < overlappingCells.x
-              + overlappingCells.width; outKey.x++) {
-            for (outKey.y = overlappingCells.y; outKey.y < overlappingCells.y
-                + overlappingCells.height; outKey.y++) {
+        for (outKey.level = subPyramid.maximumLevel; outKey.level >= subPyramid.minimumLevel;
+            outKey.level -= maxLevelsPerReducer) {
+          for (outKey.x = overlaps.x; outKey.x < overlaps.x
+              + overlaps.width; outKey.x++) {
+            for (outKey.y = overlaps.y; outKey.y < overlaps.y
+                + overlaps.height; outKey.y++) {
               context.write(outKey, shape);
             }
           }
           // Shrink overlapping cells to match the upper level
-          int updatedX1 = overlappingCells.x >> maxLevelsPerReducer;
-          int updatedY1 = overlappingCells.y >> maxLevelsPerReducer;
-          int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) >> maxLevelsPerReducer;
-          int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) >> maxLevelsPerReducer;
-          overlappingCells.x = updatedX1;
-          overlappingCells.y = updatedY1;
-          overlappingCells.width = updatedX2 - updatedX1 + 1;
-          overlappingCells.height = updatedY2 - updatedY1 + 1;
-          outKey.level -= maxLevelsPerReducer;
-        } while (outKey.level + maxLevelsPerReducer > minLevel);
+          int updatedX1 = overlaps.x >> maxLevelsPerReducer;
+          int updatedY1 = overlaps.y >> maxLevelsPerReducer;
+          int updatedX2 = (overlaps.x + overlaps.width - 1) >> maxLevelsPerReducer;
+          int updatedY2 = (overlaps.y + overlaps.height - 1) >> maxLevelsPerReducer;
+          overlaps.x = updatedX1;
+          overlaps.y = updatedY1;
+          overlaps.width = updatedX2 - updatedX1 + 1;
+          overlaps.height = updatedY2 - updatedY1 + 1;
+        }
+
         if (((++i) & 0xff) == 0)
           context.progress();
       }
@@ -297,11 +251,7 @@ public class MultilevelPlot {
   public static class PyramidPartitionReduce extends Reducer<TileIndex, Shape, TileIndex, Canvas> {
 
     private int minLevel, maxLevel;
-    /** Maximum level to replicate to */
-    private int maxLevelToReplicate;
     private Rectangle inputMBR;
-    /** The grid of the lowest (deepest) level of the pyramid */
-    private GridInfo bottomGrid;
     /** The user-configured plotter */
     private Plotter plotter;
     /** Maximum levels to generate per reducer */
@@ -310,6 +260,9 @@ public class MultilevelPlot {
     private int tileWidth, tileHeight;
     /** Whether the configured plotter defines a smooth function or not */
     private boolean smooth;
+
+    /** A sub-pyramid object to reuse in reducers*/
+    private SubPyramid subPyramid = new SubPyramid();
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -324,11 +277,7 @@ public class MultilevelPlot {
         maxLevel = Integer.parseInt(strLevels[1]);
       }
       this.maxLevelsPerReducer = conf.getInt(MaxLevelsPerReducer, 3);
-      // Adjust maxLevelToReplicate so that the difference is multiple of maxLevelsPerMachine
-      this.maxLevelToReplicate = maxLevel - (maxLevel - minLevel) % maxLevelsPerReducer;
       this.inputMBR = (Rectangle) OperationsParams.getShape(conf, InputMBR);
-      this.bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
-      this.bottomGrid.rows = bottomGrid.columns = (1 << maxLevelToReplicate); // 2 ^ maxLevel
       this.plotter = Plotter.getPlotter(conf);
       this.smooth = plotter.isSmooth();
       this.tileWidth = conf.getInt("tilewidth", 256);
@@ -338,35 +287,16 @@ public class MultilevelPlot {
     @Override
     protected void reduce(TileIndex tileID, Iterable<Shape> shapes, Context context)
         throws IOException, InterruptedException {
-      // Find first and last levels to generate in this reducer
-      int level1 = Math.max(tileID.level, minLevel);
-      int level2 = Math.max(minLevel, Math.min(tileID.level + maxLevelsPerReducer - 1, maxLevel));
-      if (tileID.level < 0)
-        tileID.level = 0;
-
-      // Portion of the bottom grid that falls under the given tile
-      // The bottom grid is the deepest level of the sub-pyramid that
-      // falls under the given tile and will be plotted by this reducer
-
-      // First, calculate the MBR of the given tile in the input space
-      // This only depends on the tile ID (level and position) and the MBR of the input space
-      GridInfo bottomGrid = new GridInfo();
-      int gridSize = 1 << tileID.level;
-      bottomGrid.x1 = (inputMBR.x1 * (gridSize - tileID.x) + inputMBR.x2 * tileID.x) / gridSize;
-      bottomGrid.x2 = (inputMBR.x1 * (gridSize - (tileID.x + 1)) + inputMBR.x2 * (tileID.x + 1)) / gridSize;
-      bottomGrid.y1 = (inputMBR.y1 * (gridSize - tileID.y) + inputMBR.y2 * tileID.y) / gridSize;
-      bottomGrid.y2 = (inputMBR.y1 * (gridSize - (tileID.y + 1)) + inputMBR.y2 * (tileID.y + 1)) / gridSize;
-      // Second, calculate number of rows and columns of the bottom grid
-      bottomGrid.columns = bottomGrid.rows = (1 << (level2 - tileID.level));
-
-      // The offset in terms of tiles of the bottom grid according to
-      // the grid of this level for the whole input file
-      int tileOffsetX = tileID.x << (level2 - tileID.level);
-      int tileOffsetY = tileID.y << (level2 - tileID.level);
+      // Create the subpyramid associated with the given tileID
+      int tileMaxLevel = Math.min(this.maxLevel, tileID.level + maxLevelsPerReducer - 1);
+      int numLevelsInReducer = tileMaxLevel - tileID.level;
+      int c1 = tileID.x << numLevelsInReducer;
+      int r1 = tileID.y << numLevelsInReducer;
+      int c2 = c1 + 1 << numLevelsInReducer;
+      int r2 = r1 + 1 << numLevelsInReducer;
+      subPyramid.set(inputMBR, tileID.level, tileMaxLevel, c1, r1, c2, r2);
 
       Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
-
-      TileIndex key = new TileIndex();
 
       context.setStatus("Plotting");
       if (smooth) {
@@ -374,44 +304,9 @@ public class MultilevelPlot {
         context.progress();
       }
       int i = 0;
-      for (Shape shape : shapes) {
-        Rectangle shapeMBR = shape.getMBR();
-        if (shapeMBR == null)
-          continue;
-        java.awt.Rectangle overlappingCells = bottomGrid.getOverlappingCells(shapeMBR);
-        // Shift overlapping cells to be in the full pyramid rather than
-        // the sub-pyramid rooted at tileID
-        overlappingCells.x += tileOffsetX;
-        overlappingCells.y += tileOffsetY;
-        // Iterate over levels from bottom up
-        for (key.level = level2; key.level >= level1; key.level--) {
-          for (key.x = overlappingCells.x; key.x < overlappingCells.x + overlappingCells.width; key.x++) {
-            for (key.y = overlappingCells.y; key.y < overlappingCells.y
-                + overlappingCells.height; key.y++) {
-              Canvas canvasLayer = canvasLayers.get(key);
-              if (canvasLayer == null) {
-                Rectangle tileMBR = key.getMBR(inputMBR);
-                canvasLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-                canvasLayers.put(key.clone(), canvasLayer);
-              }
-              plotter.plot(canvasLayer, shape);
-            }
-          }
 
-          // Update overlappingCells for the higher level
-          int updatedX1 = overlappingCells.x / 2;
-          int updatedY1 = overlappingCells.y / 2;
-          int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
-          int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
-          overlappingCells.x = updatedX1;
-          overlappingCells.y = updatedY1;
-          overlappingCells.width = updatedX2 - updatedX1 + 1;
-          overlappingCells.height = updatedY2 - updatedY1 + 1;
-        }
+      createTiles(shapes, subPyramid, tileWidth, tileHeight, plotter, canvasLayers);
 
-        if (((++i) & 0xff) == 0)
-          context.progress();
-      }
       context.setStatus("Writing " + canvasLayers.size() + " tiles");
       // Write all created layers to the output as images
       for (Map.Entry<TileIndex, Canvas> entry : canvasLayers.entrySet()) {
@@ -566,13 +461,15 @@ public class MultilevelPlot {
         maxLevel = Integer.parseInt(strLevels[1]);
       }
 
-      GridInfo bottomGrid = new GridInfo(inputMBR.x1, inputMBR.y1, inputMBR.x2, inputMBR.y2);
-      bottomGrid.rows = bottomGrid.columns = 1 << maxLevel;
+      // Create the sub pyramid that represents all tiles of interest
+      // Since we generate all tiles in the given range of levels,
+      // we set the range of tiles to (0, 0, 2^maxLevel, 2^maxLevel)
+      SubPyramid subPyramid = new SubPyramid(inputMBR, minLevel, maxLevel,
+          0, 0, 1 << maxLevel, 1 << maxLevel);
 
-      TileIndex key = new TileIndex();
+      // Prepare the map that will eventually contain all the tiles
+      Map<TileIndex, Canvas> tiles = new HashMap<TileIndex, Canvas>();
 
-      // All canvases in the pyramid, one per tile
-      Map<TileIndex, Canvas> canvases = new HashMap<TileIndex, Canvas>();
       for (InputSplit split : splits) {
         FileSplit fsplit = (FileSplit) split;
         RecordReader<Rectangle, Iterable<Shape>> reader = inputFormat.createRecordReader(fsplit, null);
@@ -593,37 +490,7 @@ public class MultilevelPlot {
 
           Iterable<Shape> shapes = reader.getCurrentValue();
 
-          for (Shape shape : shapes) {
-            Rectangle shapeMBR = shape.getMBR();
-            if (shapeMBR == null)
-              continue;
-            java.awt.Rectangle overlappingCells = bottomGrid.getOverlappingCells(shapeMBR);
-            // Iterate over levels from bottom up
-            for (key.level = maxLevel; key.level >= minLevel; key.level--) {
-              for (key.x = overlappingCells.x; key.x < overlappingCells.x
-                  + overlappingCells.width; key.x++) {
-                for (key.y = overlappingCells.y; key.y < overlappingCells.y
-                    + overlappingCells.height; key.y++) {
-                  Canvas canvas = canvases.get(key);
-                  if (canvas == null) {
-                    Rectangle tileMBR = key.getMBR(inputMBR);
-                    canvas = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-                    canvases.put(key.clone(), canvas);
-                  }
-                  plotter.plot(canvas, shape);
-                }
-              }
-              // Update overlappingCells for the higher level
-              int updatedX1 = overlappingCells.x / 2;
-              int updatedY1 = overlappingCells.y / 2;
-              int updatedX2 = (overlappingCells.x + overlappingCells.width - 1) / 2;
-              int updatedY2 = (overlappingCells.y + overlappingCells.height - 1) / 2;
-              overlappingCells.x = updatedX1;
-              overlappingCells.y = updatedY1;
-              overlappingCells.width = updatedX2 - updatedX1 + 1;
-              overlappingCells.height = updatedY2 - updatedY1 + 1;
-            }
-          }
+          createTiles(shapes, subPyramid, tileWidth, tileHeight, plotter, tiles);
         }
         reader.close();
       }
@@ -665,9 +532,9 @@ public class MultilevelPlot {
       htmlOut.close();
 
       // Write the tiles
-      final Entry<TileIndex, Canvas>[] entries = canvases.entrySet().toArray(new Map.Entry[canvases.size()]);
+      final Entry<TileIndex, Canvas>[] entries = tiles.entrySet().toArray(new Map.Entry[tiles.size()]);
       // Clear the hash map to save memory as it is no longer needed
-      canvases.clear();
+      tiles.clear();
       int parallelism = params.getInt("parallel", Runtime.getRuntime().availableProcessors());
       Parallel.forEach(entries.length, new RunnableRange<Object>() {
         @Override
@@ -707,6 +574,60 @@ public class MultilevelPlot {
       throw new RuntimeException("Error creating rastierizer", e);
     } catch (IllegalAccessException e) {
       throw new RuntimeException("Error creating rastierizer", e);
+    }
+  }
+
+  /**
+   * Creates and returns all the tiles in the given sub pyramid that contains
+   * the given set of shapes.
+   * @param shapes The shapes to be plotted
+   * @param subPyramid The subpyramid that defines the range of tiles being considered
+   * @param tileWidth Width of each tile in pixels
+   * @param tileHeight Height of each tile in pixels
+   * @param plotter The plotter used to create canvases
+   * @param tiles The set of tiles that have been created already. It could be
+   *              empty which indicates no tiles created yet.
+   */
+  public static void createTiles(
+      Iterable<? extends Shape> shapes, SubPyramid subPyramid,
+      int tileWidth, int tileHeight,
+      Plotter plotter, Map<TileIndex, Canvas> tiles) {
+    Rectangle inputMBR = subPyramid.getInputMBR();
+    java.awt.Rectangle overlaps = new java.awt.Rectangle();
+    TileIndex tileIndex = new TileIndex();
+    for (Shape shape : shapes) {
+      if (shape == null)
+        continue;
+      Rectangle mbr = shape.getMBR();
+      if (mbr == null)
+        continue;
+
+      subPyramid.getOverlappingTiles(mbr, overlaps);
+      for (tileIndex.level = subPyramid.maximumLevel; tileIndex.level >= subPyramid.minimumLevel; tileIndex.level--) {
+        for (tileIndex.x = overlaps.x; tileIndex.x < overlaps.x + overlaps.width; tileIndex.x++) {
+          for (tileIndex.y = overlaps.y; tileIndex.y < overlaps.y + overlaps.height; tileIndex.y++) {
+            // Plot the shape on the tile at (z,x,y)
+            Canvas c = tiles.get(tileIndex);
+            if (c == null) {
+              // First time to encounter this tile, create the corresponding canvas
+              Rectangle tileMBR = tileIndex.getMBR(inputMBR);
+              c = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
+              tiles.put(tileIndex.clone(), c);
+            }
+            plotter.plot(c, shape);
+          }
+        }
+        // Update overlappingCells for the higher level
+        int updatedX1 = overlaps.x / 2;
+        int updatedY1 = overlaps.y / 2;
+        int updatedX2 = (overlaps.x + overlaps.width - 1) / 2;
+        int updatedY2 = (overlaps.y + overlaps.height - 1) / 2;
+        overlaps.x = updatedX1;
+        overlaps.y = updatedY1;
+        overlaps.width = updatedX2 - updatedX1 + 1;
+        overlaps.height = updatedY2 - updatedY1 + 1;
+
+      }
     }
   }
 
