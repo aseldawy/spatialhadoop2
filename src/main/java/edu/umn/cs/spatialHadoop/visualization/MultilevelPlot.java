@@ -685,15 +685,13 @@ public class MultilevelPlot {
       plotLocal(inPaths, outPath, plotterClass, params);
     } else {
       int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 4);
-      Path flatPath = new Path(outPath, "flat");
-      Path pyramidPath = new Path(outPath, "pyramid");
 
       if (minLevel <= maxLevelWithFlatPartitioning) {
         OperationsParams flatPartitioning = new OperationsParams(params);
         flatPartitioning.set("levels", minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel));
         flatPartitioning.set("partition", "flat");
         LOG.info("Using flat partitioning in levels " + flatPartitioning.get("levels"));
-        runningJob = plotMapReduce(inPaths, flatPath, plotterClass, flatPartitioning);
+        runningJob = plotMapReduce(inPaths, new Path(outPath, "flat"), plotterClass, flatPartitioning);
       }
       if (maxLevel > maxLevelWithFlatPartitioning) {
         OperationsParams pyramidPartitioning = new OperationsParams(params);
@@ -701,10 +699,10 @@ public class MultilevelPlot {
             Math.max(minLevel, maxLevelWithFlatPartitioning + 1) + ".." + maxLevel);
         pyramidPartitioning.set("partition", "pyramid");
         LOG.info("Using pyramid partitioning in levels " + pyramidPartitioning.get("levels"));
-        runningJob = plotMapReduce(inPaths, pyramidPath, plotterClass, pyramidPartitioning);
+        runningJob = plotMapReduce(inPaths, new Path(outPath, "pyramid"), plotterClass, pyramidPartitioning);
       }
       // Move all output files to one directory
-      FSUtil.mergeAndFlattenPaths(outFS, flatPath, pyramidPath);
+      FSUtil.flattenDirectory(outFS, outPath);
 
       // Write a new HTML file that displays both parts of the pyramid
       // Add an HTML file that visualizes the result using Google Maps

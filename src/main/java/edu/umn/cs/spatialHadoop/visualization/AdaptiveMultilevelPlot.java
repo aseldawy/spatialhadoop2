@@ -11,9 +11,7 @@ package edu.umn.cs.spatialHadoop.visualization;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import edu.umn.cs.spatialHadoop.util.FSUtil;
 import org.apache.commons.logging.Log;
@@ -583,10 +581,6 @@ public class AdaptiveMultilevelPlot {
     Job[] plottingJobs = new Job[3];
     int maxLevelWithFlatPartitioning = params.getInt(FlatPartitioningLevelThreshold, 4);
 
-    Path flatImagesPath = new Path(outPath, "flat_images");
-    Path flatDataPath = new Path(outPath, "flat_data");
-    Path pyramidPath = new Path(outPath, "pyramid");
-
     if (minLevel <= maxLevelWithFlatPartitioning) {
       // Generate the top levels using the non-spatial partitioning algorithm
       String flatLevels = minLevel + ".." + Math.min(maxLevelWithFlatPartitioning, maxLevel);
@@ -603,7 +597,7 @@ public class AdaptiveMultilevelPlot {
       SpatialInputFormat3.setInputPaths(flatImagesJob, inPaths);
       if (flatImagesConf.getBoolean("output", true)) {
         flatImagesJob.setOutputFormatClass(PyramidOutputFormat3.class);
-        PyramidOutputFormat3.setOutputPath(flatImagesJob, flatImagesPath);
+        PyramidOutputFormat3.setOutputPath(flatImagesJob, new Path(outPath, "flat_images"));
       } else {
         flatImagesJob.setOutputFormatClass(NullOutputFormat.class);
       }
@@ -634,7 +628,7 @@ public class AdaptiveMultilevelPlot {
       SpatialInputFormat3.setInputPaths(flatDataJob, inPaths);
       if (flatDataConf.getBoolean("output", true)) {
         flatDataJob.setOutputFormatClass(PyramidOutputFormat3.class);
-        PyramidOutputFormat3.setOutputPath(flatDataJob, flatDataPath);
+        PyramidOutputFormat3.setOutputPath(flatDataJob, new Path(outPath, "flat_data"));
       } else {
         flatDataJob.setOutputFormatClass(NullOutputFormat.class);
       }
@@ -669,7 +663,7 @@ public class AdaptiveMultilevelPlot {
       SpatialInputFormat3.setInputPaths(pyramidJob, inPaths);
       if (pyramidConf.getBoolean("output", true)) {
         pyramidJob.setOutputFormatClass(PyramidOutputFormat3.class);
-        PyramidOutputFormat3.setOutputPath(pyramidJob, pyramidPath);
+        PyramidOutputFormat3.setOutputPath(pyramidJob, new Path(outPath, "pyramid"));
       } else {
         pyramidJob.setOutputFormatClass(NullOutputFormat.class);
       }
@@ -697,7 +691,7 @@ public class AdaptiveMultilevelPlot {
     }
     histogramFile.getFileSystem(params).delete(histogramFile, true);
     // Move all output files to one directory
-    FSUtil.mergeAndFlattenPaths(outFS, flatImagesPath, flatDataPath, pyramidPath);
+    FSUtil.flattenDirectory(outFS, outPath);
 
     // Write a new HTML file that displays both parts of the pyramid
     // Add an HTML file that visualizes the result using Google Maps
