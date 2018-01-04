@@ -219,49 +219,10 @@ public class AdaptiveMultilevelPlot {
     @Override
     protected void map(Rectangle partition, Iterable<? extends Shape> shapes, Context context)
         throws IOException, InterruptedException {
-      java.awt.Rectangle overlaps = new java.awt.Rectangle();
-      TileIndex outKey = new TileIndex();
-      int i = 0;
-      // A map that caches the tile class for all encountered tiles
-      Map<TileIndex, TileClass> tileClasses = new HashMap<TileIndex, TileClass>();
-      for (Shape shape : shapes) {
-        Rectangle shapeMBR = shape.getMBR();
-        if (shapeMBR == null)
-          continue;
-        subPyramid.getOverlappingTiles(shapeMBR, overlaps);
-        // Iterate over levels from bottom up
-        for (outKey.z = subPyramid.maximumLevel; outKey.z >= subPyramid.minimumLevel;
-             outKey.z--) {
-          for (outKey.x = overlaps.x; outKey.x < overlaps.x
-              + overlaps.width; outKey.x++) {
-            for (outKey.y = overlaps.y; outKey.y < overlaps.y
-                + overlaps.height; outKey.y++) {
-              TileClass tileClass = tileClasses.get(outKey);
-              if (tileClass == null) {
-                // First time to encounter this tile
-                // Classify it based on the histogram
-                tileClass = classifyTile(histogram, threshold, outKey.z, outKey.x, outKey.y);
-                tileClasses.put(outKey.clone(), tileClass);
-              }
-              // Write to the output only if it is in a data tile
-              if (tileClass == TileClass.DataTile)
-                context.write(outKey, shape);
-            }
-          }
-          // Shrink overlapping cells to match the upper z
-          int updatedX1 = overlaps.x / 2;
-          int updatedY1 = overlaps.y / 2;
-          int updatedX2 = (overlaps.x + overlaps.width - 1) / 2;
-          int updatedY2 = (overlaps.y + overlaps.height - 1) / 2;
-          overlaps.x = updatedX1;
-          overlaps.y = updatedY1;
-          overlaps.width = updatedX2 - updatedX1 + 1;
-          overlaps.height = updatedY2 - updatedY1 + 1;
-        }
-
-        if (((++i) & 0xff) == 0)
-          context.progress();
-      }
+      // Use the create tiles function
+      // Setting the plotter to null ensures that image tiles are skipped
+      createTiles(shapes, subPyramid, 0, 0, null,
+          histogram, threshold, null, context);
     }
   }
 
@@ -474,7 +435,7 @@ public class AdaptiveMultilevelPlot {
       Iterable<? extends Shape> shapes, SubPyramid subPyramid,
       int tileWidth, int tileHeight,
       Plotter plotter, GridHistogram h, long threshold, Map<TileIndex, Canvas> tiles,
-      TaskInputOutputContext<?, ?, TileIndex, Writable> context) throws IOException, InterruptedException {
+      TaskInputOutputContext context) throws IOException, InterruptedException {
     Rectangle inputMBR = subPyramid.getInputMBR();
     java.awt.Rectangle overlaps = new java.awt.Rectangle();
     TileIndex tileIndex = new TileIndex();
