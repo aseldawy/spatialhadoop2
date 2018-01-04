@@ -113,7 +113,7 @@ public class GeometricPlot {
       throws IOException, InterruptedException, ClassNotFoundException {
     if (params.getBoolean("pyramid", false)) {
     	if (params.getBoolean("adaptive", false)) {
-    		return AdaptiveMultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
+    		return AdaptiveMultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params)[0];
     	} else { 
     		return MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
     	}

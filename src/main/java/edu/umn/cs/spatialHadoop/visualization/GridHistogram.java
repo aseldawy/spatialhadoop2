@@ -155,17 +155,4 @@ public class GridHistogram implements Writable {
 			}
 		}
 	}
-
-	@Override
-	public String toString() {
-		String str = String.format("Histogram (%d, %d)\n", width, height);
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
-				str += values[y*width + x] +", ";
-			}
-			str += "\n";
-		}
-		return str;
-	}
-
 }

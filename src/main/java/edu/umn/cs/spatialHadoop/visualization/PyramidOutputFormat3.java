@@ -14,9 +14,13 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.io.Text2;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -50,7 +54,15 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
     /**Used to indicate progress to Hadoop*/
     private TaskAttemptContext task;
     /**Extension of output images*/
-    private String extension;
+    private String imgExt;
+
+    private Map<TileIndex, FSDataOutputStream> dataFiles;
+
+    /**A temporary Text to store a shape before writing it to the output*/
+    private Text tempLine;
+
+    /**New line characters as a byte array to append to Text*/
+    private static final byte[] NewLineChars = "\n".getBytes();
     
     ImageRecordWriter(FileSystem outFs, Path taskOutPath, TaskAttemptContext task) {
       this.task = task;
@@ -61,34 +73,56 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
       this.vflip = task.getConfiguration().getBoolean("vflip", true);
       String outFName = outPath.getName();
       int extensionStart = outFName.lastIndexOf('.');
-      extension = extensionStart == -1 ? ".png"
+      imgExt = extensionStart == -1 ? ".png"
           : outFName.substring(extensionStart);
+      tempLine = new Text2();
+      dataFiles = new HashMap<TileIndex, FSDataOutputStream>();
+    }
+
+    private final Path getTilePath(int z, int x, int y, String ext) {
+      if (vflip)
+        y = ((1 << z) - 1) - y;
+      return new Path(outPath, "tile-"+z +"-"+x+"-"+y+ext);
     }
 
     @Override
     public void write(TileIndex tileIndex, Writable w) throws IOException {
-      if (vflip)
-		tileIndex.y = ((1 << tileIndex.z) - 1) - tileIndex.y;
       if (w instanceof Canvas) {
-    	  Path imagePath = new Path(outPath, tileIndex.getImageFileName()+extension);
+        Path imagePath = getTilePath(tileIndex.z, tileIndex.x, tileIndex.y, imgExt);
     	  // Write this tile to an image
     	  FSDataOutputStream outFile = outFS.create(imagePath);
     	  plotter.writeImage((Canvas) w, outFile, this.vflip);
     	  outFile.close();
-      } else {
-    	  Path filePath = new Path(outPath, tileIndex.getImageFileName()+".txt");
-    	  // Write this tile to a text file
-    	  FSDataOutputStream outFile = outFS.create(filePath);
-    	  Text text = (Text) w;
-    	  outFile.write(text.getBytes(), 0, text.getLength());
-    	  outFile.close();
+      } else if (w instanceof Shape) {
+        // Write the shape to a text file
+        Shape s = (Shape) w;
+        FSDataOutputStream outFile = getOrCreateDataFile(tileIndex);
+        tempLine.clear();
+        s.toText(tempLine);
+        tempLine.append(NewLineChars, 0, NewLineChars.length);
+        outFile.write(tempLine.getBytes(), 0, tempLine.getLength());
       }
       task.progress();
+    }
+
+    private FSDataOutputStream getOrCreateDataFile(TileIndex tileIndex) throws IOException {
+      FSDataOutputStream dataFile = dataFiles.get(tileIndex);
+      if (dataFile == null) {
+        Path filePath = getTilePath(tileIndex.z, tileIndex.x, tileIndex.y, ".txt");
+        dataFile = outFS.create(filePath);
+        dataFiles.put(tileIndex.clone(), dataFile);
+      }
+      return dataFile;
     }
 
     @Override
     public void close(TaskAttemptContext context) throws IOException,
         InterruptedException {
+      // Close all open data files
+      for (Map.Entry<TileIndex, FSDataOutputStream> entry : dataFiles.entrySet()) {
+        entry.getValue().close();
+      }
+      dataFiles.clear();
     }
   }
   

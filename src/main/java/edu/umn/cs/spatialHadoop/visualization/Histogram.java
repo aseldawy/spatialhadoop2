@@ -31,8 +31,8 @@ public class Histogram {
 	/**Logger for FileMBR*/
 	private static final Log LOG = LogFactory.getLog(Histogram.class);
 	
-	private static final String HistogramWidth = "hist.width";
-	private static final String HistogramHeight = "hist.height";
+	public static final String HistogramWidth = "hist.width";
+	public static final String HistogramHeight = "hist.height";
 	
 	public static class HistogramMapper<S extends Shape>
     extends Mapper<Rectangle, Iterable<S>, NullWritable, GridHistogram>{
