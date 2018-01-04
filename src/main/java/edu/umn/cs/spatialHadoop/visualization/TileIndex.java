@@ -23,41 +23,18 @@ import org.apache.hadoop.io.WritableComparable;
  * @author Ahmed Eldawy
  *
  */
-public class TileIndex implements WritableComparable<TileIndex> {
+public class TileIndex {
+  /**Number of bits to reserve for each coordinate, x and y */
+  private static final int CoordinateBits = 20;
+  private static final int CoordinateMask = 0xfffff;
+  /**Number of bits to reserve for the level, z*/
+  private static final int LevelBits = 6;
+
+  /**Coordinates of the tile*/
   public int z, x, y;
   
-  public TileIndex() {}
-  
-  public TileIndex(int z, int x, int y) {
-    super();
-    this.z = z;
-    this.x = x;
-    this.y = y;
-  }
+  private TileIndex() {}
 
-  @Override
-  public void readFields(DataInput in) throws IOException {
-    z = in.readInt();
-    x = in.readInt();
-    y = in.readInt();
-  }
-
-  @Override
-  public void write(DataOutput out) throws IOException {
-    out.writeInt(z);
-    out.writeInt(x);
-    out.writeInt(y);
-  }
-
-  @Override
-  public int compareTo(TileIndex a) {
-    if (this.z != a.z)
-      return this.z - a.z;
-    if (this.x != a.x)
-      return this.x - a.x;
-    return this.y - a.y;
-  }
-  
   @Override
   public String toString() {
     return "Level: "+ z +" @("+x+","+y+")";
@@ -67,7 +44,7 @@ public class TileIndex implements WritableComparable<TileIndex> {
   public int hashCode() {
     return z * 31 + x * 25423 + y;
   }
-  
+
   @Override
   public boolean equals(Object obj) {
     if (obj == null)
@@ -75,34 +52,46 @@ public class TileIndex implements WritableComparable<TileIndex> {
     TileIndex b = (TileIndex) obj;
     return this.z == b.z && this.x == b.x && this.y == b.y;
   }
+
+  public static long encode(int z, int x, int y) {
+    return (((long)z) << (CoordinateBits * 2)) | (((long)x) << CoordinateBits) | y;
+  }
+
+  public static TileIndex decode(long encodedTileID, TileIndex tileIndex) {
+    if (tileIndex == null)
+      tileIndex = new TileIndex();
+    tileIndex.z = (int) (encodedTileID >> (CoordinateBits * 2));
+    tileIndex.x = (int) ((encodedTileID >> CoordinateBits) & CoordinateMask);
+    tileIndex.y = (int) (encodedTileID & CoordinateMask);
+    return tileIndex;
+  }
   
-  @Override
-  public TileIndex clone() {
-    return new TileIndex(this.z, this.x, this.y);
-  }
-
-  public String getImageFileName() {
-    return "tile-"+this.z +"-"+this.x+"-"+this.y;
-  }
-
   /**
    * Returns the MBR of this rectangle given that the MBR of whole pyramid
    * (i.e., the top tile) is the given one.
    * @param spaceMBR
    * @return
    */
-  public Rectangle getMBR(Rectangle spaceMBR) {
-    int fraction = 1 << this.z;
+  public static Rectangle getMBR(Rectangle spaceMBR, int z, int x, int y) {
+    int fraction = 1 << z;
     double tileWidth = spaceMBR.getWidth() / fraction;
     double tileHeight = spaceMBR.getHeight() / fraction;
-    double x1 = spaceMBR.x1 + tileWidth * this.x;
-    double y1 = spaceMBR.y1 + tileWidth * this.y;
+    double x1 = spaceMBR.x1 + tileWidth * x;
+    double y1 = spaceMBR.y1 + tileWidth * y;
+    // TODO reuse a rectangle object to avoid creating too many objects
     return new Rectangle(x1, y1, x1 + tileWidth, y1 + tileHeight);
   }
 
+  public static Rectangle getMBR(Rectangle spaceMBR, long encodedTileID) {
+    int z = (int) (encodedTileID >> (CoordinateBits * 2));
+    int x = (int) ((encodedTileID >> CoordinateBits) & CoordinateMask);
+    int y = (int) (encodedTileID & CoordinateMask);
+    return getMBR(spaceMBR, z, x, y);
+  }
+
   public void moveToParent() {
-	this.x /= 2;
-	this.y /= 2;
-	this.z--;
+    this.x /= 2;
+    this.y /= 2;
+    this.z--;
   }
 }

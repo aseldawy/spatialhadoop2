@@ -29,6 +29,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
@@ -71,7 +72,7 @@ public class MultilevelPlot {
   /** The maximum z on which flat partitioning can be used */
   public static final String FlatPartitioningLevelThreshold = "MultilevelPlot.FlatPartitioningLevelThreshold";
 
-  public static class FlatPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Canvas> {
+  public static class FlatPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, LongWritable, Canvas> {
     /** The subpyramid that defines the tiles of interest*/
     private SubPyramid subPyramid;
 
@@ -118,16 +119,18 @@ public class MultilevelPlot {
         throws IOException, InterruptedException {
       if (smooth)
         shapes = plotter.smooth(shapes);
-      Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
+      Map<Long, Canvas> canvasLayers = new HashMap<Long, Canvas>();
       createTiles(shapes, subPyramid, tileWidth, tileHeight, plotter, canvasLayers);
       // Write all created layers to the output
-      for (Map.Entry<TileIndex, Canvas> entry : canvasLayers.entrySet()) {
-        context.write(entry.getKey(), entry.getValue());
+      LongWritable outKey = new LongWritable();
+      for (Map.Entry<Long, Canvas> entry : canvasLayers.entrySet()) {
+        outKey.set(entry.getKey());
+        context.write(outKey, entry.getValue());
       }
     }
   }
 
-  public static class FlatPartitionReduce extends Reducer<TileIndex, Canvas, TileIndex, Canvas> {
+  public static class FlatPartitionReduce extends Reducer<LongWritable, Canvas, LongWritable, Canvas> {
     /** Minimum and maximum levels of the pyramid to plot (inclusive and zero-based) */
     private int minLevel, maxLevel;
 
@@ -167,9 +170,9 @@ public class MultilevelPlot {
     }
 
     @Override
-    protected void reduce(TileIndex tileID, Iterable<Canvas> interLayers, Context context)
+    protected void reduce(LongWritable tileID, Iterable<Canvas> interLayers, Context context)
         throws IOException, InterruptedException {
-      Rectangle tileMBR = tileID.getMBR(inputMBR);
+      Rectangle tileMBR = TileIndex.getMBR(inputMBR, tileID.get());
       Canvas finalLayer = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
       for (Canvas interLayer : interLayers) {
         plotter.merge(finalLayer, interLayer);
@@ -180,7 +183,7 @@ public class MultilevelPlot {
     }
   }
 
-  public static class PyramidPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, TileIndex, Shape> {
+  public static class PyramidPartitionMap extends Mapper<Rectangle, Iterable<? extends Shape>, LongWritable, Shape> {
 
     /** The sub-pyramid that represents the tiles of interest */
     private SubPyramid subPyramid;
@@ -214,20 +217,19 @@ public class MultilevelPlot {
     protected void map(Rectangle partition, Iterable<? extends Shape> shapes, Context context)
         throws IOException, InterruptedException {
       java.awt.Rectangle overlaps = new java.awt.Rectangle();
-      TileIndex outKey = new TileIndex();
       int i = 0;
+      LongWritable outKey = new LongWritable();
       for (Shape shape : shapes) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
           continue;
         subPyramid.getOverlappingTiles(shapeMBR, overlaps);
         // Iterate over levels from bottom up
-        for (outKey.z = subPyramid.maximumLevel; outKey.z >= subPyramid.minimumLevel;
-             outKey.z -= maxLevelsPerReducer) {
-          for (outKey.x = overlaps.x; outKey.x < overlaps.x
-              + overlaps.width; outKey.x++) {
-            for (outKey.y = overlaps.y; outKey.y < overlaps.y
-                + overlaps.height; outKey.y++) {
+        for (int z = subPyramid.maximumLevel; z >= subPyramid.minimumLevel;
+             z -= maxLevelsPerReducer) {
+          for (int x = overlaps.x; x < overlaps.x + overlaps.width; x++) {
+            for (int y = overlaps.y; y < overlaps.y + overlaps.height; y++) {
+              outKey.set(TileIndex.encode(z, x, y));
               context.write(outKey, shape);
             }
           }
@@ -248,7 +250,7 @@ public class MultilevelPlot {
     }
   }
 
-  public static class PyramidPartitionReduce extends Reducer<TileIndex, Shape, TileIndex, Canvas> {
+  public static class PyramidPartitionReduce extends Reducer<LongWritable, Shape, LongWritable, Canvas> {
 
     private int minLevel, maxLevel;
     private Rectangle inputMBR;
@@ -263,6 +265,9 @@ public class MultilevelPlot {
 
     /** A sub-pyramid object to reuse in reducers*/
     private SubPyramid subPyramid = new SubPyramid();
+
+    /**A temporary tile index to decode the tileID*/
+    private TileIndex tempTileIndex;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -285,18 +290,19 @@ public class MultilevelPlot {
     }
 
     @Override
-    protected void reduce(TileIndex tileID, Iterable<Shape> shapes, Context context)
+    protected void reduce(LongWritable tileID, Iterable<Shape> shapes, Context context)
         throws IOException, InterruptedException {
+      tempTileIndex = TileIndex.decode(tileID.get(), tempTileIndex);
       // Create the subpyramid associated with the given tileID
-      int tileMaxLevel = Math.min(this.maxLevel, tileID.z + maxLevelsPerReducer - 1);
-      int numLevelsInReducer = tileMaxLevel - tileID.z;
-      int c1 = tileID.x << numLevelsInReducer;
-      int r1 = tileID.y << numLevelsInReducer;
+      int tileMaxLevel = Math.min(this.maxLevel, tempTileIndex.z + maxLevelsPerReducer - 1);
+      int numLevelsInReducer = tileMaxLevel - tempTileIndex.z;
+      int c1 = tempTileIndex.x << numLevelsInReducer;
+      int r1 = tempTileIndex.y << numLevelsInReducer;
       int c2 = c1 + 1 << numLevelsInReducer;
       int r2 = r1 + 1 << numLevelsInReducer;
-      subPyramid.set(inputMBR, tileID.z, tileMaxLevel, c1, r1, c2, r2);
+      subPyramid.set(inputMBR, tempTileIndex.z, tileMaxLevel, c1, r1, c2, r2);
 
-      Map<TileIndex, Canvas> canvasLayers = new HashMap<TileIndex, Canvas>();
+      Map<Long, Canvas> canvasLayers = new HashMap<Long, Canvas>();
 
       context.setStatus("Plotting");
       if (smooth) {
@@ -309,8 +315,10 @@ public class MultilevelPlot {
 
       context.setStatus("Writing " + canvasLayers.size() + " tiles");
       // Write all created layers to the output as images
-      for (Map.Entry<TileIndex, Canvas> entry : canvasLayers.entrySet()) {
-        context.write(entry.getKey(), entry.getValue());
+      LongWritable outKey = new LongWritable();
+      for (Map.Entry<Long, Canvas> entry : canvasLayers.entrySet()) {
+        outKey.set(entry.getKey());
+        context.write(outKey, entry.getValue());
       }
     }
   }
@@ -354,8 +362,8 @@ public class MultilevelPlot {
     job.setInputFormatClass(SpatialInputFormat3.class);
     SpatialInputFormat3.setInputPaths(job, inFiles);
     if (conf.getBoolean("output", true)) {
-      job.setOutputFormatClass(PyramidOutputFormat2.class);
-      PyramidOutputFormat2.setOutputPath(job, outFile);
+      job.setOutputFormatClass(PyramidOutputFormat3.class);
+      PyramidOutputFormat3.setOutputPath(job, outFile);
     } else {
       job.setOutputFormatClass(NullOutputFormat.class);
     }
@@ -365,14 +373,14 @@ public class MultilevelPlot {
     if (partitionTechnique.equalsIgnoreCase("flat")) {
       // Use flat partitioning
       job.setMapperClass(FlatPartitionMap.class);
-      job.setMapOutputKeyClass(TileIndex.class);
+      job.setMapOutputKeyClass(LongWritable.class);
       job.setMapOutputValueClass(plotter.getCanvasClass());
       job.setReducerClass(FlatPartitionReduce.class);
     } else if (partitionTechnique.equalsIgnoreCase("pyramid")) {
       // Use pyramid partitioning
       Shape shape = params.getShape("shape");
       job.setMapperClass(PyramidPartitionMap.class);
-      job.setMapOutputKeyClass(TileIndex.class);
+      job.setMapOutputKeyClass(LongWritable.class);
       job.setMapOutputValueClass(shape.getClass());
       job.setReducerClass(PyramidPartitionReduce.class);
     } else {
@@ -455,7 +463,7 @@ public class MultilevelPlot {
       int minLevel, maxLevel;
       if (strLevels.length == 1) {
         minLevel = 0;
-        maxLevel = Integer.parseInt(strLevels[0]);
+        maxLevel = Integer.parseInt(strLevels[0]) - 1;
       } else {
         minLevel = Integer.parseInt(strLevels[0]);
         maxLevel = Integer.parseInt(strLevels[1]);
@@ -468,7 +476,7 @@ public class MultilevelPlot {
           0, 0, 1 << maxLevel, 1 << maxLevel);
 
       // Prepare the map that will eventually contain all the tiles
-      Map<TileIndex, Canvas> tiles = new HashMap<TileIndex, Canvas>();
+      Map<Long, Canvas> tiles = new HashMap<Long, Canvas>();
 
       for (InputSplit split : splits) {
         FileSplit fsplit = (FileSplit) split;
@@ -532,24 +540,26 @@ public class MultilevelPlot {
       htmlOut.close();
 
       // Write the tiles
-      final Entry<TileIndex, Canvas>[] entries = tiles.entrySet().toArray(new Map.Entry[tiles.size()]);
+      final Entry<Long, Canvas>[] entries = tiles.entrySet().toArray(new Map.Entry[tiles.size()]);
       // Clear the hash map to save memory as it is no longer needed
       tiles.clear();
       int parallelism = params.getInt("parallel", Runtime.getRuntime().availableProcessors());
       Parallel.forEach(entries.length, new RunnableRange<Object>() {
         @Override
         public Object run(int i1, int i2) {
+          TileIndex tempTileIndex = null;
           boolean output = params.getBoolean("output", true);
           try {
             Plotter plotter = plotterClass.newInstance();
             plotter.configure(params);
             for (int i = i1; i < i2; i++) {
-              Map.Entry<TileIndex, Canvas> entry = entries[i];
-              TileIndex key = entry.getKey();
+              Map.Entry<Long, Canvas> entry = entries[i];
+              Long tileID = entry.getKey();
+              tempTileIndex = TileIndex.decode(tileID, tempTileIndex);
               if (vflip)
-                key.y = ((1 << key.z) - 1) - key.y;
+                tempTileIndex.y = ((1 << tempTileIndex.z) - 1) - tempTileIndex.y;
+              Path imagePath = new Path(outPath, "tile-"+tempTileIndex.z +"-"+tempTileIndex.x+"-"+tempTileIndex.y+".png");
 
-              Path imagePath = new Path(outPath, key.getImageFileName() + extension);
               // Write this tile to an image
               DataOutputStream outFile = output ? outFS.create(imagePath)
                   : new DataOutputStream(new NullOutputStream());
@@ -591,10 +601,9 @@ public class MultilevelPlot {
   public static void createTiles(
       Iterable<? extends Shape> shapes, SubPyramid subPyramid,
       int tileWidth, int tileHeight,
-      Plotter plotter, Map<TileIndex, Canvas> tiles) {
+      Plotter plotter, Map<Long, Canvas> tiles) {
     Rectangle inputMBR = subPyramid.getInputMBR();
     java.awt.Rectangle overlaps = new java.awt.Rectangle();
-    TileIndex tileIndex = new TileIndex();
     for (Shape shape : shapes) {
       if (shape == null)
         continue;
@@ -603,16 +612,17 @@ public class MultilevelPlot {
         continue;
 
       subPyramid.getOverlappingTiles(mbr, overlaps);
-      for (tileIndex.z = subPyramid.maximumLevel; tileIndex.z >= subPyramid.minimumLevel; tileIndex.z--) {
-        for (tileIndex.x = overlaps.x; tileIndex.x < overlaps.x + overlaps.width; tileIndex.x++) {
-          for (tileIndex.y = overlaps.y; tileIndex.y < overlaps.y + overlaps.height; tileIndex.y++) {
+      for (int z = subPyramid.maximumLevel; z >= subPyramid.minimumLevel; z--) {
+        for (int x = overlaps.x; x < overlaps.x + overlaps.width; x++) {
+          for (int y = overlaps.y; y < overlaps.y + overlaps.height; y++) {
+            long tileID = TileIndex.encode(z, x, y);
             // Plot the shape on the tile at (z,x,y)
-            Canvas c = tiles.get(tileIndex);
+            Canvas c = tiles.get(tileID);
             if (c == null) {
               // First time to encounter this tile, create the corresponding canvas
-              Rectangle tileMBR = tileIndex.getMBR(inputMBR);
+              Rectangle tileMBR = TileIndex.getMBR(inputMBR, z, x, y);
               c = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
-              tiles.put(tileIndex.clone(), c);
+              tiles.put(tileID, c);
             }
             plotter.plot(c, shape);
           }

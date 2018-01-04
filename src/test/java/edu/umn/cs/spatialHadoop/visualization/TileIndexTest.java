@@ -29,35 +29,45 @@ public class TileIndexTest extends TestCase {
   
   public void testGetMBR() {
     Rectangle spaceMBR = new Rectangle(0, 0, 1024, 1024);
-    TileIndex ti = new TileIndex(0, 0 ,0);
-    Rectangle tileMBR = ti.getMBR(spaceMBR);
+    int x = 0, y = 0, z = 0;
+    Rectangle tileMBR = TileIndex.getMBR(spaceMBR, z, x, y);
     Rectangle expectedMBR = spaceMBR;
-    assertTrue("Expected MBR of "+ti+" to be "+expectedMBR+" but found to be "+tileMBR,
+    assertTrue("Expected MBR of ("+z+","+x+","+y+") to be "+expectedMBR+" but found to be "+tileMBR,
         expectedMBR.equals(tileMBR));
 
-    ti.z = 1;
+    z = 1;
     expectedMBR = new Rectangle(spaceMBR.x1, spaceMBR.y1,
         spaceMBR.getWidth() / 2, spaceMBR.getHeight() / 2);
-    tileMBR = ti.getMBR(spaceMBR);
-    assertTrue("Expected MBR of "+ti+" to be "+expectedMBR+" but found to be "+tileMBR,
+    tileMBR = TileIndex.getMBR(spaceMBR, z, x, y);
+    assertTrue("Expected MBR of ("+z+","+x+","+y+") to be "+expectedMBR+" but found to be "+tileMBR,
         expectedMBR.equals(tileMBR));
 
-    ti.z = 10;
-    ti.x = 100;
-    ti.y = 100;
+    z = 10;
+    x = 100;
+    y = 100;
     expectedMBR = new Rectangle(100, 100, 101, 101);
-    tileMBR = ti.getMBR(spaceMBR);
-    assertTrue("Expected MBR of "+ti+" to be "+expectedMBR+" but found to be "+tileMBR,
+    tileMBR = TileIndex.getMBR(spaceMBR, z, x, y);
+    assertTrue("Expected MBR of ("+z+","+x+","+y+") to be "+expectedMBR+" but found to be "+tileMBR,
         expectedMBR.equals(tileMBR));
   }
 
   public void testWithNonZeroOriginal() {
     Rectangle spaceMBR = new Rectangle(1024, 1024, 2048, 2048);
-    TileIndex ti = new TileIndex(0, 0 ,0);
-    Rectangle tileMBR = ti.getMBR(spaceMBR);
+    long ti = TileIndex.encode(0, 0 ,0);
+    Rectangle tileMBR = TileIndex.getMBR(spaceMBR, ti);
     Rectangle expectedMBR = spaceMBR;
     assertTrue("Expected MBR of "+ti+" to be "+expectedMBR+" but found to be "+tileMBR,
         expectedMBR.equals(tileMBR));
+  }
+
+  public void testEncodeAndDecode() {
+    long ti = TileIndex.encode(6, 5, 7);
+    assertEquals(0x60000500007L, ti);
+    TileIndex tileIndex = null;
+    tileIndex = TileIndex.decode(ti, tileIndex);
+    assertEquals(6, tileIndex.z);
+    assertEquals(5, tileIndex.x);
+    assertEquals(7, tileIndex.y);
   }
 
 }

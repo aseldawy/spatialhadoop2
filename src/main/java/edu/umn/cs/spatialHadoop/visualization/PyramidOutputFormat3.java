@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -43,9 +44,11 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  * @author Ahmed Eldawy
  *
  */
-public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> {
-  
-  static class ImageRecordWriter extends RecordWriter<TileIndex, Writable> {
+public class PyramidOutputFormat3 extends FileOutputFormat<LongWritable, Writable> {
+
+  public static final String DataExt = ".txt";
+
+  static class ImageRecordWriter extends RecordWriter<LongWritable, Writable> {
 
     private Plotter plotter;
     private final FileSystem outFS;
@@ -56,13 +59,16 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
     /**Extension of output images*/
     private String imgExt;
 
-    private Map<TileIndex, FSDataOutputStream> dataFiles;
+    private Map<Long, FSDataOutputStream> dataFiles;
 
     /**A temporary Text to store a shape before writing it to the output*/
     private Text tempLine;
 
     /**New line characters as a byte array to append to Text*/
     private static final byte[] NewLineChars = "\n".getBytes();
+
+    /**A temporary tile index to decocde the tile ID*/
+    private TileIndex tempTileIndex;
     
     ImageRecordWriter(FileSystem outFs, Path taskOutPath, TaskAttemptContext task) {
       this.task = task;
@@ -76,7 +82,7 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
       imgExt = extensionStart == -1 ? ".png"
           : outFName.substring(extensionStart);
       tempLine = new Text2();
-      dataFiles = new HashMap<TileIndex, FSDataOutputStream>();
+      dataFiles = new HashMap<Long, FSDataOutputStream>();
     }
 
     private final Path getTilePath(int z, int x, int y, String ext) {
@@ -86,9 +92,10 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
     }
 
     @Override
-    public void write(TileIndex tileIndex, Writable w) throws IOException {
+    public void write(LongWritable encodedTileID, Writable w) throws IOException {
+      tempTileIndex = TileIndex.decode(encodedTileID.get(), tempTileIndex);
       if (w instanceof Canvas) {
-        Path imagePath = getTilePath(tileIndex.z, tileIndex.x, tileIndex.y, imgExt);
+        Path imagePath = getTilePath(tempTileIndex.z, tempTileIndex.x, tempTileIndex.y, imgExt);
     	  // Write this tile to an image
     	  FSDataOutputStream outFile = outFS.create(imagePath);
     	  plotter.writeImage((Canvas) w, outFile, this.vflip);
@@ -96,7 +103,12 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
       } else if (w instanceof Shape) {
         // Write the shape to a text file
         Shape s = (Shape) w;
-        FSDataOutputStream outFile = getOrCreateDataFile(tileIndex);
+        FSDataOutputStream outFile = dataFiles.get(encodedTileID.get());
+        if (outFile == null) {
+          Path filePath = getTilePath(tempTileIndex.z, tempTileIndex.x, tempTileIndex.y, DataExt);
+          outFile = outFS.create(filePath);
+          dataFiles.put(encodedTileID.get(), outFile);
+        }
         tempLine.clear();
         s.toText(tempLine);
         tempLine.append(NewLineChars, 0, NewLineChars.length);
@@ -105,21 +117,11 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
       task.progress();
     }
 
-    private FSDataOutputStream getOrCreateDataFile(TileIndex tileIndex) throws IOException {
-      FSDataOutputStream dataFile = dataFiles.get(tileIndex);
-      if (dataFile == null) {
-        Path filePath = getTilePath(tileIndex.z, tileIndex.x, tileIndex.y, ".txt");
-        dataFile = outFS.create(filePath);
-        dataFiles.put(tileIndex.clone(), dataFile);
-      }
-      return dataFile;
-    }
-
     @Override
     public void close(TaskAttemptContext context) throws IOException,
         InterruptedException {
       // Close all open data files
-      for (Map.Entry<TileIndex, FSDataOutputStream> entry : dataFiles.entrySet()) {
+      for (Map.Entry<Long, FSDataOutputStream> entry : dataFiles.entrySet()) {
         entry.getValue().close();
       }
       dataFiles.clear();
@@ -127,7 +129,7 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
   }
   
   @Override
-  public RecordWriter<TileIndex, Writable> getRecordWriter(
+  public RecordWriter<LongWritable, Writable> getRecordWriter(
       TaskAttemptContext task) throws IOException, InterruptedException {
     Path file = getDefaultWorkFile(task, "").getParent();
     FileSystem fs = file.getFileSystem(task.getConfiguration());
@@ -177,7 +179,7 @@ public class PyramidOutputFormat3 extends FileOutputFormat<TileIndex, Writable> 
       int minLevel, maxLevel;
       if (strLevels.length == 1) {
         minLevel = 0;
-        maxLevel = Integer.parseInt(strLevels[0]);
+        maxLevel = Integer.parseInt(strLevels[0]) - 1;
       } else {
         minLevel = Integer.parseInt(strLevels[0]);
         maxLevel = Integer.parseInt(strLevels[1]);
