@@ -45,7 +45,7 @@ import edu.umn.cs.spatialHadoop.util.TemporalIndexManager;
 
 /**
  * Supports indexing for spatial shapes on higher temporal levels (e.g. weeks,
- * months and years) by aggregating indexes on lower levels in one higher z.
+ * months and years) by aggregating indexes on lower levels in one higher level.
  * 
  * @author ibrahimsabek
  */

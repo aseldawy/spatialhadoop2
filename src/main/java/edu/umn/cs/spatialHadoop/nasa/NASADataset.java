@@ -148,7 +148,7 @@ public class NASADataset extends Rectangle {
 /*  public static Map<String, Object> parseMetadata(List<Attribute> attrs) {
     // Keep a lineage of all open groups or objects
     Stack<Map<String,Object>> lineage = new Stack<Map<String,Object>>();
-    // Push the root group that contains all top-z data
+    // Push the root group that contains all top-level data
     lineage.push(new Hashtable<String, Object>());
     
     for (Attribute attr : attrs) {

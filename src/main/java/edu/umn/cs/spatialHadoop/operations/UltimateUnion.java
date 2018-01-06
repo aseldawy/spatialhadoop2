@@ -50,7 +50,7 @@ public class UltimateUnion {
 
   /**
    * The map function for the UltimateUnion algorithm which works on a cell
-   * z. It takes all shapes in a rectangular cell, and returns the portion
+   * level. It takes all shapes in a rectangular cell, and returns the portion
    * of the union that is contained in this cell. The output is of type
    * MultiLineString and contains the lines that is part of the final result
    * and contained in the given cell.

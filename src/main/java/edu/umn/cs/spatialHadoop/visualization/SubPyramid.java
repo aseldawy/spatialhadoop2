@@ -3,8 +3,8 @@ package edu.umn.cs.spatialHadoop.visualization;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 /**
- * Represents a part of the pyramid structure defined by a minimum z,
- * a maximum z, and a rectangular range of tiles at the maximum z.
+ * Represents a part of the pyramid structure defined by a minimum level,
+ * a maximum level, and a rectangular range of tiles at the maximum level.
  * Created by Ahmed Eldawy on 1/2/18.
  */
 public class SubPyramid {
@@ -84,7 +84,7 @@ public class SubPyramid {
 
   /**
    * Returns the range of tiles that overlaps the given rectangle at
-   * the maximum z
+   * the maximum level
    * @param rect
    * @param overlaps
    */

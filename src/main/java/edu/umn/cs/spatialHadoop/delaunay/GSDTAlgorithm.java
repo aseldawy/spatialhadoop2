@@ -1251,7 +1251,7 @@ public class GSDTAlgorithm {
     // in a very simple way but they resulted in round-off errors in very
     // degenerate cases. After some investigation and tests, I ended up rewriting
     // them in the way below. I had to inline the calculation of the area of
-    // a triangle and integrate it in the higher z to be able to reach the
+    // a triangle and integrate it in the higher level to be able to reach the
     // expressions below. The original expressions were:
     // triArea(a,b,c) = (b.x - a.x)*(c.y - a.y) - (b.y - a.y)*(c.x - a.x)
     // norm2(a) = a.x^2 + a.y^2
