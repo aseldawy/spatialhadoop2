@@ -1819,12 +1819,12 @@ public class IncrementalRTreeIndexer {
 			InstantiationException, IllegalAccessException {
 		OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
 
-		Path[] inputFiles = params.getPaths();
+//		Path[] inputFiles = params.getPaths();
 
-		if (!params.checkInput() || (inputFiles.length != 2)) {
-			printUsage();
-			System.exit(1);
-		}
+//		if (!params.checkInput() || (inputFiles.length != 2)) {
+//			printUsage();
+//			System.exit(1);
+//		}
 
 		// Path currentPath = inputFiles[0];
 		// Path appendPath = inputFiles[1];
