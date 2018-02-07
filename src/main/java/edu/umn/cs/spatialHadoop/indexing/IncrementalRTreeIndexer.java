@@ -1849,7 +1849,6 @@ public class IncrementalRTreeIndexer {
 		if (splitType.equals("rtree2")) {
 			System.out.println("R-Tree splitting");
 			Job job = reorganizeWithRTreeSplitter2(currentPath, params);
-
 		} else if (splitType.equals("greedy")) {
 			System.out.println("Greedy splitting: multiple cluster");
 			greedyReorganizeWithRTreeSplitter(currentPath, params);
