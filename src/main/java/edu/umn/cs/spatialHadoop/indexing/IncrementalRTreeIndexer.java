@@ -1657,8 +1657,8 @@ public class IncrementalRTreeIndexer {
 
 		// Split selected partitions
 		// Iterate all overflow partitions to split
-		Path tempInputPath = new Path("./", "temp.greedy2.input");
-		Path tempOutputPath = new Path("./", "temp.greedy2.output");
+		Path tempInputPath = new Path("./", "temp.greedyreducedcost.input");
+		Path tempOutputPath = new Path("./", "temp.greedyreducedcost.output");
 
 		// Move all partitions of this group to temporary input
 		if (fs.exists(tempInputPath)) {
