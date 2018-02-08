@@ -21,7 +21,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 
 public class DynamicIndexer {
-	public static void main(String[] args) throws IOException {
+	public static void main(String[] args) throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException, InterruptedException {
 		OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
 		
 		String currentPathString = params.get("current");
@@ -31,6 +31,11 @@ public class DynamicIndexer {
 
 		System.out.println("Current index path: " + currentPath);
 		System.out.println("Append data path: " + appendPath);
+		
+		long t1 = System.currentTimeMillis();
+		RTreeInserter.append(currentPath, appendPath, params);
+		long t2 = System.currentTimeMillis();
+		System.out.println("Total appending time in millis " + (t2 - t1));
 		
 		
 	}

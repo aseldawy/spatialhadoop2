@@ -262,6 +262,11 @@ public class RTreeInserter {
 		System.out.println("<new file> - (*) Path to new file");
 		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
+	
+	public static void append(Path currentPath, Path insertPath, OperationsParams params) throws ClassNotFoundException, InstantiationException, IllegalAccessException, IOException, InterruptedException {
+		insertMapReduce(currentPath, insertPath, params);
+		appendNewFiles(currentPath, params);
+	}
 
 	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException,
 			InstantiationException, IllegalAccessException {
