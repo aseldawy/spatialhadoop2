@@ -10,7 +10,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 
 public class RTreeReorganizer {
 
-	public static void reorganizeGroup(Path path, ArrayList<ArrayList<Partition>> splitPartitionGroups,
+	public static void reorganizeGroup(Path path, ArrayList<ArrayList<Partition>> splitGroups,
 			OperationsParams params) {
 
 	}

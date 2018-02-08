@@ -9,15 +9,16 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 
 public class RTreeOptimizer {
 	
-	enum OptimizerType {
-		IncrementalRTree,
+	public enum OptimizerType {
 		MaximumReducedCost,
 		MaximumReducedArea
 	}
 	
 	// Incremental RTree optimizer
-	private static ArrayList<Partition> getOverflowPartitions(ArrayList<Partition> partitions, OperationsParams params) throws IOException {
+	public static ArrayList<Partition> getOverflowPartitions(Path path, OperationsParams params) throws IOException {
 		ArrayList<Partition> overflowPartitions = new ArrayList<Partition>();
+		
+		ArrayList<Partition> partitions = MetadataUtil.getPartitions(path, params);
 		
 		Configuration conf = new Configuration();
 		int blockSize = Integer.parseInt(conf.get("dfs.blocksize"));
@@ -34,30 +35,28 @@ public class RTreeOptimizer {
 	}
 	
 	// Greedy algorithm that maximize the reduced range query cost
-	private static ArrayList<Partition> getSplitPartitionsWithMaximumReducedCost(ArrayList<Partition> partitions, OperationsParams params) {
-		ArrayList<Partition> splitPartitions = new ArrayList<Partition>();
-		return splitPartitions;
+	private static ArrayList<ArrayList<Partition>> getSplitGroupsWithMaximumReducedCost(ArrayList<Partition> partitions, OperationsParams params) {
+		ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();
+		return splitGroups;
 	}
 	
 	// Greedy algorithm that maximize the reduced area
-	private static ArrayList<Partition> getSplitPartitionsWithMaximumReducedArea(ArrayList<Partition> partitions, OperationsParams params) {
-		ArrayList<Partition> splitPartitions = new ArrayList<Partition>();
-		return splitPartitions;
+	private static ArrayList<ArrayList<Partition>> getSplitGroupsWithMaximumReducedArea(ArrayList<Partition> partitions, OperationsParams params) {
+		ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();
+		return splitGroups;
 	}
 	
-	public static ArrayList<Partition> getSplitPartitions(Path path, OperationsParams params, OptimizerType type) throws IOException {
-		ArrayList<Partition> splitPartitions = new ArrayList<Partition>();
+	public static ArrayList<ArrayList<Partition>> getSplitPartitions(Path path, OperationsParams params, OptimizerType type) throws IOException {
+		ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();
 		
 		ArrayList<Partition> partitions = MetadataUtil.getPartitions(path, params);
 		
-		if(type == OptimizerType.IncrementalRTree) {
-			splitPartitions = getOverflowPartitions(partitions, params);
-		} else if(type == OptimizerType.MaximumReducedCost) {
-			splitPartitions = getSplitPartitionsWithMaximumReducedCost(partitions, params);
+		if(type == OptimizerType.MaximumReducedCost) {
+			splitGroups = getSplitGroupsWithMaximumReducedCost(partitions, params);
 		} else if(type == OptimizerType.MaximumReducedArea) {
-			splitPartitions = getSplitPartitionsWithMaximumReducedArea(partitions, params);
+			splitGroups = getSplitGroupsWithMaximumReducedArea(partitions, params);
 		}
 		
-		return splitPartitions;
+		return splitGroups;
 	}
 }
