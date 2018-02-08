@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.io.Text;
@@ -203,12 +204,15 @@ public class RTreePartitioner extends Partitioner {
 		List<CellInfo> overlappingCells = this.getOverlappingCells(shape);
 //		System.out.println("Number of overlapping cell = " + overlappingCells.size());
 		if(overlappingCells.size() > 0) {
-			for (CellInfo cell : overlappingCells) {
-				if (cell.isIntersected(shape)) {
-//					System.out.println("return intersected cell = " + cell.cellId);
-					return cell.cellId;
-				}
-			}
+			Random random  = new Random();
+			int randomCellIndex = random.nextInt(overlappingCells.size());
+			return overlappingCells.get(randomCellIndex).cellId;
+//			for (CellInfo cell : overlappingCells) {
+//				if (cell.isIntersected(shape)) {
+////					System.out.println("return intersected cell = " + cell.cellId);
+//					return cell.cellId;
+//				}
+//			}
 		} else {
 			List<CellInfo> nearestCells = this.getNearestCells(shape, 10);
 //			System.out.println("number of nearest cells = " + nearestCells.size());

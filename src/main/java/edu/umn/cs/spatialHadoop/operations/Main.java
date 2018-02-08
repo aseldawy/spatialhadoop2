@@ -23,6 +23,7 @@ import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.indexing.Inserter;
 import edu.umn.cs.spatialHadoop.indexing.LSMRTreeIndexer;
 import edu.umn.cs.spatialHadoop.indexing.RTreeIndexer;
+import edu.umn.cs.spatialHadoop.indexing.RTreeInserter;
 import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree;
 import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
@@ -143,7 +144,9 @@ public class Main {
       
       pgd.addClass("mplot", MagickPlot.class, "Plot using ImageMagick");
       
-      pgd.addClass("insert", Inserter.class, "Insert data from a file to another file with same type of shape");
+//      pgd.addClass("insert", Inserter.class, "Insert data from a file to another file with same type of shape");
+      
+      pgd.addClass("insert", RTreeInserter.class, "Insert data from a file to another file with same type of shape");
       
       pgd.addClass("rtreeindex", RTreeIndexer.class, "Index data in HDFS using R-Tree splitting mechanism");
       

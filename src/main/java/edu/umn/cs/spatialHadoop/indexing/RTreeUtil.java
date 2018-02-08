@@ -16,7 +16,7 @@ import com.github.davidmoten.rtree.internal.EntryDefault;
 
 public class RTreeUtil {
 	
-	public static Rectangle2D.Double[] RStartTreePartitioning(Point2D.Double[] points, int numPartitions) {
+	public static Rectangle2D.Double[] RStarTreePartitioning(Point2D.Double[] points, int numPartitions) {
 		List<Entry<Integer, Geometry>> entries = new ArrayList<Entry<Integer, Geometry>>();
 		int capacity = (int) Math.ceil((double) points.length / (double) numPartitions);
 		RTree<Integer, Geometry> tree = RTree.star().maxChildren(capacity).create();
