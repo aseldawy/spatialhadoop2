@@ -46,7 +46,7 @@ public class RTreeOptimizer {
 		return splitGroups;
 	}
 	
-	public static ArrayList<ArrayList<Partition>> getSplitPartitions(Path path, OperationsParams params, OptimizerType type) throws IOException {
+	public static ArrayList<ArrayList<Partition>> getSplitGroups(Path path, OperationsParams params, OptimizerType type) throws IOException {
 		ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();
 		
 		ArrayList<Partition> partitions = MetadataUtil.getPartitions(path, params);

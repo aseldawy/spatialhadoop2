@@ -40,9 +40,9 @@ public class DynamicIndexer {
 		} else {
 			ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();
 			if(splitType.equals("greedyreducedcost")) {
-				splitGroups = RTreeOptimizer.getSplitPartitions(currentPath, params, RTreeOptimizer.OptimizerType.MaximumReducedCost);
+				splitGroups = RTreeOptimizer.getSplitGroups(currentPath, params, RTreeOptimizer.OptimizerType.MaximumReducedCost);
 			} else if(splitType.equals("greedyreducedarea")) {
-				splitGroups = RTreeOptimizer.getSplitPartitions(currentPath, params, RTreeOptimizer.OptimizerType.MaximumReducedArea);
+				splitGroups = RTreeOptimizer.getSplitGroups(currentPath, params, RTreeOptimizer.OptimizerType.MaximumReducedArea);
 			}
 			
 			long t3 = System.currentTimeMillis();
