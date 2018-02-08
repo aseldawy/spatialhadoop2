@@ -10,16 +10,17 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.LineReader;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.io.Text2;
 
 public class MetadataUtil {
-	public static List<Partition> getPartitions(Path masterPath) throws IOException {
-		
-		List<Partition> partitions = new ArrayList<Partition>();
-		
+	public static ArrayList<Partition> getPartitions(Path masterPath) throws IOException {
+
+		ArrayList<Partition> partitions = new ArrayList<Partition>();
+
 		Configuration conf = new Configuration();
 		FileSystem fs = FileSystem.get(conf);
-		
+
 		Text tempLine = new Text2();
 		@SuppressWarnings("resource")
 		LineReader in = new LineReader(fs.open(masterPath));
@@ -28,7 +29,15 @@ public class MetadataUtil {
 			tempPartition.fromText(tempLine);
 			partitions.add(tempPartition);
 		}
-		
+
 		return partitions;
+	}
+
+	public static ArrayList<Partition> getPartitions(Path path, OperationsParams params) throws IOException {
+		
+		String sindex = params.get("sindex");
+		Path masterPath = new Path(path, "_master." + sindex);
+
+		return getPartitions(masterPath);
 	}
 }
