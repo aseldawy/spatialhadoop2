@@ -202,7 +202,15 @@ public class RTreeReorganizer {
 		// keepOut.close();
 
 		MetadataUtil.dumpToFile(splitPartitions, path, "rects.split");
-		currentPartitions.removeAll(splitPartitions);
+		ArrayList<Partition> partitonsToRemove = new ArrayList<Partition>();
+		for(Partition splitPartition: splitPartitions) {
+			for(Partition currentPartition: currentPartitions) {
+				if(currentPartition.cellId == splitPartition.cellId) {
+					partitonsToRemove.add(currentPartition);
+				}
+			}
+		}
+		currentPartitions.removeAll(partitonsToRemove);
 		MetadataUtil.dumpToFile(currentPartitions, path, "rects.keep");
 
 		IncrementalRTreeFilePartitioner partitioner = new IncrementalRTreeFilePartitioner();
