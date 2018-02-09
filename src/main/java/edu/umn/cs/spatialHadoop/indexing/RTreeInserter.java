@@ -213,7 +213,13 @@ public class RTreeInserter {
 		// Append files in temp directory to corresponding files in current path
 		for (Partition partition : partitionsToAppend) {
 			System.out.println("Appending to " + partition.filename);
-			FSDataOutputStream out = fs.append(new Path(currentPath, partition.filename));
+			FSDataOutputStream out;
+			Path filePath = new Path(currentPath, partition.filename);
+			if(!fs.exists(filePath)) {
+				out = fs.create(filePath);
+			} else {
+				out = fs.append(filePath);
+			}
 			BufferedReader br = new BufferedReader(
 					new InputStreamReader(fs.open(new Path(currentPath, "temp/" + partition.filename))));
 			String line;
