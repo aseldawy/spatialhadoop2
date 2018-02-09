@@ -133,11 +133,13 @@ public class MetadataUtil {
 	}
 	
 	public static ArrayList<Partition> removePartitions(ArrayList<Partition> partitions, ArrayList<Partition> partitionsToRemove) {
+		ArrayList<Partition> tempPartitions = new ArrayList<Partition>();
 		for(Partition p: partitions) {
 			if(isContainedPartition(partitionsToRemove, p)) {
-				partitions.remove(p);
+				tempPartitions.add(p);
 			}
 		}
+		partitions.removeAll(tempPartitions);
 		return partitions;
 	}
 	
