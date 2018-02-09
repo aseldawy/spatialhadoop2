@@ -150,9 +150,66 @@ public class RTreeOptimizer {
 	}
 	
 	// Greedy algorithm that maximize the reduced area
-	private static ArrayList<ArrayList<Partition>> getSplitGroupsWithMaximumReducedArea(ArrayList<Partition> partitions, OperationsParams params) {
+	private static ArrayList<ArrayList<Partition>> getSplitGroupsWithMaximumReducedArea(ArrayList<Partition> partitions, OperationsParams params) throws IOException {
 		ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();
+		
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+		int blockSize = Integer.parseInt(conf.get("dfs.blocksize"));
+		double overflowRate = Double.parseDouble(params.get("overflow_rate"));
+		double overflowSize = blockSize * overflowRate;
+		String sindex = params.get("sindex");
+//		double budget = Double.parseDouble(params.get("budget")) * 1024 * 1024;
+//		int budgetBlocks = (int) Math.ceil(budget / blockSize);
+		
+		long incrementalRTreeBudget = 0;
+		for(Partition p: partitions) {
+			if(p.size > overflowSize) {
+				incrementalRTreeBudget += p.size;
+			}
+		}
+		int budgetBlocks = (int) Math.ceil((float)incrementalRTreeBudget / (float)blockSize);
+		
+		ArrayList<Partition> remainingPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> splitPartitions = new ArrayList<Partition>();
+		remainingPartitions = (ArrayList<Partition>) partitions.clone();
+		
+		while (budgetBlocks > 0) {
+			Partition bestCandidatePartition = findBestCandidateToReduceArea(remainingPartitions, splitPartitions);
+			splitPartitions.add(bestCandidatePartition);
+			remainingPartitions.remove(bestCandidatePartition);
+			budgetBlocks -= bestCandidatePartition.getNumberOfBlock(blockSize);
+		}
+		
+		splitGroups = MetadataUtil.groupByOverlappingPartitions(splitPartitions);
 		return splitGroups;
+	}
+	
+	private static double computeReducedArea(ArrayList<Partition> splittingPartitions, Partition partition) {
+		double reducedArea = partition.getSize();
+		for(Partition p: splittingPartitions) {
+			if(p.isIntersected(partition)) {
+				reducedArea += p.getIntersection(partition).getSize();
+			}
+		}
+		return reducedArea;
+ 	}
+	
+	private static Partition findBestCandidateToReduceArea(ArrayList<Partition> currentPartitions,
+			ArrayList<Partition> splittingPartitions) {
+		Partition bestPartition = currentPartitions.get(0);
+		double maxArea = 0;
+		for (Partition p : currentPartitions) {
+			splittingPartitions.add(p);
+			double splittingReducedArea = computeReducedArea(splittingPartitions, p);
+			if (maxArea < splittingReducedArea) {
+				bestPartition = p;
+				maxArea = splittingReducedArea;
+			}
+			splittingPartitions.remove(p);
+		}
+		
+		return bestPartition;
 	}
 	
 	public static ArrayList<ArrayList<Partition>> getSplitGroups(Path path, OperationsParams params, OptimizerType type) throws IOException {
