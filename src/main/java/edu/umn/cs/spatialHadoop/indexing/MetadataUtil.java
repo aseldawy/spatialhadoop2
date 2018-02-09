@@ -4,7 +4,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -96,5 +97,47 @@ public class MetadataUtil {
 			}
 		}
 		return false;
+	}
+	
+	public static boolean isOverlapping(ArrayList<Partition> partitions, Partition p) {
+		for (Partition partition : partitions) {
+			if ((p.cellId != partition.cellId) && p.isIntersected(partition)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	
+	public static ArrayList<Partition> deduplicatePartitions(ArrayList<Partition> partitions) {
+		ArrayList<Partition> deduplicatedPartitions = new ArrayList<Partition>();
+		Set<Integer> cellIdsSet = new HashSet<Integer>();
+		
+		for(Partition p: partitions) {
+			if(!cellIdsSet.contains(p.cellId)) {
+				deduplicatedPartitions.add(p);
+				cellIdsSet.add(p.cellId);
+			}
+		}
+		
+		return deduplicatedPartitions;
+	}
+	
+	public static int getMaximumCellId(ArrayList<Partition> partitions) {
+		int maxCellId = -1;
+		for (Partition partition : partitions) {
+			if (partition.cellId > maxCellId) {
+				maxCellId = partition.cellId;
+			}
+		}
+		return maxCellId;
+	}
+	
+	public static ArrayList<Partition> removePartitions(ArrayList<Partition> partitions, ArrayList<Partition> partitionsToRemove) {
+		for(Partition p: partitions) {
+			if(isContainedPartition(partitionsToRemove, p)) {
+				partitions.remove(p);
+			}
+		}
+		return partitions;
 	}
 }

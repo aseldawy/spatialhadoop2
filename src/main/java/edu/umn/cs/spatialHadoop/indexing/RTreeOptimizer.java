@@ -40,6 +40,51 @@ public class RTreeOptimizer {
 		return splitGroups;
 	}
 	
+	private static double computeReducedCost(ArrayList<Partition> splittingPartitions, double querySize,
+			int blockSize) {
+		// System.out.println("Computing reduced cost of a set of partitions.");
+		// Group splitting partitions by overlapping clusters
+		ArrayList<ArrayList<Partition>> groups = new ArrayList<ArrayList<Partition>>();
+		@SuppressWarnings("unchecked")
+		ArrayList<Partition> tempSplittingPartitions = (ArrayList<Partition>) splittingPartitions.clone();
+
+		while (tempSplittingPartitions.size() > 0) {
+			ArrayList<Partition> group = new ArrayList<Partition>();
+			group.add(tempSplittingPartitions.get(0));
+			for (Partition p : tempSplittingPartitions) {
+				if (MetadataUtil.isOverlapping(group, p)) {
+					group.add(p);
+				}
+			}
+			groups.add(group);
+			tempSplittingPartitions.removeAll(group);
+		}
+
+		// System.out.println("Number of groups = " + groups.size());
+
+		// Compute reduced cost
+		double costBefore = 0;
+		for (Partition p : splittingPartitions) {
+			costBefore += (p.getWidth() + querySize) * (p.getHeight() + querySize) * p.getNumberOfBlock(blockSize);
+		}
+
+		double costAfter = 0;
+		for (ArrayList<Partition> group : groups) {
+			double groupBlocks = 0;
+			Partition tempPartition = group.get(0).clone();
+			for (Partition p : group) {
+				groupBlocks += p.getNumberOfBlock(blockSize);
+				tempPartition.expand(p);
+			}
+			double groupArea = tempPartition.getSize();
+
+			costAfter += Math.pow((Math.sqrt(groupArea / groupBlocks) + querySize), 2) * groupBlocks;
+		}
+
+		// System.out.println("Reduced cost = " + Math.abs(costBefore - costAfter));
+		return Math.abs(costBefore - costAfter);
+	}
+	
 	// Greedy algorithm that maximize the reduced area
 	private static ArrayList<ArrayList<Partition>> getSplitGroupsWithMaximumReducedArea(ArrayList<Partition> partitions, OperationsParams params) {
 		ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();

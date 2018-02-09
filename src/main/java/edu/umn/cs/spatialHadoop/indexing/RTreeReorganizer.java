@@ -35,9 +35,75 @@ public class RTreeReorganizer {
 
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
 
-	public static void reorganizeGroups(Path path, ArrayList<ArrayList<Partition>> splitGroups,
-			OperationsParams params) {
+	public static void reorganizeGroups(Path path, ArrayList<ArrayList<Partition>> splitGroups, OperationsParams params)
+			throws IOException, ClassNotFoundException, InterruptedException {
+		// Indexing each group separately
+		for(ArrayList<Partition> group: splitGroups) {
+			reorganizeSingleGroup(path, group, params);
+		}
+	}
 
+	public static void reorganizeSingleGroup(Path path, ArrayList<Partition> splitPatitions, OperationsParams params)
+			throws IOException, ClassNotFoundException, InterruptedException {
+		
+		@SuppressWarnings("deprecation")
+		Job job = new Job(params, "ReorganizeGroup");
+		Configuration conf = job.getConfiguration();
+		FileSystem fs = FileSystem.get(conf);
+		String sindex = params.get("sindex");
+		
+		// Find max id
+		ArrayList<Partition> currentPartitions = MetadataUtil.getPartitions(path, params);
+		int maxCellId = MetadataUtil.getMaximumCellId(currentPartitions);
+
+		// Indexing all partitions in the group
+		// Iterate all overflow partitions to split
+		Path tempInputPath = new Path("./", "temp.ReorganizeSingleGroup.input");
+		Path tempOutputPath = new Path("./", "temp.ReorganizeSingleGroup.output");
+
+		// Move all partitions of this group to temporary input
+		if (fs.exists(tempInputPath)) {
+			fs.delete(tempInputPath);
+		}
+		fs.mkdirs(tempInputPath);
+
+		if (fs.exists(tempOutputPath)) {
+			fs.delete(tempOutputPath);
+		}
+
+		Rectangle inputMBR = new Rectangle(splitPatitions.get(0));
+		for (Partition p : splitPatitions) {
+			fs.rename(new Path(path, p.filename), new Path(tempInputPath, p.filename));
+			inputMBR.expand(p);
+		}
+
+		OperationsParams params2 = new OperationsParams(conf);
+		params2.setShape(conf, "mbr", inputMBR);
+		params2.setBoolean("local", false);
+
+		Indexer.index(tempInputPath, tempOutputPath, params2);
+		
+		// Merge
+		currentPartitions = MetadataUtil.removePartitions(currentPartitions, splitPatitions);
+		ArrayList<Partition> tempPartitions = MetadataUtil.getPartitions(tempOutputPath, params2);
+		for(Partition tempPartition: tempPartitions) {
+			maxCellId++;
+			tempPartition.cellId = maxCellId;
+			String oldFileName = tempPartition.filename;
+			tempPartition.filename = String.format("part-%05d", tempPartition.cellId);
+			fs.rename(new Path(tempOutputPath, oldFileName), new Path(path, tempPartition.filename));
+			currentPartitions.add(tempPartition);
+		}
+		
+		fs.delete(tempInputPath);
+		fs.delete(tempOutputPath);
+		
+		// Update master and wkt file
+		Path currentMasterPath = new Path(path, "_master." + sindex);
+		fs.delete(currentMasterPath);
+		MetadataUtil.dumpToFile(currentPartitions, currentMasterPath);
+		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
+		MetadataUtil.dumpToWKTFile(currentPartitions, currentWKTPath);
 	}
 
 	/**
@@ -121,9 +187,7 @@ public class RTreeReorganizer {
 
 	public static void reorganizePartitions(Path path, ArrayList<Partition> splitPartitions, OperationsParams params)
 			throws IOException, ClassNotFoundException, InterruptedException {
-//		final byte[] NewLine = new byte[] { '\n' };
 		ArrayList<Partition> currentPartitions = MetadataUtil.getPartitions(path, params);
-//		ArrayList<Partition> reorganizedPartitions = new ArrayList<Partition>();
 
 		@SuppressWarnings("deprecation")
 		Job job = new Job(params, "RTreeReorganizer");
@@ -132,13 +196,6 @@ public class RTreeReorganizer {
 		FileSystem fs = FileSystem.get(conf);
 		double blockSize = Double.parseDouble(conf.get("dfs.blocksize"));
 		String sindex = params.get("sindex");
-
-//		int maxCellId = -1;
-//		for (Partition partition : currentPartitions) {
-//			if (partition.cellId > maxCellId) {
-//				maxCellId = partition.cellId;
-//			}
-//		}
 
 		// Iterate all overflow partitions to split
 		Path tempInputPath = new Path("./", "temp.incrtree.input");
@@ -162,50 +219,15 @@ public class RTreeReorganizer {
 					false, true, conf);
 		}
 
-		// ArrayList<Partition> splitPartitions = new ArrayList<Partition>();
-		// for (Partition partition : currentPartitions) {
-		// reorganizedPartitions.add(partition);
-		// if (partition.size >= overflowSize) {
-		// splitPartitions.add(partition);
-		// totalSplitSize += partition.size;
-		// totalSplitBlocks += partition.getNumberOfBlock(blockSize);
-		// reorganizedPartitions.remove(partition);
-		// FileUtil.copy(fs, new Path(path, partition.filename), fs, new
-		// Path(tempInputPath, partition.filename),
-		// false, true, conf);
-		// }
-		// }
-
 		System.out.println("Total split partitions = " + splitPartitions.size());
 		System.out.println("Total split size = " + totalSplitSize);
 		System.out.println("Total split blocks = " + totalSplitBlocks);
 
-		// Save split partitions and keep partitions to file
-		// Path splitPath = new Path(path, "rects.split");
-		// Path keepPath = new Path(path, "rects.keep");
-		// OutputStream splitOut = fs.create(splitPath);
-		// OutputStream keepOut = fs.create(keepPath);
-		// for (Partition partition : splitPartitions) {
-		// Text splitLine = new Text2();
-		// partition.toText(splitLine);
-		// splitOut.write(splitLine.getBytes(), 0, splitLine.getLength());
-		// splitOut.write(NewLine);
-		// }
-		// currentPartitions.removeAll(splitPartitions);
-		// for (Partition partition : currentPartitions) {
-		// Text keepLine = new Text2();
-		// partition.toText(keepLine);
-		// keepOut.write(keepLine.getBytes(), 0, keepLine.getLength());
-		// keepOut.write(NewLine);
-		// }
-		// splitOut.close();
-		// keepOut.close();
-
 		MetadataUtil.dumpToFile(splitPartitions, path, "rects.split");
 		ArrayList<Partition> partitonsToRemove = new ArrayList<Partition>();
-		for(Partition splitPartition: splitPartitions) {
-			for(Partition currentPartition: currentPartitions) {
-				if(currentPartition.cellId == splitPartition.cellId) {
+		for (Partition splitPartition : splitPartitions) {
+			for (Partition currentPartition : currentPartitions) {
+				if (currentPartition.cellId == splitPartition.cellId) {
 					partitonsToRemove.add(currentPartition);
 				}
 			}
@@ -215,9 +237,6 @@ public class RTreeReorganizer {
 
 		IncrementalRTreeFilePartitioner partitioner = new IncrementalRTreeFilePartitioner();
 		partitioner.createFromInputFile(path, tempOutputPath, params);
-		// for (Partition p : partitioner.cells) {
-		// System.out.println("cell info = " + p.toString());
-		// }
 		Partitioner.setPartitioner(conf, partitioner);
 
 		// Set mapper and reducer
@@ -248,16 +267,7 @@ public class RTreeReorganizer {
 		}
 
 		// Merge
-//		ArrayList<Partition> tempPartitions = new ArrayList<Partition>();
-//		Path tempMasterPath = new Path(tempOutputPath, "_master." + sindex);
 		ArrayList<Partition> tempPartitions = MetadataUtil.getPartitions(tempOutputPath, params);
-//		Text tempLine = new Text2();
-//		LineReader in = new LineReader(fs.open(tempMasterPath));
-//		while (in.readLine(tempLine) > 0) {
-//			Partition tempPartition = new Partition();
-//			tempPartition.fromText(tempLine);
-//			tempPartitions.add(tempPartition);
-//		}
 
 		for (Partition p : tempPartitions) {
 			fs.rename(new Path(tempOutputPath, p.filename), new Path(path, p.filename));
@@ -271,21 +281,6 @@ public class RTreeReorganizer {
 		MetadataUtil.dumpToFile(currentPartitions, currentMasterPath);
 		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
 		MetadataUtil.dumpToWKTFile(currentPartitions, currentWKTPath);
-		// fs.delete(currentMasterPath);
-		// fs.delete(currentWKTPath);
-		// OutputStream masterOut = fs.create(currentMasterPath);
-		// PrintStream wktOut = new PrintStream(fs.create(currentWKTPath));
-		// wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
-		// for (Partition partition : reorganizedPartitions) {
-		// Text masterLine = new Text2();
-		// partition.toText(masterLine);
-		// masterOut.write(masterLine.getBytes(), 0, masterLine.getLength());
-		// masterOut.write(NewLine);
-		// wktOut.println(partition.toWKT());
-		// }
-		//
-		// wktOut.close();
-		// masterOut.close();
 
 		fs.delete(tempInputPath);
 		fs.delete(tempOutputPath);
@@ -294,17 +289,4 @@ public class RTreeReorganizer {
 			fs.delete(new Path(path, p.filename));
 		}
 	}
-
-//	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException,
-//			InstantiationException, IllegalAccessException {
-//		// TODO Auto-generated method stub
-//		final OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-//		Path[] inputFiles = params.getPaths();
-//
-//		if (!params.checkInput() || (inputFiles.length != 1)) {
-//			System.exit(1);
-//		}
-//
-//		Path currentPath = inputFiles[0];
-//	}
 }
