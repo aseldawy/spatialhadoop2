@@ -140,4 +140,25 @@ public class MetadataUtil {
 		}
 		return partitions;
 	}
+	
+	public static ArrayList<ArrayList<Partition>> groupByOverlappingPartitions(ArrayList<Partition> partitions) {
+		ArrayList<ArrayList<Partition>> groups = new ArrayList<ArrayList<Partition>>();
+		@SuppressWarnings("unchecked")
+		ArrayList<Partition> tempPartitions = (ArrayList<Partition>) partitions.clone();
+
+		while (tempPartitions.size() > 0) {
+			ArrayList<Partition> group = new ArrayList<Partition>();
+			group.add(tempPartitions.get(0));
+			for (Partition p : tempPartitions) {
+				if (isOverlapping(group, p)) {
+					if(!isContainedPartition(group, p)) {
+						group.add(p);
+					}
+				}
+			}
+			groups.add(group);
+			tempPartitions.removeAll(group);
+		}
+		return groups;
+	}
 }

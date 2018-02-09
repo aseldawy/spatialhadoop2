@@ -4,8 +4,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 
 public class RTreeOptimizer {
 	
@@ -35,8 +37,67 @@ public class RTreeOptimizer {
 	}
 	
 	// Greedy algorithm that maximize the reduced range query cost
-	private static ArrayList<ArrayList<Partition>> getSplitGroupsWithMaximumReducedCost(ArrayList<Partition> partitions, OperationsParams params) {
+	@SuppressWarnings("unchecked")
+	private static ArrayList<ArrayList<Partition>> getSplitGroupsWithMaximumReducedCost(ArrayList<Partition> partitions, OperationsParams params) throws IOException {
 		ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();
+		
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+		int blockSize = Integer.parseInt(conf.get("dfs.blocksize"));
+		double overflowRate = Double.parseDouble(params.get("overflow_rate"));
+		double overflowSize = blockSize * overflowRate;
+		String sindex = params.get("sindex");
+//		double budget = Double.parseDouble(params.get("budget")) * 1024 * 1024;
+//		int budgetBlocks = (int) Math.ceil(budget / blockSize);
+		
+		long incrementalRTreeBudget = 0;
+		for(Partition p: partitions) {
+			if(p.size > overflowSize) {
+				incrementalRTreeBudget += p.size;
+			}
+		}
+		int budgetBlocks = (int) Math.ceil((float)incrementalRTreeBudget / (float)blockSize);
+		
+		Rectangle mbr = (Rectangle) OperationsParams.getShape(conf, "mbr");
+		if (mbr == null) {
+			mbr = new Rectangle(partitions.get(0));
+			for (Partition p : partitions) {
+				mbr.expand(p);
+			}
+		}
+		double querySize = 0.000001 * Math.sqrt(mbr.getSize());
+		
+		ArrayList<Partition> remainingPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> splitPartitions = new ArrayList<Partition>();
+		remainingPartitions = (ArrayList<Partition>) partitions.clone();
+
+		// Find the partition with maximum reduced cost as the seed for our greedy algorithm
+//		Partition maxReducedCostPartition = partitions.get(0);
+//		double maxReducedCost = 0;
+//		for (Partition p : partitions) {
+//			splitPartitions.add(p);
+//			double pReducedCost = computeReducedCost(splitPartitions, querySize, blockSize);
+//			if (maxReducedCost < pReducedCost) {
+//				maxReducedCost = pReducedCost;
+//				maxReducedCostPartition = p;
+//			}
+//			splitPartitions.remove(p);
+//		}
+		
+//		Partition maxReducedCostPartition = findBestCandidateToReduceCost(remainingPartitions, splitPartitions, querySize, blockSize);
+//		splitPartitions.add(maxReducedCostPartition);
+//		remainingPartitions.remove(maxReducedCostPartition);
+//		budgetBlocks -= maxReducedCostPartition.getNumberOfBlock(blockSize);
+
+		while (budgetBlocks > 0) {
+			Partition bestCandidatePartition = findBestCandidateToReduceCost(remainingPartitions, splitPartitions,
+					querySize, blockSize);
+			splitPartitions.add(bestCandidatePartition);
+			remainingPartitions.remove(bestCandidatePartition);
+			budgetBlocks -= bestCandidatePartition.getNumberOfBlock(blockSize);
+		}
+		
+		splitGroups = MetadataUtil.groupByOverlappingPartitions(splitPartitions);
 		return splitGroups;
 	}
 	
@@ -44,21 +105,7 @@ public class RTreeOptimizer {
 			int blockSize) {
 		// System.out.println("Computing reduced cost of a set of partitions.");
 		// Group splitting partitions by overlapping clusters
-		ArrayList<ArrayList<Partition>> groups = new ArrayList<ArrayList<Partition>>();
-		@SuppressWarnings("unchecked")
-		ArrayList<Partition> tempSplittingPartitions = (ArrayList<Partition>) splittingPartitions.clone();
-
-		while (tempSplittingPartitions.size() > 0) {
-			ArrayList<Partition> group = new ArrayList<Partition>();
-			group.add(tempSplittingPartitions.get(0));
-			for (Partition p : tempSplittingPartitions) {
-				if (MetadataUtil.isOverlapping(group, p)) {
-					group.add(p);
-				}
-			}
-			groups.add(group);
-			tempSplittingPartitions.removeAll(group);
-		}
+		ArrayList<ArrayList<Partition>> groups = MetadataUtil.groupByOverlappingPartitions(splittingPartitions);
 
 		// System.out.println("Number of groups = " + groups.size());
 
@@ -83,6 +130,23 @@ public class RTreeOptimizer {
 
 		// System.out.println("Reduced cost = " + Math.abs(costBefore - costAfter));
 		return Math.abs(costBefore - costAfter);
+	}
+	
+	private static Partition findBestCandidateToReduceCost(ArrayList<Partition> currentPartitions,
+			ArrayList<Partition> splittingPartitions, double querySize, int blockSize) {
+		Partition bestPartition = currentPartitions.get(0);
+		double maxReducedCost = 0;
+		for (Partition p : currentPartitions) {
+			splittingPartitions.add(p);
+			double splittingReducedCost = computeReducedCost(splittingPartitions, querySize, blockSize);
+			if (maxReducedCost < splittingReducedCost) {
+				bestPartition = p;
+				maxReducedCost = splittingReducedCost;
+			}
+			splittingPartitions.remove(p);
+		}
+
+		return bestPartition;
 	}
 	
 	// Greedy algorithm that maximize the reduced area
