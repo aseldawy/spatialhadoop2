@@ -124,7 +124,7 @@ public class IncrementalRTreeFilePartitioner extends Partitioner {
 	}
 
 	public void createFromInputFile(Path inPath, Path out, OperationsParams params) throws IOException {
-		ArrayList<Partition> currentPartitions = new ArrayList<Partition>();
+		ArrayList<Partition> currentPartitions = MetadataUtil.getPartitions(inPath, params);
 
 		Job job = new Job(params, "Sampler");
 		Configuration conf = job.getConfiguration();
@@ -134,14 +134,14 @@ public class IncrementalRTreeFilePartitioner extends Partitioner {
 		double overflowSize = blockSize * overflowRate;
 		String sindex = params.get("sindex");
 
-		Path currentMasterPath = new Path(inPath, "_master." + sindex);
-		Text tempLine1 = new Text2();
-		LineReader in1 = new LineReader(fs.open(currentMasterPath));
-		while (in1.readLine(tempLine1) > 0) {
-			Partition tempPartition = new Partition();
-			tempPartition.fromText(tempLine1);
-			currentPartitions.add(tempPartition);
-		}
+//		Path currentMasterPath = new Path(inPath, "_master." + sindex);
+//		Text tempLine1 = new Text2();
+//		LineReader in1 = new LineReader(fs.open(currentMasterPath));
+//		while (in1.readLine(tempLine1) > 0) {
+//			Partition tempPartition = new Partition();
+//			tempPartition.fromText(tempLine1);
+//			currentPartitions.add(tempPartition);
+//		}
 
 		int maxCellId = -1;
 		for (Partition partition : currentPartitions) {
@@ -246,7 +246,7 @@ public class IncrementalRTreeFilePartitioner extends Partitioner {
 			params2.set("shape", job.get("shape"));
 		if (job.get("local") != null)
 			params2.set("local", job.get("local"));
-		params2.setBoolean("local", false);
+		params2.setBoolean("local", true);
 		params2.setBoolean("background", true);
 		params2.setClass("outshape", Point.class, Shape.class);
 		Sampler.sample(ins, resultCollector, params2);

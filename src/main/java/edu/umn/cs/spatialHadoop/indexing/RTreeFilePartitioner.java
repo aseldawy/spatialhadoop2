@@ -157,8 +157,8 @@ public class RTreeFilePartitioner extends Partitioner {
 			// System.out.println("templine is " + tempLine);
 			tempPartition.fromText(tempLine);
 			CellInfo tempCellInfo = new CellInfo();
-			tempCellInfo.cellId = tempPartition.cellId;
 			tempCellInfo.set(tempPartition.cellMBR);
+			tempCellInfo.cellId = tempPartition.cellId;
 			this.cells.add(tempCellInfo);
 		}
 		cellsTree = this.buildCellsTree(cells);

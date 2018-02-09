@@ -33,10 +33,11 @@ public class DynamicIndexer {
 			long t3 = System.currentTimeMillis();
 			System.out.println("Total optimizing time in millis " + (t3 - t2));
 			
-			RTreeReorganizer.reorganizePartition(currentPath, splitPartitions, params);
+			RTreeReorganizer.reorganizePartitions(currentPath, splitPartitions, params);
 			
 			long t4 = System.currentTimeMillis();
 			System.out.println("Total reorganizing time in millis " + (t4 - t3));
+			System.out.println("Total dynamic indexing time in millis " + (t4 - t1));
 		} else {
 			ArrayList<ArrayList<Partition>> splitGroups = new ArrayList<>();
 			if(splitType.equals("greedyreducedcost")) {
@@ -48,10 +49,11 @@ public class DynamicIndexer {
 			long t3 = System.currentTimeMillis();
 			System.out.println("Total optimizing time in millis " + (t3 - t2));
 			
-			RTreeReorganizer.reorganizeGroup(currentPath, splitGroups, params);
+			RTreeReorganizer.reorganizeGroups(currentPath, splitGroups, params);
 			
 			long t4 = System.currentTimeMillis();
 			System.out.println("Total reorganizing time in millis " + (t4 - t3));
+			System.out.println("Total dynamic indexing time in millis " + (t4 - t1));
 		}
 	}
 }

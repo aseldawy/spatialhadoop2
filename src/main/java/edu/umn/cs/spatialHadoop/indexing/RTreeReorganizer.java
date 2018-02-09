@@ -35,7 +35,7 @@ public class RTreeReorganizer {
 
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
 
-	public static void reorganizeGroup(Path path, ArrayList<ArrayList<Partition>> splitGroups,
+	public static void reorganizeGroups(Path path, ArrayList<ArrayList<Partition>> splitGroups,
 			OperationsParams params) {
 
 	}
@@ -119,25 +119,26 @@ public class RTreeReorganizer {
 		}
 	}
 
-	public static void reorganizePartition(Path path, ArrayList<Partition> splitPartitions, OperationsParams params)
+	public static void reorganizePartitions(Path path, ArrayList<Partition> splitPartitions, OperationsParams params)
 			throws IOException, ClassNotFoundException, InterruptedException {
-		final byte[] NewLine = new byte[] { '\n' };
+//		final byte[] NewLine = new byte[] { '\n' };
 		ArrayList<Partition> currentPartitions = MetadataUtil.getPartitions(path, params);
-		ArrayList<Partition> reorganizedPartitions = new ArrayList<Partition>();
+//		ArrayList<Partition> reorganizedPartitions = new ArrayList<Partition>();
 
 		@SuppressWarnings("deprecation")
 		Job job = new Job(params, "RTreeReorganizer");
+		job.setJarByClass(RTreeReorganizer.class);
 		Configuration conf = job.getConfiguration();
 		FileSystem fs = FileSystem.get(conf);
 		double blockSize = Double.parseDouble(conf.get("dfs.blocksize"));
 		String sindex = params.get("sindex");
 
-		int maxCellId = -1;
-		for (Partition partition : currentPartitions) {
-			if (partition.cellId > maxCellId) {
-				maxCellId = partition.cellId;
-			}
-		}
+//		int maxCellId = -1;
+//		for (Partition partition : currentPartitions) {
+//			if (partition.cellId > maxCellId) {
+//				maxCellId = partition.cellId;
+//			}
+//		}
 
 		// Iterate all overflow partitions to split
 		Path tempInputPath = new Path("./", "temp.incrtree.input");
@@ -239,28 +240,29 @@ public class RTreeReorganizer {
 		}
 
 		// Merge
-		ArrayList<Partition> tempPartitions = new ArrayList<Partition>();
-		Path tempMasterPath = new Path(tempOutputPath, "_master." + sindex);
-		Text tempLine = new Text2();
-		LineReader in = new LineReader(fs.open(tempMasterPath));
-		while (in.readLine(tempLine) > 0) {
-			Partition tempPartition = new Partition();
-			tempPartition.fromText(tempLine);
-			tempPartitions.add(tempPartition);
-		}
+//		ArrayList<Partition> tempPartitions = new ArrayList<Partition>();
+//		Path tempMasterPath = new Path(tempOutputPath, "_master." + sindex);
+		ArrayList<Partition> tempPartitions = MetadataUtil.getPartitions(tempOutputPath, params);
+//		Text tempLine = new Text2();
+//		LineReader in = new LineReader(fs.open(tempMasterPath));
+//		while (in.readLine(tempLine) > 0) {
+//			Partition tempPartition = new Partition();
+//			tempPartition.fromText(tempLine);
+//			tempPartitions.add(tempPartition);
+//		}
 
 		for (Partition p : tempPartitions) {
 			fs.rename(new Path(tempOutputPath, p.filename), new Path(path, p.filename));
 		}
 
-		reorganizedPartitions.addAll(tempPartitions);
+		currentPartitions.addAll(tempPartitions);
 
 		// Update master and wkt file
 		Path currentMasterPath = new Path(path, "_master." + sindex);
 		fs.delete(currentMasterPath);
-		MetadataUtil.dumpToFile(reorganizedPartitions, currentMasterPath);
+		MetadataUtil.dumpToFile(currentPartitions, currentMasterPath);
 		Path currentWKTPath = new Path(path, "_" + sindex + ".wkt");
-		MetadataUtil.dumpToWKTFile(reorganizedPartitions, currentWKTPath);
+		MetadataUtil.dumpToWKTFile(currentPartitions, currentWKTPath);
 		// fs.delete(currentMasterPath);
 		// fs.delete(currentWKTPath);
 		// OutputStream masterOut = fs.create(currentMasterPath);
@@ -285,16 +287,16 @@ public class RTreeReorganizer {
 		}
 	}
 
-	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException,
-			InstantiationException, IllegalAccessException {
-		// TODO Auto-generated method stub
-		final OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-		Path[] inputFiles = params.getPaths();
-
-		if (!params.checkInput() || (inputFiles.length != 1)) {
-			System.exit(1);
-		}
-
-		Path currentPath = inputFiles[0];
-	}
+//	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException,
+//			InstantiationException, IllegalAccessException {
+//		// TODO Auto-generated method stub
+//		final OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+//		Path[] inputFiles = params.getPaths();
+//
+//		if (!params.checkInput() || (inputFiles.length != 1)) {
+//			System.exit(1);
+//		}
+//
+//		Path currentPath = inputFiles[0];
+//	}
 }
