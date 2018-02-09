@@ -88,4 +88,13 @@ public class MetadataUtil {
 		
 		out.close();
 	}
+	
+	public static boolean isContainedPartition(ArrayList<Partition> partitions, Partition p) {
+		for(Partition partition: partitions) {
+			if(partition.cellId == p.cellId) {
+				return true;
+			}
+		}
+		return false;
+	}
 }

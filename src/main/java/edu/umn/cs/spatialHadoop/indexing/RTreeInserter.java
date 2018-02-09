@@ -205,7 +205,9 @@ public class RTreeInserter {
 			for (Partition currentPartition : currentPartitions) {
 				if (insertPartition.cellId == currentPartition.cellId) {
 					currentPartition.expand(insertPartition);
-					partitionsToAppend.add(currentPartition);
+					if(!MetadataUtil.isContainedPartition(partitionsToAppend, currentPartition)) {
+						partitionsToAppend.add(currentPartition);
+					}
 				}
 			}
 		}
