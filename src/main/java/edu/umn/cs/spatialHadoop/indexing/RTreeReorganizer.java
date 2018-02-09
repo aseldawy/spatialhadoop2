@@ -78,7 +78,7 @@ public class RTreeReorganizer {
 		}
 
 		OperationsParams params2 = new OperationsParams(conf);
-		params2.setShape(conf, "mbr", inputMBR);
+		OperationsParams.setShape(conf, "mbr", inputMBR);
 		params2.setBoolean("local", false);
 
 		Indexer.index(tempInputPath, tempOutputPath, params2);
