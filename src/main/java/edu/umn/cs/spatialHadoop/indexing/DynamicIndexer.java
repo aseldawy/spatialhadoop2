@@ -3,6 +3,8 @@ package edu.umn.cs.spatialHadoop.indexing;
 import java.io.IOException;
 import java.util.ArrayList;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
 
@@ -11,6 +13,10 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 public class DynamicIndexer {
 	public static void main(String[] args) throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException, InterruptedException {
 		OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+		
+		Configuration conf = new Configuration();
+		FileSystem fs = FileSystem.get(conf);
+		double blockSize = Double.parseDouble(conf.get("dfs.blocksize"));
 		
 		String splitType = params.get("splittype");
 		String currentPathString = params.get("current");
@@ -32,6 +38,7 @@ public class DynamicIndexer {
 			ArrayList<Partition> splitPartitions = RTreeOptimizer.getOverflowPartitions(currentPath, params);
 			long t3 = System.currentTimeMillis();
 			System.out.println("Total optimizing time in millis " + (t3 - t2));
+			MetadataUtil.printPartitionSummary(splitPartitions, blockSize);
 			
 			RTreeReorganizer.reorganizePartitions(currentPath, splitPartitions, params);
 			
@@ -48,6 +55,7 @@ public class DynamicIndexer {
 			
 			long t3 = System.currentTimeMillis();
 			System.out.println("Total optimizing time in millis " + (t3 - t2));
+			MetadataUtil.printGroupSummary(splitGroups, blockSize);
 			
 			RTreeReorganizer.reorganizeGroups(currentPath, splitGroups, params);
 			

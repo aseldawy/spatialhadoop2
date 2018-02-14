@@ -9,6 +9,7 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.LineReader;
@@ -162,5 +163,27 @@ public class MetadataUtil {
 			tempPartitions.removeAll(group);
 		}
 		return groups;
+	}
+	
+	public static void printPartitionSummary(ArrayList<Partition> partitions, double blockSize) {
+		long totalSplitSize = 0;
+		int totalSplitBlocks = 0;
+
+		for (Partition partition : partitions) {
+			totalSplitSize += partition.size;
+			totalSplitBlocks += partition.getNumberOfBlock(blockSize);
+		}
+
+		System.out.println("Total split partitions = " + partitions.size());
+		System.out.println("Total split size = " + totalSplitSize);
+		System.out.println("Total split blocks = " + totalSplitBlocks);
+	}
+	
+	public static void printGroupSummary(ArrayList<ArrayList<Partition>> groups, double blockSize) {
+		ArrayList<Partition> partitions = new ArrayList<Partition>();
+		for(ArrayList<Partition> group: groups) {
+			partitions.addAll(group);
+		}
+		printPartitionSummary(partitions, blockSize);
 	}
 }

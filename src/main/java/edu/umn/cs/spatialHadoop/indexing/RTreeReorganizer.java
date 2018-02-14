@@ -209,19 +209,19 @@ public class RTreeReorganizer {
 			fs.delete(tempOutputPath);
 		}
 
-		long totalSplitSize = 0;
-		int totalSplitBlocks = 0;
+//		long totalSplitSize = 0;
+//		int totalSplitBlocks = 0;
 
 		for (Partition partition : splitPartitions) {
-			totalSplitSize += partition.size;
-			totalSplitBlocks += partition.getNumberOfBlock(blockSize);
+//			totalSplitSize += partition.size;
+//			totalSplitBlocks += partition.getNumberOfBlock(blockSize);
 			FileUtil.copy(fs, new Path(path, partition.filename), fs, new Path(tempInputPath, partition.filename),
 					false, true, conf);
 		}
 
-		System.out.println("Total split partitions = " + splitPartitions.size());
-		System.out.println("Total split size = " + totalSplitSize);
-		System.out.println("Total split blocks = " + totalSplitBlocks);
+//		System.out.println("Total split partitions = " + splitPartitions.size());
+//		System.out.println("Total split size = " + totalSplitSize);
+//		System.out.println("Total split blocks = " + totalSplitBlocks);
 
 		MetadataUtil.dumpToFile(splitPartitions, path, "rects.split");
 		ArrayList<Partition> partitonsToRemove = new ArrayList<Partition>();
