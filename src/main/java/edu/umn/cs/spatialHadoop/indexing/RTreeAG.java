@@ -168,11 +168,35 @@ public class RTreeAG {
     this.maxCapcity = maxCapcity;
     this.minCapacity = minCapacity;
     nodes = new ArrayList<Node>();
-    nodes.add(Node.createLeaf(0, xs[0], ys[0]));
 
-    for (int i = 1; i < xs.length; i++) {
-      insert(i);
-    }
+    Node rootNode = Node.createLeaf(0, xs[0], ys[0]);
+    for (int i = 1; i < xs.length; i++)
+      rootNode.addEntry(i, xs[i], ys[i]);
+
+    nodes.add(rootNode);
+    root = 0;
+
+    boolean needSplits;
+    IntArray pathToRoot = new IntArray();
+    do {
+      needSplits = false;
+      for (int iNode = 0; iNode < nodes.size(); iNode++) {
+        Node node = nodes.get(iNode);
+        if (node.size() > maxCapcity && node.leaf) {
+          pathToRoot.clear();
+          pathToRoot.add(iNode);
+          while (pathToRoot.get(0) != root) {
+            for (int iParent = 0; iParent < nodes.size(); iParent++) {
+              Node parent = nodes.get(iParent);
+              if (!parent.leaf && parent.children.contains(pathToRoot.get(0)))
+                pathToRoot.insert(0, iParent);
+            }
+          }
+          adjustTree(node, pathToRoot);
+          needSplits = true;
+        }
+      }
+    } while (needSplits);
   }
 
   /**
@@ -211,6 +235,17 @@ public class RTreeAG {
     // Now we have a child node. Insert the current element to it and split
     // if necessary
     leafNode.addEntry(iPoint, x, y);
+    adjustTree(leafNode, path);
+  }
+
+  /**
+   * Adjust the tree after an insertion by making the necessary splits up to
+   * the root.
+   * @param leafNode
+   * @param path
+   */
+  private void adjustTree(Node leafNode, IntArray path) {
+    int iNode;
     int iNewNode = -1;
     if (leafNode.size() >= maxCapcity) {
       // Node full. Split into two
