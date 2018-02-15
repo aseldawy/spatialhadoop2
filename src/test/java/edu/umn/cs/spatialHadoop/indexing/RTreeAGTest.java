@@ -54,8 +54,10 @@ public class RTreeAGTest extends TestCase {
       assertEquals(rtree.numOfObjects(), 22);
       int maxNumOfNodes = 6;
       int minNumOfNodes = 4;
-      assertFalse("Too few nodes "+rtree.numOfNodes()+"<"+minNumOfNodes, rtree.numOfNodes() < minNumOfNodes);
-      assertFalse("Too many nodes "+rtree.numOfNodes()+">"+maxNumOfNodes, rtree.numOfNodes() > maxNumOfNodes);
+      assertTrue(String.format("Too few nodes %d<%d",rtree.numOfNodes(), minNumOfNodes),
+          rtree.numOfNodes() >= minNumOfNodes);
+      assertTrue(String.format("Too many nodes %d>%d", rtree.numOfNodes(), maxNumOfNodes),
+          rtree.numOfNodes() <= maxNumOfNodes);
       assertEquals(2, rtree.getHeight());
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
@@ -72,15 +74,42 @@ public class RTreeAGTest extends TestCase {
       assertEquals(rtree.numOfObjects(), 22);
       int maxNumOfNodes = 18;
       int minNumOfNodes = 9;
-      assertFalse("Too few nodes "+rtree.numOfNodes()+"<"+minNumOfNodes, rtree.numOfNodes() < minNumOfNodes);
-      assertFalse("Too many nodes "+rtree.numOfNodes()+">"+maxNumOfNodes, rtree.numOfNodes() > maxNumOfNodes);
-      assertTrue("Too short tree "+rtree.getHeight(), rtree.getHeight() >= 3);
+      assertTrue(String.format("Too few nodes %d<%d",rtree.numOfNodes(), minNumOfNodes),
+          rtree.numOfNodes() >= minNumOfNodes);
+      assertTrue(String.format("Too many nodes %d>%d", rtree.numOfNodes(), maxNumOfNodes),
+          rtree.numOfNodes() <= maxNumOfNodes);
+      assertTrue(String.format("Too short tree %d",rtree.getHeight()),
+          rtree.getHeight() >= 3);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
       fail("Error working with the test file");
     }
   }
+
+  public void testRetrieveLeaves() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8);
+      assertEquals(rtree.numOfObjects(), 11);
+      assertEquals(2, rtree.getAllLeaves().length);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+  /**
+   * Read a CSV file that contains one point per line in the format "x,y".
+   * The points are returned as a 2D array where the first index indicates the
+   * coordinate (0 for x and 1 for y) and the second index indicates the point
+   * number.
+   * @param fileName
+   * @return
+   * @throws IOException
+   */
   private double[][] readFile(String fileName) throws IOException {
     FileReader testPointsIn = new FileReader(fileName);
     char[] buffer = new char[(int) new File(fileName).length()];

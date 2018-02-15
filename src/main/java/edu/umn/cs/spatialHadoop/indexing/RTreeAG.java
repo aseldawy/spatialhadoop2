@@ -484,4 +484,19 @@ public class RTreeAG {
     }
     return height;
   }
+
+  public Rectangle[] getAllLeaves() {
+    int numOfLeaves = 0;
+    for (Node node : nodes) {
+      if (node.leaf)
+        numOfLeaves++;
+    }
+    Rectangle[] leaves = new Rectangle[numOfLeaves];
+    for (Node node : nodes) {
+      if (node.leaf) {
+        leaves[--numOfLeaves] = node;
+      }
+    }
+    return leaves;
+  }
 }
