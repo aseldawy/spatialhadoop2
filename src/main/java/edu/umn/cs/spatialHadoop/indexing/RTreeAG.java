@@ -53,7 +53,7 @@ public class RTreeAG {
     private Node() {}
 
     static Node createLeaf(int iEntry, double x, double y) {
-      return new Node().reset(iEntry, x, y);
+      return new Node().resetLeafNode(iEntry, x, y);
     }
 
     static Node createNonLeaf(int iNode1, int iNode2, Node n1, Node n2) {
@@ -66,11 +66,23 @@ public class RTreeAG {
       return nonLeaf;
     }
 
-    public Node reset(int iEntry, double x, double y) {
+    public static Node createNonLeafNode(int iNode, Node node) {
+      return new Node().resetNonLeafNode(iNode, node);
+    }
+
+    public Node resetLeafNode(int iEntry, double x, double y) {
       this.children = new IntArray();
       this.children.add(iEntry);
       this.set(x, y, Math.nextUp(x), Math.nextUp(y));
       this.leaf = true;
+      return this;
+    }
+
+    public Node resetNonLeafNode(int iNode, Node node) {
+      this.children = new IntArray();
+      this.children.add(iNode);
+      this.set(node);
+      this.leaf = false;
       return this;
     }
 
@@ -100,6 +112,26 @@ public class RTreeAG {
         newHeight += (this.y1 - y);
       else if (y > this.y2)
         newHeight += (this.y2 - y);
+
+      return newWidth * newHeight - getWidth() * getHeight();
+    }
+
+    /**
+     * Calculates the expansion when the given MBR is added to this node
+     * @param mbr
+     * @return
+     */
+    public double expansion(Rectangle mbr) {
+      double newWidth = this.getWidth();
+      double newHeight = this.getHeight();
+      if (mbr.x1 < this.x1)
+        newWidth += (this.x1 - mbr.x1);
+      else if (mbr.x2 > this.x2)
+        newWidth += (mbr.x2 - this.x2);
+      if (mbr.y1 < this.y1)
+        newHeight += (this.y1 - mbr.y1);
+      else if (mbr.y2 > this.y2)
+        newHeight += (this.y2 - mbr.y2);
 
       return newWidth * newHeight - getWidth() * getHeight();
     }
@@ -208,8 +240,7 @@ public class RTreeAG {
           parent.addChildNode(iNewNode, nodes.get(iNewNode));
           iNewNode = -1;
           if (parent.size() >= maxCapcity) {
-            // TODO Otherwise, invoke SplitNode to produce P and PP containing
-            // ENN and all P's old entries
+            iNewNode = quadraticSplitNonLeaf(parent);
           }
         }
       }
@@ -248,7 +279,7 @@ public class RTreeAG {
 
     // After picking the seeds, we will start picking next elements one-by-one
     IntArray nonAssignedEntries = oldNode.children;
-    oldNode.reset(seed1, xs[seed1], ys[seed1]);
+    oldNode.resetLeafNode(seed1, xs[seed1], ys[seed1]);
     Node newNode = Node.createLeaf(seed2, xs[seed2], ys[seed2]);
     Node group1 = oldNode;
     Node group2 = newNode;
@@ -313,6 +344,109 @@ public class RTreeAG {
         }
         chosenNode.addEntry(nextEntry, xs[nextEntry], ys[nextEntry]);
         nonAssignedEntries.remove(nextEntry);
+      }
+    }
+    // Add the new node to the list of nodes and return its index
+    nodes.add(newNode);
+    return nodes.size() - 1;
+  }
+
+  /**
+   * Split an overflow leaf node into two using the Quadratic Split method described
+   * in Guttman'86 page 52.
+   * @param oldNode
+   * @return
+   */
+  private int quadraticSplitNonLeaf(Node oldNode) {
+    // Pick seeds
+    // Indexes of the objects to be picked as seeds in the arrays xs and ys
+    // Select two entries to be the first elements of the groups
+    int seed1 = -1, seed2 = -1;
+    double maxD = Double.NEGATIVE_INFINITY;
+    for (int i1 = 0; i1 < oldNode.size(); i1++) {
+      int entry1 = oldNode.children.get(i1);
+      for (int i2 = i1 + 1; i2 < oldNode.size(); i2++) {
+        int entry2 = oldNode.children.get(i2);
+        // For each pair of entries, compose a rectangle J including both of
+        // them and calculate d = area(J) - area(entry1) - area(entry2)
+        // Choose the most wasteful pair. Choose the pair with the largest d
+        double d = Math.abs((xs[entry1] - xs[entry2]) * (ys[entry1] - ys[entry2]))
+            -nodes.get(entry1).area() - nodes.get(entry2).area();
+        if (d > maxD) {
+          maxD = d;
+          seed1 = entry1;
+          seed2 = entry2;
+        }
+      }
+    }
+
+    // After picking the seeds, we will start picking next elements one-by-one
+    IntArray nonAssignedNodes = oldNode.children;
+    oldNode.resetNonLeafNode(seed1, nodes.get(seed1));
+    Node newNode = Node.createNonLeafNode(seed2, nodes.get(seed2));
+    Node group1 = oldNode;
+    Node group2 = newNode;
+    nonAssignedNodes.remove(seed1);
+    nonAssignedNodes.remove(seed2);
+    while (nonAssignedNodes.size() > 0) {
+      // If one group has so few entries that all the rest must be assigned to it
+      // in order to have the minimum number m, assign them and stop
+      if (nonAssignedNodes.size() + group1.size() == minCapacity) {
+        // Assign all the rest to group1
+        for (int iEntry : nonAssignedNodes)
+          group1.addChildNode(iEntry, nodes.get(iEntry));
+        nonAssignedNodes.clear();
+      } else if (nonAssignedNodes.size() + group2.size() == minCapacity) {
+        // Assign all the rest to newNode
+        for (int iEntry : nonAssignedNodes)
+          group2.addChildNode(iEntry, nodes.get(iEntry));
+        nonAssignedNodes.clear();
+      } else {
+        // Invoke the algorithm  PickNext to choose the next entry to assign.
+        int nextEntry = -1;
+        double maxDiff = Double.NEGATIVE_INFINITY;
+        for (int nonAssignedEntry : nonAssignedNodes) {
+          double d1 = group1.expansion(nodes.get(nonAssignedEntry));
+          double d2 = group2.expansion(nodes.get(nonAssignedEntry));
+          double diff = Math.abs(d1 - d2);
+          if (diff > maxDiff) {
+            maxDiff = diff;
+            nextEntry = nonAssignedEntry;
+          }
+        }
+
+        // Choose which node to add the next entry to
+        double diffExpansion = group1.expansion(nodes.get(nextEntry)) -
+            group2.expansion(nodes.get(nextEntry));
+        Node chosenNode;
+        // Add it to the group whose covering rectangle will have to be enlarged
+        // least to accommodate it
+        if (diffExpansion < 0) {
+          chosenNode = group1;
+        } else if (diffExpansion > 0) {
+          chosenNode = group2;
+        } else {
+          // Resolve ties by adding the entry to the group with smaller area
+          double diffArea = group1.area() - group2.area();
+          if (diffArea < 0) {
+            chosenNode = group1;
+          } else if (diffArea > 0) {
+            chosenNode = group2;
+          } else {
+            // ... then to the one with fewer entries
+            double diffSize = group1.size() - group2.size();
+            if (diffSize < 0) {
+              chosenNode = group1;
+            } else if (diffSize > 0) {
+              chosenNode = group2;
+            } else {
+              // ... then to either
+              chosenNode = Math.random() < 0.5? group1 : group2;
+            }
+          }
+        }
+        chosenNode.addChildNode(nextEntry, nodes.get(nextEntry));
+        nonAssignedNodes.remove(nextEntry);
       }
     }
     // Add the new node to the list of nodes and return its index
