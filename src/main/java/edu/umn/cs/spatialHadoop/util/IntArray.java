@@ -35,7 +35,19 @@ public class IntArray implements Writable, Iterable<Integer> {
   public void add(int x) {
     append(x);
   }
-  
+
+  /**
+   * Inserts a value at a given position in the array.
+   * @param position the index in which the new value will be inserted
+   * @param value the value to insert into the array
+   */
+  public void insert(int position, int value) {
+    expand(1);
+    System.arraycopy(array, position, array, position+1, size() - position);
+    array[position] = value;
+    size++;
+  }
+
   public void append(int x) {
     expand(1);
     array[size++] = x;
