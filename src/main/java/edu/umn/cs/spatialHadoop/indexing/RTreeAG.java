@@ -192,7 +192,7 @@ public class RTreeAG {
         if (iNewNode != -1) {
           // If the root is split, create a new root
           Node newRoot = Node.createNonLeaf(iNode, iNewNode, nodes.get(iNode), nodes.get(iNewNode));
-          int root = nodes.size();
+          root = nodes.size();
           nodes.add(newRoot);
         }
         // If N is the root with no partner NN, stop.
@@ -206,8 +206,11 @@ public class RTreeAG {
           // create a new entry ENN and add to the parent if there is room.
           // Add Enn to P if there is room
           parent.addChildNode(iNewNode, nodes.get(iNewNode));
-          // TODO Otherwise, invoke SplitNode to produce P and PP containing
-          // ENN and all P's old entries
+          iNewNode = -1;
+          if (parent.size() >= maxCapcity) {
+            // TODO Otherwise, invoke SplitNode to produce P and PP containing
+            // ENN and all P's old entries
+          }
         }
       }
     }
@@ -331,5 +334,20 @@ public class RTreeAG {
    */
   public int numOfNodes() {
     return nodes.size();
+  }
+
+  public int getHeight() {
+    if (nodes.isEmpty())
+      return 0;
+    // Compute the height of the tree by traversing any path from the root
+    // to the leaf.
+    // Since the tree is balanced, any path would work
+    int height = 1;
+    int iNode = root;
+    while (!nodes.get(iNode).leaf) {
+      height++;
+      iNode = nodes.get(iNode).children.get(0);
+    }
+    return height;
   }
 }

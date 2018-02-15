@@ -38,6 +38,7 @@ public class RTreeAGTest extends TestCase {
       RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8);
       assertEquals(rtree.numOfObjects(), 11);
       assertEquals(3, rtree.numOfNodes());
+      assertEquals(2, rtree.getHeight());
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
@@ -45,6 +46,41 @@ public class RTreeAGTest extends TestCase {
     }
   }
 
+  public void testBuild2() {
+    try {
+      String fileName = "src/test/resources/test2.points";
+      double[][] points = readFile(fileName);
+      RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8);
+      assertEquals(rtree.numOfObjects(), 22);
+      int maxNumOfNodes = 6;
+      int minNumOfNodes = 4;
+      assertFalse("Too few nodes "+rtree.numOfNodes()+"<"+minNumOfNodes, rtree.numOfNodes() < minNumOfNodes);
+      assertFalse("Too many nodes "+rtree.numOfNodes()+">"+maxNumOfNodes, rtree.numOfNodes() > maxNumOfNodes);
+      assertEquals(2, rtree.getHeight());
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+  public void testBuild3() {
+    try {
+      String fileName = "src/test/resources/test2.points";
+      double[][] points = readFile(fileName);
+      RTreeAG rtree = new RTreeAG(points[0], points[1], 2, 4);
+      assertEquals(rtree.numOfObjects(), 22);
+      int maxNumOfNodes = 18;
+      int minNumOfNodes = 9;
+      assertFalse("Too few nodes "+rtree.numOfNodes()+"<"+minNumOfNodes, rtree.numOfNodes() < minNumOfNodes);
+      assertFalse("Too many nodes "+rtree.numOfNodes()+">"+maxNumOfNodes, rtree.numOfNodes() > maxNumOfNodes);
+      assertTrue("Too short tree "+rtree.getHeight(), rtree.getHeight() >= 3);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
   private double[][] readFile(String fileName) throws IOException {
     FileReader testPointsIn = new FileReader(fileName);
     char[] buffer = new char[(int) new File(fileName).length()];
