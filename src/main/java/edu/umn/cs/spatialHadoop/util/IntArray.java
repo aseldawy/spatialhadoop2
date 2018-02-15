@@ -187,9 +187,21 @@ public class IntArray implements Writable, Iterable<Integer> {
   public int get(int index) {
     return array[index];
   }
-  
+
+  /**
+   * Removes and returns the last element in the array
+   * @return
+   */
   public int pop() {
     return array[--size];
+  }
+
+  /**
+   * Returns the last element in the array without removing it.
+   * @return
+   */
+  public int peek() {
+    return array[size-1];
   }
 
   public boolean remove(int value) {
