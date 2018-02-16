@@ -67,6 +67,24 @@ public class BitArray implements Writable {
       entries[entry] &= ~(1L << offset);
     }
   }
+
+  /**
+   * Resize the array to have at least the given new size without losing the
+   * current data
+   * @param newSize
+   */
+  public void resize(long newSize) {
+    if (newSize > size) {
+      // Resize needed
+      int newArraySize = (int) ((size + BitsPerEntry - 1) / BitsPerEntry);
+      if (newArraySize > entries.length) {
+        long[] newEntries = new long[newArraySize];
+        System.arraycopy(entries, 0, newEntries, 0, entries.length);
+        entries = newEntries;
+      }
+      size = newSize;
+    }
+  }
   
   /**
    * Returns the boolean at position <code>i</code>
