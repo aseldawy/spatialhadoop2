@@ -14,9 +14,6 @@ import sun.plugin.dom.css.Rect;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Comparator;
 
 /**
  * A partitioner that uses the original Antonin Guttman R-tree index technique.

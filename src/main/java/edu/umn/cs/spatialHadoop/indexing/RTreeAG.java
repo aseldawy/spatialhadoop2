@@ -14,6 +14,11 @@ import java.util.List;
  * Antonin Guttman: R-Trees: A Dynamic Index Structure for Spatial Searching.
  * SIGMOD Conference 1984: 47-57
  *
+ * It also provides an implementation of the R*-tree as described in:
+ * Norbert Beckmann, Hans-Peter Kriegel, Ralf Schneider, Bernhard Seeger:
+ * The R*-Tree: An Efficient and Robust Access Method for Points and Rectangles.
+ * SIGMOD Conference 1990: 322-331
+ *
  * It only contain the implementation of the parts needed for the indexing
  * methods. For example, the delete operation was not implemented as it is
  * not needed. Also, this index is designed mainly to be used to index a sample
@@ -34,8 +39,8 @@ public class RTreeAG {
   /** Minimum capacity of a node. */
   private final int minCapacity;
 
-  /**If this flag is true, the R* split algorithm is used*/
-  private boolean rStarSplit;
+  /**If this flag is true, the R* implementation is used*/
+  private boolean rStar;
 
   /**
    * A data structure for a node that works for both leaf and non-leaf nodes.
@@ -178,6 +183,33 @@ public class RTreeAG {
 
       return newNode;
     }
+
+    public Node splitNonLeafNode(int separator, List<Node> nodes) {
+      // Create the new node that will hold the entries from separator -> size
+      Node newNode = new Node();
+      newNode.leaf = false;
+      // Recompute the two MBRs at the cut line
+      this.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = 0; i < separator; i++) {
+        int iChild = this.children.get(i);
+        this.expand(nodes.get(iChild));
+      }
+      newNode.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = separator; i < this.size(); i++) {
+        int iChild = this.children.get(i);
+        newNode.expand(nodes.get(iChild));
+      }
+
+      // Adjust the children at each node
+      newNode.children = new IntArray();
+      newNode.children.append(children, separator, children.size() - separator);
+      children.resize(separator);
+
+      return newNode;
+    }
+
   }
 
   /**
@@ -200,7 +232,7 @@ public class RTreeAG {
     this.ys = ys;
     this.maxCapcity = maxCapcity;
     this.minCapacity = minCapacity;
-    this.rStarSplit = rStar;
+    this.rStar = rStar;
     nodes = new ArrayList<Node>();
 
     Node rootNode = Node.createLeaf(0, xs[0], ys[0]);
@@ -261,7 +293,7 @@ public class RTreeAG {
     int iNewNode = -1;
     if (leafNode.size() >= maxCapcity) {
       // Node full. Split into two
-      iNewNode = rStarSplit ? rStarSplitLeaf(leafNode) : quadraticSplitLeaf(leafNode);
+      iNewNode = rStar ? rStarSplitLeaf(leafNode) : quadraticSplitLeaf(leafNode);
     }
     // AdjustTree. Ascend from the leaf node L
     while (!path.isEmpty()) {
@@ -287,7 +319,7 @@ public class RTreeAG {
           parent.addChildNode(iNewNode, nodes.get(iNewNode));
           iNewNode = -1;
           if (parent.size() >= maxCapcity) {
-            iNewNode = quadraticSplitNonLeaf(parent);
+            iNewNode = rStar? rStarSplitNonLeaf(parent) : quadraticSplitNonLeaf(parent);
           }
         }
       }
@@ -297,7 +329,7 @@ public class RTreeAG {
   /**
    * The R* split algorithm operating on a leaf node as described in the
    * following paper, Page 326.
-   * 	Norbert Beckmann, Hans-Peter Kriegel, Ralf Schneider, Bernhard Seeger:
+   * Norbert Beckmann, Hans-Peter Kriegel, Ralf Schneider, Bernhard Seeger:
    * The R*-Tree: An Efficient and Robust Access Method for Points and Rectangles. SIGMOD Conference 1990: 322-331
    * @param node
    * @return the index of the new node created as a result of the split
@@ -324,7 +356,7 @@ public class RTreeAG {
       }
     };
     quickSort.sort(sortX, 0, node.size());
-    double sumMarginX = computeSumMargin(node);
+    double sumMarginX = computeSumMarginLeaf(node);
 
     IndexedSortable sortY = new IndexedSortable() {
       @Override
@@ -341,7 +373,7 @@ public class RTreeAG {
       }
     };
     quickSort.sort(sortY, 0, node.size());
-    double sumMarginY = computeSumMargin(node);
+    double sumMarginY = computeSumMarginLeaf(node);
     if (sumMarginX < sumMarginY) {
       // Choose the axis with the minimum S as split axis.
       quickSort.sort(sortX, 0, node.size());
@@ -396,7 +428,7 @@ public class RTreeAG {
    * @param node
    * @return
    */
-  private double computeSumMargin(Node node) {
+  private double computeSumMarginLeaf(Node node) {
     double sumMargin = 0.0;
     Rectangle mbr1 = new Rectangle();
     Rectangle mbr2 = new Rectangle();
@@ -418,6 +450,152 @@ public class RTreeAG {
       sumMargin += mbr2.getWidth() + mbr2.getHeight();
     }
     return sumMargin;
+  }
+
+  /**
+   * Compute the sum margin of the given node assuming that the children have
+   * been already sorted along one of the dimensions.
+   * @param node
+   * @return
+   */
+  private double computeSumMarginNonLeaf(Node node) {
+    double sumMargin = 0.0;
+    Rectangle mbr1 = new Rectangle();
+    Rectangle mbr2 = new Rectangle();
+    for (int k = 1; k <= maxCapcity - 2 * minCapacity + 2; k++) {
+      int separator = minCapacity - 1 + k;
+      mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = 0; i < separator; i++) {
+        int iChild = node.children.get(i);
+        mbr1.expand(nodes.get(iChild));
+      }
+      mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = separator; i < node.size(); i++) {
+        int iChild = node.children.get(i);
+        mbr2.expand(nodes.get(iChild));
+      }
+      sumMargin += mbr1.getWidth() + mbr1.getHeight();
+      sumMargin += mbr2.getWidth() + mbr2.getHeight();
+    }
+    return sumMargin;
+  }
+
+  /**
+   * The R* split algorithm operating on a non-leaf node as described in the
+   * paper, Page 326.
+   * @param node
+   * @return the index of the new node created as a result of the split
+   */
+  protected int rStarSplitNonLeaf(final Node node) {
+    // ChooseSplitAxis
+    // Sort the entries by each axis and compute S, the sum of all margin-values
+    // of the different distributions
+
+    // Sort by x-axis
+    QuickSort quickSort = new QuickSort();
+    IndexedSortable sortX = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        double diffX1 = nodes.get(node.children.get(i)).x1 - nodes.get(node.children.get(j)).x1;
+        if (diffX1 < 0)
+          return -1;
+        else if (diffX1 > 0)
+          return 1;
+        else {
+          // Same x1, sort on x2
+          double diffX2 = nodes.get(node.children.get(i)).x2 - nodes.get(node.children.get(j)).x2;
+          if (diffX1 < 0)
+            return -1;
+          else if (diffX1 > 0)
+            return 1;
+          else
+            return 0;
+        }
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        node.children.swap(i, j);
+      }
+    };
+    quickSort.sort(sortX, 0, node.size());
+    double sumMarginX = computeSumMarginNonLeaf(node);
+
+    IndexedSortable sortY = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        double diffY1 = nodes.get(node.children.get(i)).y1 - nodes.get(node.children.get(j)).y1;
+        if (diffY1 < 0)
+          return -1;
+        else if (diffY1 > 0)
+          return 1;
+        else {
+          // Same y1, sort on y2
+          double diffY2 = nodes.get(node.children.get(i)).y2 - nodes.get(node.children.get(j)).y2;
+          if (diffY1 < 0)
+            return -1;
+          else if (diffY1 > 0)
+            return 1;
+          else
+            return 0;
+        }
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        node.children.swap(i, j);
+      }
+    };
+    quickSort.sort(sortY, 0, node.size());
+    double sumMarginY = computeSumMarginNonLeaf(node);
+    if (sumMarginX < sumMarginY) {
+      // Choose the axis with the minimum S as split axis.
+      quickSort.sort(sortX, 0, node.size());
+    }
+
+    // Along the chosen axis, choose the distribution with the minimum overlap value.
+    double minOverlap = Double.POSITIVE_INFINITY;
+    double minArea = Double.POSITIVE_INFINITY;
+    int chosenK = -1;
+    Rectangle mbr1 = new Rectangle();
+    Rectangle mbr2 = new Rectangle();
+    for (int k = 1; k <= maxCapcity - 2 * minCapacity + 2; k++) {
+      int separator = minCapacity - 1 + k;
+      mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = 0; i < separator; i++) {
+        int iChild = node.children.get(i);
+        mbr1.expand(nodes.get(iChild));
+      }
+      mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = separator; i < node.size(); i++) {
+        int iChild = node.children.get(i);
+        mbr2.expand(nodes.get(iChild));
+      }
+      Rectangle overlapMBR = mbr1.getIntersection(mbr2);
+      double overlapArea = overlapMBR == null? 0 : overlapMBR.getWidth() * overlapMBR.getHeight();
+      if (overlapArea < minOverlap) {
+        minOverlap = overlapArea;
+        minArea = mbr1.getWidth() * mbr1.getHeight() + mbr2.getWidth() *  mbr2.getHeight();
+        chosenK = k;
+      } else if (overlapArea == minOverlap) {
+        // Resolve ties by choosing the distribution with minimum area-value
+        double area = mbr1.getWidth() * mbr1.getHeight() + mbr2.getWidth() *  mbr2.getHeight();
+        if (area < minArea) {
+          minArea = area;
+          chosenK = k;
+        }
+      }
+    }
+
+    // Split at the chosenK
+    int separator = minCapacity - 1 + chosenK;
+    Node newNode = node.splitNonLeafNode(separator, nodes);
+    nodes.add(newNode);
+    return nodes.size() - 1;
   }
 
   /**
