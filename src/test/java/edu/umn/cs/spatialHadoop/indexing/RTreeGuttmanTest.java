@@ -10,9 +10,9 @@ import java.io.FileReader;
 import java.io.IOException;
 
 /**
- * Unit test for the RTreeAG class
+ * Unit test for the RTreeGuttman class
  */
-public class RTreeAGTest extends TestCase {
+public class RTreeGuttmanTest extends TestCase {
 
   /**
    * Create the test case
@@ -20,7 +20,7 @@ public class RTreeAGTest extends TestCase {
    * @param testName
    *          name of the test case
    */
-  public RTreeAGTest(String testName) {
+  public RTreeGuttmanTest(String testName) {
     super(testName);
   }
 
@@ -28,14 +28,14 @@ public class RTreeAGTest extends TestCase {
    * @return the suite of tests being tested
    */
   public static Test suite() {
-    return new TestSuite(RTreeAGTest.class);
+    return new TestSuite(RTreeGuttmanTest.class);
   }
 
   public void testBuild() {
     try {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
-      RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8, false);
+      RTreeGuttman rtree = new RTreeGuttman(points[0], points[1], 4, 8);
       assertEquals(rtree.numOfDataEntries(), 11);
       assertEquals(3, rtree.numOfNodes());
       assertEquals(2, rtree.getHeight());
@@ -50,27 +50,7 @@ public class RTreeAGTest extends TestCase {
     try {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
-      RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8, false);
-      assertEquals(rtree.numOfDataEntries(), 22);
-      int maxNumOfNodes = 6;
-      int minNumOfNodes = 4;
-      assertTrue(String.format("Too few nodes %d<%d",rtree.numOfNodes(), minNumOfNodes),
-          rtree.numOfNodes() >= minNumOfNodes);
-      assertTrue(String.format("Too many nodes %d>%d", rtree.numOfNodes(), maxNumOfNodes),
-          rtree.numOfNodes() <= maxNumOfNodes);
-      assertEquals(2, rtree.getHeight());
-    } catch (FileNotFoundException e) {
-      fail("Error opening test file");
-    } catch (IOException e) {
-      fail("Error working with the test file");
-    }
-  }
-
-  public void testBuildRStar() {
-    try {
-      String fileName = "src/test/resources/test2.points";
-      double[][] points = readFile(fileName);
-      RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8, true);
+      RTreeGuttman rtree = new RTreeGuttman(points[0], points[1], 4, 8);
       assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 6;
       int minNumOfNodes = 4;
@@ -90,7 +70,7 @@ public class RTreeAGTest extends TestCase {
     try {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
-      RTreeAG rtree = new RTreeAG(points[0], points[1], 2, 4, false);
+      RTreeGuttman rtree = new RTreeGuttman(points[0], points[1], 2, 4);
       assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 18;
       int minNumOfNodes = 9;
@@ -111,7 +91,7 @@ public class RTreeAGTest extends TestCase {
     try {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
-      RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8, false);
+      RTreeGuttman rtree = new RTreeGuttman(points[0], points[1], 4, 8);
       assertEquals(rtree.numOfDataEntries(), 11);
       assertEquals(2, rtree.getAllLeaves().length);
     } catch (FileNotFoundException e) {
