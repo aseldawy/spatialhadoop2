@@ -328,7 +328,7 @@ public class RTreeGuttman {
 
   /**
    * Split an overflow leaf node into two using the Quadratic Split method described
-   * in Guttman'86 page 52.
+   * in Guttman'84 page 52.
    * @param iNode the index of the node to split
    * @return
    */
