@@ -76,7 +76,7 @@ public class BitArray implements Writable {
   public void resize(long newSize) {
     if (newSize > size) {
       // Resize needed
-      int newArraySize = (int) ((size + BitsPerEntry - 1) / BitsPerEntry);
+      int newArraySize = (int) ((newSize + BitsPerEntry - 1) / BitsPerEntry);
       if (newArraySize > entries.length) {
         long[] newEntries = new long[newArraySize];
         System.arraycopy(entries, 0, newEntries, 0, entries.length);
