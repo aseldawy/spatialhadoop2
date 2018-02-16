@@ -9,7 +9,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.core.*;
-import sun.plugin.dom.css.Rect;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -64,7 +63,7 @@ public class RTreePartitioner extends Partitioner {
       xs[i] = points[i].x;
       ys[i] = points[i].y;
     }
-    RTreeAG rtree = new RTreeAG(xs, ys, capacity/2, capacity, true);
+    RTreeAG_Star rtree = new RTreeAG_Star(xs, ys, capacity/2, capacity, true);
     Rectangle[] nodes = rtree.getAllLeaves();
     partitions = new RTreePartition[nodes.length];
     for (int i = 0; i < nodes.length; i++) {

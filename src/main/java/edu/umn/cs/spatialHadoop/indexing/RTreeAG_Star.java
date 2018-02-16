@@ -25,7 +25,7 @@ import java.util.List;
  * in memory and use it for the partitioning. So, the disk-based mapping and
  * search were not implemented for simplicity.
  */
-public class RTreeAG {
+public class RTreeAG_Star {
 
   /** x-coordinates of all points inserted into the tree. */
   private double[] xs;
@@ -227,7 +227,7 @@ public class RTreeAG {
    * @param maxCapcity - Maximum capacity of a node
    * @param rStar - When set to true, R* split algorithm is applied
    */
-  public RTreeAG(double[] xs, double[] ys, int minCapacity, int maxCapcity, boolean rStar) {
+  public RTreeAG_Star(double[] xs, double[] ys, int minCapacity, int maxCapcity, boolean rStar) {
     this.xs = xs;
     this.ys = ys;
     this.maxCapcity = maxCapcity;
