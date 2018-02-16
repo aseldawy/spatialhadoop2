@@ -2,6 +2,8 @@ package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.IntArray;
+import org.apache.hadoop.util.IndexedSortable;
+import org.apache.hadoop.util.QuickSort;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,24 +22,20 @@ import java.util.List;
  */
 public class RTreeAG {
 
-  /**
-   * x-coordinates of all points inserted into the tree.
-   */
+  /** x-coordinates of all points inserted into the tree. */
   private double[] xs;
-  /**
-   * y-coordinates of all points inserted into the tree.
-   */
+
+  /** y-coordinates of all points inserted into the tree. */
   private double[] ys;
 
-  /**
-   * Maximum capacity of a node
-   */
+  /** Maximum capacity of a node */
   private final int maxCapcity;
 
-  /**
-   * Minimum capacity of a node.
-   */
+  /** Minimum capacity of a node. */
   private final int minCapacity;
+
+  /**If this flag is true, the R* split algorithm is used*/
+  private boolean rStarSplit;
 
   /**
    * A data structure for a node that works for both leaf and non-leaf nodes.
@@ -146,6 +144,40 @@ public class RTreeAG {
       this.children.add(iNode);
       this.expand(mbr);
     }
+
+    /**
+     * Split the node along the given separator and return the newly created
+     * node.
+     * @param separator
+     * @param xs
+     * @param ys
+     * @return
+     */
+    public Node splitLeafNode(int separator, double[] xs, double[] ys) {
+      // Create the new node that will hold the entries from separator -> size
+      Node newNode = new Node();
+      newNode.leaf = true;
+      // Recompute the two MBRs at the cut line
+      this.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = 0; i < separator; i++) {
+        int iChild = this.children.get(i);
+        this.expand(xs[iChild], ys[iChild]);
+      }
+      newNode.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = separator; i < this.size(); i++) {
+        int iChild = this.children.get(i);
+        newNode.expand(xs[iChild], ys[iChild]);
+      }
+
+      // Adjust the children at each node
+      newNode.children = new IntArray();
+      newNode.children.append(children, separator, children.size() - separator);
+      children.resize(separator);
+
+      return newNode;
+    }
   }
 
   /**
@@ -161,42 +193,22 @@ public class RTreeAG {
    * @param ys - y-coordinates for the points
    * @param minCapacity - Minimum capacity of a node
    * @param maxCapcity - Maximum capacity of a node
+   * @param rStar - When set to true, R* split algorithm is applied
    */
-  public RTreeAG(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
+  public RTreeAG(double[] xs, double[] ys, int minCapacity, int maxCapcity, boolean rStar) {
     this.xs = xs;
     this.ys = ys;
     this.maxCapcity = maxCapcity;
     this.minCapacity = minCapacity;
+    this.rStarSplit = rStar;
     nodes = new ArrayList<Node>();
 
     Node rootNode = Node.createLeaf(0, xs[0], ys[0]);
-    for (int i = 1; i < xs.length; i++)
-      rootNode.addEntry(i, xs[i], ys[i]);
-
-    nodes.add(rootNode);
     root = 0;
-
-    boolean needSplits;
-    IntArray pathToRoot = new IntArray();
-    do {
-      needSplits = false;
-      for (int iNode = 0; iNode < nodes.size(); iNode++) {
-        Node node = nodes.get(iNode);
-        if (node.size() > maxCapcity && node.leaf) {
-          pathToRoot.clear();
-          pathToRoot.add(iNode);
-          while (pathToRoot.get(0) != root) {
-            for (int iParent = 0; iParent < nodes.size(); iParent++) {
-              Node parent = nodes.get(iParent);
-              if (!parent.leaf && parent.children.contains(pathToRoot.get(0)))
-                pathToRoot.insert(0, iParent);
-            }
-          }
-          adjustTree(node, pathToRoot);
-          needSplits = true;
-        }
-      }
-    } while (needSplits);
+    nodes.add(rootNode);
+    // Insert one by one
+    for (int i = 1; i < xs.length; i++)
+      insert(i);
   }
 
   /**
@@ -249,7 +261,7 @@ public class RTreeAG {
     int iNewNode = -1;
     if (leafNode.size() >= maxCapcity) {
       // Node full. Split into two
-      iNewNode = quadraticSplitLeaf(leafNode);
+      iNewNode = rStarSplit ? rStarSplitLeaf(leafNode) : quadraticSplitLeaf(leafNode);
     }
     // AdjustTree. Ascend from the leaf node L
     while (!path.isEmpty()) {
@@ -280,16 +292,141 @@ public class RTreeAG {
         }
       }
     }
+  }
 
+  /**
+   * The R* split algorithm operating on a leaf node as described in the
+   * following paper, Page 326.
+   * 	Norbert Beckmann, Hans-Peter Kriegel, Ralf Schneider, Bernhard Seeger:
+   * The R*-Tree: An Efficient and Robust Access Method for Points and Rectangles. SIGMOD Conference 1990: 322-331
+   * @param node
+   * @return the index of the new node created as a result of the split
+   */
+  protected int rStarSplitLeaf(final Node node) {
+    // ChooseSplitAxis
+    // Sort the entries by each axis and compute S, the sum of all margin-values
+    // of the different distributions
+
+    // Sort by x-axis
+    QuickSort quickSort = new QuickSort();
+    IndexedSortable sortX = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        double diffX = xs[node.children.get(i)] - xs[node.children.get(j)];
+        if (diffX < 0) return -1;
+        if (diffX > 0) return 1;
+        return 0;
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        node.children.swap(i, j);
+      }
+    };
+    quickSort.sort(sortX, 0, node.size());
+    double sumMarginX = computeSumMargin(node);
+
+    IndexedSortable sortY = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        double diffY = ys[node.children.get(i)] - ys[node.children.get(j)];
+        if (diffY < 0) return -1;
+        if (diffY > 0) return 1;
+        return 0;
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        node.children.swap(i, j);
+      }
+    };
+    quickSort.sort(sortY, 0, node.size());
+    double sumMarginY = computeSumMargin(node);
+    if (sumMarginX < sumMarginY) {
+      // Choose the axis with the minimum S as split axis.
+      quickSort.sort(sortX, 0, node.size());
+    }
+
+    // Along the chosen axis, choose the distribution with the minimum overlap value.
+    double minOverlap = Double.POSITIVE_INFINITY;
+    double minArea = Double.POSITIVE_INFINITY;
+    int chosenK = -1;
+    Rectangle mbr1 = new Rectangle();
+    Rectangle mbr2 = new Rectangle();
+    for (int k = 1; k <= maxCapcity - 2 * minCapacity + 2; k++) {
+      int separator = minCapacity - 1 + k;
+      mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = 0; i < separator; i++) {
+        int iChild = node.children.get(i);
+        mbr1.expand(xs[iChild], ys[iChild]);
+      }
+      mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = separator; i < node.size(); i++) {
+        int iChild = node.children.get(i);
+        mbr2.expand(xs[iChild], ys[iChild]);
+      }
+      Rectangle overlapMBR = mbr1.getIntersection(mbr2);
+      double overlapArea = overlapMBR == null? 0 : overlapMBR.getWidth() * overlapMBR.getHeight();
+      if (overlapArea < minOverlap) {
+        minOverlap = overlapArea;
+        minArea = mbr1.getWidth() * mbr1.getHeight() + mbr2.getWidth() *  mbr2.getHeight();
+        chosenK = k;
+      } else if (overlapArea == minOverlap) {
+        // Resolve ties by choosing the distribution with minimum area-value
+        double area = mbr1.getWidth() * mbr1.getHeight() + mbr2.getWidth() *  mbr2.getHeight();
+        if (area < minArea) {
+          minArea = area;
+          chosenK = k;
+        }
+      }
+    }
+
+    // Split at the chosenK
+    int separator = minCapacity - 1 + chosenK;
+    Node newNode = node.splitLeafNode(separator, xs, ys);
+    nodes.add(newNode);
+    return nodes.size() - 1;
+  }
+
+  /**
+   * Compute the sum margin of the given node assuming that the children have
+   * been already sorted along one of the dimensions.
+   * @param node
+   * @return
+   */
+  private double computeSumMargin(Node node) {
+    double sumMargin = 0.0;
+    Rectangle mbr1 = new Rectangle();
+    Rectangle mbr2 = new Rectangle();
+    for (int k = 1; k <= maxCapcity - 2 * minCapacity + 2; k++) {
+      int separator = minCapacity - 1 + k;
+      mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = 0; i < separator; i++) {
+        int iChild = node.children.get(i);
+        mbr1.expand(xs[iChild], ys[iChild]);
+      }
+      mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (int i = separator; i < node.size(); i++) {
+        int iChild = node.children.get(i);
+        mbr2.expand(xs[iChild], ys[iChild]);
+      }
+      sumMargin += mbr1.getWidth() + mbr1.getHeight();
+      sumMargin += mbr2.getWidth() + mbr2.getHeight();
+    }
+    return sumMargin;
   }
 
   /**
    * Split an overflow leaf node into two using the Quadratic Split method described
    * in Guttman'86 page 52.
    * @param oldNode
-   * @return
+   * @return the index of the new node that resulted of the split
    */
-  private int quadraticSplitLeaf(Node oldNode) {
+  protected int quadraticSplitLeaf(Node oldNode) {
     // Pick seeds
     // Indexes of the objects to be picked as seeds in the arrays xs and ys
     // Select two entries to be the first elements of the groups
@@ -392,7 +529,7 @@ public class RTreeAG {
    * @param oldNode
    * @return
    */
-  private int quadraticSplitNonLeaf(Node oldNode) {
+  protected int quadraticSplitNonLeaf(Node oldNode) {
     // Pick seeds
     // Indexes of the objects to be picked as seeds in the arrays xs and ys
     // Select two entries to be the first elements of the groups
@@ -505,6 +642,13 @@ public class RTreeAG {
     return nodes.size();
   }
 
+  /**
+   * Computes the height of the tree which is defined as the number of edges
+   * on the path from the root to the deepest node. Sine the R-tree is perfectly
+   * balanced, it is enough to measure the length of the path from the root to
+   * any node, e.g., the left-most node.
+   * @return
+   */
   public int getHeight() {
     if (nodes.isEmpty())
       return 0;
@@ -520,6 +664,10 @@ public class RTreeAG {
     return height;
   }
 
+  /**
+   * Retreive all the leaf nodes in the tree.
+   * @return
+   */
   public Rectangle[] getAllLeaves() {
     int numOfLeaves = 0;
     for (Node node : nodes) {

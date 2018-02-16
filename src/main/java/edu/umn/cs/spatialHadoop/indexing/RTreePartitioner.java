@@ -67,7 +67,7 @@ public class RTreePartitioner extends Partitioner {
       xs[i] = points[i].x;
       ys[i] = points[i].y;
     }
-    RTreeAG rtree = new RTreeAG(xs, ys, capacity/2, capacity);
+    RTreeAG rtree = new RTreeAG(xs, ys, capacity/2, capacity, true);
     Rectangle[] nodes = rtree.getAllLeaves();
     partitions = new RTreePartition[nodes.length];
     for (int i = 0; i < nodes.length; i++) {

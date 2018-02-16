@@ -72,7 +72,11 @@ public class IntArray implements Writable, Iterable<Integer> {
   public void append(IntArray another) {
     append(another.array, 0, another.size);
   }
-  
+
+  public void append(IntArray another, int offset, int count) {
+    append(another.array, offset, count);
+  }
+
   public void append(IntArray another, int delta) {
     append(another.array, 0, another.size, delta);
   }
@@ -237,6 +241,13 @@ public class IntArray implements Writable, Iterable<Integer> {
   @Override
   public Iterator<Integer> iterator() {
     return new IntIterator();
+  }
+
+  /**Shrinks the array to contain the given number of elements only*/
+  public void resize(int newSize) {
+    if (newSize > this.size)
+      throw new IllegalArgumentException("The new size cannot be greater than the current size");
+    this.size = newSize;
   }
 
   class IntIterator implements Iterator<Integer> {
