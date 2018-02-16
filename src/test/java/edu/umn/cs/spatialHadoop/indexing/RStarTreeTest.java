@@ -35,7 +35,7 @@ public class RStarTreeTest extends TestCase {
     try {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
-      RTreeGuttman rtree = new RStarTree(points[0], points[1], 4, 8);
+      RTreeGuttman rtree = RStarTree.constructFromPoints(points[0], points[1], 4, 8);
       assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 6;
       int minNumOfNodes = 4;

@@ -5,10 +5,160 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
+/**
+ * An R*-tree implementation based on the design in the following paper.
+ *
+ * Norbert Beckmann, Hans-Peter Kriegel, Ralf Schneider, Bernhard Seeger:
+ * The R*-Tree: An Efficient and Robust Access Method for Points and Rectangles.
+ * SIGMOD Conference 1990: 322-331
+ */
 public class RStarTree extends RTreeGuttman {
-  public RStarTree(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
-    super(xs, ys, minCapacity, maxCapcity);
+
+  /**Number of entries to delete and reinsert if a forced re-insert is needed*/
+  protected int p;
+
+  /**A flag set to true while a reinserting is in action to avoid cascade reinsertions*/
+  protected boolean reinserting;
+
+  public static RTreeGuttman constructFromPoints(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
+    RTreeGuttman rtree = new RStarTree(minCapacity, maxCapcity);
+    rtree.initializeDataEntries(xs, ys);
+    rtree.insertAllDataEntries();
+    return rtree;
   }
+
+  public RStarTree(int minCapacity, int maxCapcity) {
+    super(minCapacity, maxCapcity);
+    p = maxCapcity * 4 / 10;
+  }
+
+  /**
+   * Treats a node that ran out of space by either forced reinsert of some
+   * entries or splitting.
+   * @param iLeafNode the leaf node that overflew
+   */
+  protected int overflowTreatment(int iLeafNode, IntArray path) {
+    if (iLeafNode != iRoot && !reinserting) {
+      // If the level is not the root level and this is the first call of
+      // overflowTreatment in the given level during the insertion of one entry
+      // invoke reInsert
+      reInsert(iLeafNode, path);
+      // Return -1 which indicates no split happened.
+      // Although we call insert recursively which might result in another split,
+      // even in the same node, the recursive call will handle its split correctly
+      // As long as the ID of the given node and the path to the root do not
+      // change, this method should work fine.
+      return -1;
+    } else {
+      return split(iLeafNode);
+    }
+  }
+
+  /**
+   * Delete and reinsert p elements from the given overflowing leaf node.
+   * Described in Beckmann et al'90 Page 327
+   * @param iNode
+   */
+  protected void reInsert(int iNode, IntArray path) {
+    reinserting = true;
+    // RI1 For all M+1 entries of a node N, compute the distance between
+    // the centers of their rectangles and the center of the MBR of N
+    double nodeX = (x1s[iNode] + x2s[iNode]) / 2;
+    double nodeY = (y1s[iNode] + y2s[iNode]) / 2;
+    
+    final double[] distances2 = new double[Node_size(iNode)];
+    final IntArray nodeChildren = children.get(iNode);
+    for (int i = 0; i < nodeChildren.size(); i++) {
+      int iChild = nodeChildren.get(i);
+      double childX = (x1s[iChild] + x2s[iChild]) / 2;
+      double childY = (y1s[iChild] + y2s[iChild]) / 2;
+      double dx = childX - nodeX;
+      double dy = childY - nodeY;
+      distances2[i] = dx * dx + dy * dy;
+    }
+
+    // RI2 Sort the entries in decreasing order of their distances
+    IndexedSortable sortDistance2 = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        double diff = distances2[i] - distances2[j];
+        if (diff < 0) return -1;
+        if (diff > 0) return 1;
+        return 0;
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        nodeChildren.swap(i, j);
+        double temp = distances2[i];
+        distances2[i] = distances2[j];
+        distances2[j] = temp;
+      }
+    };
+    QuickSort quickSort = new QuickSort();
+    quickSort.sort(sortDistance2, 0, nodeChildren.size());
+
+    // RI3 Remove the first p entries from N and adjust the MBR of N
+    // Eldawy: We chose to sort them by (increasing) distance and remove
+    // the last p elements since deletion from the tail of the list is faster
+    IntArray entriesToReInsert = new IntArray();
+    entriesToReInsert.append(nodeChildren, nodeChildren.size() - p, p);
+    nodeChildren.resize(nodeChildren.size() - p);
+
+    // Eldawy: Since we're going to reinsert elements at the root, we ought to
+    // adjust the MBRs of all nodes along the path to the root, including N.
+    for (int i = path.size() - 1; i >= 0; i--)
+      Node_recalculateMBR(path.get(i));
+
+    // RI4: In the sort, defined in RI2, starting with the minimum distance
+    // (=close reinsert), invoke Insert to reinsert the entries
+    for (int iEntryToReinsert : entriesToReInsert)
+      insertAnExistingDataEntry(iEntryToReinsert);
+    reinserting = false;
+  }
+
+  /**
+   * Adjust the tree after an insertion by making the necessary splits up to
+   * the root.
+   * @param iLeafNode the index of the leaf node where the insertion happened
+   * @param path
+   */
+  protected void adjustTree(int iLeafNode, IntArray path) {
+    int iNode;
+    int iNewNode = -1;
+    if (Node_size(iLeafNode) > maxCapcity) {
+      // Node full.
+      // Overflow treatment
+      iNewNode = overflowTreatment(iLeafNode, path);
+    }
+    // AdjustTree. Ascend from the leaf node L
+    while (!path.isEmpty()) {
+      iNode = path.pop();
+      if (path.isEmpty()) {
+        // The node is the root (no parent)
+        if (iNewNode != -1) {
+          // If the root is split, create a new root
+          iRoot = Node_createNodeWithChildren(false, iNode, iNewNode);
+        }
+        // If N is the root with no partner NN, stop.
+      } else {
+        int iParent = path.peek();
+        // Adjust covering rectangle in parent entry
+        Node_expand(iParent, iNode);
+        if (iNewNode != -1) {
+          // If N has a partner NN resulting from an earlier split,
+          // create a new entry ENN and add to the parent if there is room.
+          // Add Enn to P if there is room
+          Node_addChild(iParent, iNewNode);
+          iNewNode = -1;
+          if (Node_size(iParent) >= maxCapcity) {
+            iNewNode = split(iParent);
+          }
+        }
+      }
+    }
+  }
+
 
   /**
    * The R* split algorithm operating on a leaf node as described in the

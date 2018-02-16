@@ -15,11 +15,6 @@ import java.util.List;
  * Antonin Guttman: R-Trees: A Dynamic Index Structure for Spatial Searching.
  * SIGMOD Conference 1984: 47-57
  *
- * It also provides an implementation of the R*-tree as described in:
- * Norbert Beckmann, Hans-Peter Kriegel, Ralf Schneider, Bernhard Seeger:
- * The R*-Tree: An Efficient and Robust Access Method for Points and Rectangles.
- * SIGMOD Conference 1990: 322-331
- *
  * It only contain the implementation of the parts needed for the indexing
  * methods. For example, the delete operation was not implemented as it is
  * not needed. Also, this index is designed mainly to be used to index a sample
@@ -216,14 +211,40 @@ public class RTreeGuttman {
   }
 
   /**
-   * Construct a new RTree on the given set of points.
-   * @param xs - x-coordinates for the points
-   * @param ys - y-coordinates for the points
+   * Construct a new R-tree from the given set of point coordinates.
+   * @param xs
+   * @param ys
+   * @param minCapacity
+   * @param maxCapcity
+   * @return
+   */
+  public static RTreeGuttman constructFromPoints(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
+    RTreeGuttman rtree = new RTreeGuttman(minCapacity, maxCapcity);
+    rtree.initializeDataEntries(xs, ys);
+    rtree.insertAllDataEntries();
+    return rtree;
+  }
+
+  /**
+   * Construct a new empty R-tree with the given parameters.
    * @param minCapacity - Minimum capacity of a node
    * @param maxCapcity - Maximum capacity of a node
    */
-  public RTreeGuttman(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
+  public RTreeGuttman(int minCapacity, int maxCapcity) {
+    this.minCapacity = minCapacity;
+    this.maxCapcity = maxCapcity;
+  }
+
+  protected void insertAllDataEntries() {
+    iRoot = Node_createNodeWithChildren(true, 0);
+    // Insert one by one
+    for (int i = 1; i < numEntries; i++)
+      insertAnExistingDataEntry(i);
+  }
+
+  protected void initializeDataEntries(double[] xs, double[] ys) {
     this.numEntries = xs.length;
+    this.numNodes = 0; // Initially, no nodes are there
     this.isLeaf = new BitArray(numEntries);
     children = new ArrayList<IntArray>(numEntries);
     this.x1s = new double[numEntries];
@@ -237,14 +258,6 @@ public class RTreeGuttman {
       this.y2s[i] = Math.nextUp(ys[i]);
       children.add(null); // data entries do not have children
     }
-    this.numNodes = 0; // Initially, no nodes are there
-    this.maxCapcity = maxCapcity;
-    this.minCapacity = minCapacity;
-
-    iRoot = Node_createNodeWithChildren(true, 0);
-    // Insert one by one
-    for (int i = 1; i < xs.length; i++)
-      insert(i);
   }
 
   /**
@@ -252,7 +265,7 @@ public class RTreeGuttman {
    * of this data entry are already stored in the coordinates arrays.
    * @param iEntry - The index of the point in the array of points
    */
-  private void insert(int iEntry) {
+  protected void insertAnExistingDataEntry(int iEntry) {
     // The path from the root to the newly inserted record. Used for splitting.
     IntArray path = new IntArray();
     int iCurrentVisitedNode = iRoot;
@@ -291,7 +304,7 @@ public class RTreeGuttman {
    * @param iLeafNode the index of the leaf node where the insertion happened
    * @param path
    */
-  private void adjustTree(int iLeafNode, IntArray path) {
+  protected void adjustTree(int iLeafNode, IntArray path) {
     int iNode;
     int iNewNode = -1;
     if (Node_size(iLeafNode) > maxCapcity) {
