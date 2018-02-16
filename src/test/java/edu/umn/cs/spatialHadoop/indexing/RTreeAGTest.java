@@ -36,7 +36,7 @@ public class RTreeAGTest extends TestCase {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
       RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8, false);
-      assertEquals(rtree.numOfObjects(), 11);
+      assertEquals(rtree.numOfDataEntries(), 11);
       assertEquals(3, rtree.numOfNodes());
       assertEquals(2, rtree.getHeight());
     } catch (FileNotFoundException e) {
@@ -51,7 +51,7 @@ public class RTreeAGTest extends TestCase {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
       RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8, false);
-      assertEquals(rtree.numOfObjects(), 22);
+      assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 6;
       int minNumOfNodes = 4;
       assertTrue(String.format("Too few nodes %d<%d",rtree.numOfNodes(), minNumOfNodes),
@@ -71,7 +71,7 @@ public class RTreeAGTest extends TestCase {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
       RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8, true);
-      assertEquals(rtree.numOfObjects(), 22);
+      assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 6;
       int minNumOfNodes = 4;
       assertTrue(String.format("Too few nodes %d<%d",rtree.numOfNodes(), minNumOfNodes),
@@ -91,7 +91,7 @@ public class RTreeAGTest extends TestCase {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
       RTreeAG rtree = new RTreeAG(points[0], points[1], 2, 4, false);
-      assertEquals(rtree.numOfObjects(), 22);
+      assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 18;
       int minNumOfNodes = 9;
       assertTrue(String.format("Too few nodes %d<%d",rtree.numOfNodes(), minNumOfNodes),
@@ -112,7 +112,7 @@ public class RTreeAGTest extends TestCase {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
       RTreeAG rtree = new RTreeAG(points[0], points[1], 4, 8, false);
-      assertEquals(rtree.numOfObjects(), 11);
+      assertEquals(rtree.numOfDataEntries(), 11);
       assertEquals(2, rtree.getAllLeaves().length);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
