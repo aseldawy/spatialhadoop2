@@ -35,4 +35,11 @@ public class BitArrayTest extends TestCase {
     assertTrue(bitArray.get(5));
   }
 
+  public void testCountOnes() {
+    BitArray bitArray = new BitArray(100);
+    for (int i = 0; i < 100; i++) {
+      bitArray.set(i, true);
+      assertEquals(i+1, bitArray.countOnes());
+    }
+  }
 }

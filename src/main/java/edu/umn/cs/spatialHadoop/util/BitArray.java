@@ -97,6 +97,26 @@ public class BitArray implements Writable {
     return (entries[entry] & (1L << offset)) != 0;
   }
 
+  /**
+   * Count number of set bits in the bit array.
+   * Code adapted from
+   * https://codingforspeed.com/a-faster-approach-to-count-set-bits-in-a-32-bit-integer/
+   * @return
+   */
+  public long countOnes() {
+    long totalCount = 0;
+    for (long i : entries) {
+      i = i - ((i >>> 1) & 0x5555555555555555L);
+      i = (i & 0x3333333333333333L) + ((i >>> 2) & 0x3333333333333333L);
+      i = (i + (i >>> 4)) & 0x0f0f0f0f0f0f0f0fL;
+      i = i + (i >>> 8);
+      i = i + (i >>> 16);
+      i = i + (i >>> 32);
+      totalCount += i & 0x7f;
+    }
+    return totalCount;
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     out.writeInt(entries.length);
