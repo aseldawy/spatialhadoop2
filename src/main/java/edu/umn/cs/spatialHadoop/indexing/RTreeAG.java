@@ -25,13 +25,10 @@ import java.util.List;
  * in memory and use it for the partitioning. So, the disk-based mapping and
  * search were not implemented for simplicity.
  */
-public class RTreeAG_Star {
+public class RTreeAG {
 
-  /** x-coordinates of all points inserted into the tree. */
-  private double[] xs;
-
-  /** y-coordinates of all points inserted into the tree. */
-  private double[] ys;
+  /** The four coordinates (left, bottom, right, top) for data entries */
+  private double[] x1s, y1s, x2s, y2s;
 
   /** Maximum capacity of a node */
   private final int maxCapcity;
@@ -227,9 +224,17 @@ public class RTreeAG_Star {
    * @param maxCapcity - Maximum capacity of a node
    * @param rStar - When set to true, R* split algorithm is applied
    */
-  public RTreeAG_Star(double[] xs, double[] ys, int minCapacity, int maxCapcity, boolean rStar) {
-    this.xs = xs;
-    this.ys = ys;
+  public RTreeAG(double[] xs, double[] ys, int minCapacity, int maxCapcity, boolean rStar) {
+    this.x1s = new double[xs.length];
+    this.y1s = new double[xs.length];
+    this.x2s = new double[xs.length];
+    this.y2s = new double[xs.length];
+    for (int i = 0; i < xs.length; i++) {
+      this.x1s[i] = xs[i];
+      this.y1s[i] = ys[i];
+      this.x2s[i] = Math.nextUp(xs[i]);
+      this.y2s[i] = Math.nextUp(ys[i]);
+    }
     this.maxCapcity = maxCapcity;
     this.minCapacity = minCapacity;
     this.rStar = rStar;
@@ -248,8 +253,8 @@ public class RTreeAG_Star {
    * @param iPoint - The index of the point in the array of points
    */
   private void insert(int iPoint) {
-    double x = xs[iPoint];
-    double y = ys[iPoint];
+    double x = x1s[iPoint];
+    double y = y1s[iPoint];
     // The path from the root to the newly inserted record. Used for splitting.
     IntArray path = new IntArray();
     int iNode = root;
@@ -344,7 +349,7 @@ public class RTreeAG_Star {
     IndexedSortable sortX = new IndexedSortable() {
       @Override
       public int compare(int i, int j) {
-        double diffX = xs[node.children.get(i)] - xs[node.children.get(j)];
+        double diffX = x1s[node.children.get(i)] - x1s[node.children.get(j)];
         if (diffX < 0) return -1;
         if (diffX > 0) return 1;
         return 0;
@@ -361,7 +366,7 @@ public class RTreeAG_Star {
     IndexedSortable sortY = new IndexedSortable() {
       @Override
       public int compare(int i, int j) {
-        double diffY = ys[node.children.get(i)] - ys[node.children.get(j)];
+        double diffY = y1s[node.children.get(i)] - y1s[node.children.get(j)];
         if (diffY < 0) return -1;
         if (diffY > 0) return 1;
         return 0;
@@ -391,13 +396,13 @@ public class RTreeAG_Star {
           Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
       for (int i = 0; i < separator; i++) {
         int iChild = node.children.get(i);
-        mbr1.expand(xs[iChild], ys[iChild]);
+        mbr1.expand(x1s[iChild], y1s[iChild]);
       }
       mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
           Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
       for (int i = separator; i < node.size(); i++) {
         int iChild = node.children.get(i);
-        mbr2.expand(xs[iChild], ys[iChild]);
+        mbr2.expand(x1s[iChild], y1s[iChild]);
       }
       Rectangle overlapMBR = mbr1.getIntersection(mbr2);
       double overlapArea = overlapMBR == null? 0 : overlapMBR.getWidth() * overlapMBR.getHeight();
@@ -417,7 +422,7 @@ public class RTreeAG_Star {
 
     // Split at the chosenK
     int separator = minCapacity - 1 + chosenK;
-    Node newNode = node.splitLeafNode(separator, xs, ys);
+    Node newNode = node.splitLeafNode(separator, x1s, y1s);
     nodes.add(newNode);
     return nodes.size() - 1;
   }
@@ -438,13 +443,13 @@ public class RTreeAG_Star {
           Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
       for (int i = 0; i < separator; i++) {
         int iChild = node.children.get(i);
-        mbr1.expand(xs[iChild], ys[iChild]);
+        mbr1.expand(x1s[iChild], y1s[iChild]);
       }
       mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
           Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
       for (int i = separator; i < node.size(); i++) {
         int iChild = node.children.get(i);
-        mbr2.expand(xs[iChild], ys[iChild]);
+        mbr2.expand(x1s[iChild], y1s[iChild]);
       }
       sumMargin += mbr1.getWidth() + mbr1.getHeight();
       sumMargin += mbr2.getWidth() + mbr2.getHeight();
@@ -618,7 +623,7 @@ public class RTreeAG_Star {
         // them and calculate d = area(J) - area(entry1) - area(entry2)
         // Since both entries are points, d = area(J)
         // Choose the most wasteful pair. Choose the pair with the largest d
-        double d = Math.abs((xs[entry1] - xs[entry2]) * (ys[entry1] - ys[entry2]));
+        double d = Math.abs((x1s[entry1] - x1s[entry2]) * (y1s[entry1] - y1s[entry2]));
         if (d > maxD) {
           maxD = d;
           seed1 = entry1;
@@ -629,8 +634,8 @@ public class RTreeAG_Star {
 
     // After picking the seeds, we will start picking next elements one-by-one
     IntArray nonAssignedEntries = oldNode.children;
-    oldNode.resetLeafNode(seed1, xs[seed1], ys[seed1]);
-    Node newNode = Node.createLeaf(seed2, xs[seed2], ys[seed2]);
+    oldNode.resetLeafNode(seed1, x1s[seed1], y1s[seed1]);
+    Node newNode = Node.createLeaf(seed2, x1s[seed2], y1s[seed2]);
     Node group1 = oldNode;
     Node group2 = newNode;
     nonAssignedEntries.remove(seed1);
@@ -641,20 +646,20 @@ public class RTreeAG_Star {
       if (nonAssignedEntries.size() + group1.size() == minCapacity) {
         // Assign all the rest to group1
         for (int iEntry : nonAssignedEntries)
-          group1.addEntry(iEntry, xs[iEntry], ys[iEntry]);
+          group1.addEntry(iEntry, x1s[iEntry], y1s[iEntry]);
         nonAssignedEntries.clear();
       } else if (nonAssignedEntries.size() + group2.size() == minCapacity) {
         // Assign all the rest to newNode
         for (int iEntry : nonAssignedEntries)
-          group2.addEntry(iEntry, xs[iEntry], ys[iEntry]);
+          group2.addEntry(iEntry, x1s[iEntry], y1s[iEntry]);
         nonAssignedEntries.clear();
       } else {
         // Invoke the algorithm  PickNext to choose the next entry to assign.
         int nextEntry = -1;
         double maxDiff = Double.NEGATIVE_INFINITY;
         for (int nonAssignedEntry : nonAssignedEntries) {
-          double d1 = group1.expansion(xs[nonAssignedEntry], ys[nonAssignedEntry]);
-          double d2 = group2.expansion(xs[nonAssignedEntry], ys[nonAssignedEntry]);
+          double d1 = group1.expansion(x1s[nonAssignedEntry], y1s[nonAssignedEntry]);
+          double d2 = group2.expansion(x1s[nonAssignedEntry], y1s[nonAssignedEntry]);
           double diff = Math.abs(d1 - d2);
           if (diff > maxDiff) {
             maxDiff = diff;
@@ -663,8 +668,8 @@ public class RTreeAG_Star {
         }
 
         // Choose which node to add the next entry to
-        double diffExpansion = group1.expansion(xs[nextEntry], ys[nextEntry]) -
-            group2.expansion(xs[nextEntry], ys[nextEntry]);
+        double diffExpansion = group1.expansion(x1s[nextEntry], y1s[nextEntry]) -
+            group2.expansion(x1s[nextEntry], y1s[nextEntry]);
         Node chosenNode;
         // Add it to the group whose covering rectangle will have to be enlarged
         // least to accommodate it
@@ -692,7 +697,7 @@ public class RTreeAG_Star {
             }
           }
         }
-        chosenNode.addEntry(nextEntry, xs[nextEntry], ys[nextEntry]);
+        chosenNode.addEntry(nextEntry, x1s[nextEntry], y1s[nextEntry]);
         nonAssignedEntries.remove(nextEntry);
       }
     }
@@ -720,7 +725,7 @@ public class RTreeAG_Star {
         // For each pair of entries, compose a rectangle J including both of
         // them and calculate d = area(J) - area(entry1) - area(entry2)
         // Choose the most wasteful pair. Choose the pair with the largest d
-        double d = Math.abs((xs[entry1] - xs[entry2]) * (ys[entry1] - ys[entry2]))
+        double d = Math.abs((x1s[entry1] - x1s[entry2]) * (y1s[entry1] - y1s[entry2]))
             -nodes.get(entry1).area() - nodes.get(entry2).area();
         if (d > maxD) {
           maxD = d;
@@ -809,7 +814,7 @@ public class RTreeAG_Star {
    * @return
    */
   public int numOfObjects() {
-    return xs.length;
+    return x1s.length;
   }
 
   /**
