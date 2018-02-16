@@ -13,6 +13,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Iterator;
 
 import org.apache.hadoop.io.Writable;
@@ -229,6 +230,13 @@ public class IntArray implements Writable, Iterable<Integer> {
       }
     }
     return false;
+  }
+
+  public IntArray clone() {
+    IntArray newIntArray = new IntArray();
+    newIntArray.size = this.size;
+    newIntArray.array = this.array.clone();
+    return newIntArray;
   }
 
   /**
