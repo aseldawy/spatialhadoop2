@@ -57,7 +57,7 @@ public class RTreeGuttman {
    * it is a node or a data entry.
    */
   protected void makeRoomForOneMoreObject() {
-    if (x1s.length >= numEntries + numNodes) {
+    if (x1s.length <= numEntries + numNodes) {
       // Expand the coordinate arrays in big chunks to avoid memory copy
       double[] newCoords = new double[x1s.length * 2];
       System.arraycopy(x1s, 0, newCoords, 0, x1s.length);
