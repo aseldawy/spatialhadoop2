@@ -400,7 +400,7 @@ public class RTreeGuttman {
         for (int nonAssignedEntry : nonAssignedNodes) {
           double d1 = Node_expansion(group1, nonAssignedEntry);
           double d2 = Node_expansion(group2, nonAssignedEntry);
-          double diff = Math.abs(d1 - d2);
+          double diff = d1 - d2;
           if (nextEntry == -1 || Math.abs(diff) > Math.abs(maxDiff)) {
             maxDiff = diff;
             nextEntry = nonAssignedEntry;

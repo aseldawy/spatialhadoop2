@@ -1,5 +1,7 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.util.IntArray;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
@@ -65,6 +67,26 @@ public class RTreeGuttmanTest extends TestCase {
       fail("Error working with the test file");
     }
   }
+
+  public void testSplit() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      // Create a tree with a very large threshold to avoid any splits
+      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 50, 100);
+      assertEquals(11, rtree.numOfDataEntries());
+      // Make one split at the root
+      int iNode = rtree.iRoot;
+      int iNewNode = rtree.split(iNode);
+      assertTrue(rtree.Node_size(iNewNode) > 2);
+      assertTrue(rtree.Node_size(iNode) > 2);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
 
   public void testBuild3() {
     try {
