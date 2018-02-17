@@ -123,6 +123,20 @@ public class RTreeGuttmanTest extends TestCase {
     }
   }
 
+
+  public void testExpansion() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      assertEquals(0.0, rtree.Node_expansion(rtree.iRoot, 0));
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
   /**
    * Read a CSV file that contains one point per line in the format "x,y".
    * The points are returned as a 2D array where the first index indicates the

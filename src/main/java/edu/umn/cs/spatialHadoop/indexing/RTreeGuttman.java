@@ -142,7 +142,7 @@ public class RTreeGuttman {
    */
   protected double Node_expansion(int iNode, int iNewChild) {
     double widthB4Expansion = x2s[iNode] - x1s[iNode];
-    double heightB4Expansion = y2s[iNewChild] - y1s[iNode];
+    double heightB4Expansion = y2s[iNode] - y1s[iNode];
     double widthAfterExpansion = Math.max(x2s[iNode], x2s[iNewChild]) -
         Math.min(x1s[iNode], x1s[iNewChild]);
     double heightAfterExpansion = Math.max(y2s[iNode], y2s[iNewChild]) -
