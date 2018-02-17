@@ -159,6 +159,11 @@ public class RStarTree extends RTreeGuttman {
     }
   }
 
+  interface MultiIndexedSortable extends IndexedSortable {
+    enum Axis {X1, Y1, X2, Y2};
+    void setAttribute(Axis i);
+    Axis getAttribute();
+  }
 
   /**
    * The R* split algorithm operating on a leaf node as described in the
@@ -175,22 +180,29 @@ public class RStarTree extends RTreeGuttman {
     // Sort the entries by each axis and compute S, the sum of all margin-values
     // of the different distributions
 
-    // Sort by x-axis (x1 then x2)
-    IndexedSortable sortX = new IndexedSortable() {
+    // Sort by x1, y1, x2, y2
+    MultiIndexedSortable sorter = new MultiIndexedSortable() {
+      public Axis attribute;
+
+      @Override
+      public void setAttribute(Axis att) { this.attribute = att; }
+
+      @Override
+      public Axis getAttribute() { return attribute; }
+
       @Override
       public int compare(int i, int j) {
-        double dx = x1s[nodeChildren.get(i)] - x1s[nodeChildren.get(j)];
-        if (dx < 0)
-          return -1;
-        if (dx > 0)
-          return 1;
-        else {
-          dx = x2s[nodeChildren.get(i)] - x2s[nodeChildren.get(j)];
-          if (dx < 0) return -1;
-          if (dx > 0) return 1;
-          return 0;
+        double diff;
+        switch (attribute) {
+          case X1: diff = x1s[nodeChildren.get(i)] - x1s[nodeChildren.get(j)]; break;
+          case Y1: diff = y1s[nodeChildren.get(i)] - y1s[nodeChildren.get(j)]; break;
+          case X2: diff = x2s[nodeChildren.get(i)] - x2s[nodeChildren.get(j)]; break;
+          case Y2: diff = y2s[nodeChildren.get(i)] - y2s[nodeChildren.get(j)]; break;
+          default: diff = 0;
         }
-
+        if (diff < 0) return -1;
+        if (diff > 0) return 1;
+        return 0;
       }
 
       @Override
@@ -198,37 +210,23 @@ public class RStarTree extends RTreeGuttman {
         nodeChildren.swap(i, j);
       }
     };
-    // Sort by y-axis (y1 then y2)
-    IndexedSortable sortY = new IndexedSortable() {
-      @Override
-      public int compare(int i, int j) {
-        double dy = y1s[nodeChildren.get(i)] - y1s[nodeChildren.get(j)];
-        if (dy < 0)
-          return -1;
-        if (dy > 0)
-          return 1;
-        else {
-          dy = y2s[nodeChildren.get(i)] - y2s[nodeChildren.get(j)];
-          if (dy < 0) return -1;
-          if (dy > 0) return 1;
-          return 0;
-        }
-
-      }
-
-      @Override
-      public void swap(int i, int j) {
-        nodeChildren.swap(i, j);
-      }
-    };
+    double minSumMargin = Double.POSITIVE_INFINITY;
+    MultiIndexedSortable.Axis bestAxis = null;
     QuickSort quickSort = new QuickSort();
-    quickSort.sort(sortX, 0, nodeChildren.size());
-    double sumMarginX = computeSumMargin(iNode);
-    quickSort.sort(sortY, 0, nodeChildren.size());
-    double sumMarginY = computeSumMargin(iNode);
-    if (sumMarginX < sumMarginY) {
-      // Choose the axis with the minimum S as split axis.
-      quickSort.sort(sortX, 0, nodeChildren.size());
+    for (MultiIndexedSortable.Axis sortAttr : MultiIndexedSortable.Axis.values()) {
+      sorter.setAttribute(sortAttr);
+      quickSort.sort(sorter, 0, nodeChildren.size());
+      double sumMargin = computeSumMargin(iNode);
+      if (sumMargin < minSumMargin) {
+        bestAxis = sortAttr;
+        minSumMargin = sumMargin;
+      }
+    }
+
+    // Choose the axis with the minimum S as split axis.
+    if (bestAxis != sorter.getAttribute()) {
+      sorter.setAttribute(bestAxis);
+      quickSort.sort(sorter, 0, nodeChildren.size());
     }
 
     // Along the chosen axis, choose the distribution with the minimum overlap value.

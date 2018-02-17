@@ -34,12 +34,12 @@ public class RTreePartitioner extends Partitioner {
       double newHeight = this.getHeight();
       if (mbr.x1 < this.x1)
         newWidth += (this.x1 - mbr.x1);
-      else if (mbr.x2 > this.x2)
+      if (mbr.x2 > this.x2)
         newWidth += (mbr.x2 - this.x2);
       if (mbr.y1 < this.y1)
         newHeight += (this.y1 - mbr.y1);
-      else if (mbr.y2 > this.y2)
-        newHeight += (this.y2 - mbr.y2);
+      if (mbr.y2 > this.y2)
+        newHeight += (mbr.y2 - this.y2);
 
       return newWidth * newHeight - getWidth() * getHeight();
     }
