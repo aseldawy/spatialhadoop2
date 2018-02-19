@@ -10,43 +10,53 @@ package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.core.*;
 
+import java.awt.geom.Rectangle2D;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * A partitioner that uses the original Antonin Guttman R-tree index technique.
+ * A partitioner that supports an R-tree-based partitioning using either the
+ * original Guttman R-tree (1984) or the improved R*-tree (1990)
  * @author Ahmed Eldawy
  *
  */
 public class RTreePartitioner extends Partitioner {
 
+  /**The coordinates of the partitions*/
+  protected double[] x1s, y1s, x2s, y2s;
+
   /**
-   * A helper class that extends Rectangle with expansion calculation functions.
+   * Computes the expansion that will happen on an a partition when it is
+   * enlarged to enclose a given rectangle.
+   * @param partitionID
+   * @param mbr the MBR of the object to be added to the partition
+   * @return
    */
-  private static class RTreePartition extends Rectangle {
-    public double area() {
-      return getWidth() * getHeight();
-    }
-
-    public double expansion(Rectangle mbr) {
-      double newWidth = this.getWidth();
-      double newHeight = this.getHeight();
-      if (mbr.x1 < this.x1)
-        newWidth += (this.x1 - mbr.x1);
-      if (mbr.x2 > this.x2)
-        newWidth += (mbr.x2 - this.x2);
-      if (mbr.y1 < this.y1)
-        newHeight += (this.y1 - mbr.y1);
-      if (mbr.y2 > this.y2)
-        newHeight += (mbr.y2 - this.y2);
-
-      return newWidth * newHeight - getWidth() * getHeight();
-    }
+  protected double Partition_expansion(int partitionID, Rectangle mbr) {
+    double widthBefore = x2s[partitionID] - x1s[partitionID];
+    double heightBefore = y2s[partitionID] - y1s[partitionID];
+    double widthAfter = widthBefore, heightAfter = heightBefore;
+    if (mbr.x1 < x1s[partitionID])
+      widthAfter += x1s[partitionID] - mbr.x1;
+    if (mbr.y1 < y1s[partitionID])
+      widthAfter += y1s[partitionID] - mbr.y1;
+    if (mbr.x2 > x2s[partitionID])
+      heightAfter += x2s[partitionID] - mbr.x2;
+    if (mbr.y2 > y2s[partitionID])
+      heightAfter += y2s[partitionID] - mbr.y2;
+    return widthAfter * heightAfter - widthBefore * heightBefore;
   }
 
-  /**The list of all partitions created on the sample points*/
-  private RTreePartition[] partitions;
+  /**
+   * Computes the area of a partition.
+   * @param partitionID
+   * @return
+   */
+  protected double Partition_area(int partitionID) {
+    return (x2s[partitionID] - x1s[partitionID]) *
+        (y2s[partitionID] - y1s[partitionID]);
+  }
 
   /**
    * A default constructor to be able to dynamically instantiate it
@@ -64,37 +74,50 @@ public class RTreePartitioner extends Partitioner {
       ys[i] = points[i].y;
     }
     RTreeGuttman rtree = RStarTree.constructFromPoints(xs, ys, capacity/2, capacity);
-    Rectangle[] nodes = rtree.getAllLeaves();
-    partitions = new RTreePartition[nodes.length];
+    Rectangle2D.Double[] nodes = rtree.getAllLeaves();
+    x1s = new double[nodes.length];
+    y1s = new double[nodes.length];
+    x2s = new double[nodes.length];
+    y2s = new double[nodes.length];
     for (int i = 0; i < nodes.length; i++) {
-      partitions[i] = new RTreePartition();
-      partitions[i].set(nodes[i]);
+      x1s[i] = nodes[i].getMinX();
+      y1s[i] = nodes[i].getMinY();
+      x2s[i] = nodes[i].getMaxX();
+      y2s[i] = nodes[i].getMaxY();
     }
   }
 
   @Override
   public void write(DataOutput out) throws IOException {
-    out.writeInt(partitions.length);
-    for (Rectangle partition : partitions) {
-      partition.write(out);
+    out.writeInt(x1s.length);
+    for (int i = 0; i < x1s.length; i++) {
+      out.writeDouble(x1s[i]);
+      out.writeDouble(y1s[i]);
+      out.writeDouble(x2s[i]);
+      out.writeDouble(y2s[i]);
     }
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
     int numPartitions = in.readInt();
-    if (partitions == null || partitions.length != numPartitions)
-      partitions = new RTreePartition[numPartitions];
+    if (getPartitionCount() != numPartitions) {
+      x1s = new double[numPartitions];
+      y1s = new double[numPartitions];
+      x2s = new double[numPartitions];
+      y2s = new double[numPartitions];
+    }
     for (int i = 0; i < numPartitions; i++) {
-      if (partitions[i] == null)
-        partitions[i] = new RTreePartition();
-      partitions[i].readFields(in);
+      x1s[i] = in.readDouble();
+      y1s[i] = in.readDouble();
+      x2s[i] = in.readDouble();
+      y2s[i] = in.readDouble();
     }
   }
   
   @Override
   public int getPartitionCount() {
-    return partitions.length;
+    return x1s == null? 0 : x1s.length;
   }
 
   @Override
@@ -110,14 +133,14 @@ public class RTreePartitioner extends Partitioner {
     Rectangle shapeMBR = shape.getMBR();
     double minExpansion = Double.POSITIVE_INFINITY;
     int chosenPartition = -1;
-    for (int i = 0; i < partitions.length; i++) {
-      double expansion = partitions[i].expansion(shapeMBR);
+    for (int i = 0; i < getPartitionCount(); i++) {
+      double expansion = Partition_expansion(i, shapeMBR);
       if (expansion < minExpansion) {
         minExpansion = expansion;
         chosenPartition = i;
       } else if (expansion == minExpansion) {
         // Resolve ties by choosing the entry with the rectangle of smallest area
-        if (partitions[i].area() < partitions[chosenPartition].area())
+        if (Partition_area(i) < Partition_area(chosenPartition))
           chosenPartition = i;
       }
     }
@@ -131,6 +154,6 @@ public class RTreePartitioner extends Partitioner {
 
   @Override
   public CellInfo getPartition(int id) {
-    return new CellInfo(id, partitions[id]);
+    return new CellInfo(id, x1s[id], y1s[id], x2s[id], y2s[id]);
   }
 }

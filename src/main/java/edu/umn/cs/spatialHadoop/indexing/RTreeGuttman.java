@@ -1,11 +1,9 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
-import org.apache.hadoop.util.IndexedSortable;
-import org.apache.hadoop.util.QuickSort;
 
+import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -485,12 +483,12 @@ public class RTreeGuttman {
    * Retrieve all the leaf nodes in the tree.
    * @return
    */
-  public Rectangle[] getAllLeaves() {
+  public Rectangle2D.Double[] getAllLeaves() {
     int numOfLeaves = (int) isLeaf.countOnes();
-    Rectangle[] leaves = new Rectangle[numOfLeaves];
+    Rectangle2D.Double[] leaves = new Rectangle2D.Double[numOfLeaves];
     for (int i = 0; i < numEntries + numNodes; i++) {
       if (isLeaf.get(i)) {
-        Rectangle rect = new Rectangle(x1s[i], y1s[i], x2s[i], y2s[i]);
+        Rectangle2D.Double rect = new Rectangle2D.Double(x1s[i], y1s[i], x2s[i], y2s[i]);
         leaves[--numOfLeaves] = rect;
       }
     }
