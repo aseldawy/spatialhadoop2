@@ -21,7 +21,7 @@ public class RStarTree extends RTreeGuttman {
   protected boolean reinserting;
 
   public static RTreeGuttman constructFromPoints(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
-    RTreeGuttman rtree = new RStarTree(minCapacity, maxCapcity);
+    RStarTree rtree = new RStarTree(minCapacity, maxCapcity);
     rtree.initializeDataEntries(xs, ys);
     rtree.insertAllDataEntries();
     return rtree;
@@ -50,7 +50,7 @@ public class RStarTree extends RTreeGuttman {
       // change, this method should work fine.
       return -1;
     } else {
-      return split(iLeafNode);
+      return split(iLeafNode, minCapacity);
     }
   }
 
@@ -152,7 +152,8 @@ public class RStarTree extends RTreeGuttman {
           Node_addChild(iParent, iNewNode);
           iNewNode = -1;
           if (Node_size(iParent) >= maxCapcity) {
-            iNewNode = split(iParent);
+            // TODO call overflowTreatment if necessary
+            iNewNode = split(iParent, minCapacity);
           }
         }
       }
@@ -171,10 +172,11 @@ public class RStarTree extends RTreeGuttman {
    * Norbert Beckmann, Hans-Peter Kriegel, Ralf Schneider, Bernhard Seeger:
    * The R*-Tree: An Efficient and Robust Access Method for Points and Rectangles. SIGMOD Conference 1990: 322-331
    * @param iNode the index of the node to split
+   * @param minSplitSize Minimum size for each split
    * @return the index of the new node created as a result of the split
    */
   @Override
-  protected int split(int iNode) {
+  protected int split(int iNode, int minSplitSize) {
     final IntArray nodeChildren = children.get(iNode);
     // ChooseSplitAxis
     // Sort the entries by each axis and compute S, the sum of all margin-values
@@ -235,8 +237,10 @@ public class RStarTree extends RTreeGuttman {
     int chosenK = -1;
     Rectangle mbr1 = new Rectangle();
     Rectangle mbr2 = new Rectangle();
-    for (int k = 1; k <= maxCapcity - 2 * minCapacity + 2; k++) {
-      int separator = minCapacity - 1 + k;
+    // # of possible splits = current size - 2 * minSplitSize + 1
+    int numPossibleSplits = Node_size(iNode) - 2 * minSplitSize + 1;
+    for (int k = 1; k <= numPossibleSplits; k++) {
+      int separator = minCapacity + k - 1; // Separator = size of first group
       mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
           Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
       for (int i = 0; i < separator; i++) {

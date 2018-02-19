@@ -40,7 +40,7 @@ public class RTreeGuttmanTest extends TestCase {
       RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
       assertEquals(rtree.numOfDataEntries(), 11);
       assertEquals(3, rtree.numOfNodes());
-      assertEquals(2, rtree.getHeight());
+      assertEquals(1, rtree.getHeight());
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
@@ -60,7 +60,7 @@ public class RTreeGuttmanTest extends TestCase {
           rtree.numOfNodes() >= minNumOfNodes);
       assertTrue(String.format("Too many nodes %d>%d", rtree.numOfNodes(), maxNumOfNodes),
           rtree.numOfNodes() <= maxNumOfNodes);
-      assertEquals(2, rtree.getHeight());
+      assertEquals(1, rtree.getHeight());
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
@@ -77,9 +77,9 @@ public class RTreeGuttmanTest extends TestCase {
       assertEquals(11, rtree.numOfDataEntries());
       // Make one split at the root
       int iNode = rtree.iRoot;
-      int iNewNode = rtree.split(iNode);
-      assertTrue(rtree.Node_size(iNewNode) > 2);
-      assertTrue(rtree.Node_size(iNode) > 2);
+      int iNewNode = rtree.split(iNode, 4);
+      assertTrue("Too small size " + rtree.Node_size(iNewNode), rtree.Node_size(iNewNode) > 2);
+      assertTrue("Too small size " + rtree.Node_size(iNode), rtree.Node_size(iNode) > 2);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
@@ -101,7 +101,7 @@ public class RTreeGuttmanTest extends TestCase {
       assertTrue(String.format("Too many nodes %d>%d", rtree.numOfNodes(), maxNumOfNodes),
           rtree.numOfNodes() <= maxNumOfNodes);
       assertTrue(String.format("Too short tree %d",rtree.getHeight()),
-          rtree.getHeight() >= 3);
+          rtree.getHeight() >= 2);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

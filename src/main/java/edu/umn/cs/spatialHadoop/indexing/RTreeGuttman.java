@@ -307,7 +307,7 @@ public class RTreeGuttman {
     int iNewNode = -1;
     if (Node_size(iLeafNode) > maxCapcity) {
       // Node full. Split into two
-      iNewNode = split(iLeafNode);
+      iNewNode = split(iLeafNode, minCapacity);
     }
     // AdjustTree. Ascend from the leaf node L
     while (!path.isEmpty()) {
@@ -330,7 +330,7 @@ public class RTreeGuttman {
           Node_addChild(iParent, iNewNode);
           iNewNode = -1;
           if (Node_size(iParent) >= maxCapcity) {
-            iNewNode = split(iParent);
+            iNewNode = split(iParent, minCapacity);
           }
         }
       }
@@ -341,9 +341,10 @@ public class RTreeGuttman {
    * Split an overflow leaf node into two using the Quadratic Split method described
    * in Guttman'84 page 52.
    * @param iNode the index of the node to split
+   * @param minSplitSize Minimum size of each split, typically, {@link #minCapacity}
    * @return
    */
-  protected int split(int iNode) {
+  protected int split(int iNode, int minSplitSize) {
     IntArray nodeChildren = children.get(iNode);
     // Pick seeds
     // Indexes of the objects to be picked as seeds in the arrays xs and ys
@@ -380,13 +381,13 @@ public class RTreeGuttman {
     int group2 = iNewNode;
     while (nonAssignedNodes.size() > 0) {
       // If one group has so few entries that all the rest must be assigned to it
-      // in order to have the minimum number m, assign them and stop
-      if (nonAssignedNodes.size() + Node_size(group1) == minCapacity) {
+      // in order to have the minimum number minSplitSize, assign them and stop
+      if (nonAssignedNodes.size() + Node_size(group1) <= minSplitSize) {
         // Assign all the rest to group1
         for (int iObject : nonAssignedNodes)
           Node_addChild(group1, iObject);
         nonAssignedNodes.clear();
-      } else if (nonAssignedNodes.size() + Node_size(group1) == minCapacity) {
+      } else if (nonAssignedNodes.size() + Node_size(group2) <= minSplitSize) {
         // Assign all the rest to group2
         for (int iObject : nonAssignedNodes)
           Node_addChild(group2, iObject);
@@ -470,7 +471,7 @@ public class RTreeGuttman {
     // Compute the height of the tree by traversing any path from the root
     // to the leaf.
     // Since the tree is balanced, any path would work
-    int height = 1;
+    int height = 0;
     int iNode = iRoot;
     while (!isLeaf.get(iNode)) {
       height++;

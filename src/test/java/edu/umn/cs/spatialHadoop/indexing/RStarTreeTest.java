@@ -43,7 +43,7 @@ public class RStarTreeTest extends TestCase {
           rtree.numOfNodes() >= minNumOfNodes);
       assertTrue(String.format("Too many nodes %d>%d", rtree.numOfNodes(), maxNumOfNodes),
           rtree.numOfNodes() <= maxNumOfNodes);
-      assertEquals(2, rtree.getHeight());
+      assertEquals(1, rtree.getHeight());
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
