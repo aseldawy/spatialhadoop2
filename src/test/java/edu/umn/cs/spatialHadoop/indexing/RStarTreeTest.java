@@ -9,6 +9,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Comparator;
 
 /**
  * Unit test for the RTreeGuttman class
@@ -70,6 +72,63 @@ public class RStarTreeTest extends TestCase {
     }
   }
 
+  public void testPartitionPoints() {
+    try {
+      String fileName = "src/test/resources/test2.points";
+      double[][] points = readFile(fileName);
+      // Create a tree without splits
+      int capacity = 8;
+      Rectangle2D.Double[] partitions =
+          RStarTree.partitionPoints(points[0], points[1], capacity);
+      // Minimum number of partitions = Ceil(# points / capacity)
+      int minNumPartitions = (points[0].length + capacity - 1) / capacity;
+      int maxNumPartitions = (points[0].length + capacity / 2 - 1) / (capacity / 2);
+      assertTrue("Too many partitions " + partitions.length,
+          partitions.length <= maxNumPartitions);
+      assertTrue("Too few partitions " + partitions.length,
+          partitions.length >= minNumPartitions);
+      // Make sure the MBR of all partitions cover the input space
+      Rectangle2D mbrAllPartitions = partitions[0];
+      for (Rectangle2D.Double leaf : partitions) {
+        mbrAllPartitions = mbrAllPartitions.createUnion(leaf);
+      }
+      assertEquals(new Rectangle2D.Double(1, 2, 21, 10), mbrAllPartitions);
+
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+  public void testPartition1() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      // Create a tree without splits
+      int capacity = 8;
+      Rectangle2D.Double[] partitions =
+          RStarTree.partitionPoints(points[0], points[1], capacity);
+
+      assertEquals(2, partitions.length);
+      Arrays.sort(partitions, new Comparator<Rectangle2D.Double>(){
+
+        @Override
+        public int compare(Rectangle2D.Double o1, Rectangle2D.Double o2) {
+          double dx = o1.x - o2.x;
+          if (dx < 0) return -1;
+          if (dx > 0) return 1;
+          return 0;
+        }
+      });
+      assertEquals(new Rectangle2D.Double(1, 3, 5, 9), partitions[0]);
+      assertEquals(new Rectangle2D.Double(9, 2, 3, 8), partitions[1]);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
   /**
    * Read a CSV file that contains one point per line in the format "x,y".
    * The points are returned as a 2D array where the first index indicates the

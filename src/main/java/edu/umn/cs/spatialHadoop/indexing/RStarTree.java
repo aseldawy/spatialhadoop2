@@ -9,6 +9,8 @@ import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * An R*-tree implementation based on the design in the following paper.
@@ -224,19 +226,14 @@ public class RStarTree extends RTreeGuttman {
     MultiIndexedSortable.Axis bestAxis = null;
     QuickSort quickSort = new QuickSort();
     for (MultiIndexedSortable.Axis sortAttr : MultiIndexedSortable.Axis.values()) {
-      long t11 = System.nanoTime();
       sorter.setAttribute(sortAttr);
       quickSort.sort(sorter, 0, nodeSize);
-      long t12 = System.nanoTime();
+
       double sumMargin = computeSumMargin(iNode, minSplitSize);
       if (sumMargin < minSumMargin) {
         bestAxis = sortAttr;
         minSumMargin = sumMargin;
       }
-      long t13 = System.nanoTime();
-      if (t13 - t11 > 1E9)
-      System.out.printf("Splitting %d points: Sort in %f seconds and compute minSumMargin in %f seconds\n",
-          nodeSize, (t12-t11)*1E-9, (t13-t12)*1E-9);
     }
 
     // Choose the axis with the minimum S as split axis.
@@ -353,19 +350,321 @@ public class RStarTree extends RTreeGuttman {
 
       mbr2.set(minX1[separator], minY1[separator],
           maxX2[separator], maxY2[separator]);
-      /*mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
-          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
-      for (int i = separator; i < nodeChildren.size(); i++) {
-        int iChild = nodeChildren.get(i);
-        mbr2.expand(x1s[iChild], y1s[iChild]);
-        mbr2.expand(x2s[iChild], y2s[iChild]);
-      }*/
       sumMargin += mbr1.getWidth() + mbr1.getHeight();
       sumMargin += mbr2.getWidth() + mbr2.getHeight();
     }
     return sumMargin;
   }
 
+  /**
+   * Use the R*-tree improved splitting algorithm to split the given set of points
+   * such that each split does not exceed the given capacity.
+   * Returns the MBRs of the splits. This method is a standalone static method
+   * that does not use the RStarTree class but uses a similar algorithm used
+   * in {@link #split(int, int)}
+   * @param xs
+   * @param ys
+   * @param capacity
+   * @return
+   */
+  public static Rectangle2D.Double[] partitionPoints(final double[] xs, final double[] ys, int capacity) {
+    IndexedSortable sorterX = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        double dx = xs[i] - xs[j];
+        if (dx < 0) return -1;
+        if (dx > 0) return 1;
+        return 0;
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        double t = xs[i];
+        xs[i] = xs[j];
+        xs[j] = t;
+        t = ys[i];
+        ys[i] = ys[j];
+        ys[j] = t;
+      }
+    };
+    IndexedSortable sorterY = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        double dy = ys[i] - ys[j];
+        if (dy < 0) return -1;
+        if (dy > 0) return 1;
+        return 0;
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        double t = xs[i];
+        xs[i] = xs[j];
+        xs[j] = t;
+        t = ys[i];
+        ys[i] = ys[j];
+        ys[j] = t;
+      }
+    };
+    QuickSort quickSort = new QuickSort();
+    int numRangesToSplit = 0;
+    long[] rangesToSplit = new long[16];
+    List<Rectangle2D.Double> finalizedSplits = new ArrayList<Rectangle2D.Double>();
+    rangesToSplit[numRangesToSplit++] = (((long)xs.length) << 32);
+    // Temporary arrays for pre-caching min and max coordinates
+    double[] group2Min = new double[xs.length];
+    double[] group2Max = new double[xs.length];
+    while (numRangesToSplit > 0) {
+      long rangeToSplit = rangesToSplit[--numRangesToSplit];
+      int rangeStart = (int) (rangeToSplit & 0xffffffffL);
+      int rangeEnd = (int) (rangeToSplit >>> 32);
+
+      if (rangeEnd - rangeStart <= capacity) {
+        // No further splitting needed. Create a partition
+        double minX = Double.POSITIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        for (int i = rangeStart; i < rangeEnd; i++) {
+          if (xs[i] < minX) minX = xs[i];
+          if (xs[i] > maxX) maxX = xs[i];
+          if (ys[i] < minY) minY = ys[i];
+          if (ys[i] > maxY) maxY = ys[i];
+        }
+        finalizedSplits.add(new Rectangle2D.Double(minX, minY,
+            maxX - minX, maxY - minY));
+        continue;
+      }
+
+      int minSplitSize = Math.max(capacity / 2, (rangeEnd - rangeStart) / 2 - capacity);
+      // ChooseSplitAxis
+      // Sort the entries by each axis and compute S, the sum of all margin-values
+      // of the different distributions
+
+      // Start with x-axis. Sort then compute sum margin.
+      quickSort.sort(sorterX, rangeStart, rangeEnd);
+      // To compute sum margin, we need to compute MBR of each group
+      // Group 1 covers the range [rangeStart, separator)
+      // Group 2 covers the range [separator, rangeEnd)
+      // Min X and Max X of each group can be found directly based on the sort order
+      // Min and Max Y of group 1 can be computed incrementally as we scan from the start
+      // Min and Max Y of group 2 is pre-computed and cached incrementally as we scan from the end
+
+      // To compute Min & Max Y of group 1, we start the first (smallest) group
+      double group1MinX, group1MaxX;
+      double group1MinY = Double.POSITIVE_INFINITY;
+      double group1MaxY = Double.NEGATIVE_INFINITY;
+      for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
+        if (ys[i] < group1MinY)
+          group1MinY = ys[i];
+        if (ys[i] > group1MaxY)
+          group1MaxY = ys[i];
+      }
+
+      // Pre-compute Min & Max Y of group 2 incrementally from the end
+      group2Min[rangeEnd - 1] = group2Max[rangeEnd - 1] = ys[rangeEnd - 1];
+      for (int i = rangeEnd - 2; i >= rangeStart + minSplitSize; i--) {
+        group2Min[i] = Math.min(group2Min[i + 1], ys[i]);
+        group2Max[i] = Math.max(group2Max[i + 1], ys[i]);
+      }
+
+      double sumMarginX = 0.0;
+      int numPossibleSplits = (rangeEnd - rangeStart) - 2 * minSplitSize + 1;
+      for (int k = 1; k <= numPossibleSplits; k++) {
+        // Separator is the first entry in the second group
+        int separator = rangeStart + minSplitSize + k - 1;
+        // Compute MBR of group 1
+        group1MinX = xs[rangeStart];
+        group1MaxX = xs[separator - 1];
+        if (ys[separator - 1] < group1MinY)
+          group1MinY = ys[separator - 1];
+        if (ys[separator - 1] > group1MaxY)
+          group1MaxY = ys[separator - 1];
+        // Retrieve MBR of group 2
+        double group2MinX = xs[separator];
+        double group2MaxX = xs[rangeEnd - 1];
+        double group2MinY = group2Min[separator];
+        double group2MaxY = group2Max[separator];
+
+        sumMarginX += (group1MaxX - group1MinX) + (group1MaxY - group1MinY);
+        sumMarginX += (group2MaxX - group2MinX) + (group2MaxY - group2MinY);
+      }
+
+      // Repeat for the Y-axis
+      quickSort.sort(sorterY, rangeStart, rangeEnd);
+      // MBR of smallest group 1
+      group1MinX = Double.POSITIVE_INFINITY;
+      group1MaxX = Double.NEGATIVE_INFINITY;
+      for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
+        if (xs[i] < group1MinX)
+          group1MinX = xs[i];
+        if (xs[i] > group1MaxX)
+          group1MaxX = xs[i];
+      }
+      // Pre-cache all MBRs of group 2
+      group2Min[rangeEnd - 1] = group2Max[rangeEnd - 1] = xs[rangeEnd - 1];
+      for (int i = rangeEnd - 2; i >= rangeStart + minSplitSize; i--) {
+        group2Min[i] = Math.min(group2Min[i + 1], xs[i]);
+        group2Max[i] = Math.max(group2Max[i + 1], xs[i]);
+      }
+
+      double sumMarginY = 0.0;
+      for (int k = 1; k <= numPossibleSplits; k++) {
+        // Separator is the first entry in the second group
+        int separator = rangeStart + minSplitSize + k - 1;
+        // Compute MBR of group 1
+        group1MinY = ys[rangeStart];
+        group1MaxY = ys[separator - 1];
+        if (xs[separator - 1] < group1MinX)
+          group1MinX = xs[separator - 1];
+        if (xs[separator - 1] > group1MaxX)
+          group1MaxX = xs[separator - 1];
+        // Retrieve MBR of group 2
+        double group2MinY = ys[separator];
+        double group2MaxY = ys[rangeEnd - 1];
+        double group2MinX = group2Min[separator];
+        double group2MaxX = group2Max[separator];
+
+        sumMarginY += (group1MaxX - group1MinX) + (group1MaxY - group1MinY);
+        sumMarginY += (group2MaxX - group2MinX) + (group2MaxY - group2MinY);
+      }
+
+      // Along the chosen axis, choose the distribution with the minimum overlap value.
+      double minOverlap = Double.POSITIVE_INFINITY;
+      double minArea = Double.POSITIVE_INFINITY;
+      int chosenK = -1;
+
+      if (sumMarginX < sumMarginY) {
+        // Split along the X-axis
+        // Repeat sorting along the X-axis and pre-compute min & max Y
+        quickSort.sort(sorterX, rangeStart, rangeEnd);
+        group2Min[rangeEnd - 1] = group2Max[rangeEnd - 1] = ys[rangeEnd - 1];
+        for (int i = rangeEnd - 2; i >= rangeStart + minSplitSize; i--) {
+          group2Min[i] = Math.min(group2Min[i + 1], ys[i]);
+          group2Max[i] = Math.max(group2Max[i + 1], ys[i]);
+        }
+
+        group1MinY = Double.POSITIVE_INFINITY;
+        group1MaxY = Double.NEGATIVE_INFINITY;
+        for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
+          if (ys[i] < group1MinY) group1MinY = ys[i];
+          if (ys[i] > group1MaxY) group1MaxY = ys[i];
+        }
+
+        for (int k = 1; k <= numPossibleSplits; k++) {
+          // Separator is the first entry in the second group
+          int separator = rangeStart + minSplitSize + k - 1;
+
+          // Compute MBR of group 1
+          group1MinX = xs[rangeStart];
+          group1MaxX = xs[separator - 1];
+          if (ys[separator - 1] < group1MinY)
+            group1MinY = ys[separator - 1];
+          if (ys[separator - 1] > group1MaxY)
+            group1MaxY = ys[separator - 1];
+          // Retrieve MBR of group 2
+          double group2MinX = xs[separator];
+          double group2MaxX = xs[rangeEnd - 1];
+          double group2MinY = group2Min[separator];
+          double group2MaxY = group2Max[separator];
+
+          double overlapMinX = Math.max(group1MinX, group2MinX);
+          double overlapMinY = Math.max(group1MinY, group2MinY);
+          double overlapMaxX = Math.min(group1MaxX, group2MaxX);
+          double overlapMaxY = Math.min(group1MaxY, group2MaxY);
+          double overlapWidth = overlapMaxX - overlapMinX;
+          double overlapHeight = overlapMaxY - overlapMinY;
+          double overlapArea = overlapWidth <= 0 || overlapHeight <= 0? 0:
+              overlapWidth * overlapHeight;
+          if (overlapArea < minOverlap) {
+            minOverlap = overlapArea;
+            minArea = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
+                (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
+            chosenK = k;
+          } else if (overlapArea == minOverlap) {
+            // Resolve ties by choosing the distribution with minimum area-value
+            double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
+                (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
+            if (area < minArea) {
+              minArea = area;
+              chosenK = k;
+            }
+          }
+        }
+      } else {
+        // Split along the Y-axis
+        // Points are already sorted and MinX and MaxX for group 2 are precached
+
+        group1MinX = Double.POSITIVE_INFINITY;
+        group1MaxX = Double.NEGATIVE_INFINITY;
+        for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
+          if (xs[i] < group1MinX) group1MinX = xs[i];
+          if (xs[i] > group1MaxX) group1MaxX = xs[i];
+        }
+        for (int k = 1; k <= numPossibleSplits; k++) {
+          // Separator is the first entry in the second group
+          int separator = rangeStart + minSplitSize + k - 1;
+
+          // Compute MBR of group 1
+          group1MinY = ys[rangeStart];
+          group1MaxY = ys[separator - 1];
+          if (xs[separator - 1] < group1MinX)
+            group1MinX = xs[separator - 1];
+          if (xs[separator - 1] > group1MaxX)
+            group1MaxX = xs[separator - 1];
+          // Retrieve MBR of group 2
+          double group2MinY = ys[separator];
+          double group2MaxY = ys[rangeEnd - 1];
+          double group2MinX = group2Min[separator];
+          double group2MaxX = group2Max[separator];
+
+          double overlapMinX = Math.max(group1MinX, group2MinX);
+          double overlapMinY = Math.max(group1MinY, group2MinY);
+          double overlapMaxX = Math.min(group1MaxX, group2MaxX);
+          double overlapMaxY = Math.min(group1MaxY, group2MaxY);
+          double overlapWidth = overlapMaxX - overlapMinX;
+          double overlapHeight = overlapMaxY - overlapMinY;
+          double overlapArea = overlapWidth <= 0 || overlapHeight <= 0? 0:
+              overlapWidth * overlapHeight;
+          if (overlapArea < minOverlap) {
+            minOverlap = overlapMinX;
+            minArea = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
+                (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
+            chosenK = k;
+          } else if (overlapArea == minOverlap) {
+            // Resolve ties by choosing the distribution with minimum area-value
+            double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
+                (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
+            if (area < minArea) {
+              minArea = area;
+              chosenK = k;
+            }
+          }
+        }
+      }
+      // Split at the chosenK
+      int separator = rangeStart + minSplitSize - 1 + chosenK;
+
+      // Create two sub-splits
+      // Sub-split 1 covers the range [rangeStart, separator)
+      // Sub-split 2 covers the range [separator, rangeEnd)
+      long range1 = (((long) rangeStart) | (((long)separator) << 32));
+      long range2 = (((long) separator) | (((long)rangeEnd) << 32));
+      // Add to the stack and expand if necessary
+      if (rangesToSplit.length < numRangesToSplit + 2) {
+        // Need to expand
+        long[] newRangesToSplit = new long[rangesToSplit.length * 2];
+        System.arraycopy(rangesToSplit, 0, newRangesToSplit, 0, numRangesToSplit);
+        rangesToSplit = newRangesToSplit;
+      }
+      rangesToSplit[numRangesToSplit++] = range1;
+      rangesToSplit[numRangesToSplit++] = range2;
+    }
+
+    return finalizedSplits.toArray(new Rectangle2D.Double[finalizedSplits.size()]);
+  }
+
+  enum Method {Incremental, BulkLoading1, BulkLoading2};
   public static void main(String[] args) throws IOException {
     String fileName = args[0];
     FileReader testPointsIn = new FileReader(fileName);
@@ -382,40 +681,57 @@ public class RStarTree extends RTreeGuttman {
       xs[iLine] = Double.parseDouble(parts[0]);
       ys[iLine] = Double.parseDouble(parts[1]);
     }
-    int capacity = 2972;
+    int capacity = 8;
+    capacity = xs.length / 2;
+    capacity = 2000;
 
-    boolean bulkLoading = true;
+    Method method = Method.BulkLoading1;
 
-    RStarTree rtree;
-    if (bulkLoading) {
-      IntArray nodesToSplit = new IntArray();
-      // Construct a tree with one root that contains all the points
-      rtree = RStarTree.constructFromPoints(xs, ys, xs.length, xs.length * 2);
-      nodesToSplit.add(rtree.iRoot);
-      int numSplits = 0;
-      while (!nodesToSplit.isEmpty()) {
-        int iNodeToSplit = nodesToSplit.pop();
-        if (rtree.Node_size(iNodeToSplit) > capacity) {
-          numSplits++;
-          int minSplitSize = Math.max(capacity / 2, rtree.Node_size(iNodeToSplit) / 2 - capacity);
-          int iNewNode = rtree.split(iNodeToSplit, minSplitSize);
-          if (rtree.Node_size(iNodeToSplit) > capacity)
-            nodesToSplit.add(iNodeToSplit);
-          if (rtree.Node_size(iNewNode) > capacity)
-            nodesToSplit.add(iNewNode);
+    Rectangle2D.Double[] leaves;
+
+    switch (method) {
+      case BulkLoading1: {
+        IntArray nodesToSplit = new IntArray();
+        // Construct a tree with one root that contains all the points
+        RStarTree rtree = RStarTree.constructFromPoints(xs, ys, xs.length, xs.length * 2);
+        nodesToSplit.add(rtree.iRoot);
+        int numSplits = 0;
+        while (!nodesToSplit.isEmpty()) {
+          int iNodeToSplit = nodesToSplit.pop();
+          int initializeSize = rtree.Node_size(iNodeToSplit);
+          if (rtree.Node_size(iNodeToSplit) > capacity) {
+            numSplits++;
+            int minSplitSize = Math.max(capacity / 2, rtree.Node_size(iNodeToSplit) / 2 - capacity);
+            int iNewNode = rtree.split(iNodeToSplit, minSplitSize);
+            if (rtree.Node_size(iNodeToSplit) > capacity)
+              nodesToSplit.add(iNodeToSplit);
+            if (rtree.Node_size(iNewNode) > capacity)
+              nodesToSplit.add(iNewNode);
+          }
         }
+        System.out.printf("Performed %d splits\n", numSplits);
+        leaves = rtree.getAllLeaves();
+        break;
       }
-      System.out.printf("Performed %d splits\n", numSplits);
-    } else {
-      // Build the R-tree incrementally
-      rtree = RStarTree.constructFromPoints(xs, ys, capacity/2, capacity);
+      case BulkLoading2: {
+        leaves = RStarTree.partitionPoints(xs, ys, capacity);
+        break;
+      }
+      case Incremental: {
+        // Build the R-tree incrementally
+        RStarTree rtree = RStarTree.constructFromPoints(xs, ys, capacity/2, capacity);
+        leaves = rtree.getAllLeaves();
+        break;
+      }
+      default:
+        throw new RuntimeException("Unknown method "+method);
     }
-    Rectangle2D.Double[] leaves = rtree.getAllLeaves();
+
     for (Rectangle2D.Double leaf : leaves) {
       System.out.println(new Rectangle(leaf.getMinX(), leaf.getMinY(), leaf.getMaxX(), leaf.getMaxY()).toWKT());
     }
 
     long t2 = System.currentTimeMillis();
-    System.out.printf("Generated the tree in %f seconds\n", (t2 -t1) / 1000.0);
+    System.out.printf("Generated the tree using %s in %f seconds\n", method.toString(), (t2 -t1) / 1000.0);
   }
 }
