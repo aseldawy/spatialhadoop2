@@ -252,8 +252,8 @@ public class RTreeGuttman {
     for (int i = 0; i < numEntries; i++) {
       this.x1s[i] = xs[i];
       this.y1s[i] = ys[i];
-      this.x2s[i] = Math.nextUp(xs[i]);
-      this.y2s[i] = Math.nextUp(ys[i]);
+      this.x2s[i] = xs[i];
+      this.y2s[i] = ys[i];
       children.add(null); // data entries do not have children
     }
   }
@@ -489,7 +489,8 @@ public class RTreeGuttman {
     Rectangle2D.Double[] leaves = new Rectangle2D.Double[numOfLeaves];
     for (int i = 0; i < numEntries + numNodes; i++) {
       if (isLeaf.get(i)) {
-        Rectangle2D.Double rect = new Rectangle2D.Double(x1s[i], y1s[i], x2s[i], y2s[i]);
+        Rectangle2D.Double rect = new Rectangle2D.Double(x1s[i], y1s[i],
+            x2s[i] - x1s[i], y2s[i] - y1s[i]);
         leaves[--numOfLeaves] = rect;
       }
     }

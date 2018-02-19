@@ -4,6 +4,7 @@ import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
+import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -44,6 +45,24 @@ public class RStarTreeTest extends TestCase {
       assertTrue(String.format("Too many nodes %d>%d", rtree.numOfNodes(), maxNumOfNodes),
           rtree.numOfNodes() <= maxNumOfNodes);
       assertEquals(1, rtree.getHeight());
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+  public void testSplit() {
+    try {
+      String fileName = "src/test/resources/test2.points";
+      double[][] points = readFile(fileName);
+      // Create a tree without splits
+      RStarTree rtree = RStarTree.constructFromPoints(points[0], points[1], 22, 44);
+      assertEquals(rtree.numOfDataEntries(), 22);
+      // Perform one split at the root
+      rtree.split(rtree.iRoot, 4);
+      Rectangle2D.Double[] leaves = rtree.getAllLeaves();
+      assertEquals(2, leaves.length);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

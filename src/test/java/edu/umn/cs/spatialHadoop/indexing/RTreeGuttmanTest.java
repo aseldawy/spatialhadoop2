@@ -6,6 +6,7 @@ import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
+import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -115,7 +116,13 @@ public class RTreeGuttmanTest extends TestCase {
       double[][] points = readFile(fileName);
       RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
       assertEquals(rtree.numOfDataEntries(), 11);
-      assertEquals(2, rtree.getAllLeaves().length);
+      Rectangle2D.Double[] leaves = rtree.getAllLeaves();
+      assertEquals(2, leaves.length);
+      Rectangle2D mbrAllLeaves = leaves[0];
+      for (Rectangle2D.Double leaf : leaves) {
+        mbrAllLeaves = mbrAllLeaves.createUnion(leaf);
+      }
+      assertEquals(new Rectangle2D.Double(1, 2, 11, 10), mbrAllLeaves);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

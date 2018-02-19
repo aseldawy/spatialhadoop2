@@ -5,6 +5,11 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
+import java.awt.geom.Rectangle2D;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+
 /**
  * An R*-tree implementation based on the design in the following paper.
  *
@@ -20,7 +25,7 @@ public class RStarTree extends RTreeGuttman {
   /**A flag set to true while a reinserting is in action to avoid cascade reinsertions*/
   protected boolean reinserting;
 
-  public static RTreeGuttman constructFromPoints(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
+  public static RStarTree constructFromPoints(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
     RStarTree rtree = new RStarTree(minCapacity, maxCapcity);
     rtree.initializeDataEntries(xs, ys);
     rtree.insertAllDataEntries();
@@ -177,7 +182,8 @@ public class RStarTree extends RTreeGuttman {
    */
   @Override
   protected int split(int iNode, int minSplitSize) {
-    final IntArray nodeChildren = children.get(iNode);
+    int nodeSize = Node_size(iNode);
+    final int[] nodeChildren = children.get(iNode).underlyingArray();
     // ChooseSplitAxis
     // Sort the entries by each axis and compute S, the sum of all margin-values
     // of the different distributions
@@ -196,10 +202,10 @@ public class RStarTree extends RTreeGuttman {
       public int compare(int i, int j) {
         double diff;
         switch (attribute) {
-          case X1: diff = x1s[nodeChildren.get(i)] - x1s[nodeChildren.get(j)]; break;
-          case Y1: diff = y1s[nodeChildren.get(i)] - y1s[nodeChildren.get(j)]; break;
-          case X2: diff = x2s[nodeChildren.get(i)] - x2s[nodeChildren.get(j)]; break;
-          case Y2: diff = y2s[nodeChildren.get(i)] - y2s[nodeChildren.get(j)]; break;
+          case X1: diff = x1s[nodeChildren[i]] - x1s[nodeChildren[j]]; break;
+          case Y1: diff = y1s[nodeChildren[i]] - y1s[nodeChildren[j]]; break;
+          case X2: diff = x2s[nodeChildren[i]] - x2s[nodeChildren[j]]; break;
+          case Y2: diff = y2s[nodeChildren[i]] - y2s[nodeChildren[j]]; break;
           default: diff = 0;
         }
         if (diff < 0) return -1;
@@ -209,52 +215,77 @@ public class RStarTree extends RTreeGuttman {
 
       @Override
       public void swap(int i, int j) {
-        nodeChildren.swap(i, j);
+        int t = nodeChildren[i];
+        nodeChildren[i] = nodeChildren[j];
+        nodeChildren[j] = t;
       }
     };
     double minSumMargin = Double.POSITIVE_INFINITY;
     MultiIndexedSortable.Axis bestAxis = null;
     QuickSort quickSort = new QuickSort();
     for (MultiIndexedSortable.Axis sortAttr : MultiIndexedSortable.Axis.values()) {
+      long t11 = System.nanoTime();
       sorter.setAttribute(sortAttr);
-      quickSort.sort(sorter, 0, nodeChildren.size());
-      double sumMargin = computeSumMargin(iNode);
+      quickSort.sort(sorter, 0, nodeSize);
+      long t12 = System.nanoTime();
+      double sumMargin = computeSumMargin(iNode, minSplitSize);
       if (sumMargin < minSumMargin) {
         bestAxis = sortAttr;
         minSumMargin = sumMargin;
       }
+      long t13 = System.nanoTime();
+      if (t13 - t11 > 1E9)
+      System.out.printf("Splitting %d points: Sort in %f seconds and compute minSumMargin in %f seconds\n",
+          nodeSize, (t12-t11)*1E-9, (t13-t12)*1E-9);
     }
 
     // Choose the axis with the minimum S as split axis.
     if (bestAxis != sorter.getAttribute()) {
       sorter.setAttribute(bestAxis);
-      quickSort.sort(sorter, 0, nodeChildren.size());
+      quickSort.sort(sorter, 0, nodeSize);
     }
 
     // Along the chosen axis, choose the distribution with the minimum overlap value.
+    Rectangle mbr1 = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+        Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+    // Initialize the MBR of the first group to the minimum group size
+    for (int i = 0; i < minSplitSize; i++){
+      int iChild = nodeChildren[i];
+      mbr1.expand(x1s[iChild], y1s[iChild]);
+      mbr1.expand(x2s[iChild], y2s[iChild]);
+    }
+
+    // Pre-cache the MBRs for groups that start at position i and end at the end
+    Rectangle mbr2 = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+        Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+    double[] minX1 = new double[nodeSize];
+    double[] minY1 = new double[nodeSize];
+    double[] maxX2 = new double[nodeSize];
+    double[] maxY2 = new double[nodeSize];
+    for (int i = nodeSize - 1; i >= minSplitSize; i--) {
+      int iChild = nodeChildren[i];
+      mbr2.expand(x1s[iChild], y1s[iChild]);
+      mbr2.expand(x2s[iChild], y2s[iChild]);
+      minX1[i] = mbr2.x1;
+      minY1[i] = mbr2.y1;
+      maxX2[i] = mbr2.x2;
+      maxY2[i] = mbr2.y2;
+    }
+
     double minOverlap = Double.POSITIVE_INFINITY;
     double minArea = Double.POSITIVE_INFINITY;
     int chosenK = -1;
-    Rectangle mbr1 = new Rectangle();
-    Rectangle mbr2 = new Rectangle();
+
     // # of possible splits = current size - 2 * minSplitSize + 1
     int numPossibleSplits = Node_size(iNode) - 2 * minSplitSize + 1;
     for (int k = 1; k <= numPossibleSplits; k++) {
-      int separator = minCapacity + k - 1; // Separator = size of first group
-      mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
-          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
-      for (int i = 0; i < separator; i++) {
-        int iChild = nodeChildren.get(i);
-        mbr1.expand(x1s[iChild], y1s[iChild]);
-        mbr1.expand(x2s[iChild], y2s[iChild]);
-      }
-      mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
-          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
-      for (int i = separator; i < nodeChildren.size(); i++) {
-        int iChild = nodeChildren.get(i);
-        mbr2.expand(x1s[iChild], y1s[iChild]);
-        mbr2.expand(x2s[iChild], y2s[iChild]);
-      }
+      int separator = minSplitSize + k - 1; // Separator = size of first group
+      mbr1.expand(x1s[nodeChildren[separator-1]], y1s[nodeChildren[separator-1]]);
+      mbr1.expand(x2s[nodeChildren[separator-1]], y2s[nodeChildren[separator-1]]);
+
+      mbr2.set(minX1[separator], minY1[separator],
+          maxX2[separator], maxY2[separator]);
+
       Rectangle overlapMBR = mbr1.getIntersection(mbr2);
       double overlapArea = overlapMBR == null? 0 : overlapMBR.getWidth() * overlapMBR.getHeight();
       if (overlapArea < minOverlap) {
@@ -272,7 +303,7 @@ public class RStarTree extends RTreeGuttman {
     }
 
     // Split at the chosenK
-    int separator = minCapacity - 1 + chosenK;
+    int separator = minSplitSize - 1 + chosenK;
     int iNewNode = Node_split(iNode, separator);
     return iNewNode;
   }
@@ -281,30 +312,110 @@ public class RStarTree extends RTreeGuttman {
    * Compute the sum margin of the given node assuming that the children have
    * been already sorted along one of the dimensions.
    * @param iNode the index of the node to compute for
+   * @param minSplitSize the minimum split size to consider
    * @return
    */
-  private double computeSumMargin(int iNode) {
+  private double computeSumMargin(int iNode, int minSplitSize) {
     IntArray nodeChildren = children.get(iNode);
     double sumMargin = 0.0;
     Rectangle mbr1 = new Rectangle();
-    Rectangle mbr2 = new Rectangle();
-    for (int k = 1; k <= maxCapcity - 2 * minCapacity + 2; k++) {
-      int separator = minCapacity - 1 + k;
-      mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
-          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
-      for (int i = 0; i < separator; i++) {
-        int iChild = nodeChildren.get(i);
-        mbr1.expand(x1s[iChild], y1s[iChild]);
-      }
-      mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+    // Initialize the MBR of the first group to the minimum group size
+    mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+        Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+    for (int i = 0; i < minSplitSize; i++){
+      int iChild = nodeChildren.get(i);
+      mbr1.expand(x1s[iChild], y1s[iChild]);
+      mbr1.expand(x2s[iChild], y2s[iChild]);
+    }
+
+    // Pre-cache the MBRs for groups that start at position i and end at the end
+    Rectangle mbr2 = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+        Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+    double[] minX1 = new double[nodeChildren.size()];
+    double[] minY1 = new double[nodeChildren.size()];
+    double[] maxX2 = new double[nodeChildren.size()];
+    double[] maxY2 = new double[nodeChildren.size()];
+    for (int i = nodeChildren.size() - 1; i >= minSplitSize; i--) {
+      int iChild = nodeChildren.get(i);
+      mbr2.expand(x1s[iChild], y1s[iChild]);
+      mbr2.expand(x2s[iChild], y2s[iChild]);
+      minX1[i] = mbr2.x1;
+      minY1[i] = mbr2.y1;
+      maxX2[i] = mbr2.x2;
+      maxY2[i] = mbr2.y2;
+    }
+
+    int numPossibleSplits = Node_size(iNode) - 2 * minSplitSize + 1;
+    for (int k = 1; k <= numPossibleSplits; k++) {
+      int separator = minSplitSize + k - 1; // Separator = size of first group
+      mbr1.expand(x1s[nodeChildren.get(separator-1)], y1s[nodeChildren.get(separator-1)]);
+      mbr1.expand(x2s[nodeChildren.get(separator-1)], y2s[nodeChildren.get(separator-1)]);
+
+      mbr2.set(minX1[separator], minY1[separator],
+          maxX2[separator], maxY2[separator]);
+      /*mbr2.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
           Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
       for (int i = separator; i < nodeChildren.size(); i++) {
         int iChild = nodeChildren.get(i);
         mbr2.expand(x1s[iChild], y1s[iChild]);
-      }
+        mbr2.expand(x2s[iChild], y2s[iChild]);
+      }*/
       sumMargin += mbr1.getWidth() + mbr1.getHeight();
       sumMargin += mbr2.getWidth() + mbr2.getHeight();
     }
     return sumMargin;
+  }
+
+  public static void main(String[] args) throws IOException {
+    String fileName = args[0];
+    FileReader testPointsIn = new FileReader(fileName);
+    char[] buffer = new char[(int) new File(fileName).length()];
+    testPointsIn.read(buffer);
+    testPointsIn.close();
+
+    long t1 = System.currentTimeMillis();
+    String[] lines = new String(buffer).split("\\s");
+    double[] xs = new double[lines.length];
+    double[] ys = new double[lines.length];
+    for (int iLine = 0; iLine < lines.length; iLine++) {
+      String[] parts = lines[iLine].split(",");
+      xs[iLine] = Double.parseDouble(parts[0]);
+      ys[iLine] = Double.parseDouble(parts[1]);
+    }
+    int capacity = 2972;
+
+    boolean bulkLoading = true;
+
+    RStarTree rtree;
+    if (bulkLoading) {
+      IntArray nodesToSplit = new IntArray();
+      // Construct a tree with one root that contains all the points
+      rtree = RStarTree.constructFromPoints(xs, ys, xs.length, xs.length * 2);
+      nodesToSplit.add(rtree.iRoot);
+      int numSplits = 0;
+      while (!nodesToSplit.isEmpty()) {
+        int iNodeToSplit = nodesToSplit.pop();
+        if (rtree.Node_size(iNodeToSplit) > capacity) {
+          numSplits++;
+          int minSplitSize = Math.max(capacity / 2, rtree.Node_size(iNodeToSplit) / 2 - capacity);
+          int iNewNode = rtree.split(iNodeToSplit, minSplitSize);
+          if (rtree.Node_size(iNodeToSplit) > capacity)
+            nodesToSplit.add(iNodeToSplit);
+          if (rtree.Node_size(iNewNode) > capacity)
+            nodesToSplit.add(iNewNode);
+        }
+      }
+      System.out.printf("Performed %d splits\n", numSplits);
+    } else {
+      // Build the R-tree incrementally
+      rtree = RStarTree.constructFromPoints(xs, ys, capacity/2, capacity);
+    }
+    Rectangle2D.Double[] leaves = rtree.getAllLeaves();
+    for (Rectangle2D.Double leaf : leaves) {
+      System.out.println(new Rectangle(leaf.getMinX(), leaf.getMinY(), leaf.getMaxX(), leaf.getMaxY()).toWKT());
+    }
+
+    long t2 = System.currentTimeMillis();
+    System.out.printf("Generated the tree in %f seconds\n", (t2 -t1) / 1000.0);
   }
 }
