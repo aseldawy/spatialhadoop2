@@ -455,10 +455,8 @@ public class RStarTree extends RTreeGuttman {
       double group1MinY = Double.POSITIVE_INFINITY;
       double group1MaxY = Double.NEGATIVE_INFINITY;
       for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
-        if (ys[i] < group1MinY)
-          group1MinY = ys[i];
-        if (ys[i] > group1MaxY)
-          group1MaxY = ys[i];
+        if (ys[i] < group1MinY) group1MinY = ys[i];
+        if (ys[i] > group1MaxY) group1MaxY = ys[i];
       }
 
       // Pre-compute Min & Max Y of group 2 incrementally from the end
@@ -496,10 +494,8 @@ public class RStarTree extends RTreeGuttman {
       group1MinX = Double.POSITIVE_INFINITY;
       group1MaxX = Double.NEGATIVE_INFINITY;
       for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
-        if (xs[i] < group1MinX)
-          group1MinX = xs[i];
-        if (xs[i] > group1MaxX)
-          group1MaxX = xs[i];
+        if (xs[i] < group1MinX) group1MinX = xs[i];
+        if (xs[i] > group1MaxX) group1MaxX = xs[i];
       }
       // Pre-cache all MBRs of group 2
       group2Min[rangeEnd - 1] = group2Max[rangeEnd - 1] = xs[rangeEnd - 1];
@@ -628,6 +624,7 @@ public class RStarTree extends RTreeGuttman {
         System.arraycopy(rangesToSplit, 0, newRangesToSplit, 0, numRangesToSplit);
         rangesToSplit = newRangesToSplit;
       }
+
       rangesToSplit[numRangesToSplit++] = range1;
       rangesToSplit[numRangesToSplit++] = range2;
     }
@@ -669,7 +666,6 @@ public class RStarTree extends RTreeGuttman {
         int numSplits = 0;
         while (!nodesToSplit.isEmpty()) {
           int iNodeToSplit = nodesToSplit.pop();
-          int initializeSize = rtree.Node_size(iNodeToSplit);
           if (rtree.Node_size(iNodeToSplit) > capacity) {
             numSplits++;
             int minSplitSize = Math.max(capacity / 2, rtree.Node_size(iNodeToSplit) / 2 - capacity);
