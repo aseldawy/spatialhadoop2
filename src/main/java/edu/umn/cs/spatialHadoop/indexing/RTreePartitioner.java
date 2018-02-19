@@ -40,11 +40,11 @@ public class RTreePartitioner extends Partitioner {
     if (mbr.x1 < x1s[partitionID])
       widthAfter += x1s[partitionID] - mbr.x1;
     if (mbr.y1 < y1s[partitionID])
-      widthAfter += y1s[partitionID] - mbr.y1;
+      heightAfter += y1s[partitionID] - mbr.y1;
     if (mbr.x2 > x2s[partitionID])
-      heightAfter += x2s[partitionID] - mbr.x2;
+      widthAfter += mbr.x2 - x2s[partitionID];
     if (mbr.y2 > y2s[partitionID])
-      heightAfter += y2s[partitionID] - mbr.y2;
+      heightAfter += mbr.y2 - y2s[partitionID];
     return widthAfter * heightAfter - widthBefore * heightBefore;
   }
 
