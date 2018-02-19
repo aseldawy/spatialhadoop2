@@ -529,8 +529,9 @@ public class RStarTree extends RTreeGuttman {
         sumMarginY += (group2MaxX - group2MinX) + (group2MaxY - group2MinY);
       }
 
-      // Along the chosen axis, choose the distribution with the minimum overlap value.
-      double minOverlap = Double.POSITIVE_INFINITY;
+      // Along the chosen axis, choose the distribution with the minimum area
+      // Note: Since we partition points, the overlap is always zero and we
+      // ought to choose based on the total area only
       double minArea = Double.POSITIVE_INFINITY;
       int chosenK = -1;
 
@@ -568,27 +569,12 @@ public class RStarTree extends RTreeGuttman {
           double group2MinY = group2Min[separator];
           double group2MaxY = group2Max[separator];
 
-          double overlapMinX = Math.max(group1MinX, group2MinX);
-          double overlapMinY = Math.max(group1MinY, group2MinY);
-          double overlapMaxX = Math.min(group1MaxX, group2MaxX);
-          double overlapMaxY = Math.min(group1MaxY, group2MaxY);
-          double overlapWidth = overlapMaxX - overlapMinX;
-          double overlapHeight = overlapMaxY - overlapMinY;
-          double overlapArea = overlapWidth <= 0 || overlapHeight <= 0? 0:
-              overlapWidth * overlapHeight;
-          if (overlapArea < minOverlap) {
-            minOverlap = overlapArea;
-            minArea = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
-                (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
+          // Resolve ties by choosing the distribution with minimum area-value
+          double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
+              (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
+          if (area < minArea) {
+            minArea = area;
             chosenK = k;
-          } else if (overlapArea == minOverlap) {
-            // Resolve ties by choosing the distribution with minimum area-value
-            double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
-                (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
-            if (area < minArea) {
-              minArea = area;
-              chosenK = k;
-            }
           }
         }
       } else {
@@ -618,27 +604,12 @@ public class RStarTree extends RTreeGuttman {
           double group2MinX = group2Min[separator];
           double group2MaxX = group2Max[separator];
 
-          double overlapMinX = Math.max(group1MinX, group2MinX);
-          double overlapMinY = Math.max(group1MinY, group2MinY);
-          double overlapMaxX = Math.min(group1MaxX, group2MaxX);
-          double overlapMaxY = Math.min(group1MaxY, group2MaxY);
-          double overlapWidth = overlapMaxX - overlapMinX;
-          double overlapHeight = overlapMaxY - overlapMinY;
-          double overlapArea = overlapWidth <= 0 || overlapHeight <= 0? 0:
-              overlapWidth * overlapHeight;
-          if (overlapArea < minOverlap) {
-            minOverlap = overlapMinX;
-            minArea = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
-                (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
+          // Resolve ties by choosing the distribution with minimum area-value
+          double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
+              (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
+          if (area < minArea) {
+            minArea = area;
             chosenK = k;
-          } else if (overlapArea == minOverlap) {
-            // Resolve ties by choosing the distribution with minimum area-value
-            double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
-                (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
-            if (area < minArea) {
-              minArea = area;
-              chosenK = k;
-            }
           }
         }
       }
