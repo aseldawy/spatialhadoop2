@@ -73,16 +73,16 @@ public class RTreePartitioner extends Partitioner {
       xs[i] = points[i].x;
       ys[i] = points[i].y;
     }
-    Rectangle2D.Double[] partitions = RStarTree.partitionPoints(xs, ys, capacity);
+    Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity, false);
     x1s = new double[partitions.length];
     y1s = new double[partitions.length];
     x2s = new double[partitions.length];
     y2s = new double[partitions.length];
     for (int i = 0; i < partitions.length; i++) {
-      x1s[i] = partitions[i].getMinX();
-      y1s[i] = partitions[i].getMinY();
-      x2s[i] = partitions[i].getMaxX();
-      y2s[i] = partitions[i].getMaxY();
+      x1s[i] = partitions[i].x1;
+      y1s[i] = partitions[i].y1;
+      x2s[i] = partitions[i].x2;
+      y2s[i] = partitions[i].y2;
     }
   }
 

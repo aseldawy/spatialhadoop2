@@ -116,13 +116,13 @@ public class RTreeGuttmanTest extends TestCase {
       double[][] points = readFile(fileName);
       RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
       assertEquals(rtree.numOfDataEntries(), 11);
-      Rectangle2D.Double[] leaves = rtree.getAllLeaves();
+      Rectangle[] leaves = rtree.getAllLeaves();
       assertEquals(2, leaves.length);
-      Rectangle2D mbrAllLeaves = leaves[0];
-      for (Rectangle2D.Double leaf : leaves) {
-        mbrAllLeaves = mbrAllLeaves.createUnion(leaf);
+      Rectangle mbrAllLeaves = leaves[0];
+      for (Rectangle leaf : leaves) {
+        mbrAllLeaves.expand(leaf);
       }
-      assertEquals(new Rectangle2D.Double(1, 2, 11, 10), mbrAllLeaves);
+      assertEquals(new Rectangle(1, 2, 12, 12), mbrAllLeaves);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
@@ -63,7 +64,7 @@ public class RStarTreeTest extends TestCase {
       assertEquals(rtree.numOfDataEntries(), 22);
       // Perform one split at the root
       rtree.split(rtree.iRoot, 4);
-      Rectangle2D.Double[] leaves = rtree.getAllLeaves();
+      Rectangle[] leaves = rtree.getAllLeaves();
       assertEquals(2, leaves.length);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
@@ -78,8 +79,8 @@ public class RStarTreeTest extends TestCase {
       double[][] points = readFile(fileName);
       // Create a tree without splits
       int capacity = 8;
-      Rectangle2D.Double[] partitions =
-          RStarTree.partitionPoints(points[0], points[1], capacity);
+      Rectangle[] partitions =
+          RStarTree.partitionPoints(points[0], points[1], capacity, false);
       // Minimum number of partitions = Ceil(# points / capacity)
       int minNumPartitions = (points[0].length + capacity - 1) / capacity;
       int maxNumPartitions = (points[0].length + capacity / 2 - 1) / (capacity / 2);
@@ -88,11 +89,11 @@ public class RStarTreeTest extends TestCase {
       assertTrue("Too few partitions " + partitions.length,
           partitions.length >= minNumPartitions);
       // Make sure the MBR of all partitions cover the input space
-      Rectangle2D mbrAllPartitions = partitions[0];
-      for (Rectangle2D.Double leaf : partitions) {
-        mbrAllPartitions = mbrAllPartitions.createUnion(leaf);
+      Rectangle mbrAllPartitions = partitions[0];
+      for (Rectangle leaf : partitions) {
+        mbrAllPartitions.expand(leaf);
       }
-      assertEquals(new Rectangle2D.Double(1, 2, 21, 10), mbrAllPartitions);
+      assertEquals(new Rectangle(1, 2, 22, 12), mbrAllPartitions);
 
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
@@ -107,22 +108,38 @@ public class RStarTreeTest extends TestCase {
       double[][] points = readFile(fileName);
       // Create a tree without splits
       int capacity = 8;
-      Rectangle2D.Double[] partitions =
-          RStarTree.partitionPoints(points[0], points[1], capacity);
+      Rectangle[] partitions =
+          RStarTree.partitionPoints(points[0], points[1], capacity, false);
 
       assertEquals(2, partitions.length);
-      Arrays.sort(partitions, new Comparator<Rectangle2D.Double>(){
+      Arrays.sort(partitions);
+      assertEquals(new Rectangle(1, 3, 6, 12), partitions[0]);
+      assertEquals(new Rectangle(9, 2, 12, 10), partitions[1]);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
 
-        @Override
-        public int compare(Rectangle2D.Double o1, Rectangle2D.Double o2) {
-          double dx = o1.x - o2.x;
-          if (dx < 0) return -1;
-          if (dx > 0) return 1;
-          return 0;
-        }
-      });
-      assertEquals(new Rectangle2D.Double(1, 3, 5, 9), partitions[0]);
-      assertEquals(new Rectangle2D.Double(9, 2, 3, 8), partitions[1]);
+  public void testPartitionInfinity() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      // Create a tree without splits
+      int capacity = 8;
+      Rectangle[] partitions =
+          RStarTree.partitionPoints(points[0], points[1], capacity, true);
+
+      assertEquals(2, partitions.length);
+      Rectangle mbrAllPartitions = new Rectangle(Double.POSITIVE_INFINITY,
+          Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+
+      for (Rectangle partition : partitions) {
+        mbrAllPartitions.expand(partition);
+      }
+      assertEquals(new Rectangle(Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY,
+          Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY), mbrAllPartitions);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

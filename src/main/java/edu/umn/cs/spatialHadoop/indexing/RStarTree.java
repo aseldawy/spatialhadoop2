@@ -11,6 +11,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Stack;
 
 /**
  * An R*-tree implementation based on the design in the following paper.
@@ -365,9 +366,30 @@ public class RStarTree extends RTreeGuttman {
    * @param xs
    * @param ys
    * @param capacity
+   * @param expandToInf when set to true, the returned partitions are expanded
+   *                    to cover the entire space from, Negative Infinity to
+   *                    Positive Infinity, in all dimensions.
    * @return
    */
-  public static Rectangle2D.Double[] partitionPoints(final double[] xs, final double[] ys, int capacity) {
+  public static Rectangle[] partitionPoints(final double[] xs,
+                                            final double[] ys,
+                                            int capacity,
+                                            boolean expandToInf) {
+    class SplitTask {
+      /**The range of points to partition*/
+      int start, end;
+      /**The rectangular region that covers those points*/
+      double x1, y1, x2, y2;
+
+      SplitTask(int s, int e, double x1, double y1, double x2, double y2) {
+        this.start = s;
+        this.end = e;
+        this.x1 = x1;
+        this.y1 = y1;
+        this.x2 = x2;
+        this.y2 = y2;
+      }
+    }
     IndexedSortable sorterX = new IndexedSortable() {
       @Override
       public int compare(int i, int j) {
@@ -407,42 +429,46 @@ public class RStarTree extends RTreeGuttman {
       }
     };
     QuickSort quickSort = new QuickSort();
-    int numRangesToSplit = 0;
-    long[] rangesToSplit = new long[16];
-    List<Rectangle2D.Double> finalizedSplits = new ArrayList<Rectangle2D.Double>();
-    rangesToSplit[numRangesToSplit++] = (((long)xs.length) << 32);
+    Stack<SplitTask> rangesToSplit = new Stack<SplitTask>();
+    rangesToSplit.push(new SplitTask(0, xs.length, Double.NEGATIVE_INFINITY,
+        Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY));
+    List<Rectangle> finalizedSplits = new ArrayList<Rectangle>();
     // Temporary arrays for pre-caching min and max coordinates
     double[] group2Min = new double[xs.length];
     double[] group2Max = new double[xs.length];
-    while (numRangesToSplit > 0) {
-      long rangeToSplit = rangesToSplit[--numRangesToSplit];
-      int rangeStart = (int) (rangeToSplit & 0xffffffffL);
-      int rangeEnd = (int) (rangeToSplit >>> 32);
+    while (!rangesToSplit.isEmpty()) {
+      SplitTask range = rangesToSplit.pop();
 
-      if (rangeEnd - rangeStart <= capacity) {
-        // No further splitting needed. Create a partition
-        double minX = Double.POSITIVE_INFINITY;
-        double minY = Double.POSITIVE_INFINITY;
-        double maxX = Double.NEGATIVE_INFINITY;
-        double maxY = Double.NEGATIVE_INFINITY;
-        for (int i = rangeStart; i < rangeEnd; i++) {
-          minX = Math.min(minX, xs[i]);
-          maxX = Math.max(maxX, xs[i]);
-          minY = Math.min(minY, ys[i]);
-          maxY = Math.max(maxY, ys[i]);
+      if (range.end - range.start <= capacity) {
+        Rectangle partitionMBR;
+        if (expandToInf) {
+          partitionMBR = new Rectangle(range.x1, range.y1,
+              range.x2, range.y2);
+        } else {
+          // No further splitting needed. Create a partition
+          double minX = Double.POSITIVE_INFINITY;
+          double minY = Double.POSITIVE_INFINITY;
+          double maxX = Double.NEGATIVE_INFINITY;
+          double maxY = Double.NEGATIVE_INFINITY;
+          for (int i = range.start; i < range.end; i++) {
+            minX = Math.min(minX, xs[i]);
+            maxX = Math.max(maxX, xs[i]);
+            minY = Math.min(minY, ys[i]);
+            maxY = Math.max(maxY, ys[i]);
+          }
+          partitionMBR = new Rectangle(minX, minY, maxX, maxY);
         }
-        finalizedSplits.add(new Rectangle2D.Double(minX, minY,
-            maxX - minX, maxY - minY));
+        finalizedSplits.add(partitionMBR);
         continue;
       }
 
-      int minSplitSize = Math.max(capacity / 2, (rangeEnd - rangeStart) / 2 - capacity);
+      int minSplitSize = Math.max(capacity / 2, (range.end - range.start) / 2 - capacity);
       // ChooseSplitAxis
       // Sort the entries by each axis and compute S, the sum of all margin-values
       // of the different distributions
 
       // Start with x-axis. Sort then compute sum margin.
-      quickSort.sort(sorterX, rangeStart, rangeEnd);
+      quickSort.sort(sorterX, range.start, range.end);
       // To compute sum margin, we need to compute MBR of each group
       // Group 1 covers the range [rangeStart, separator)
       // Group 2 covers the range [separator, rangeEnd)
@@ -454,31 +480,31 @@ public class RStarTree extends RTreeGuttman {
       double group1MinX, group1MaxX;
       double group1MinY = Double.POSITIVE_INFINITY;
       double group1MaxY = Double.NEGATIVE_INFINITY;
-      for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
+      for (int i = range.start; i < range.start + minSplitSize; i++) {
         group1MinY = Math.min(group1MinY, ys[i]);
         group1MaxY = Math.max(group1MaxY, ys[i]);
       }
 
       // Pre-compute Min & Max Y of group 2 incrementally from the end
-      group2Min[rangeEnd - 1] = group2Max[rangeEnd - 1] = ys[rangeEnd - 1];
-      for (int i = rangeEnd - 2; i >= rangeStart + minSplitSize; i--) {
+      group2Min[range.end - 1] = group2Max[range.end - 1] = ys[range.end - 1];
+      for (int i = range.end - 2; i >= range.start + minSplitSize; i--) {
         group2Min[i] = Math.min(group2Min[i + 1], ys[i]);
         group2Max[i] = Math.max(group2Max[i + 1], ys[i]);
       }
 
       double sumMarginX = 0.0;
-      int numPossibleSplits = (rangeEnd - rangeStart) - 2 * minSplitSize + 1;
+      int numPossibleSplits = (range.end - range.start) - 2 * minSplitSize + 1;
       for (int k = 1; k <= numPossibleSplits; k++) {
         // Separator is the first entry in the second group
-        int separator = rangeStart + minSplitSize + k - 1;
+        int separator = range.start + minSplitSize + k - 1;
         // Expand the MBR of group 1
-        group1MinX = xs[rangeStart];
+        group1MinX = xs[range.start];
         group1MaxX = xs[separator - 1];
         group1MinY = Math.min(group1MinY, ys[separator - 1]);
         group1MaxY = Math.max(group1MaxY, ys[separator - 1]);
         // Retrieve MBR of group 2
         double group2MinX = xs[separator];
-        double group2MaxX = xs[rangeEnd - 1];
+        double group2MaxX = xs[range.end - 1];
         double group2MinY = group2Min[separator];
         double group2MaxY = group2Max[separator];
         // Compute the sum of the margin
@@ -487,17 +513,17 @@ public class RStarTree extends RTreeGuttman {
       }
 
       // Repeat for the Y-axis
-      quickSort.sort(sorterY, rangeStart, rangeEnd);
+      quickSort.sort(sorterY, range.start, range.end);
       // MBR of smallest group 1
       group1MinX = Double.POSITIVE_INFINITY;
       group1MaxX = Double.NEGATIVE_INFINITY;
-      for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
+      for (int i = range.start; i < range.start + minSplitSize; i++) {
         group1MinX = Math.min(group1MinX, xs[i]);
         group1MaxX = Math.max(group1MaxX, xs[i]);
       }
       // Pre-cache all MBRs of group 2
-      group2Min[rangeEnd - 1] = group2Max[rangeEnd - 1] = xs[rangeEnd - 1];
-      for (int i = rangeEnd - 2; i >= rangeStart + minSplitSize; i--) {
+      group2Min[range.end - 1] = group2Max[range.end - 1] = xs[range.end - 1];
+      for (int i = range.end - 2; i >= range.start + minSplitSize; i--) {
         group2Min[i] = Math.min(group2Min[i + 1], xs[i]);
         group2Max[i] = Math.max(group2Max[i + 1], xs[i]);
       }
@@ -505,15 +531,15 @@ public class RStarTree extends RTreeGuttman {
       double sumMarginY = 0.0;
       for (int k = 1; k <= numPossibleSplits; k++) {
         // Separator is the first entry in the second group
-        int separator = rangeStart + minSplitSize + k - 1;
+        int separator = range.start + minSplitSize + k - 1;
         // Compute MBR of group 1
-        group1MinY = ys[rangeStart];
+        group1MinY = ys[range.start];
         group1MaxY = ys[separator - 1];
         group1MinX = Math.min(group1MinX, xs[separator - 1]);
         group1MaxX = Math.max(group1MaxX, xs[separator - 1]);
         // Retrieve MBR of group 2
         double group2MinY = ys[separator];
-        double group2MaxY = ys[rangeEnd - 1];
+        double group2MaxY = ys[range.end - 1];
         double group2MinX = group2Min[separator];
         double group2MaxX = group2Max[separator];
 
@@ -530,32 +556,32 @@ public class RStarTree extends RTreeGuttman {
       if (sumMarginX < sumMarginY) {
         // Split along the X-axis
         // Repeat sorting along the X-axis and pre-compute min & max Y
-        quickSort.sort(sorterX, rangeStart, rangeEnd);
-        group2Min[rangeEnd - 1] = group2Max[rangeEnd - 1] = ys[rangeEnd - 1];
-        for (int i = rangeEnd - 2; i >= rangeStart + minSplitSize; i--) {
+        quickSort.sort(sorterX, range.start, range.end);
+        group2Min[range.end - 1] = group2Max[range.end - 1] = ys[range.end - 1];
+        for (int i = range.end - 2; i >= range.start + minSplitSize; i--) {
           group2Min[i] = Math.min(group2Min[i + 1], ys[i]);
           group2Max[i] = Math.max(group2Max[i + 1], ys[i]);
         }
         // MBR of smallest group 1
         group1MinY = Double.POSITIVE_INFINITY;
         group1MaxY = Double.NEGATIVE_INFINITY;
-        for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
+        for (int i = range.start; i < range.start + minSplitSize; i++) {
           group1MinY = Math.min(group1MinY, ys[i]);
           group1MaxY = Math.max(group1MaxY, ys[i]);
         }
 
         for (int k = 1; k <= numPossibleSplits; k++) {
           // Separator is the first entry in the second group
-          int separator = rangeStart + minSplitSize + k - 1;
+          int separator = range.start + minSplitSize + k - 1;
 
           // Expand MBR of group 1
-          group1MinX = xs[rangeStart];
+          group1MinX = xs[range.start];
           group1MaxX = xs[separator - 1];
           group1MinY = Math.min(group1MinY, ys[separator - 1]);
           group1MaxY = Math.max(group1MaxY, ys[separator - 1]);
           // Retrieve MBR of group 2
           double group2MinX = xs[separator];
-          double group2MaxX = xs[rangeEnd - 1];
+          double group2MaxX = xs[range.end - 1];
           double group2MinY = group2Min[separator];
           double group2MaxY = group2Max[separator];
 
@@ -573,22 +599,22 @@ public class RStarTree extends RTreeGuttman {
         // Compute MBR of smallest group 1
         group1MinX = Double.POSITIVE_INFINITY;
         group1MaxX = Double.NEGATIVE_INFINITY;
-        for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
+        for (int i = range.start; i < range.start + minSplitSize; i++) {
           group1MinX = Math.min(group1MinX, xs[i]);
           group1MaxX = Math.max(group1MaxX, xs[i]);
         }
         for (int k = 1; k <= numPossibleSplits; k++) {
           // Separator is the first entry in the second group
-          int separator = rangeStart + minSplitSize + k - 1;
+          int separator = range.start + minSplitSize + k - 1;
 
           // Expand MBR of group 1
-          group1MinY = ys[rangeStart];
+          group1MinY = ys[range.start];
           group1MaxY = ys[separator - 1];
           group1MinX = Math.min(group1MinX, xs[separator - 1]);
           group1MaxX = Math.max(group1MaxX, xs[separator - 1]);
           // Retrieve MBR of group 2
           double group2MinY = ys[separator];
-          double group2MaxY = ys[rangeEnd - 1];
+          double group2MaxY = ys[range.end - 1];
           double group2MinX = group2Min[separator];
           double group2MaxX = group2Max[separator];
 
@@ -602,26 +628,18 @@ public class RStarTree extends RTreeGuttman {
         }
       }
       // Split at the chosenK
-      int separator = rangeStart + minSplitSize - 1 + chosenK;
+      int separator = range.start + minSplitSize - 1 + chosenK;
 
       // Create two sub-ranges
       // Sub-range 1 covers the range [rangeStart, separator)
       // Sub-range 2 covers the range [separator, rangeEnd)
-      long range1 = (((long) rangeStart) | (((long)separator) << 32));
-      long range2 = (((long) separator) | (((long)rangeEnd) << 32));
-      // Add to the stack and expand if necessary
-      if (rangesToSplit.length < numRangesToSplit + 2) {
-        // Need to expand the stack
-        long[] newRangesToSplit = new long[rangesToSplit.length * 2];
-        System.arraycopy(rangesToSplit, 0, newRangesToSplit, 0, numRangesToSplit);
-        rangesToSplit = newRangesToSplit;
-      }
-
-      rangesToSplit[numRangesToSplit++] = range1;
-      rangesToSplit[numRangesToSplit++] = range2;
+      rangesToSplit.add(new SplitTask(range.start, separator,
+          range.x1, range.y1, range.x2, range.y2));
+      rangesToSplit.add(new SplitTask(separator, range.end,
+          range.x1, range.y1, range.x2, range.y2));
     }
 
-    return finalizedSplits.toArray(new Rectangle2D.Double[finalizedSplits.size()]);
+    return finalizedSplits.toArray(new Rectangle[finalizedSplits.size()]);
   }
 
   enum Method {Incremental, BulkLoading1, BulkLoading2};
@@ -643,11 +661,11 @@ public class RStarTree extends RTreeGuttman {
     }
     int capacity = 8;
     capacity = xs.length / 2;
-    capacity = 2000;
+    capacity = 2972;
 
     Method method = Method.BulkLoading2;
 
-    Rectangle2D.Double[] leaves;
+    Rectangle[] leaves;
 
     switch (method) {
       case BulkLoading1: {
@@ -673,7 +691,7 @@ public class RStarTree extends RTreeGuttman {
         break;
       }
       case BulkLoading2: {
-        leaves = RStarTree.partitionPoints(xs, ys, capacity);
+        leaves = RStarTree.partitionPoints(xs, ys, capacity, false);
         break;
       }
       case Incremental: {
@@ -686,8 +704,8 @@ public class RStarTree extends RTreeGuttman {
         throw new RuntimeException("Unknown method "+method);
     }
 
-    for (Rectangle2D.Double leaf : leaves) {
-      System.out.println(new Rectangle(leaf.getMinX(), leaf.getMinY(), leaf.getMaxX(), leaf.getMaxY()).toWKT());
+    for (Rectangle leaf : leaves) {
+      System.out.println(leaf.toWKT());
     }
 
     long t2 = System.currentTimeMillis();
