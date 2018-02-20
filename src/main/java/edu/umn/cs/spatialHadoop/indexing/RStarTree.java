@@ -702,7 +702,7 @@ public class RStarTree extends RTreeGuttman {
         break;
       }
       case BulkLoading2: {
-        leaves = RStarTree.partitionPoints(xs, ys, capacity, false);
+        leaves = RStarTree.partitionPoints(xs, ys, capacity, true);
         break;
       }
       case Incremental: {
@@ -715,8 +715,9 @@ public class RStarTree extends RTreeGuttman {
         throw new RuntimeException("Unknown method "+method);
     }
 
+    Rectangle clipMBR = new Rectangle(-180, -90, 180, 90);
     for (Rectangle leaf : leaves) {
-      System.out.println(leaf.toWKT());
+      System.out.println(leaf.getIntersection(clipMBR).toWKT());
     }
 
     long t2 = System.currentTimeMillis();

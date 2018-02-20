@@ -73,7 +73,7 @@ public class RTreePartitioner extends Partitioner {
       xs[i] = points[i].x;
       ys[i] = points[i].y;
     }
-    Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity, false);
+    Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity, true);
     x1s = new double[partitions.length];
     y1s = new double[partitions.length];
     x2s = new double[partitions.length];
