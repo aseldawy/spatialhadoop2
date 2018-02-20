@@ -73,17 +73,16 @@ public class RTreePartitioner extends Partitioner {
       xs[i] = points[i].x;
       ys[i] = points[i].y;
     }
-    RTreeGuttman rtree = RStarTree.constructFromPoints(xs, ys, capacity/2, capacity);
-    Rectangle2D.Double[] nodes = rtree.getAllLeaves();
-    x1s = new double[nodes.length];
-    y1s = new double[nodes.length];
-    x2s = new double[nodes.length];
-    y2s = new double[nodes.length];
-    for (int i = 0; i < nodes.length; i++) {
-      x1s[i] = nodes[i].getMinX();
-      y1s[i] = nodes[i].getMinY();
-      x2s[i] = nodes[i].getMaxX();
-      y2s[i] = nodes[i].getMaxY();
+    Rectangle2D.Double[] partitions = RStarTree.partitionPoints(xs, ys, capacity);
+    x1s = new double[partitions.length];
+    y1s = new double[partitions.length];
+    x2s = new double[partitions.length];
+    y2s = new double[partitions.length];
+    for (int i = 0; i < partitions.length; i++) {
+      x1s[i] = partitions[i].getMinX();
+      y1s[i] = partitions[i].getMinY();
+      x2s[i] = partitions[i].getMaxX();
+      y2s[i] = partitions[i].getMaxY();
     }
   }
 
