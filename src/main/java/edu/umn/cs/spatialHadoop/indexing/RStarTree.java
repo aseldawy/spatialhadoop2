@@ -426,10 +426,10 @@ public class RStarTree extends RTreeGuttman {
         double maxX = Double.NEGATIVE_INFINITY;
         double maxY = Double.NEGATIVE_INFINITY;
         for (int i = rangeStart; i < rangeEnd; i++) {
-          if (xs[i] < minX) minX = xs[i];
-          if (xs[i] > maxX) maxX = xs[i];
-          if (ys[i] < minY) minY = ys[i];
-          if (ys[i] > maxY) maxY = ys[i];
+          minX = Math.min(minX, xs[i]);
+          maxX = Math.max(maxX, xs[i]);
+          minY = Math.min(minY, ys[i]);
+          maxY = Math.max(maxY, ys[i]);
         }
         finalizedSplits.add(new Rectangle2D.Double(minX, minY,
             maxX - minX, maxY - minY));
@@ -455,8 +455,8 @@ public class RStarTree extends RTreeGuttman {
       double group1MinY = Double.POSITIVE_INFINITY;
       double group1MaxY = Double.NEGATIVE_INFINITY;
       for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
-        if (ys[i] < group1MinY) group1MinY = ys[i];
-        if (ys[i] > group1MaxY) group1MaxY = ys[i];
+        group1MinY = Math.min(group1MinY, ys[i]);
+        group1MaxY = Math.max(group1MaxY, ys[i]);
       }
 
       // Pre-compute Min & Max Y of group 2 incrementally from the end
@@ -471,19 +471,17 @@ public class RStarTree extends RTreeGuttman {
       for (int k = 1; k <= numPossibleSplits; k++) {
         // Separator is the first entry in the second group
         int separator = rangeStart + minSplitSize + k - 1;
-        // Compute MBR of group 1
+        // Expand the MBR of group 1
         group1MinX = xs[rangeStart];
         group1MaxX = xs[separator - 1];
-        if (ys[separator - 1] < group1MinY)
-          group1MinY = ys[separator - 1];
-        if (ys[separator - 1] > group1MaxY)
-          group1MaxY = ys[separator - 1];
+        group1MinY = Math.min(group1MinY, ys[separator - 1]);
+        group1MaxY = Math.max(group1MaxY, ys[separator - 1]);
         // Retrieve MBR of group 2
         double group2MinX = xs[separator];
         double group2MaxX = xs[rangeEnd - 1];
         double group2MinY = group2Min[separator];
         double group2MaxY = group2Max[separator];
-
+        // Compute the sum of the margin
         sumMarginX += (group1MaxX - group1MinX) + (group1MaxY - group1MinY);
         sumMarginX += (group2MaxX - group2MinX) + (group2MaxY - group2MinY);
       }
@@ -494,8 +492,8 @@ public class RStarTree extends RTreeGuttman {
       group1MinX = Double.POSITIVE_INFINITY;
       group1MaxX = Double.NEGATIVE_INFINITY;
       for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
-        if (xs[i] < group1MinX) group1MinX = xs[i];
-        if (xs[i] > group1MaxX) group1MaxX = xs[i];
+        group1MinX = Math.min(group1MinX, xs[i]);
+        group1MaxX = Math.max(group1MaxX, xs[i]);
       }
       // Pre-cache all MBRs of group 2
       group2Min[rangeEnd - 1] = group2Max[rangeEnd - 1] = xs[rangeEnd - 1];
@@ -511,10 +509,8 @@ public class RStarTree extends RTreeGuttman {
         // Compute MBR of group 1
         group1MinY = ys[rangeStart];
         group1MaxY = ys[separator - 1];
-        if (xs[separator - 1] < group1MinX)
-          group1MinX = xs[separator - 1];
-        if (xs[separator - 1] > group1MaxX)
-          group1MaxX = xs[separator - 1];
+        group1MinX = Math.min(group1MinX, xs[separator - 1]);
+        group1MaxX = Math.max(group1MaxX, xs[separator - 1]);
         // Retrieve MBR of group 2
         double group2MinY = ys[separator];
         double group2MaxY = ys[rangeEnd - 1];
@@ -540,32 +536,30 @@ public class RStarTree extends RTreeGuttman {
           group2Min[i] = Math.min(group2Min[i + 1], ys[i]);
           group2Max[i] = Math.max(group2Max[i + 1], ys[i]);
         }
-
+        // MBR of smallest group 1
         group1MinY = Double.POSITIVE_INFINITY;
         group1MaxY = Double.NEGATIVE_INFINITY;
         for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
-          if (ys[i] < group1MinY) group1MinY = ys[i];
-          if (ys[i] > group1MaxY) group1MaxY = ys[i];
+          group1MinY = Math.min(group1MinY, ys[i]);
+          group1MaxY = Math.max(group1MaxY, ys[i]);
         }
 
         for (int k = 1; k <= numPossibleSplits; k++) {
           // Separator is the first entry in the second group
           int separator = rangeStart + minSplitSize + k - 1;
 
-          // Compute MBR of group 1
+          // Expand MBR of group 1
           group1MinX = xs[rangeStart];
           group1MaxX = xs[separator - 1];
-          if (ys[separator - 1] < group1MinY)
-            group1MinY = ys[separator - 1];
-          if (ys[separator - 1] > group1MaxY)
-            group1MaxY = ys[separator - 1];
+          group1MinY = Math.min(group1MinY, ys[separator - 1]);
+          group1MaxY = Math.max(group1MaxY, ys[separator - 1]);
           // Retrieve MBR of group 2
           double group2MinX = xs[separator];
           double group2MaxX = xs[rangeEnd - 1];
           double group2MinY = group2Min[separator];
           double group2MaxY = group2Max[separator];
 
-          // Resolve ties by choosing the distribution with minimum area-value
+          // Overlap is always zero so we choose the distribution with min area
           double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
               (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
           if (area < minArea) {
@@ -576,31 +570,29 @@ public class RStarTree extends RTreeGuttman {
       } else {
         // Split along the Y-axis
         // Points are already sorted and MinX and MaxX for group 2 are precached
-
+        // Compute MBR of smallest group 1
         group1MinX = Double.POSITIVE_INFINITY;
         group1MaxX = Double.NEGATIVE_INFINITY;
         for (int i = rangeStart; i < rangeStart + minSplitSize; i++) {
-          if (xs[i] < group1MinX) group1MinX = xs[i];
-          if (xs[i] > group1MaxX) group1MaxX = xs[i];
+          group1MinX = Math.min(group1MinX, xs[i]);
+          group1MaxX = Math.max(group1MaxX, xs[i]);
         }
         for (int k = 1; k <= numPossibleSplits; k++) {
           // Separator is the first entry in the second group
           int separator = rangeStart + minSplitSize + k - 1;
 
-          // Compute MBR of group 1
+          // Expand MBR of group 1
           group1MinY = ys[rangeStart];
           group1MaxY = ys[separator - 1];
-          if (xs[separator - 1] < group1MinX)
-            group1MinX = xs[separator - 1];
-          if (xs[separator - 1] > group1MaxX)
-            group1MaxX = xs[separator - 1];
+          group1MinX = Math.min(group1MinX, xs[separator - 1]);
+          group1MaxX = Math.max(group1MaxX, xs[separator - 1]);
           // Retrieve MBR of group 2
           double group2MinY = ys[separator];
           double group2MaxY = ys[rangeEnd - 1];
           double group2MinX = group2Min[separator];
           double group2MaxX = group2Max[separator];
 
-          // Resolve ties by choosing the distribution with minimum area-value
+          // Choose the distribution with minimum area
           double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +
               (group2MaxX - group2MinX) * (group2MaxY - group2MinY);
           if (area < minArea) {
@@ -612,14 +604,14 @@ public class RStarTree extends RTreeGuttman {
       // Split at the chosenK
       int separator = rangeStart + minSplitSize - 1 + chosenK;
 
-      // Create two sub-splits
-      // Sub-split 1 covers the range [rangeStart, separator)
-      // Sub-split 2 covers the range [separator, rangeEnd)
+      // Create two sub-ranges
+      // Sub-range 1 covers the range [rangeStart, separator)
+      // Sub-range 2 covers the range [separator, rangeEnd)
       long range1 = (((long) rangeStart) | (((long)separator) << 32));
       long range2 = (((long) separator) | (((long)rangeEnd) << 32));
       // Add to the stack and expand if necessary
       if (rangesToSplit.length < numRangesToSplit + 2) {
-        // Need to expand
+        // Need to expand the stack
         long[] newRangesToSplit = new long[rangesToSplit.length * 2];
         System.arraycopy(rangesToSplit, 0, newRangesToSplit, 0, numRangesToSplit);
         rangesToSplit = newRangesToSplit;
@@ -653,7 +645,7 @@ public class RStarTree extends RTreeGuttman {
     capacity = xs.length / 2;
     capacity = 2000;
 
-    Method method = Method.BulkLoading1;
+    Method method = Method.BulkLoading2;
 
     Rectangle2D.Double[] leaves;
 
