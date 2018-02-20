@@ -381,6 +381,8 @@ public class RStarTree extends RTreeGuttman {
       /**The rectangular region that covers those points*/
       double x1, y1, x2, y2;
 
+      SplitTask(){}
+
       SplitTask(int s, int e, double x1, double y1, double x2, double y2) {
         this.start = s;
         this.end = e;
@@ -442,8 +444,7 @@ public class RStarTree extends RTreeGuttman {
       if (range.end - range.start <= capacity) {
         Rectangle partitionMBR;
         if (expandToInf) {
-          partitionMBR = new Rectangle(range.x1, range.y1,
-              range.x2, range.y2);
+          partitionMBR = new Rectangle(range.x1, range.y1, range.x2, range.y2);
         } else {
           // No further splitting needed. Create a partition
           double minX = Double.POSITIVE_INFINITY;
@@ -633,10 +634,20 @@ public class RStarTree extends RTreeGuttman {
       // Create two sub-ranges
       // Sub-range 1 covers the range [rangeStart, separator)
       // Sub-range 2 covers the range [separator, rangeEnd)
-      rangesToSplit.add(new SplitTask(range.start, separator,
-          range.x1, range.y1, range.x2, range.y2));
-      rangesToSplit.add(new SplitTask(separator, range.end,
-          range.x1, range.y1, range.x2, range.y2));
+      SplitTask range1 = new SplitTask(range.start, separator,
+          range.x1, range.y1, range.x2, range.y2);
+      SplitTask range2 = new SplitTask(separator, range.end,
+          range.x1, range.y1, range.x2, range.y2);
+      // The spatial range of the input is split along the split axis
+      if (sumMarginX < sumMarginY) {
+        // Split was along the X-axis
+        range1.x2 = range2.x1 = xs[separator];
+      } else {
+        // Split was along the Y-axis
+        range1.y2 = range2.y1 = ys[separator];
+      }
+      rangesToSplit.add(range1);
+      rangesToSplit.add(range2);
     }
 
     return finalizedSplits.toArray(new Rectangle[finalizedSplits.size()]);

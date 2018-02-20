@@ -127,19 +127,28 @@ public class RStarTreeTest extends TestCase {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
       // Create a tree without splits
-      int capacity = 8;
+      int capacity = 4;
       Rectangle[] partitions =
           RStarTree.partitionPoints(points[0], points[1], capacity, true);
 
-      assertEquals(2, partitions.length);
+      assertEquals(4, partitions.length);
+
+      // The MBR of all partitions should cover the entire space
       Rectangle mbrAllPartitions = new Rectangle(Double.POSITIVE_INFINITY,
           Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
-
-      for (Rectangle partition : partitions) {
+      for (Rectangle partition : partitions)
         mbrAllPartitions.expand(partition);
-      }
       assertEquals(new Rectangle(Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY,
           Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY), mbrAllPartitions);
+
+      // The partitions should not be overlapping
+      for (int i = 0; i < partitions.length; i++) {
+        for (int j = i + 1; j < partitions.length; j++) {
+          assertFalse(String.format("Partitions %s and %s are overlapped",
+              partitions[i], partitions[j]), partitions[i].isIntersected(partitions[j]));
+        }
+      }
+
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
