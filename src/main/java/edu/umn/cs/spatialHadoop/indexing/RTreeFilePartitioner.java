@@ -125,25 +125,30 @@ public class RTreeFilePartitioner extends Partitioner {
 	public void createFromMasterFile(Path inPath, OperationsParams params) throws IOException {
 		this.cells = new ArrayList<CellInfo>();
 
-		Job job = Job.getInstance(params);
-		final Configuration conf = job.getConfiguration();
-		final String sindex = conf.get("sindex");
-
-		Path masterPath = new Path(inPath, "_master." + sindex);
-		FileSystem inFs = inPath.getFileSystem(params);
-		Text tempLine = new Text2();
-		LineReader in = new LineReader(inFs.open(masterPath));
-		while (in.readLine(tempLine) > 0) {
-			Partition tempPartition = new Partition();
-			// System.out.println("templine is " + tempLine);
-			tempPartition.fromText(tempLine);
+//		Job job = Job.getInstance(params);
+//		final Configuration conf = job.getConfiguration();
+//		final String sindex = conf.get("sindex");
+//
+//		Path masterPath = new Path(inPath, "_master." + sindex);
+//		FileSystem inFs = inPath.getFileSystem(params);
+//		Text tempLine = new Text2();
+//		LineReader in = new LineReader(inFs.open(masterPath));
+//		while (in.readLine(tempLine) > 0) {
+//			Partition tempPartition = new Partition();
+//			// System.out.println("templine is " + tempLine);
+//			tempPartition.fromText(tempLine);
+//			CellInfo tempCellInfo = new CellInfo();
+//			tempCellInfo.set(tempPartition.cellMBR);
+//			tempCellInfo.cellId = tempPartition.cellId;
+//			this.cells.add(tempCellInfo);
+//		}
+		ArrayList<Partition> partitions = MetadataUtil.getPartitions(inPath, params);
+		for(Partition p: partitions) {
 			CellInfo tempCellInfo = new CellInfo();
-			tempCellInfo.set(tempPartition.cellMBR);
-			tempCellInfo.cellId = tempPartition.cellId;
+			tempCellInfo.set(p.cellMBR);
+			tempCellInfo.cellId = p.cellId;
 			this.cells.add(tempCellInfo);
 		}
-//		ArrayList<Partition> partitions = MetadataUtil.getPartitions(inPath, params);
-//		for(Patition p: partitions)
 		cellsTree = this.buildCellsTree(cells);
 	}
 
