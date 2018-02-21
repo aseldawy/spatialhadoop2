@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Observable;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
@@ -32,6 +33,7 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 public class RTreeFilePartitioner extends Partitioner {
 
 	private static final double MINIMUM_EXPANSION = Double.MAX_VALUE;
+	private static final int MAXIMUM_NEAREST_CELLS = 3;
 	protected ArrayList<CellInfo> cells;
 	private RTree<Integer, Geometry> cellsTree;
 
@@ -57,14 +59,11 @@ public class RTreeFilePartitioner extends Partitioner {
 	}
 
 	private List<CellInfo> getNearestCells(Shape shape, int maxCount) {
-//		System.out.println("Getting nearest cells");
 		ArrayList<Integer> nearestCellIds = new ArrayList<Integer>();
 
 		Rectangle r = shape.getMBR();
 		List<Entry<Integer, Geometry>> entries = this.cellsTree
 				.nearest(Geometries.rectangle(r.x1, r.y1, r.x2, r.y2), 50, maxCount).toList().toBlocking().single();
-//		List<Entry<Integer, Geometry>> entries = this.cellsTree.search(Geometries.rectangle(r.x1, r.y1, r.x2, r.y2))
-//				.toList().toBlocking().single();
 		for (Entry<Integer, Geometry> entry : entries) {
 			Integer cellId = entry.value();
 			nearestCellIds.add(cellId);
@@ -73,7 +72,6 @@ public class RTreeFilePartitioner extends Partitioner {
 				.collect(Collectors.toList());
 
 		return nearestCells;
-		// return null;
 	}
 	
 	private List<CellInfo> getOverlappingCells(Shape shape) {
@@ -94,14 +92,6 @@ public class RTreeFilePartitioner extends Partitioner {
 
 	@Override
 	public void write(DataOutput out) throws IOException {
-		// TODO Auto-generated method stub
-		// String tempString = "";
-		// for(CellInfo cell: this.cells) {
-		// Text text = new Text();
-		// cell.toText(text);
-		// tempString += text.toString() + "\n";
-		// }
-		// out.writeUTF(tempString);
 		out.writeInt(cells.size());
 		for (CellInfo cell : this.cells) {
 			cell.write(out);
@@ -110,14 +100,6 @@ public class RTreeFilePartitioner extends Partitioner {
 
 	@Override
 	public void readFields(DataInput in) throws IOException {
-		// TODO Auto-generated method stub
-		// String tempString = in.readUTF();
-		// String[] cellTexts = tempString.split("\n");
-		// for(String text: cellTexts) {
-		// CellInfo tempCellInfo = new CellInfo();
-		// tempCellInfo.fromText(new Text(text));
-		// this.cells.add(tempCellInfo);
-		// }
 		int cellsSize = in.readInt();
 		cells = new ArrayList<CellInfo>(cellsSize);
 		for (int i = 0; i < cellsSize; i++) {
@@ -143,22 +125,11 @@ public class RTreeFilePartitioner extends Partitioner {
 	 */
 	public void createFromMasterFile(Path inPath, OperationsParams params) throws IOException {
 		this.cells = new ArrayList<CellInfo>();
-
-		Job job = Job.getInstance(params);
-		final Configuration conf = job.getConfiguration();
-		final String sindex = conf.get("sindex");
-
-		Path masterPath = new Path(inPath, "_master." + sindex);
-		FileSystem inFs = inPath.getFileSystem(params);
-		Text tempLine = new Text2();
-		LineReader in = new LineReader(inFs.open(masterPath));
-		while (in.readLine(tempLine) > 0) {
-			Partition tempPartition = new Partition();
-			// System.out.println("templine is " + tempLine);
-			tempPartition.fromText(tempLine);
+		ArrayList<Partition> partitions = MetadataUtil.getPartitions(inPath, params);
+		for(Partition p: partitions) {
 			CellInfo tempCellInfo = new CellInfo();
-			tempCellInfo.set(tempPartition.cellMBR);
-			tempCellInfo.cellId = tempPartition.cellId;
+			tempCellInfo.set(p.cellMBR);
+			tempCellInfo.cellId = p.cellId;
 			this.cells.add(tempCellInfo);
 		}
 		cellsTree = this.buildCellsTree(cells);
@@ -167,7 +138,7 @@ public class RTreeFilePartitioner extends Partitioner {
 	@Override
 	public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
 		System.out.println("overlapPartitions method");
-		List<CellInfo> nearestCells = this.getNearestCells(shape, 5);
+		List<CellInfo> nearestCells = this.getNearestCells(shape, MAXIMUM_NEAREST_CELLS);
 		System.out.println("number of nearest cells = " + nearestCells.size());
 
 		// TODO Auto-generated method stub
@@ -197,17 +168,22 @@ public class RTreeFilePartitioner extends Partitioner {
 	@Override
 	public int overlapPartition(Shape shape) {
 		List<CellInfo> overlappingCells = this.getOverlappingCells(shape);
-//		System.out.println("Number of overlapping cell = " + overlappingCells.size());
-		if(overlappingCells.size() > 0) {
-			for (CellInfo cell : overlappingCells) {
-				if (cell.isIntersected(shape)) {
+		int numberOfOverlappingCells = overlappingCells.size();
+		System.out.println("Number of overlapping cell = " + numberOfOverlappingCells);
+		if(numberOfOverlappingCells > 0) {
+			Random random = new Random();
+			int index = random.nextInt(numberOfOverlappingCells - 1);
+			return overlappingCells.get(index).cellId;
+			
+//			for (CellInfo cell : overlappingCells) {
+//				if (cell.isIntersected(shape)) {
 //					System.out.println("return intersected cell = " + cell.cellId);
-					return cell.cellId;
-				}
-			}
+//					return cell.cellId;
+//				}
+//			}
 		} else {
-			List<CellInfo> nearestCells = this.getNearestCells(shape, 10);
-//			System.out.println("number of nearest cells = " + nearestCells.size());
+			List<CellInfo> nearestCells = this.getNearestCells(shape, MAXIMUM_NEAREST_CELLS);
+			System.out.println("number of nearest cells = " + nearestCells.size());
 
 			if(nearestCells.size() > 0) {
 				double minimumExpansion = MINIMUM_EXPANSION;
@@ -221,26 +197,12 @@ public class RTreeFilePartitioner extends Partitioner {
 						minimumCell = cell;
 					}
 				}
-//				System.out.println("return minimum expand cell = " + minimumCell.cellId);
+				System.out.println("return minimum expand cell = " + minimumCell.cellId);
 				return minimumCell.cellId;
 			}
 		}
-//		System.out.println("Return first cell. Should not run to here ");
+		System.out.println("Return first cell. Should not run to here ");
 		return this.cells.get(0).cellId;
-
-		// ArrayList<CellInfo> tempCells = new ArrayList<CellInfo>();
-		// for(CellInfo cell: this.cells) {
-		// CellInfo tempCell = new CellInfo(cell);
-		// tempCell.expand(shape);
-		// tempCells.add(tempCell);
-		// }
-		// CellInfo minimumTempCell = tempCells.get(0);
-		// for(CellInfo cell: this.cells) {
-		// if(cell.getSize() < minimumTempCell.getSize()) {
-		// minimumTempCell = cell;
-		// }
-		// }
-		// return minimumTempCell.cellId;
 	}
 
 	@Override

@@ -140,10 +140,10 @@ public class RTreeInserter {
 
 		// Set mapper and reducer
 		Shape shape = OperationsParams.getShape(conf, "shape");
-		job.setMapperClass(InserterMap.class);
+		job.setMapperClass(RTreeInserterMap.class);
 		job.setMapOutputKeyClass(IntWritable.class);
 		job.setMapOutputValueClass(shape.getClass());
-		job.setReducerClass(InserterReduce.class);
+		job.setReducerClass(RTreeInserterReduce.class);
 
 		// Set input and output
 		job.setInputFormatClass(SpatialInputFormat3.class);
@@ -184,21 +184,7 @@ public class RTreeInserter {
 		String sindex = params.get("sindex");
 
 		Path currentMasterPath = new Path(currentPath, "_master." + sindex);
-		// Text tempLine = new Text2();
-		// LineReader in = new LineReader(fs.open(currentMasterPath));
-		// while (in.readLine(tempLine) > 0) {
-		// Partition tempPartition = new Partition();
-		// tempPartition.fromText(tempLine);
-		// currentPartitions.add(tempPartition);
-		// }
-		//
 		Path insertMasterPath = new Path(currentPath, "temp/_master." + sindex);
-		// in = new LineReader(fs.open(insertMasterPath));
-		// while (in.readLine(tempLine) > 0) {
-		// Partition tempPartition = new Partition();
-		// tempPartition.fromText(tempLine);
-		// insertPartitions.add(tempPartition);
-		// }
 
 		ArrayList<Partition> partitionsToAppend = new ArrayList<Partition>();
 		for (Partition insertPartition : insertPartitions) {
@@ -214,7 +200,7 @@ public class RTreeInserter {
 
 		// Append files in temp directory to corresponding files in current path
 		for (Partition partition : partitionsToAppend) {
-			System.out.println("Appending to " + partition.filename);
+//			System.out.println("Appending to " + partition.filename);
 			FSDataOutputStream out;
 			Path filePath = new Path(currentPath, partition.filename);
 			if(!fs.exists(filePath)) {
