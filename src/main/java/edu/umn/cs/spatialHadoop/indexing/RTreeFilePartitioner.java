@@ -44,7 +44,7 @@ public class RTreeFilePartitioner extends Partitioner {
 	}
 
 	private RTree<Integer, Geometry> buildCellsTree(ArrayList<CellInfo> cellList) {
-		System.out.println("Building tree of cells.");
+		System.out.println("Building tree of " + cellList.size() + " cells.");
 		List<Entry<Integer, Geometry>> entries = new ArrayList<Entry<Integer, Geometry>>();
 		for (CellInfo cell : cellList) {
 			Rectangle r = cell.getMBR();
