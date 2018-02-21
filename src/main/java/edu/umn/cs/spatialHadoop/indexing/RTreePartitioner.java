@@ -23,6 +23,9 @@ import java.io.IOException;
  */
 public class RTreePartitioner extends Partitioner {
 
+  /**MBR of the points used to partition the space*/
+  protected Rectangle mbrPoints;
+
   /**The coordinates of the partitions*/
   protected double[] x1s, y1s, x2s, y2s;
 
@@ -34,18 +37,23 @@ public class RTreePartitioner extends Partitioner {
    * @return
    */
   protected double Partition_expansion(int partitionID, Rectangle mbr) {
-    double widthBefore = x2s[partitionID] - x1s[partitionID];
-    double heightBefore = y2s[partitionID] - y1s[partitionID];
-    double widthAfter = widthBefore, heightAfter = heightBefore;
-    if (mbr.x1 < x1s[partitionID])
-      widthAfter += x1s[partitionID] - mbr.x1;
-    if (mbr.y1 < y1s[partitionID])
-      heightAfter += y1s[partitionID] - mbr.y1;
-    if (mbr.x2 > x2s[partitionID])
-      widthAfter += mbr.x2 - x2s[partitionID];
-    if (mbr.y2 > y2s[partitionID])
-      heightAfter += mbr.y2 - y2s[partitionID];
-    return widthAfter * heightAfter - widthBefore * heightBefore;
+    // If the given rectangle is completely enclosed in the enalrged MBR of the
+    // given partition, return 0
+    if (mbr.x1 >= x1s[partitionID] && mbr.x2 <= x2s[partitionID] &&
+        mbr.y1 >= y1s[partitionID] && mbr.y2 <= y2s[partitionID])
+      return 0;
+    // Compute the non-infinity MBR of the partition
+    double px1 = Math.max(x1s[partitionID], mbrPoints.x1);
+    double px2 = Math.min(x2s[partitionID], mbrPoints.x2);
+    double py1 = Math.max(y1s[partitionID], mbrPoints.y1);
+    double py2 = Math.min(y2s[partitionID], mbrPoints.y2);
+    double areaBefore = (px2 - px1) * (py2 - py1);
+    // Expand the non-infinity MBR of the partition to include the given MBR
+    px1 = Math.min(px1, mbr.x1);
+    py1 = Math.min(py1, mbr.y1);
+    px2 = Math.max(px2, mbr.x2);
+    py2 = Math.max(py2, mbr.y2);
+    return (px2-px1) * (py2-py1) - areaBefore;
   }
 
   /**
@@ -54,8 +62,11 @@ public class RTreePartitioner extends Partitioner {
    * @return
    */
   protected double Partition_area(int partitionID) {
-    return (x2s[partitionID] - x1s[partitionID]) *
-        (y2s[partitionID] - y1s[partitionID]);
+    double px1 = Math.max(x1s[partitionID], mbrPoints.x1);
+    double px2 = Math.min(x2s[partitionID], mbrPoints.x2);
+    double py1 = Math.max(y1s[partitionID], mbrPoints.y1);
+    double py2 = Math.min(y2s[partitionID], mbrPoints.y2);
+    return (px2 - px1) * (py2 - py1);
   }
 
   /**
@@ -69,9 +80,12 @@ public class RTreePartitioner extends Partitioner {
   public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
     double[] xs = new double[points.length];
     double[] ys = new double[points.length];
+    mbrPoints = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+        Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
     for (int i = 0; i < points.length; i++) {
       xs[i] = points[i].x;
       ys[i] = points[i].y;
+      mbrPoints.expand(points[i]);
     }
     Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity, true);
     x1s = new double[partitions.length];
@@ -88,6 +102,7 @@ public class RTreePartitioner extends Partitioner {
 
   @Override
   public void write(DataOutput out) throws IOException {
+    mbrPoints.write(out);
     out.writeInt(x1s.length);
     for (int i = 0; i < x1s.length; i++) {
       out.writeDouble(x1s[i]);
@@ -99,6 +114,9 @@ public class RTreePartitioner extends Partitioner {
 
   @Override
   public void readFields(DataInput in) throws IOException {
+    if (mbrPoints == null)
+      mbrPoints = new Rectangle();
+    mbrPoints.readFields(in);
     int numPartitions = in.readInt();
     if (getPartitionCount() != numPartitions) {
       x1s = new double[numPartitions];

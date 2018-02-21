@@ -127,6 +127,9 @@ public class Indexer {
         InterruptedException {
       final IntWritable partitionID = new IntWritable();
       for (final Shape shape : shapes) {
+        Rectangle shapeMBR = shape.getMBR();
+        if (shapeMBR == null)
+          continue;
         if (replicate) {
           partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
             @Override
@@ -226,7 +229,7 @@ public class Indexer {
 
   /**
    * Set the local indexer for the given job configuration.
-   * @param job
+   * @param conf
    * @param sindex
    */
   private static void setLocalIndexer(Configuration conf, String sindex) {
@@ -429,7 +432,10 @@ public class Indexer {
       indexLocal(inPath, outPath, params);
       return null;
     } else {
-      return indexMapReduce(inPath, outPath, params);
+      Job job = indexMapReduce(inPath, outPath, params);
+      if (!job.isSuccessful())
+        throw new RuntimeException("Failed job "+job);
+      return job;
     }
   }
 
