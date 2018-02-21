@@ -57,6 +57,17 @@ public class RTreePartitioner extends Partitioner {
   }
 
   /**
+   * Tests if a partition overlaps a given rectangle
+   * @param partitionID
+   * @param mbr
+   * @return
+   */
+  protected boolean Partition_overlap(int partitionID, Rectangle mbr) {
+    return !(mbr.x2 <= x1s[partitionID] || x2s[partitionID] < mbr.x1 ||
+      mbr.y2 <= y1s[partitionID] || y2s[partitionID] < mbr.y1);
+  }
+
+  /**
    * Computes the area of a partition.
    * @param partitionID
    * @return
@@ -139,7 +150,11 @@ public class RTreePartitioner extends Partitioner {
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
-    throw new RuntimeException("Disjoint replicated partitioning not supported for R-tree!");
+    Rectangle shapeMBR = shape.getMBR();
+    for (int i = 0; i < getPartitionCount(); i++) {
+      if (Partition_overlap(i, shapeMBR))
+        matcher.collect(i);
+    }
   }
   
   @Override
