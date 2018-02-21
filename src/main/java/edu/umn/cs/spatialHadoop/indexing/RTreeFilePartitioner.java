@@ -32,6 +32,7 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 public class RTreeFilePartitioner extends Partitioner {
 
 	private static final double MINIMUM_EXPANSION = Double.MAX_VALUE;
+	private static final int MAXIMUM_NEAREST_CELLS = 3;
 	protected ArrayList<CellInfo> cells;
 	private RTree<Integer, Geometry> cellsTree;
 
@@ -149,7 +150,7 @@ public class RTreeFilePartitioner extends Partitioner {
 	@Override
 	public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
 		System.out.println("overlapPartitions method");
-		List<CellInfo> nearestCells = this.getNearestCells(shape, 5);
+		List<CellInfo> nearestCells = this.getNearestCells(shape, MAXIMUM_NEAREST_CELLS);
 		System.out.println("number of nearest cells = " + nearestCells.size());
 
 		// TODO Auto-generated method stub
@@ -179,17 +180,17 @@ public class RTreeFilePartitioner extends Partitioner {
 	@Override
 	public int overlapPartition(Shape shape) {
 		List<CellInfo> overlappingCells = this.getOverlappingCells(shape);
-//		System.out.println("Number of overlapping cell = " + overlappingCells.size());
+		System.out.println("Number of overlapping cell = " + overlappingCells.size());
 		if(overlappingCells.size() > 0) {
 			for (CellInfo cell : overlappingCells) {
 				if (cell.isIntersected(shape)) {
-//					System.out.println("return intersected cell = " + cell.cellId);
+					System.out.println("return intersected cell = " + cell.cellId);
 					return cell.cellId;
 				}
 			}
 		} else {
-			List<CellInfo> nearestCells = this.getNearestCells(shape, 10);
-//			System.out.println("number of nearest cells = " + nearestCells.size());
+			List<CellInfo> nearestCells = this.getNearestCells(shape, MAXIMUM_NEAREST_CELLS);
+			System.out.println("number of nearest cells = " + nearestCells.size());
 
 			if(nearestCells.size() > 0) {
 				double minimumExpansion = MINIMUM_EXPANSION;
@@ -203,26 +204,12 @@ public class RTreeFilePartitioner extends Partitioner {
 						minimumCell = cell;
 					}
 				}
-//				System.out.println("return minimum expand cell = " + minimumCell.cellId);
+				System.out.println("return minimum expand cell = " + minimumCell.cellId);
 				return minimumCell.cellId;
 			}
 		}
-//		System.out.println("Return first cell. Should not run to here ");
+		System.out.println("Return first cell. Should not run to here ");
 		return this.cells.get(0).cellId;
-
-		// ArrayList<CellInfo> tempCells = new ArrayList<CellInfo>();
-		// for(CellInfo cell: this.cells) {
-		// CellInfo tempCell = new CellInfo(cell);
-		// tempCell.expand(shape);
-		// tempCells.add(tempCell);
-		// }
-		// CellInfo minimumTempCell = tempCells.get(0);
-		// for(CellInfo cell: this.cells) {
-		// if(cell.getSize() < minimumTempCell.getSize()) {
-		// minimumTempCell = cell;
-		// }
-		// }
-		// return minimumTempCell.cellId;
 	}
 
 	@Override
