@@ -171,15 +171,15 @@ public class RTreeFilePartitioner extends Partitioner {
 		int numberOfOverlappingCells = overlappingCells.size();
 		System.out.println("Number of overlapping cell = " + numberOfOverlappingCells);
 		if(numberOfOverlappingCells > 0) {
-			Random random = new Random();
-			int index = random.nextInt(numberOfOverlappingCells - 1);
-			return overlappingCells.get(index).cellId;
-//			for (CellInfo cell : overlappingCells) {
-//				if (cell.isIntersected(shape)) {
-//					System.out.println("return intersected cell = " + cell.cellId);
-//					return cell.cellId;
-//				}
-//			}
+//			Random random = new Random();
+//			int index = random.nextInt(numberOfOverlappingCells - 1);
+//			return overlappingCells.get(index).cellId;
+			for (CellInfo cell : overlappingCells) {
+				if (cell.isIntersected(shape)) {
+					System.out.println("return intersected cell = " + cell.cellId);
+					return cell.cellId;
+				}
+			}
 		} else {
 			List<CellInfo> nearestCells = this.getNearestCells(shape, MAXIMUM_NEAREST_CELLS);
 			System.out.println("number of nearest cells = " + nearestCells.size());
