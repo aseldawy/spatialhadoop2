@@ -299,7 +299,7 @@ public class IncrementalRTreeFilePartitioner extends Partitioner {
 		tree = tree.add(entries);
 
 		long t2 = System.currentTimeMillis();
-//		System.out.println("Total adding entries time in millis " + (t2 - t1));
+		System.out.println("Total adding entries time in millis " + (t2 - t1));
 
 		// Get list of all leaf nodes
 		ArrayList<Partition> cells = new ArrayList<Partition>();
