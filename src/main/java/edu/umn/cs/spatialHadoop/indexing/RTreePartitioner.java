@@ -33,6 +33,9 @@ public class RTreePartitioner extends Partitioner {
   /**An internal R*-tree that stores all partitions for fast search*/
   private RStarTree partitionRTree;
 
+  /**A temporary array used to compute intersections*/
+  private IntArray overlappingPartitions = new IntArray();
+
   /**
    * Computes the expansion that will happen on an a partition when it is
    * enlarged to enclose a given rectangle.
@@ -161,7 +164,6 @@ public class RTreePartitioner extends Partitioner {
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
     Rectangle shapeMBR = shape.getMBR();
-    IntArray overlappingPartitions = new IntArray();
     partitionRTree.search(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2, overlappingPartitions);
     for (int overlappingPartition : overlappingPartitions)
       matcher.collect(overlappingPartition);
@@ -172,20 +174,24 @@ public class RTreePartitioner extends Partitioner {
     // ChooseLeaf. Select a leaf node in which to place a new entry E
     // Select a node N whose rectangle needs least enlargement to include E
     // Resolve ties by choosing the entry with the rectangle of smallest area
+    // For efficiency, we only consider the partitions that overlap the input
+    // shape. This is not entirely accurate however.
     Rectangle shapeMBR = shape.getMBR();
     double minExpansion = Double.POSITIVE_INFINITY;
     int chosenPartition = -1;
-    for (int i = 0; i < getPartitionCount(); i++) {
-      double expansion = Partition_expansion(i, shapeMBR);
+    partitionRTree.search(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2, overlappingPartitions);
+    for (int overlappingPartition : overlappingPartitions) {
+      double expansion = Partition_expansion(overlappingPartition, shapeMBR);
       if (expansion < minExpansion) {
         minExpansion = expansion;
-        chosenPartition = i;
+        chosenPartition = overlappingPartition;
       } else if (expansion == minExpansion) {
         // Resolve ties by choosing the entry with the rectangle of smallest area
-        if (Partition_area(i) < Partition_area(chosenPartition))
-          chosenPartition = i;
+        if (Partition_area(overlappingPartition) < Partition_area(chosenPartition))
+          chosenPartition = overlappingPartition;
       }
     }
+
     return chosenPartition;
   }
   
