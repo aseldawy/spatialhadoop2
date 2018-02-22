@@ -5,13 +5,11 @@ import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
-import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Comparator;
 
 /**
  * Unit test for the RTreeGuttman class
@@ -39,7 +37,8 @@ public class RStarTreeTest extends TestCase {
     try {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
-      RTreeGuttman rtree = RStarTree.constructFromPoints(points[0], points[1], 4, 8);
+      RTreeGuttman rtree = new RStarTree(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 6;
       int minNumOfNodes = 4;
@@ -60,12 +59,17 @@ public class RStarTreeTest extends TestCase {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
       // Create a tree without splits
-      RStarTree rtree = RStarTree.constructFromPoints(points[0], points[1], 22, 44);
+      RTreeGuttman rtree = new RStarTree(22, 44);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 22);
       // Perform one split at the root
       rtree.split(rtree.iRoot, 4);
-      Rectangle[] leaves = rtree.getAllLeaves();
-      assertEquals(2, leaves.length);
+
+      Iterable<RTreeGuttman.Node> leaves = rtree.getAllLeaves();
+      int numOfLeaves = 0;
+      for (RTreeGuttman.Node leaf : leaves)
+        numOfLeaves++;
+      assertEquals(2, numOfLeaves);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

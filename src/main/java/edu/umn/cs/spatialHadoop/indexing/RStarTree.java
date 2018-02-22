@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import com.google.common.collect.Lists;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 import org.apache.hadoop.util.IndexedSortable;
@@ -27,13 +28,6 @@ public class RStarTree extends RTreeGuttman {
 
   /**A flag set to true while a reinserting is in action to avoid cascade reinsertions*/
   protected boolean reinserting;
-
-  public static RStarTree constructFromPoints(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
-    RStarTree rtree = new RStarTree(minCapacity, maxCapcity);
-    rtree.initializeDataEntries(xs, ys);
-    rtree.insertAllDataEntries();
-    return rtree;
-  }
 
   public RStarTree(int minCapacity, int maxCapcity) {
     super(minCapacity, maxCapcity);
@@ -682,7 +676,8 @@ public class RStarTree extends RTreeGuttman {
       case BulkLoading1: {
         IntArray nodesToSplit = new IntArray();
         // Construct a tree with one root that contains all the points
-        RStarTree rtree = RStarTree.constructFromPoints(xs, ys, xs.length, xs.length * 2);
+        RStarTree rtree = new RStarTree(xs.length, xs.length * 2);
+        rtree.initializeFromPoints(xs, ys);
         nodesToSplit.add(rtree.iRoot);
         int numSplits = 0;
         while (!nodesToSplit.isEmpty()) {
@@ -698,7 +693,10 @@ public class RStarTree extends RTreeGuttman {
           }
         }
         System.out.printf("Performed %d splits\n", numSplits);
-        leaves = rtree.getAllLeaves();
+        List<Rectangle> rects = new ArrayList<Rectangle>();
+        for (Node leaf : rtree.getAllLeaves())
+          rects.add(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y1));
+        leaves = rects.toArray(new Rectangle[rects.size()]);
         break;
       }
       case BulkLoading2: {
@@ -707,8 +705,12 @@ public class RStarTree extends RTreeGuttman {
       }
       case Incremental: {
         // Build the R-tree incrementally
-        RStarTree rtree = RStarTree.constructFromPoints(xs, ys, capacity/2, capacity);
-        leaves = rtree.getAllLeaves();
+        RStarTree rtree = new RStarTree(capacity/2, capacity);
+        rtree.initializeFromPoints(xs, ys);
+        List<Rectangle> rects = new ArrayList<Rectangle>();
+        for (Node leaf : rtree.getAllLeaves())
+          rects.add(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y1));
+        leaves = rects.toArray(new Rectangle[rects.size()]);
         break;
       }
       default:

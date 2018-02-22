@@ -211,21 +211,6 @@ public class RTreeGuttman {
   }
 
   /**
-   * Construct a new R-tree from the given set of point coordinates.
-   * @param xs
-   * @param ys
-   * @param minCapacity
-   * @param maxCapcity
-   * @return
-   */
-  public static RTreeGuttman constructFromPoints(double[] xs, double[] ys, int minCapacity, int maxCapcity) {
-    RTreeGuttman rtree = new RTreeGuttman(minCapacity, maxCapcity);
-    rtree.initializeDataEntries(xs, ys);
-    rtree.insertAllDataEntries();
-    return rtree;
-  }
-
-  /**
    * Initialize the current R-tree from given data entries
    * @param x1
    * @param y1
@@ -236,6 +221,17 @@ public class RTreeGuttman {
     this.initializeDataEntries(x1, y1, x2, y2);
     this.insertAllDataEntries();
   }
+
+  /**
+   * Initialize the tree from a set of points
+   * @param xs
+   * @param ys
+   */
+  public void initializeFromPoints(double[] xs, double[] ys) {
+    this.initializeDataEntries(xs, ys);
+    this.insertAllDataEntries();
+  }
+
 
   /**
    * Construct a new empty R-tree with the given parameters.
@@ -566,16 +562,8 @@ public class RTreeGuttman {
    * Retrieve all the leaf nodes in the tree.
    * @return
    */
-  public Rectangle[] getAllLeaves() {
-    int numOfLeaves = (int) isLeaf.countOnes();
-    Rectangle[] leaves = new Rectangle[numOfLeaves];
-    for (int i = 0; i < numEntries + numNodes; i++) {
-      if (isLeaf.get(i)) {
-        Rectangle rect = new Rectangle(x1s[i], y1s[i], x2s[i], y2s[i]);
-        leaves[--numOfLeaves] = rect;
-      }
-    }
-    return leaves;
+  public Iterable<Node> getAllLeaves() {
+    return new LeafNodeIterable();
   }
 
   /**
@@ -585,13 +573,18 @@ public class RTreeGuttman {
     public int id;
     public double x1, y1, x2, y2;
 
+    protected Entry() {}
+
     @Override
     public String toString() {
       return String.format("Entry #%d (%f, %f, %f, %f)", id, x1, y1, x2, y2);
     }
   }
 
-  public class EntryIterator implements Iterable<Entry>, Iterator<Entry> {
+  /**
+   * An iterable and iterator that traverses all data entries in the tree.
+   */
+  protected class EntryIterator implements Iterable<Entry>, Iterator<Entry> {
     private int iNextEntry = 0;
     private final Entry entry = new Entry();
 
@@ -623,14 +616,18 @@ public class RTreeGuttman {
     }
   }
 
+  /**
+   * Returns an iterable on all data entries in the tree.
+   * @return
+   */
   public Iterable<Entry> entrySet() {
     return new EntryIterator();
   }
 
   /**
-   * An iterator for search results
+   * An iterator for range query search results
    */
-  public class SearchIterator implements Iterable<Entry>, Iterator<Entry> {
+  protected class SearchIterator implements Iterable<Entry>, Iterator<Entry> {
     /**The list of nodes yet to be searched*/
     private IntArray nodesToSearch;
 
@@ -730,4 +727,66 @@ public class RTreeGuttman {
       throw new RuntimeException("Not supported");
     }
   }
+
+  /**
+   * A class that holds information about one node in the tree.
+   */
+  public static class Node {
+    /**Whether this is a leaf node or not*/
+    public boolean isLeaf;
+
+    /**The boundaries of the node*/
+    public double x1, y1, x2, y2;
+
+    protected Node(){}
+  }
+
+  protected class LeafNodeIterable implements Iterable<Node>, Iterator<Node> {
+    /**The ID of the next node to be returned*/
+    protected int iNextNode;
+
+    /**Current node pointed by the iterator*/
+    protected Node currentNode;
+
+    protected LeafNodeIterable() {
+      currentNode = new Node();
+      // This iterator only returns leaf nodes
+      currentNode.isLeaf = true;
+      iNextNode = numEntries - 1;
+      prefetchNext();
+    }
+
+    protected void prefetchNext() {
+      if (iNextNode >= x1s.length)
+        return;
+      do {
+        iNextNode++;
+      } while (iNextNode < x1s.length && !isLeaf.get(iNextNode));
+    }
+
+    @Override
+    public Iterator<Node> iterator() {
+      return this;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return iNextNode < RTreeGuttman.this.x1s.length;
+    }
+
+    @Override
+    public Node next() {
+      currentNode.x1 = x1s[iNextNode];
+      currentNode.y1 = y1s[iNextNode];
+      currentNode.x2 = x2s[iNextNode];
+      currentNode.y2 = y2s[iNextNode];
+      prefetchNext();
+      return currentNode;
+    }
+
+    public void remove() {
+      throw new RuntimeException("Not supported");
+    }
+  }
+
 }

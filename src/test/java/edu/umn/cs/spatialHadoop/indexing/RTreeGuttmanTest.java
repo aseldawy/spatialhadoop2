@@ -6,7 +6,6 @@ import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
-import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -38,7 +37,8 @@ public class RTreeGuttmanTest extends TestCase {
     try {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
-      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 11);
       assertEquals(3, rtree.numOfNodes());
       assertEquals(1, rtree.getHeight());
@@ -67,7 +67,8 @@ public class RTreeGuttmanTest extends TestCase {
     try {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
-      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
       double x1 = 0, y1 = 0, x2 = 5, y2 = 4;
       assertTrue("First object should overlap the search area",
           rtree.Object_overlaps(0, x1, y1, x2, y2));
@@ -93,7 +94,8 @@ public class RTreeGuttmanTest extends TestCase {
       double[][] points = readFile(fileName);
       double[] x1s = points[0];
       double[] y1s = points[1];
-      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(11, rtree.numOfDataEntries());
       int count = 0;
       for (RTreeGuttman.Entry entry : rtree.entrySet()) {
@@ -112,7 +114,8 @@ public class RTreeGuttmanTest extends TestCase {
     try {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
-      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 6;
       int minNumOfNodes = 4;
@@ -133,7 +136,8 @@ public class RTreeGuttmanTest extends TestCase {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
       // Create a tree with a very large threshold to avoid any splits
-      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 50, 100);
+      RTreeGuttman rtree = new RTreeGuttman(50, 100);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(11, rtree.numOfDataEntries());
       // Make one split at the root
       int iNode = rtree.iRoot;
@@ -152,7 +156,8 @@ public class RTreeGuttmanTest extends TestCase {
     try {
       String fileName = "src/test/resources/test2.points";
       double[][] points = readFile(fileName);
-      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 2, 4);
+      RTreeGuttman rtree = new RTreeGuttman(2, 4);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 22);
       int maxNumOfNodes = 18;
       int minNumOfNodes = 9;
@@ -173,14 +178,19 @@ public class RTreeGuttmanTest extends TestCase {
     try {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
-      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 11);
-      Rectangle[] leaves = rtree.getAllLeaves();
-      assertEquals(2, leaves.length);
-      Rectangle mbrAllLeaves = leaves[0];
-      for (Rectangle leaf : leaves) {
-        mbrAllLeaves.expand(leaf);
+      Iterable<RTreeGuttman.Node> leaves = rtree.getAllLeaves();
+      Rectangle mbrAllLeaves = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      int numOfLeaves = 0;
+      for (RTreeGuttman.Node leaf : leaves) {
+        mbrAllLeaves.expand(leaf.x1, leaf.y1);
+        mbrAllLeaves.expand(leaf.x2, leaf.y2);
+        numOfLeaves++;
       }
+      assertEquals(2, numOfLeaves);
       assertEquals(new Rectangle(1, 2, 12, 12), mbrAllLeaves);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
@@ -194,7 +204,8 @@ public class RTreeGuttmanTest extends TestCase {
     try {
       String fileName = "src/test/resources/test.points";
       double[][] points = readFile(fileName);
-      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(0.0, rtree.Node_expansion(rtree.iRoot, 0));
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
