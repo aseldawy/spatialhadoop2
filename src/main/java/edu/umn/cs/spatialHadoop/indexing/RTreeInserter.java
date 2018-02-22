@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -8,6 +9,7 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
@@ -35,6 +37,7 @@ import edu.umn.cs.spatialHadoop.indexing.Inserter.InserterReduce;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
+import edu.umn.cs.spatialHadoop.osm.OSMPoint;
 
 public class RTreeInserter {
 	private static final Log LOG = LogFactory.getLog(Indexer.class);
@@ -264,23 +267,68 @@ public class RTreeInserter {
 		insertMapReduce(currentPath, insertPath, params);
 		appendNewFiles(currentPath, params);
 	}
+	
+	public static void append(Path currentPath, String localInsertPath, OperationsParams params) throws IOException {
+		long t1 = System.currentTimeMillis();
+		// Create partitioner
+		RTreeFilePartitioner partitioner = new RTreeFilePartitioner();
+		partitioner.createFromMasterFile(currentPath, params);
+		
+		// Read the append file and assign record to a map of (cellId) -> {list of records}
+		HashMap<Integer, List<Shape>> map = new HashMap<Integer, List<Shape>>();
+		BufferedReader br = new BufferedReader(new FileReader(localInsertPath));
+		try {
+		    String line = br.readLine();
+
+		    while (line != null) {
+		    	// Convert line to shape
+		    	Text text = new Text(line);
+		    	OSMPoint shape = new OSMPoint();
+		    	shape.fromText(text);
+		    	// Find the corresponding cellId
+		    	int partitionId = partitioner.overlapPartition(shape);
+		    	List<Shape> shapes = map.get(partitionId);
+		    	if(shapes == null) {
+		    		shapes = new ArrayList<Shape>();
+		    	}
+		    	shapes.add(shape);
+		    	map.put(partitionId, shapes);
+		    	
+		    	// Read next record
+		        line = br.readLine();
+		    }
+		} finally {
+		    br.close();
+		}
+		
+		// Append the mapped records to HDFS files
+		
+		
+		long t2 = System.currentTimeMillis();
+		System.out.println("Total appending time in millis " + (t2 - t1));
+	}
 
 	public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException,
 			InstantiationException, IllegalAccessException {
 		// TODO Auto-generated method stub
 		final OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-		Path[] inputFiles = params.getPaths();
-
-		if (!params.checkInput() || (inputFiles.length != 2)) {
-			printUsage();
-			System.exit(1);
-		}
-
-		Path currentPath = inputFiles[0];
-		Path insertPath = inputFiles[1];
-		System.out.println("Current path: " + currentPath);
-		System.out.println("Insert path: " + insertPath);
-		insertMapReduce(currentPath, insertPath, params);
-		appendNewFiles(currentPath, params);
+//		Path[] inputFiles = params.getPaths();
+//
+//		if (!params.checkInput() || (inputFiles.length != 2)) {
+//			printUsage();
+//			System.exit(1);
+//		}
+//
+//		Path currentPath = inputFiles[0];
+//		Path insertPath = inputFiles[1];
+//		System.out.println("Current path: " + currentPath);
+//		System.out.println("Insert path: " + insertPath);
+//		insertMapReduce(currentPath, insertPath, params);
+//		appendNewFiles(currentPath, params);
+		
+		String currentPathString = params.get("current");
+		String appendPathString = params.get("append");
+		Path currentPath = new Path(currentPathString);
+		append(currentPath, appendPathString, params);
 	}
 }

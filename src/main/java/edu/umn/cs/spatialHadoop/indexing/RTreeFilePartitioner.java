@@ -169,20 +169,20 @@ public class RTreeFilePartitioner extends Partitioner {
 	public int overlapPartition(Shape shape) {
 		List<CellInfo> overlappingCells = this.getOverlappingCells(shape);
 		int numberOfOverlappingCells = overlappingCells.size();
-		System.out.println("Number of overlapping cell = " + numberOfOverlappingCells);
+//		System.out.println("Number of overlapping cell = " + numberOfOverlappingCells);
 		if(numberOfOverlappingCells > 0) {
 //			Random random = new Random();
 //			int index = random.nextInt(numberOfOverlappingCells - 1);
 //			return overlappingCells.get(index).cellId;
 			for (CellInfo cell : overlappingCells) {
 				if (cell.isIntersected(shape)) {
-					System.out.println("return intersected cell = " + cell.cellId);
+//					System.out.println("return intersected cell = " + cell.cellId);
 					return cell.cellId;
 				}
 			}
 		} else {
 			List<CellInfo> nearestCells = this.getNearestCells(shape, MAXIMUM_NEAREST_CELLS);
-			System.out.println("number of nearest cells = " + nearestCells.size());
+//			System.out.println("number of nearest cells = " + nearestCells.size());
 
 			if(nearestCells.size() > 0) {
 				double minimumExpansion = MINIMUM_EXPANSION;
@@ -196,11 +196,11 @@ public class RTreeFilePartitioner extends Partitioner {
 						minimumCell = cell;
 					}
 				}
-				System.out.println("return minimum expand cell = " + minimumCell.cellId);
+//				System.out.println("return minimum expand cell = " + minimumCell.cellId);
 				return minimumCell.cellId;
 			}
 		}
-		System.out.println("Return first cell. Should not run to here ");
+//		System.out.println("Return first cell. Should not run to here ");
 		return this.cells.get(0).cellId;
 	}
 

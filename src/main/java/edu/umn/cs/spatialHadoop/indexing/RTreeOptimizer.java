@@ -71,24 +71,6 @@ public class RTreeOptimizer {
 		ArrayList<Partition> splitPartitions = new ArrayList<Partition>();
 		remainingPartitions = (ArrayList<Partition>) partitions.clone();
 
-		// Find the partition with maximum reduced cost as the seed for our greedy algorithm
-//		Partition maxReducedCostPartition = partitions.get(0);
-//		double maxReducedCost = 0;
-//		for (Partition p : partitions) {
-//			splitPartitions.add(p);
-//			double pReducedCost = computeReducedCost(splitPartitions, querySize, blockSize);
-//			if (maxReducedCost < pReducedCost) {
-//				maxReducedCost = pReducedCost;
-//				maxReducedCostPartition = p;
-//			}
-//			splitPartitions.remove(p);
-//		}
-		
-//		Partition maxReducedCostPartition = findBestCandidateToReduceCost(remainingPartitions, splitPartitions, querySize, blockSize);
-//		splitPartitions.add(maxReducedCostPartition);
-//		remainingPartitions.remove(maxReducedCostPartition);
-//		budgetBlocks -= maxReducedCostPartition.getNumberOfBlock(blockSize);
-
 		while (budgetBlocks > 0) {
 			Partition bestCandidatePartition = findBestCandidateToReduceCost(remainingPartitions, splitPartitions,
 					querySize, blockSize);
