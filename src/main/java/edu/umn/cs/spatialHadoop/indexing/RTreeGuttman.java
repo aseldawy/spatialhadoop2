@@ -6,6 +6,7 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
 
 import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -225,6 +226,18 @@ public class RTreeGuttman {
   }
 
   /**
+   * Initialize the current R-tree from given data entries
+   * @param x1
+   * @param y1
+   * @param x2
+   * @param y2
+   */
+  public void initializeFromRects(double[] x1, double[] y1, double[] x2, double[] y2) {
+    this.initializeDataEntries(x1, y1, x2, y2);
+    this.insertAllDataEntries();
+  }
+
+  /**
    * Construct a new empty R-tree with the given parameters.
    * @param minCapacity - Minimum capacity of a node
    * @param maxCapcity - Maximum capacity of a node
@@ -258,6 +271,25 @@ public class RTreeGuttman {
       children.add(null); // data entries do not have children
     }
   }
+
+  protected void initializeDataEntries(double[] x1, double[] y1, double[] x2, double[] y2) {
+    this.numEntries = x1.length;
+    this.numNodes = 0; // Initially, no nodes are there
+    this.isLeaf = new BitArray(numEntries);
+    children = new ArrayList<IntArray>(numEntries);
+    this.x1s = new double[numEntries];
+    this.y1s = new double[numEntries];
+    this.x2s = new double[numEntries];
+    this.y2s = new double[numEntries];
+    for (int i = 0; i < numEntries; i++) {
+      this.x1s[i] = x1[i];
+      this.y1s[i] = y1[i];
+      this.x2s[i] = x2[i];
+      this.y2s[i] = y2[i];
+      children.add(null); // data entries do not have children
+    }
+  }
+
 
   /**
    * Inserts the given data entry into the tree. We assume that the coordinates
@@ -444,6 +476,55 @@ public class RTreeGuttman {
   }
 
   /**
+   * Search for all the entries that overlap a given query rectangle
+   * @param x1
+   * @param y1
+   * @param x2
+   * @param y2
+   * @param results the results as a list of entry IDs as given in the construction
+   *                function
+   */
+  public void search(double x1, double y1, double x2, double y2, IntArray results) {
+    results.clear();
+    IntArray nodesToSearch = new IntArray();
+    nodesToSearch.add(iRoot);
+    while (!nodesToSearch.isEmpty()) {
+      int nodeToSearch = nodesToSearch.pop();
+      if (isLeaf.get(nodeToSearch)) {
+        // Search and return all the entries in the leaf node
+        for (int iEntry : children.get(nodeToSearch)) {
+          if (Object_overlaps(iEntry, x1, y1, x2, y2))
+            results.add(iEntry);
+        }
+      } else {
+        // A non-leaf node, expand the search to all overlapping children
+        for (int iChild : children.get(nodeToSearch)) {
+          if (Object_overlaps(iChild, x1, y1, x2, y2))
+            nodesToSearch.add(iChild);
+        }
+      }
+    }
+  }
+
+  public Iterable<Entry> search(double x1, double y1, double x2, double y2) {
+    return new SearchIterator(x1, y1, x2, y2);
+  }
+
+  /**
+   * Tests if an object (entry or node) overlaps with a rectangle
+   * @param iEntry
+   * @param x1
+   * @param y1
+   * @param x2
+   * @param y2
+   * @return
+   */
+  protected boolean Object_overlaps(int iEntry, double x1, double y1, double x2, double y2) {
+    return !(x2 < x1s[iEntry] || x2s[iEntry] < x1 ||
+             y2 < y1s[iEntry] || y2s[iEntry] < y1);
+  }
+
+  /**
    * Total number of objects in the tree.
    * @return
    */
@@ -495,5 +576,158 @@ public class RTreeGuttman {
       }
     }
     return leaves;
+  }
+
+  /**
+   * A class used to iterate over the data entries in the R-tree
+   */
+  public static class Entry {
+    public int id;
+    public double x1, y1, x2, y2;
+
+    @Override
+    public String toString() {
+      return String.format("Entry #%d (%f, %f, %f, %f)", id, x1, y1, x2, y2);
+    }
+  }
+
+  public class EntryIterator implements Iterable<Entry>, Iterator<Entry> {
+    private int iNextEntry = 0;
+    private final Entry entry = new Entry();
+
+    protected EntryIterator() {}
+
+    @Override
+    public Iterator<Entry> iterator() {
+      return this;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return iNextEntry < RTreeGuttman.this.numEntries;
+    }
+
+    @Override
+    public Entry next() {
+      entry.id = iNextEntry;
+      entry.x1 = x1s[iNextEntry];
+      entry.y1 = y1s[iNextEntry];
+      entry.x2 = x2s[iNextEntry];
+      entry.y2 = y2s[iNextEntry];
+      iNextEntry++;
+      return entry;
+    }
+
+    public void remove() {
+      throw new RuntimeException("Not supported");
+    }
+  }
+
+  public Iterable<Entry> entrySet() {
+    return new EntryIterator();
+  }
+
+  /**
+   * An iterator for search results
+   */
+  public class SearchIterator implements Iterable<Entry>, Iterator<Entry> {
+    /**The list of nodes yet to be searched*/
+    private IntArray nodesToSearch;
+
+    /**The ID of the entry to return on the next call*/
+    private int iNextEntry;
+
+    /**The object used to return all search results*/
+    private Entry entry;
+
+    /**The search range*/
+    private double x1, y1, x2, y2;
+
+    protected SearchIterator(double x1, double y1, double x2, double y2) {
+      this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2;
+      searchFirst();
+    }
+
+    /**
+     * Search for the first element in the result
+     */
+    protected void searchFirst() {
+      nodesToSearch = new IntArray();
+      nodesToSearch.add(iRoot);
+      entry = new Entry();
+      while (!nodesToSearch.isEmpty()) {
+        // We keep the top of the stack for the subsequent next calls
+        int iNodeToSearch = nodesToSearch.peek();
+        if (isLeaf.get(iNodeToSearch)) {
+          for (iNextEntry = 0; iNextEntry < Node_size(iNodeToSearch); iNextEntry++) {
+            // Found a matching element in a leaf node
+            if (Object_overlaps(children.get(iNodeToSearch).get(iNextEntry), x1, y1, x2, y2))
+              return;
+          }
+        } else {
+          // Found a matching non-leaf node, visit its children
+          nodesToSearch.pop(); // No longer needed
+          for (int iChild : children.get(iNodeToSearch)) {
+            if (Object_overlaps(iChild, x1, y1, x2, y2))
+              nodesToSearch.add(iChild);
+          }
+        }
+      }
+      iNextEntry = -1;
+    }
+
+    protected void prefetchNext() {
+      int iNodeToSearch = nodesToSearch.peek();
+      while (++iNextEntry < Node_size(iNodeToSearch)) {
+        if (Object_overlaps(children.get(iNodeToSearch).get(iNextEntry), x1, y1, x2, y2))
+          return;
+      }
+      // Done with the current leaf node. Continue searching for the next leaf
+      nodesToSearch.pop();
+      while (!nodesToSearch.isEmpty()) {
+        iNodeToSearch = nodesToSearch.peek();
+        if (isLeaf.get(iNodeToSearch)) {
+          for (iNextEntry = 0; iNextEntry < Node_size(iNodeToSearch); iNextEntry++) {
+            // Found a matching element in a leaf node
+            if (Object_overlaps(children.get(iNodeToSearch).get(iNextEntry), x1, y1, x2, y2))
+              return;
+          }
+        } else {
+          // Found a matching non-leaf node, visit its children
+          nodesToSearch.pop(); // No longer needed
+          for (int iChild : children.get(iNodeToSearch)) {
+            if (Object_overlaps(iChild, x1, y1, x2, y2))
+              nodesToSearch.add(iChild);
+          }
+        }
+      }
+      iNextEntry = -1; // No more entries to search
+    }
+
+    @Override
+    public Iterator<Entry> iterator() {
+      return this;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return iNextEntry != -1;
+    }
+
+    @Override
+    public Entry next() {
+      int iEntry = children.get(nodesToSearch.peek()).get(iNextEntry);
+      entry.id = iEntry;
+      entry.x1 = x1s[iEntry];
+      entry.y1 = y1s[iEntry];
+      entry.x2 = x2s[iEntry];
+      entry.y2 = y2s[iEntry];
+      prefetchNext();
+      return entry;
+    }
+
+    public void remove() {
+      throw new RuntimeException("Not supported");
+    }
   }
 }

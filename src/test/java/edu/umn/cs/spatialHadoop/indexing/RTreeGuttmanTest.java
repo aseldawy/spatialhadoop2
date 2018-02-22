@@ -49,6 +49,65 @@ public class RTreeGuttmanTest extends TestCase {
     }
   }
 
+  public void testBuildRectangles() {
+    try {
+      String fileName = "src/test/resources/test.rect";
+      double[][] rects = readFile(fileName);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromRects(rects[0], rects[1], rects[2], rects[3]);
+      assertEquals(rtree.numOfDataEntries(), 14);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+  public void testSearch() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      double x1 = 0, y1 = 0, x2 = 5, y2 = 4;
+      assertTrue("First object should overlap the search area",
+          rtree.Object_overlaps(0, x1, y1, x2, y2));
+      assertTrue("Second object should overlap the search area",
+          rtree.Object_overlaps(2, x1, y1, x2, y2));
+      IntArray expectedResult = new IntArray();
+      expectedResult.add(0);
+      expectedResult.add(2);
+      for (RTreeGuttman.Entry entry : rtree.search(x1, y1, x2, y2)) {
+        assertTrue("Unexpected result "+entry, expectedResult.remove(entry.id));
+      }
+      assertTrue("Some expected results not returned "+expectedResult, expectedResult.isEmpty());
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+  public void testIterateOverEntries() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      double[] x1s = points[0];
+      double[] y1s = points[1];
+      RTreeGuttman rtree = RTreeGuttman.constructFromPoints(points[0], points[1], 4, 8);
+      assertEquals(11, rtree.numOfDataEntries());
+      int count = 0;
+      for (RTreeGuttman.Entry entry : rtree.entrySet()) {
+        assertEquals(x1s[entry.id], entry.x1);
+        assertEquals(y1s[entry.id], entry.y1);
+        count++;
+      }
+      assertEquals(11, count);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
   public void testBuild2() {
     try {
       String fileName = "src/test/resources/test2.points";
@@ -160,14 +219,15 @@ public class RTreeGuttmanTest extends TestCase {
     testPointsIn.close();
 
     String[] lines = new String(buffer).split("\\s");
-    double[] xs = new double[lines.length];
-    double[] ys = new double[lines.length];
+    int numDimensions = lines[0].split(",").length;
+    double[][] coords = new double[numDimensions][lines.length];
+
     for (int iLine = 0; iLine < lines.length; iLine++) {
       String[] parts = lines[iLine].split(",");
-      xs[iLine] = Double.parseDouble(parts[0]);
-      ys[iLine] = Double.parseDouble(parts[1]);
+      for (int iDim = 0; iDim < parts.length; iDim++)
+        coords[iDim][iLine] = Double.parseDouble(parts[iDim]);
     }
-    return new double[][]{xs, ys};
+    return coords;
   }
 
 }

@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.core.*;
+import edu.umn.cs.spatialHadoop.util.IntArray;
 
 import java.awt.geom.Rectangle2D;
 import java.io.DataInput;
@@ -28,6 +29,9 @@ public class RTreePartitioner extends Partitioner {
 
   /**The coordinates of the partitions*/
   protected double[] x1s, y1s, x2s, y2s;
+
+  /**An internal R*-tree that stores all partitions for fast search*/
+  private RStarTree partitionRTree;
 
   /**
    * Computes the expansion that will happen on an a partition when it is
@@ -109,6 +113,9 @@ public class RTreePartitioner extends Partitioner {
       x2s[i] = partitions[i].x2;
       y2s[i] = partitions[i].y2;
     }
+    // Create an internal R-tree over the partition boundaries to speed up the search function
+    this.partitionRTree = new RStarTree(4, 8);
+    partitionRTree.initializeFromRects(x1s, y1s, x2s, y2s);
   }
 
   @Override
@@ -141,6 +148,9 @@ public class RTreePartitioner extends Partitioner {
       x2s[i] = in.readDouble();
       y2s[i] = in.readDouble();
     }
+    if (partitionRTree == null)
+      partitionRTree = new RStarTree(4, 8);
+    partitionRTree.initializeFromRects(x1s, y1s, x2s, y2s);
   }
   
   @Override
@@ -151,10 +161,10 @@ public class RTreePartitioner extends Partitioner {
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
     Rectangle shapeMBR = shape.getMBR();
-    for (int i = 0; i < getPartitionCount(); i++) {
-      if (Partition_overlap(i, shapeMBR))
-        matcher.collect(i);
-    }
+    IntArray overlappingPartitions = new IntArray();
+    partitionRTree.search(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2, overlappingPartitions);
+    for (int overlappingPartition : overlappingPartitions)
+      matcher.collect(overlappingPartition);
   }
   
   @Override
