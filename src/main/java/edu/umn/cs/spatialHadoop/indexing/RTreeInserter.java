@@ -287,12 +287,10 @@ public class RTreeInserter {
 		    	shape.fromText(text);
 		    	// Find the corresponding cellId
 		    	int partitionId = partitioner.overlapPartition(shape);
-		    	List<Shape> shapes = map.get(partitionId);
-		    	if(shapes == null) {
-		    		shapes = new ArrayList<Shape>();
+		    	if(map.get(partitionId) == null) {
+		    		map.put(partitionId, new ArrayList<Shape>());
 		    	}
-		    	shapes.add(shape);
-		    	map.put(partitionId, shapes);
+		    	map.get(partitionId).add(shape);
 		    	
 		    	// Read next record
 		        line = br.readLine();
