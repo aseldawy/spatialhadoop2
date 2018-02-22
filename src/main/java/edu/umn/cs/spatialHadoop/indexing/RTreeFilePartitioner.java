@@ -200,7 +200,7 @@ public class RTreeFilePartitioner extends Partitioner {
 				return minimumCell.cellId;
 			}
 		}
-//		System.out.println("Return first cell. Should not run to here ");
+		System.out.println("Return first cell. Should not run to here ");
 		return this.cells.get(0).cellId;
 	}
 
