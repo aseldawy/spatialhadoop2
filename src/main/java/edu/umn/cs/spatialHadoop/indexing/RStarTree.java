@@ -425,7 +425,13 @@ public class RStarTree extends RTreeGuttman {
           iSplit = partitionGreaterThanOrEqual[iSplit];
         } else {
           // The entire space is still to be considered
-          splitsToSearch.add(partitionGreaterThanOrEqual[iSplit]);
+          if (partitionGreaterThanOrEqual[iSplit] >= 0) {
+            // A split that needs to be further considered
+            splitsToSearch.add(partitionGreaterThanOrEqual[iSplit]);
+          } else {
+            // A terminal partition that should be matched
+            splitsToSearch.insert(0, partitionGreaterThanOrEqual[iSplit]);
+          }
           iSplit = partitionLessThan[iSplit];
         }
         // If iSplit reaches a terminal partitions, add it to the answer and

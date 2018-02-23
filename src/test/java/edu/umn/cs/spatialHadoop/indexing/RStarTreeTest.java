@@ -162,6 +162,26 @@ public class RStarTreeTest extends TestCase {
     }
   }
 
+  public void testAuxiliarySearchStructureWithBiggerIndex() {
+    try {
+      String fileName = "src/test/resources/test2.points";
+      double[][] points = readFile(fileName);
+      // Create a tree without splits
+      int capacity = 3;
+      RStarTree.AuxiliarySearchStructure aux = new RStarTree.AuxiliarySearchStructure();
+      Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity, true, aux);
+      IntArray ps = new IntArray();
+      // Make a search that should match with all paritions
+      aux.search(0,0,100,100, ps);
+      assertEquals(partitions.length, ps.size());
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+
   public void testAuxiliarySearchStructureWithOnePartition() {
     try {
       String fileName = "src/test/resources/test.points";
