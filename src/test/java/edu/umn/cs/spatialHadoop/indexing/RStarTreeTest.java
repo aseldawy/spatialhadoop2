@@ -84,7 +84,7 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 8;
       Rectangle[] partitions =
-          RStarTree.partitionPoints(points[0], points[1], capacity, false);
+          RStarTree.partitionPoints(points[0], points[1], capacity, false, null);
       // Minimum number of partitions = Ceil(# points / capacity)
       int minNumPartitions = (points[0].length + capacity - 1) / capacity;
       int maxNumPartitions = (points[0].length + capacity / 2 - 1) / (capacity / 2);
@@ -113,12 +113,31 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 8;
       Rectangle[] partitions =
-          RStarTree.partitionPoints(points[0], points[1], capacity, false);
+          RStarTree.partitionPoints(points[0], points[1], capacity, false, null);
 
       assertEquals(2, partitions.length);
       Arrays.sort(partitions);
       assertEquals(new Rectangle(1, 3, 6, 12), partitions[0]);
       assertEquals(new Rectangle(9, 2, 12, 10), partitions[1]);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+  public void testAuxiliarySearchStructure() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      // Create a tree without splits
+      int capacity = 4;
+      RStarTree.AuxiliarySearchStructure aux = new RStarTree.AuxiliarySearchStructure();
+      RStarTree.partitionPoints(points[0], points[1], capacity, true, aux);
+      assertEquals(3, aux.partitionGreaterThanOrEqual.length);
+      assertEquals(9.0, aux.splitCoords[aux.rootSplit]);
+      assertTrue(aux.partitionGreaterThanOrEqual[aux.rootSplit] < 0);
+      assertTrue(aux.partitionGreaterThanOrEqual[aux.rootSplit] >= 0);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
@@ -133,7 +152,7 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 4;
       Rectangle[] partitions =
-          RStarTree.partitionPoints(points[0], points[1], capacity, true);
+          RStarTree.partitionPoints(points[0], points[1], capacity, true, null);
 
       assertEquals(4, partitions.length);
 

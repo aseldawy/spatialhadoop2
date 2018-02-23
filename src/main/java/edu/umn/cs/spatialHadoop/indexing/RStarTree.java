@@ -2,6 +2,7 @@ package edu.umn.cs.spatialHadoop.indexing;
 
 import com.google.common.collect.Lists;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
@@ -10,9 +11,7 @@ import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Stack;
+import java.util.*;
 
 /**
  * An R*-tree implementation based on the design in the following paper.
@@ -352,6 +351,31 @@ public class RStarTree extends RTreeGuttman {
   }
 
   /**
+   * A class that stores an auxiliary data structure used to search through
+   * the partitions created using the function
+   * {@link #partitionPoints(double[], double[], int, boolean, AuxiliarySearchStructure)}
+   */
+  public static class AuxiliarySearchStructure {
+    /**The coordinate along where the split happens*/
+    public double[] splitCoords;
+    /**The axis along where the partition happened. 0 for X and 1 for Y.*/
+    public BitArray splitAxis;
+    /**
+     * The next partition to consider if the search point is less than the
+     * split line. If the number is negative, it indicates that the search is
+     * terminated and a partition is matched. The partition index is (-x-1)
+     **/
+    public int[] partitionLessThan;
+    /**
+     * The next partition to consider if the search point is greater than or
+     * equal to the split line.
+     */
+    public int[] partitionGreaterThanOrEqual;
+    /**The first split to consider*/
+    public int rootSplit;
+  }
+
+  /**
    * Use the R*-tree improved splitting algorithm to split the given set of points
    * such that each split does not exceed the given capacity.
    * Returns the MBRs of the splits. This method is a standalone static method
@@ -363,17 +387,27 @@ public class RStarTree extends RTreeGuttman {
    * @param expandToInf when set to true, the returned partitions are expanded
    *                    to cover the entire space from, Negative Infinity to
    *                    Positive Infinity, in all dimensions.
+   * @param aux If not set to <code>null</code>, this will be filled with some
+   *            auxiliary information to help efficiently search through the
+   *            partitions.
    * @return
    */
   public static Rectangle[] partitionPoints(final double[] xs,
                                             final double[] ys,
                                             int capacity,
-                                            boolean expandToInf) {
+                                            boolean expandToInf,
+                                            AuxiliarySearchStructure aux) {
     class SplitTask {
       /**The range of points to partition*/
       int start, end;
       /**The rectangular region that covers those points*/
       double x1, y1, x2, y2;
+      /**Where the separation happens in the range [start, end)*/
+      int separator;
+      /**The coordinate along where the separation happened*/
+      double splitCoord;
+      /**The axis along where the separation happened. 0 for X and 1 for Y*/
+      int axis;
 
       SplitTask(){}
 
@@ -426,6 +460,7 @@ public class RStarTree extends RTreeGuttman {
     };
     QuickSort quickSort = new QuickSort();
     Stack<SplitTask> rangesToSplit = new Stack<SplitTask>();
+    Map<Long,SplitTask> rangesAlreadySplit = new HashMap<Long,SplitTask>();
     rangesToSplit.push(new SplitTask(0, xs.length, Double.NEGATIVE_INFINITY,
         Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY));
     List<Rectangle> finalizedSplits = new ArrayList<Rectangle>();
@@ -453,6 +488,10 @@ public class RStarTree extends RTreeGuttman {
           }
           partitionMBR = new Rectangle(minX, minY, maxX, maxY);
         }
+        // Mark the range as a leaf partition by setting the separator to
+        // a negative number x. The partition ID is -x-1
+        range.separator = -finalizedSplits.size()-1;
+        rangesAlreadySplit.put(((long)range.end << 32) | range.start, range);
         finalizedSplits.add(partitionMBR);
         continue;
       }
@@ -623,106 +662,63 @@ public class RStarTree extends RTreeGuttman {
         }
       }
       // Split at the chosenK
-      int separator = range.start + minSplitSize - 1 + chosenK;
+      range.separator = range.start + minSplitSize - 1 + chosenK;
 
       // Create two sub-ranges
       // Sub-range 1 covers the range [rangeStart, separator)
       // Sub-range 2 covers the range [separator, rangeEnd)
-      SplitTask range1 = new SplitTask(range.start, separator,
+      SplitTask range1 = new SplitTask(range.start, range.separator,
           range.x1, range.y1, range.x2, range.y2);
-      SplitTask range2 = new SplitTask(separator, range.end,
+      SplitTask range2 = new SplitTask(range.separator, range.end,
           range.x1, range.y1, range.x2, range.y2);
       // The spatial range of the input is split along the split axis
       if (sumMarginX < sumMarginY) {
         // Split was along the X-axis
-        range1.x2 = range2.x1 = xs[separator];
+        range.axis = 0;
+        range.splitCoord = range1.x2 = range2.x1 = xs[range.separator];
       } else {
         // Split was along the Y-axis
-        range1.y2 = range2.y1 = ys[separator];
+        range.axis = 1;
+        range.splitCoord = range1.y2 = range2.y1 = ys[range.separator];
       }
       rangesToSplit.add(range1);
       rangesToSplit.add(range2);
+      rangesAlreadySplit.put(((long)range.end << 32) | range.start, range);
+    }
+
+    if (aux != null) {
+      // Assign an ID for each partition
+      Map<Long, Integer> partitionIDs = new HashMap<Long, Integer>();
+      int seq = 0;
+      for (Map.Entry<Long, SplitTask> entry : rangesAlreadySplit.entrySet()) {
+        if (entry.getValue().separator >= 0)
+          partitionIDs.put(entry.getKey(), seq++);
+        else
+          partitionIDs.put(entry.getKey(), entry.getValue().separator);
+      }
+      // Build the search data structure
+      int numOfSplitAxis = rangesAlreadySplit.size() - finalizedSplits.size();
+      assert seq == numOfSplitAxis;
+      aux.partitionGreaterThanOrEqual = new int[numOfSplitAxis];
+      aux.partitionLessThan = new int[numOfSplitAxis];
+      aux.splitAxis = new BitArray(numOfSplitAxis);
+      aux.splitCoords = new double[numOfSplitAxis];
+      for (Map.Entry<Long, SplitTask> entry : rangesAlreadySplit.entrySet()) {
+        if (entry.getValue().separator > 0) {
+          int id = partitionIDs.get(entry.getKey());
+          SplitTask range = entry.getValue();
+          aux.splitCoords[id] = range.splitCoord;
+          aux.splitAxis.set(id, range.axis == 1);
+          long p1 = (range.start << 32) | range.separator;
+          aux.partitionLessThan[id] = partitionIDs.get(p1);
+          long p2 = (range.separator << 32) | range.end;
+          aux.partitionGreaterThanOrEqual[id] = partitionIDs.get(p2);
+          if (range.start == 0 && range.end == xs.length)
+            aux.rootSplit = id;
+        }
+      }
     }
 
     return finalizedSplits.toArray(new Rectangle[finalizedSplits.size()]);
-  }
-
-  enum Method {Incremental, BulkLoading1, BulkLoading2};
-  public static void main(String[] args) throws IOException {
-    String fileName = args[0];
-    FileReader testPointsIn = new FileReader(fileName);
-    char[] buffer = new char[(int) new File(fileName).length()];
-    testPointsIn.read(buffer);
-    testPointsIn.close();
-
-    long t1 = System.currentTimeMillis();
-    String[] lines = new String(buffer).split("\\s");
-    double[] xs = new double[lines.length];
-    double[] ys = new double[lines.length];
-    for (int iLine = 0; iLine < lines.length; iLine++) {
-      String[] parts = lines[iLine].split(",");
-      xs[iLine] = Double.parseDouble(parts[0]);
-      ys[iLine] = Double.parseDouble(parts[1]);
-    }
-    int capacity = 8;
-    capacity = xs.length / 2;
-    capacity = 2972;
-
-    Method method = Method.BulkLoading2;
-
-    Rectangle[] leaves;
-
-    switch (method) {
-      case BulkLoading1: {
-        IntArray nodesToSplit = new IntArray();
-        // Construct a tree with one root that contains all the points
-        RStarTree rtree = new RStarTree(xs.length, xs.length * 2);
-        rtree.initializeFromPoints(xs, ys);
-        nodesToSplit.add(rtree.iRoot);
-        int numSplits = 0;
-        while (!nodesToSplit.isEmpty()) {
-          int iNodeToSplit = nodesToSplit.pop();
-          if (rtree.Node_size(iNodeToSplit) > capacity) {
-            numSplits++;
-            int minSplitSize = Math.max(capacity / 2, rtree.Node_size(iNodeToSplit) / 2 - capacity);
-            int iNewNode = rtree.split(iNodeToSplit, minSplitSize);
-            if (rtree.Node_size(iNodeToSplit) > capacity)
-              nodesToSplit.add(iNodeToSplit);
-            if (rtree.Node_size(iNewNode) > capacity)
-              nodesToSplit.add(iNewNode);
-          }
-        }
-        System.out.printf("Performed %d splits\n", numSplits);
-        List<Rectangle> rects = new ArrayList<Rectangle>();
-        for (Node leaf : rtree.getAllLeaves())
-          rects.add(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y1));
-        leaves = rects.toArray(new Rectangle[rects.size()]);
-        break;
-      }
-      case BulkLoading2: {
-        leaves = RStarTree.partitionPoints(xs, ys, capacity, true);
-        break;
-      }
-      case Incremental: {
-        // Build the R-tree incrementally
-        RStarTree rtree = new RStarTree(capacity/2, capacity);
-        rtree.initializeFromPoints(xs, ys);
-        List<Rectangle> rects = new ArrayList<Rectangle>();
-        for (Node leaf : rtree.getAllLeaves())
-          rects.add(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y1));
-        leaves = rects.toArray(new Rectangle[rects.size()]);
-        break;
-      }
-      default:
-        throw new RuntimeException("Unknown method "+method);
-    }
-
-    Rectangle clipMBR = new Rectangle(-180, -90, 180, 90);
-    for (Rectangle leaf : leaves) {
-      System.out.println(leaf.getIntersection(clipMBR).toWKT());
-    }
-
-    long t2 = System.currentTimeMillis();
-    System.out.printf("Generated the tree using %s in %f seconds\n", method.toString(), (t2 -t1) / 1000.0);
   }
 }
