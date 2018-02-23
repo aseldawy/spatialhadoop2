@@ -9,8 +9,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
 
-import org.apache.hadoop.io.Text;
-import org.hsqldb.lib.Collection;
 
 import com.github.davidmoten.rtree.Entry;
 import com.github.davidmoten.rtree.Leaf;
@@ -26,7 +24,6 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
-import rx.Observable;
 
 public class RTreePartitioner extends Partitioner {
 

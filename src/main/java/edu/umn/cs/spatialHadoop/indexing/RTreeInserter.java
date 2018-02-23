@@ -24,6 +24,7 @@ import org.apache.hadoop.mapred.ClusterStatus;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
+import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -48,6 +49,8 @@ public class RTreeInserter {
 		LocalIndexes.put("rtree", RTreeLocalIndexer.class);
 		LocalIndexes.put("r+tree", RTreeLocalIndexer.class);
 	}
+
+	enum AppendCounters {TotalAppendTime, TotalPartitionTime, TotalOverlappingTime, TotalNonOverlappingTime, TotalMapTime};
 
 	/**
 	 * The map function that partitions the data using the configured partitioner.
@@ -76,6 +79,8 @@ public class RTreeInserter {
 		@Override
 		protected void map(Rectangle key, Iterable<? extends Shape> shapes, final Context context)
 				throws IOException, InterruptedException {
+			long t1 = System.nanoTime();
+			long totalPartitionTime = 0;
 			final IntWritable partitionID = new IntWritable();
 			for (final Shape shape : shapes) {
 				if (replicate) {
@@ -93,12 +98,25 @@ public class RTreeInserter {
 						}
 					});
 				} else {
+					long t3 = System.nanoTime();
 					partitionID.set(partitioner.overlapPartition(shape));
-					if (partitionID.get() >= 0)
+					if (partitionID.get() >= 0) {
 						context.write(partitionID, shape);
+					}
+					long t4 = System.nanoTime();
+					totalPartitionTime += t4-t3;
 				}
 				context.progress();
 			}
+			long t2 = System.nanoTime();
+			long totalSearchTime = RTreeFilePartitioner.TotalSearchTime;
+			RTreeFilePartitioner.TotalSearchTime = 0;
+			Counter appendTimeCounter = context.getCounter(AppendCounters.TotalAppendTime);
+			appendTimeCounter.increment(totalSearchTime);
+			context.getCounter(AppendCounters.TotalMapTime).increment(t2-t1);
+			context.getCounter(AppendCounters.TotalPartitionTime).increment(totalPartitionTime);
+			context.getCounter(AppendCounters.TotalOverlappingTime).increment(RTreeFilePartitioner.TimeOverlappingCells);
+			context.getCounter(AppendCounters.TotalNonOverlappingTime).increment(RTreeFilePartitioner.TimeNonOverlappingCells);
 		}
 	}
 
@@ -310,23 +328,34 @@ public class RTreeInserter {
 			InstantiationException, IllegalAccessException {
 		// TODO Auto-generated method stub
 		final OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-//		Path[] inputFiles = params.getPaths();
-//
-//		if (!params.checkInput() || (inputFiles.length != 2)) {
-//			printUsage();
-//			System.exit(1);
-//		}
-//
-//		Path currentPath = inputFiles[0];
-//		Path insertPath = inputFiles[1];
-//		System.out.println("Current path: " + currentPath);
-//		System.out.println("Insert path: " + insertPath);
-//		insertMapReduce(currentPath, insertPath, params);
-//		appendNewFiles(currentPath, params);
-		
-		String currentPathString = params.get("current");
-		String appendPathString = params.get("append");
-		Path currentPath = new Path(currentPathString);
-		append(currentPath, appendPathString, params);
+		Path[] inputFiles = params.getPaths();
+
+		if (!params.checkInput() || (inputFiles.length != 2)) {
+			printUsage();
+			System.exit(1);
+		}
+
+		long t1 = System.currentTimeMillis();
+		Path currentPath = inputFiles[0];
+		Path insertPath = inputFiles[1];
+		System.out.println("Current path: " + currentPath);
+		System.out.println("Insert path: " + insertPath);
+		Job appendJob = insertMapReduce(currentPath, insertPath, params);
+		//appendNewFiles(currentPath, params);
+		long t2 = System.currentTimeMillis();
+		long totalSearchTime = appendJob.getCounters().findCounter(AppendCounters.TotalAppendTime).getValue();
+		System.out.printf("Finished the append process in %f seconds\n", (t2-t1)*1E-3);
+		System.out.printf("Total search time is %f seconds\n", totalSearchTime*1E-9);
+		long totalMapTime = appendJob.getCounters().findCounter(AppendCounters.TotalMapTime).getValue();
+		System.out.printf("Total map time is %f seconds\n", totalMapTime*1E-9);
+		long totalPartitionTime = appendJob.getCounters().findCounter(AppendCounters.TotalPartitionTime).getValue();
+		System.out.printf("Total partition time is %f seconds\n", totalPartitionTime*1E-9);
+		System.out.printf("Total overlapping time time is %f seconds\n", appendJob.getCounters().findCounter(AppendCounters.TotalOverlappingTime).getValue()*1E-9);
+		System.out.printf("Total non-overlapping time time is %f seconds\n", appendJob.getCounters().findCounter(AppendCounters.TotalNonOverlappingTime).getValue()*1E-9);
+
+//		String currentPathString = params.get("current");
+//		String appendPathString = params.get("append");
+//		Path currentPath = new Path(currentPathString);
+//		append(currentPath, appendPathString, params);
 	}
 }

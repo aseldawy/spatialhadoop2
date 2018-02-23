@@ -4,11 +4,11 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Observable;
-import java.util.Random;
-import java.util.stream.Collectors;
+import java.util.Map;
 
+import javafx.scene.control.Cell;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -35,12 +35,13 @@ public class RTreeFilePartitioner extends Partitioner {
 	private static final double MINIMUM_EXPANSION = Double.MAX_VALUE;
 	private static final int MAXIMUM_NEAREST_CELLS = 3;
 	protected ArrayList<CellInfo> cells;
+	protected Map<Integer, CellInfo> cellsMap;
 	private RTree<Integer, Geometry> cellsTree;
 
 	public RTreeFilePartitioner() {
 		// TODO Auto-generated constructor stub
 		cells = new ArrayList<CellInfo>();
-		cellsTree = this.buildCellsTree(cells);
+		cellsMap = new HashMap<Integer, CellInfo>();
 	}
 
 	private RTree<Integer, Geometry> buildCellsTree(ArrayList<CellInfo> cellList) {
@@ -59,33 +60,30 @@ public class RTreeFilePartitioner extends Partitioner {
 	}
 
 	private List<CellInfo> getNearestCells(Shape shape, int maxCount) {
-		ArrayList<Integer> nearestCellIds = new ArrayList<Integer>();
-
 		Rectangle r = shape.getMBR();
 		List<Entry<Integer, Geometry>> entries = this.cellsTree
 				.nearest(Geometries.rectangle(r.x1, r.y1, r.x2, r.y2), 50, maxCount).toList().toBlocking().single();
+		List<CellInfo> nearestCells = new ArrayList<CellInfo>();
 		for (Entry<Integer, Geometry> entry : entries) {
-			Integer cellId = entry.value();
-			nearestCellIds.add(cellId);
+			nearestCells.add(cellsMap.get(entry.value()));
 		}
-		List<CellInfo> nearestCells = this.cells.stream().filter(c -> nearestCellIds.contains(new Integer(c.cellId)))
-				.collect(Collectors.toList());
-
 		return nearestCells;
 	}
-	
+
+	public static long TotalSearchTime = 0;
+
 	private List<CellInfo> getOverlappingCells(Shape shape) {
-		ArrayList<Integer> overlappingCellIds = new ArrayList<Integer>();
 		Rectangle r = shape.getMBR();
-		
+
+		long t1 = System.nanoTime();
 		List<Entry<Integer, Geometry>> entries = this.cellsTree.search(Geometries.rectangle(r.x1, r.y1, r.x2, r.y2))
 				.toList().toBlocking().single();
+		List<CellInfo> overlappingCells = new ArrayList<CellInfo>();
 		for (Entry<Integer, Geometry> entry : entries) {
-			Integer cellId = entry.value();
-			overlappingCellIds.add(cellId);
+			overlappingCells.add(cellsMap.get(entry.value()));
 		}
-		List<CellInfo> overlappingCells = this.cells.stream().filter(c -> overlappingCellIds.contains(new Integer(c.cellId)))
-				.collect(Collectors.toList());
+		long t2 = System.nanoTime();
+		TotalSearchTime += t2 - t1;
 
 		return overlappingCells;
 	}
@@ -102,10 +100,15 @@ public class RTreeFilePartitioner extends Partitioner {
 	public void readFields(DataInput in) throws IOException {
 		int cellsSize = in.readInt();
 		cells = new ArrayList<CellInfo>(cellsSize);
+		if (cellsMap == null)
+			cellsMap = new HashMap<Integer, CellInfo>();
+		else
+			cellsMap.clear();
 		for (int i = 0; i < cellsSize; i++) {
 			CellInfo cellInfo = new CellInfo();
 			cellInfo.readFields(in);
 			cells.add(cellInfo);
+			cellsMap.put(cellInfo.cellId, cellInfo);
 		}
 		cellsTree = this.buildCellsTree(cells);
 	}
@@ -125,12 +128,14 @@ public class RTreeFilePartitioner extends Partitioner {
 	 */
 	public void createFromMasterFile(Path inPath, OperationsParams params) throws IOException {
 		this.cells = new ArrayList<CellInfo>();
+
 		ArrayList<Partition> partitions = MetadataUtil.getPartitions(inPath, params);
 		for(Partition p: partitions) {
 			CellInfo tempCellInfo = new CellInfo();
 			tempCellInfo.set(p.cellMBR);
 			tempCellInfo.cellId = p.cellId;
 			this.cells.add(tempCellInfo);
+			cellsMap.put(tempCellInfo.cellId, tempCellInfo);
 		}
 		cellsTree = this.buildCellsTree(cells);
 	}
@@ -165,59 +170,60 @@ public class RTreeFilePartitioner extends Partitioner {
 		}
 	}
 
+	public static long TimeOverlappingCells = 0;
+	public static long TimeNonOverlappingCells = 0;
+
 	@Override
 	public int overlapPartition(Shape shape) {
 		List<CellInfo> overlappingCells = this.getOverlappingCells(shape);
 		int numberOfOverlappingCells = overlappingCells.size();
 //		System.out.println("Number of overlapping cell = " + numberOfOverlappingCells);
 		if(numberOfOverlappingCells > 0) {
+			long t1 = System.nanoTime();
 //			Random random = new Random();
 //			int index = random.nextInt(numberOfOverlappingCells - 1);
 //			return overlappingCells.get(index).cellId;
-			for (CellInfo cell : overlappingCells) {
-				if (cell.isIntersected(shape)) {
-//					System.out.println("return intersected cell = " + cell.cellId);
-					return cell.cellId;
-				}
-			}
+			// We need to add a refinement step because the RTree uses single-precision floating points while we use
+			// double-precision floating points which might result in some false positives
+			return cells.get(0).cellId;
+//			for (CellInfo cell : overlappingCells) {
+//				if (cell.isIntersected(shape)) {
+////					System.out.println("return intersected cell = " + cell.cellId);
+//					long t2 = System.nanoTime();
+//					TimeOverlappingCells += t2 - t1;
+//					return cell.cellId;
+//				} else {
+//					System.out.println("Found a non overlapping cell "+cell);
+//				}
+//			}
 		} else {
+			long t1 = System.nanoTime();
 			List<CellInfo> nearestCells = this.getNearestCells(shape, MAXIMUM_NEAREST_CELLS);
 //			System.out.println("number of nearest cells = " + nearestCells.size());
 
-			if(nearestCells.size() > 0) {
-				double minimumExpansion = MINIMUM_EXPANSION;
-				CellInfo minimumCell = nearestCells.get(0);
-				for (CellInfo cell : nearestCells) {
-					CellInfo tempCell = new CellInfo(cell);
-					tempCell.expand(shape);
-					double expansionArea = tempCell.getSize() - cell.getSize();
-					if (expansionArea < minimumExpansion) {
-						minimumExpansion = expansionArea;
-						minimumCell = cell;
-					}
+			double minimumExpansion = MINIMUM_EXPANSION;
+			CellInfo minimumCell = nearestCells.get(0);
+			for (CellInfo cell : nearestCells) {
+				CellInfo tempCell = new CellInfo(cell);
+				tempCell.expand(shape);
+				double expansionArea = tempCell.getSize() - cell.getSize();
+				if (expansionArea < minimumExpansion) {
+					minimumExpansion = expansionArea;
+					minimumCell = cell;
 				}
-//				System.out.println("return minimum expand cell = " + minimumCell.cellId);
-				return minimumCell.cellId;
 			}
+//				System.out.println("return minimum expand cell = " + minimumCell.cellId);
+			long t2 = System.nanoTime();
+			TimeNonOverlappingCells += t2 - t1;
+			return minimumCell.cellId;
 		}
 //		System.out.println("Return first cell. Should not run to here ");
-		return this.cells.get(0).cellId;
+		//throw new RuntimeException("Error! Could not find any overlapping cells");
 	}
 
 	@Override
 	public CellInfo getPartition(int partitionID) {
-		// TODO Auto-generated method stub
-		CellInfo result = new CellInfo(partitionID, 0, 0, 0, 0);
-		List<CellInfo> matchingCells = this.cells.stream().filter(c -> c.cellId == partitionID)
-				.collect(Collectors.toList());
-//		System.out.println("matching cell size = " + matchingCells.size());
-		for (CellInfo cell : matchingCells) {
-			if (cell.cellId == partitionID) {
-				result = cell;
-				break;
-			}
-		}
-		return result;
+		return cellsMap.get(partitionID);
 	}
 
 	@Override
