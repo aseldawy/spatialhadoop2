@@ -89,7 +89,7 @@ public class Indexer {
     PartitionerReplicate.put("zcurve", false);
     PartitionerReplicate.put("hilbert", false);
     PartitionerReplicate.put("kdtree", true);
-    PartitionerReplicate.put("rtreeag", false);
+    PartitionerReplicate.put("rtreeag", true);
 
     LocalIndexes = new HashMap<String, Class<? extends LocalIndexer>>();
     LocalIndexes.put("rtree", RTreeLocalIndexer.class);
