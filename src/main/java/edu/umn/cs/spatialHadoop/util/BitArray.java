@@ -119,27 +119,28 @@ public class BitArray implements Writable {
 
   @Override
   public void write(DataOutput out) throws IOException {
-    out.writeInt(entries.length);
-    ByteBuffer bbuffer = ByteBuffer.allocate(entries.length * BitsPerEntry / 8);
-    for (long entry : entries)
-      bbuffer.putLong(entry);
-    if (bbuffer.remaining() > 0)
-      throw new RuntimeException("Error calculating the size of the buffer");
+    out.writeLong(size);
+    int numEntriesToWrite = (int) ((size + BitsPerEntry - 1) / BitsPerEntry);
+    ByteBuffer bbuffer = ByteBuffer.allocate(numEntriesToWrite * 8);
+    for (int i = 0; i < numEntriesToWrite; i++)
+      bbuffer.putLong(entries[i]);
+    // We should fill up the bbuffer
+    assert bbuffer.remaining() == 0;
     out.write(bbuffer.array(), bbuffer.arrayOffset(), bbuffer.position() - bbuffer.arrayOffset());
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    int count = in.readInt();
-    if (entries == null || entries.length != count)
-      entries = new long[count];
-    byte[] buffer = new byte[entries.length * BitsPerEntry / 8];
+    size = in.readLong();
+    int numEntriesToRead = (int) ((size + BitsPerEntry - 1) / BitsPerEntry);
+    if (entries == null || entries.length < numEntriesToRead)
+      entries = new long[numEntriesToRead];
+    byte[] buffer = new byte[numEntriesToRead * 8];
     in.readFully(buffer);
     ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
-    for (int i = 0; i < entries.length; i++)
+    for (int i = 0; i < numEntriesToRead; i++)
       entries[i] = bbuffer.getLong();
-    if (bbuffer.hasRemaining())
-      throw new RuntimeException("Did not consume all entries");
+    assert !bbuffer.hasRemaining();
   }
 
   public long size() {

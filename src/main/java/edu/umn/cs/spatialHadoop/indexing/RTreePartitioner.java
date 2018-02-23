@@ -30,11 +30,11 @@ public class RTreePartitioner extends Partitioner {
   /**The coordinates of the partitions*/
   protected double[] x1s, y1s, x2s, y2s;
 
-  /**An internal R*-tree that stores all partitions for fast search*/
-  private RStarTree partitionRTree;
-
   /**A temporary array used to compute intersections*/
   private IntArray overlappingPartitions = new IntArray();
+
+  /**An auxiliary search structure to find matching partitions quickly*/
+  private RStarTree.AuxiliarySearchStructure aux;
 
   /**
    * Computes the expansion that will happen on an a partition when it is
@@ -105,7 +105,8 @@ public class RTreePartitioner extends Partitioner {
       ys[i] = points[i].y;
       mbrPoints.expand(points[i]);
     }
-    Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity, true, null);
+    aux = new RStarTree.AuxiliarySearchStructure();
+    Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity, true, aux);
     x1s = new double[partitions.length];
     y1s = new double[partitions.length];
     x2s = new double[partitions.length];
@@ -116,9 +117,6 @@ public class RTreePartitioner extends Partitioner {
       x2s[i] = partitions[i].x2;
       y2s[i] = partitions[i].y2;
     }
-    // Create an internal R-tree over the partition boundaries to speed up the search function
-    this.partitionRTree = new RStarTree(4, 8);
-    partitionRTree.initializeFromRects(x1s, y1s, x2s, y2s);
   }
 
   @Override
@@ -131,12 +129,12 @@ public class RTreePartitioner extends Partitioner {
       out.writeDouble(x2s[i]);
       out.writeDouble(y2s[i]);
     }
+    aux.write(out);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    if (mbrPoints == null)
-      mbrPoints = new Rectangle();
+    if (mbrPoints == null) mbrPoints = new Rectangle();
     mbrPoints.readFields(in);
     int numPartitions = in.readInt();
     if (getPartitionCount() != numPartitions) {
@@ -151,9 +149,9 @@ public class RTreePartitioner extends Partitioner {
       x2s[i] = in.readDouble();
       y2s[i] = in.readDouble();
     }
-    if (partitionRTree == null)
-      partitionRTree = new RStarTree(4, 8);
-    partitionRTree.initializeFromRects(x1s, y1s, x2s, y2s);
+    if (aux == null)
+      aux = new RStarTree.AuxiliarySearchStructure();
+    aux.readFields(in);
   }
   
   @Override
@@ -164,7 +162,7 @@ public class RTreePartitioner extends Partitioner {
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
     Rectangle shapeMBR = shape.getMBR();
-    partitionRTree.search(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2, overlappingPartitions);
+    aux.search(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2, overlappingPartitions);
     for (int overlappingPartition : overlappingPartitions)
       matcher.collect(overlappingPartition);
   }
@@ -179,7 +177,9 @@ public class RTreePartitioner extends Partitioner {
     Rectangle shapeMBR = shape.getMBR();
     double minExpansion = Double.POSITIVE_INFINITY;
     int chosenPartition = -1;
-    partitionRTree.search(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2, overlappingPartitions);
+    aux.search(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2, overlappingPartitions);
+    if (overlappingPartitions.size() == 1)
+      return overlappingPartitions.get(0);
     for (int overlappingPartition : overlappingPartitions) {
       double expansion = Partition_expansion(overlappingPartition, shapeMBR);
       if (expansion < minExpansion) {

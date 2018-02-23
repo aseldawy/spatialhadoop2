@@ -4,13 +4,12 @@ import com.google.common.collect.Lists;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
 import java.awt.geom.Rectangle2D;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 
 /**
@@ -355,7 +354,9 @@ public class RStarTree extends RTreeGuttman {
    * the partitions created using the function
    * {@link #partitionPoints(double[], double[], int, boolean, AuxiliarySearchStructure)}
    */
-  public static class AuxiliarySearchStructure {
+  public static class AuxiliarySearchStructure implements Writable {
+    /**The first split to consider*/
+    public int rootSplit;
     /**The coordinate along where the split happens*/
     public double[] splitCoords;
     /**The axis along where the partition happened. 0 for X and 1 for Y.*/
@@ -371,8 +372,6 @@ public class RStarTree extends RTreeGuttman {
      * equal to the split line.
      */
     public int[] partitionGreaterThanOrEqual;
-    /**The first split to consider*/
-    public int rootSplit;
 
     /**
      * Returns the ID of the partition that contain the given point
@@ -381,6 +380,8 @@ public class RStarTree extends RTreeGuttman {
      * @return
      */
     public int search(double x, double y) {
+      if (splitCoords.length == 0)
+        return 0;
       int iSplit = rootSplit;
       while (iSplit >= 0) {
         // Choose which coordinate to work with depending on the split axis
@@ -406,6 +407,11 @@ public class RStarTree extends RTreeGuttman {
       // from the other end
       // A negative number indicates a matching partition
       ps.clear();
+      if (splitCoords.length == 0) {
+        // No splits. Always return 0 which is the only partition we have
+        ps.add(0);
+        return;
+      }
       IntArray splitsToSearch = ps;
       int iSplit = rootSplit;
       while (iSplit >= 0) {
@@ -436,6 +442,34 @@ public class RStarTree extends RTreeGuttman {
       // partitionID
       for (int i = 0; i < ps.size(); i++)
         ps.set(i, -ps.get(i) - 1);
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+      out.writeInt(rootSplit);
+      out.writeInt(splitCoords.length);
+      for (int i = 0; i < splitCoords.length; i++) {
+        out.writeDouble(splitCoords[i]);
+        out.writeInt(partitionLessThan[i]);
+        out.writeInt(partitionGreaterThanOrEqual[i]);
+      }
+      splitAxis.write(out);
+    }
+
+    @Override
+    public void readFields(DataInput in) throws IOException {
+      rootSplit = in.readInt();
+      int numOfSplits = in.readInt();
+      if (splitCoords == null) splitCoords = new double[numOfSplits];
+      if (partitionLessThan == null) partitionLessThan = new int[numOfSplits];
+      if (partitionGreaterThanOrEqual == null) partitionGreaterThanOrEqual = new int[numOfSplits];
+      for (int i = 0; i < numOfSplits; i++) {
+        splitCoords[i] = in.readDouble();
+        partitionLessThan[i] = in.readInt();
+        partitionGreaterThanOrEqual[i] = in.readInt();
+      }
+      if (splitAxis == null) splitAxis = new BitArray();
+      splitAxis.readFields(in);
     }
   }
 

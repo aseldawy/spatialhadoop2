@@ -11,12 +11,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
-import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.util.Arrays;
 
 /**
  * Unit test for the index construction operation
@@ -64,8 +60,8 @@ public class IndexerTest extends TestCase {
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
-      fail("Error working with the test file");
       e.printStackTrace();
+      fail("Error working with the test file");
     } catch (InterruptedException e) {
       fail("Error running the job");
     } catch (ClassNotFoundException e) {

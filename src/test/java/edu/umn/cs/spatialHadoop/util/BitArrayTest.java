@@ -5,6 +5,8 @@ import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
+import java.io.*;
+
 /**
  * Unit test for the utility class {@link Head}.
  */
@@ -43,5 +45,32 @@ public class BitArrayTest extends TestCase {
       bitArray.set(i, true);
       assertEquals(i+1, bitArray.countOnes());
     }
+  }
+
+  public void testReadWrite() {
+    BitArray bitArray = new BitArray(20);
+    bitArray.set(5, true);
+    bitArray.set(10, true);
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    DataOutputStream dos = new DataOutputStream(baos);
+    try {
+      bitArray.write(dos);
+      dos.close();
+    } catch (IOException e) {
+      fail("Error in write");
+    }
+    byte[] buffer = baos.toByteArray();
+
+    DataInputStream in = new DataInputStream(new ByteArrayInputStream(buffer));
+    bitArray = new BitArray();
+    try {
+      bitArray.readFields(in);
+      in.close();
+    } catch (IOException e) {
+      fail("Error in read");
+    }
+    assertTrue(bitArray.get(5));
+    assertTrue(bitArray.get(10));
+    assertEquals(20, bitArray.size);
   }
 }
