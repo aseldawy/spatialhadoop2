@@ -133,11 +133,15 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 4;
       RStarTree.AuxiliarySearchStructure aux = new RStarTree.AuxiliarySearchStructure();
-      RStarTree.partitionPoints(points[0], points[1], capacity, true, aux);
+      Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity, true, aux);
       assertEquals(3, aux.partitionGreaterThanOrEqual.length);
       assertEquals(9.0, aux.splitCoords[aux.rootSplit]);
       assertTrue(aux.partitionGreaterThanOrEqual[aux.rootSplit] < 0);
       assertTrue(aux.partitionLessThan[aux.rootSplit] >= 0);
+      int p1 = aux.search(5,5);
+      Rectangle expectedMBR = new Rectangle(Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY,
+          9, 6);
+      assertEquals(expectedMBR, partitions[p1]);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

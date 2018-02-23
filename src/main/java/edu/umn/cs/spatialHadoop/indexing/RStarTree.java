@@ -373,6 +373,26 @@ public class RStarTree extends RTreeGuttman {
     public int[] partitionGreaterThanOrEqual;
     /**The first split to consider*/
     public int rootSplit;
+
+    /**
+     * Returns the ID of the partition that contain the given point
+     * @param x
+     * @param y
+     * @return
+     */
+    public int search(double x, double y) {
+      int iSplit = rootSplit;
+      while (iSplit >= 0) {
+        if (splitAxis.get(iSplit))
+          // Split along the X-axis
+          iSplit = (x < splitCoords[iSplit] ? partitionLessThan : partitionGreaterThanOrEqual)[iSplit];
+        else
+          // Split along the Y-axis
+          iSplit = (y < splitCoords[iSplit] ? partitionLessThan : partitionGreaterThanOrEqual)[iSplit];
+      }
+      // Found the terminal partition, return its correct ID
+      return -iSplit - 1;
+    }
   }
 
   /**
