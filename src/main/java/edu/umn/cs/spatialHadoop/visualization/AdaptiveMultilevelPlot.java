@@ -397,6 +397,16 @@ public class AdaptiveMultilevelPlot {
     }
   }
 
+  /**
+   * Classifies a tile according to the file histogram into one of the four
+   * classes: ImageTile, DataTile, EmptyTile, and ShallowTile
+   * @param h A precomputed histogram
+   * @param threshold The size threshold of image and data tiles
+   * @param z The level of the tile
+   * @param x The column index of the tile in the level z
+   * @param y The row index of the tile in the level z
+   * @return
+   */
   public static TileClass classifyTile(GridHistogram h, long threshold, int z, int x, int y) {
     float histTileWidth = h.getWidth() / (float)(1 << z);
     float histTileHeight = h.getHeight() / (float)(1 << z);
