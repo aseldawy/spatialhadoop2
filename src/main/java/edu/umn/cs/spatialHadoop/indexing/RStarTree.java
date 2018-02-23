@@ -709,9 +709,9 @@ public class RStarTree extends RTreeGuttman {
           SplitTask range = entry.getValue();
           aux.splitCoords[id] = range.splitCoord;
           aux.splitAxis.set(id, range.axis == 1);
-          long p1 = (range.start << 32) | range.separator;
+          long p1 = (((long)range.separator) << 32) | range.start;
           aux.partitionLessThan[id] = partitionIDs.get(p1);
-          long p2 = (range.separator << 32) | range.end;
+          long p2 = (((long)range.end) << 32) | range.separator;
           aux.partitionGreaterThanOrEqual[id] = partitionIDs.get(p2);
           if (range.start == 0 && range.end == xs.length)
             aux.rootSplit = id;

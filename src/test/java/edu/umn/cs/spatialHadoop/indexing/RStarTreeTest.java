@@ -137,7 +137,7 @@ public class RStarTreeTest extends TestCase {
       assertEquals(3, aux.partitionGreaterThanOrEqual.length);
       assertEquals(9.0, aux.splitCoords[aux.rootSplit]);
       assertTrue(aux.partitionGreaterThanOrEqual[aux.rootSplit] < 0);
-      assertTrue(aux.partitionGreaterThanOrEqual[aux.rootSplit] >= 0);
+      assertTrue(aux.partitionLessThan[aux.rootSplit] >= 0);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
