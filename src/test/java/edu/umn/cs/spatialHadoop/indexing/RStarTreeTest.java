@@ -1,6 +1,7 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.util.IntArray;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
@@ -141,7 +142,19 @@ public class RStarTreeTest extends TestCase {
       int p1 = aux.search(5,5);
       Rectangle expectedMBR = new Rectangle(Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY,
           9, 6);
+      p1 = aux.search(10,0);
+      expectedMBR = new Rectangle(9, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
       assertEquals(expectedMBR, partitions[p1]);
+      // Search a rectangle that matches one partition
+      IntArray ps = new IntArray();
+      aux.search(10, 0, 15, 15, ps);
+      assertEquals(1, ps.size());
+      // Make sure that it returns the same ID returned by the point search
+      p1 = aux.search(10, 0);
+      assertEquals(p1, ps.peek());
+      // Search a rectangle that machines two partitions
+      aux.search(0, 0, 5, 7, ps);
+      assertEquals(2, ps.size());
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

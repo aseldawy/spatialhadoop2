@@ -383,15 +383,59 @@ public class RStarTree extends RTreeGuttman {
     public int search(double x, double y) {
       int iSplit = rootSplit;
       while (iSplit >= 0) {
-        if (splitAxis.get(iSplit))
-          // Split along the X-axis
-          iSplit = (x < splitCoords[iSplit] ? partitionLessThan : partitionGreaterThanOrEqual)[iSplit];
-        else
-          // Split along the Y-axis
-          iSplit = (y < splitCoords[iSplit] ? partitionLessThan : partitionGreaterThanOrEqual)[iSplit];
+        // Choose which coordinate to work with depending on the split axis
+        double coordToConsider = splitAxis.get(iSplit)? y : x;
+        iSplit = (coordToConsider < splitCoords[iSplit] ? partitionLessThan : partitionGreaterThanOrEqual)[iSplit];
       }
       // Found the terminal partition, return its correct ID
       return -iSplit - 1;
+    }
+
+    /**
+     * Find all the overlapping partitions for a given rectangular area
+     * @param x1
+     * @param y1
+     * @param x2
+     * @param y2
+     * @param ps
+     */
+    public void search(double x1, double y1, double x2, double y2, IntArray ps) {
+      // We to keep a stack of splits to consider.
+      // For efficiency, we reuse the given IntArray (ps) where we store the
+      // the matching partitions from one end and the splits to be considered
+      // from the other end
+      // A negative number indicates a matching partition
+      ps.clear();
+      IntArray splitsToSearch = ps;
+      int iSplit = rootSplit;
+      while (iSplit >= 0) {
+        double coordMin = splitAxis.get(iSplit)? y1 : x1;
+        double coordMax = splitAxis.get(iSplit)? y2 : x2;
+        if (coordMax < splitCoords[iSplit]) {
+          // Only the first half-space matches
+          iSplit = partitionLessThan[iSplit];
+        } else if (coordMin >= splitCoords[iSplit]) {
+          // Only the second half-space matches
+          iSplit = partitionGreaterThanOrEqual[iSplit];
+        } else {
+          // The entire space is still to be considered
+          splitsToSearch.add(partitionGreaterThanOrEqual[iSplit]);
+          iSplit = partitionLessThan[iSplit];
+        }
+        // If iSplit reaches a terminal partitions, add it to the answer and
+        // move on to the next split
+        while (iSplit < 0) {
+          ps.insert(0, iSplit);
+          if (splitsToSearch.peek() >= 0)
+            iSplit = splitsToSearch.pop();
+          else
+            break;
+        }
+      }
+      // Convert the matching splits from their negative number to the correct
+      // partitionID
+      for (int i = 0; i < ps.size(); i++)
+        ps.set(i, -ps.get(i) - 1);
     }
   }
 

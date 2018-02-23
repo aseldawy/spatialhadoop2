@@ -43,4 +43,12 @@ public class IntArrayTest extends TestCase {
     assertEquals(5, array.get(1));
   }
 
+  public void testSetFunction() {
+    IntArray array = new IntArray();
+    array.add(5);
+    assertEquals(5, array.get(0));
+    array.set(0, 15);
+    assertEquals(15, array.get(0));
+    assertEquals(1, array.size);
+  }
 }

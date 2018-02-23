@@ -258,6 +258,12 @@ public class IntArray implements Writable, Iterable<Integer> {
     this.size = newSize;
   }
 
+  public void set(int index, int value) {
+    if (index >= size)
+      throw new ArrayIndexOutOfBoundsException(index);
+    array[index] = value;
+  }
+
   class IntIterator implements Iterator<Integer> {
     int i = -1;
 
