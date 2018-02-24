@@ -77,7 +77,8 @@ public class Indexer {
     PartitionerClasses.put("zcurve", ZCurvePartitioner.class);
     PartitionerClasses.put("hilbert", HilbertCurvePartitioner.class);
     PartitionerClasses.put("kdtree", KdTreePartitioner.class);
-    PartitionerClasses.put("rtreeag", RTreePartitioner.class);
+    PartitionerClasses.put("r*tree", RTreePartitioner.class);
+    PartitionerClasses.put("r*tree+", RTreePartitioner.class);
 
     PartitionerReplicate = new HashMap<String, Boolean>();
     PartitionerReplicate.put("grid", true);
@@ -89,7 +90,8 @@ public class Indexer {
     PartitionerReplicate.put("zcurve", false);
     PartitionerReplicate.put("hilbert", false);
     PartitionerReplicate.put("kdtree", true);
-    PartitionerReplicate.put("rtreeag", true);
+    PartitionerReplicate.put("r*tree", false);
+    PartitionerReplicate.put("r*tree+", true);
 
     LocalIndexes = new HashMap<String, Class<? extends LocalIndexer>>();
     LocalIndexes.put("rtree", RTreeLocalIndexer.class);

@@ -55,7 +55,7 @@ public class IndexerTest extends TestCase {
       params.setBoolean("local", false);
       params.setClass("shape", OSMPolygon.class, Shape.class);
       params.setFloat("ratio", 1.0f);
-      params.set("sindex", "rtreeag");
+      params.set("sindex", "r*tree");
       Indexer.index(inPath, outPath, params);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
