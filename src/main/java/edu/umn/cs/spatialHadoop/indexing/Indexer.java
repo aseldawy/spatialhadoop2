@@ -68,8 +68,8 @@ public class Indexer {
     PartitionerClasses.put("grid", GridPartitioner.class);
     PartitionerClasses.put("str", STRPartitioner.class);
     PartitionerClasses.put("str+", STRPartitioner.class);
-    PartitionerClasses.put("rtree", STRPartitioner.class);
-    PartitionerClasses.put("r+tree", STRPartitioner.class);
+    PartitionerClasses.put("rtree", RStarTreePartitioner.class);
+    PartitionerClasses.put("r+tree", RStarTreePartitioner.class);
     PartitionerClasses.put("quadtree", QuadTreePartitioner.class);
     PartitionerClasses.put("zcurve", ZCurvePartitioner.class);
     PartitionerClasses.put("hilbert", HilbertCurvePartitioner.class);
