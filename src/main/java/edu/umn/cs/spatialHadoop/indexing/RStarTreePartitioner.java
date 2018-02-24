@@ -17,12 +17,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 /**
- * A partitioner that supports an R-tree-based partitioning using either the
- * original Guttman R-tree (1984) or the improved R*-tree (1990)
+ * A partitioner that supports an R*-tree-based partitioning using the R*-tree
+ * index published in (1990)
+ * @see RStarTree
+ * @see RStarTree#partitionPoints(double[], double[], int, boolean, RStarTree.AuxiliarySearchStructure) 
  * @author Ahmed Eldawy
  *
  */
-public class RTreePartitioner extends Partitioner {
+public class RStarTreePartitioner extends Partitioner {
 
   /**MBR of the points used to partition the space*/
   protected Rectangle mbrPoints;
@@ -91,7 +93,7 @@ public class RTreePartitioner extends Partitioner {
    * A default constructor to be able to dynamically instantiate it
    * and deserialize it
    */
-  public RTreePartitioner() {
+  public RStarTreePartitioner() {
   }
   
   @Override
