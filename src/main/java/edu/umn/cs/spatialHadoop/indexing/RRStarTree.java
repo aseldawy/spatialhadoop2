@@ -249,6 +249,7 @@ public class RRStarTree extends RTreeGuttman {
   public static void main(String[] args) throws IOException {
     //double[][] tweets = readFile("src/test/resources/test2.points");
     //int capacity = 12;
+    long t1 = System.currentTimeMillis();
     double[][] tweets = readFile("tweets_1m");
     int capacity = 2000;
     RTreeType type = RTreeType.Guttman;
@@ -260,9 +261,12 @@ public class RRStarTree extends RTreeGuttman {
       default: throw new RuntimeException("Unknown tree type "+type);
     }
     rtree.initializeFromPoints(tweets[2], tweets[1]);
+    long t2 = System.currentTimeMillis();
     for (RTreeGuttman.Node leaf : rtree.getAllLeaves()) {
       System.out.println(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y2).toWKT());
     }
+    System.out.printf("Built %s with %d entries in %f seconds\n",
+                type.toString(), rtree.numEntries, (t2-t1)*1E-3);
   }
 
   /**
