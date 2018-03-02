@@ -299,22 +299,8 @@ public class RTreeGuttman {
     path.add(iCurrentVisitedNode);
     // Descend in the tree until we find a leaf node to add the object to
     while (!isLeaf.get(iCurrentVisitedNode)) {
-      // Node is not leaf. Choose a child node
-      // 1. Choose the child with the minimum expansion
-      double minExpansion = Double.POSITIVE_INFINITY;
-      int iBestChild = 0;
-      for (int iCandidateChild : children.get(iCurrentVisitedNode)) {
-        double expansion = Node_expansion(iCandidateChild, iEntry);
-        if (expansion < minExpansion) {
-          minExpansion = expansion;
-          iBestChild = iCandidateChild;
-        } else if (expansion == minExpansion) {
-          // Resolve ties by choosing the entry with the rectangle of smallest area
-          if (Node_area(iCandidateChild) < Node_area(iBestChild))
-            iBestChild = iCandidateChild;
-        }
-      }
       // Descend to the best child found
+      int iBestChild = chooseSubtree(iEntry, iCurrentVisitedNode);
       iCurrentVisitedNode = iBestChild;
       path.add(iCurrentVisitedNode);
     }
@@ -323,6 +309,31 @@ public class RTreeGuttman {
     // if necessary
     Node_addChild(iCurrentVisitedNode, iEntry);
     adjustTree(iCurrentVisitedNode, path);
+  }
+
+  /**
+   * Choose the best subtree to add a data entry to.
+   * @param iEntry
+   * @param iNode
+   * @return
+   */
+  protected int chooseSubtree(int iEntry, int iNode) {
+    // Node is not leaf. Choose a child node
+    // 1. Choose the child with the minimum expansion
+    double minExpansion = Double.POSITIVE_INFINITY;
+    int iBestChild = 0;
+    for (int iCandidateChild : children.get(iNode)) {
+      double expansion = Node_expansion(iCandidateChild, iEntry);
+      if (expansion < minExpansion) {
+        minExpansion = expansion;
+        iBestChild = iCandidateChild;
+      } else if (expansion == minExpansion) {
+        // Resolve ties by choosing the entry with the rectangle of smallest area
+        if (Node_area(iCandidateChild) < Node_area(iBestChild))
+          iBestChild = iCandidateChild;
+      }
+    }
+    return iBestChild;
   }
 
   /**

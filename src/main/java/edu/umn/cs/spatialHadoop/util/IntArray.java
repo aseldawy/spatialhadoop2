@@ -201,6 +201,18 @@ public class IntArray implements Writable, Iterable<Integer> {
     Arrays.sort(array, 0, size);
   }
 
+  public void insertionSort(Comparator<Integer> c) {
+    for (int sortSize = 2; sortSize < size; sortSize++) {
+      int pivot = array[sortSize-1];
+      int j = sortSize - 2;
+      while (j >= 0 && c.compare(array[j], pivot) > 0) {
+        array[j + 1] = array[j];
+        j--;
+      }
+      array[j+1] = pivot;
+    }
+  }
+
   public int get(int index) {
     return array[index];
   }
