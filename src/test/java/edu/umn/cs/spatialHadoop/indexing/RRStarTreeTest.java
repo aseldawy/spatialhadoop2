@@ -59,6 +59,92 @@ public class RRStarTreeTest extends TestCase {
     assertTrue(rrStarTree.Node_covers(n2, 2));
   }
 
+  public void testInsertion() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      double[] xs = points[0], ys = points[1];
+      // Case 1: COV is not empty, choose the node with zero volume
+      RRStarTree rtree = new RRStarTree(4, 8);
+      rtree.initializeDataEntries(xs, ys);
+      int n1 = rtree.Node_createNodeWithChildren(true, 1, 7);
+      int n2 = rtree.Node_createNodeWithChildren(true, 5, 6);
+      rtree.iRoot = rtree.Node_createNodeWithChildren(false, n1, n2);
+      // n1 and n2 cover p4 but n1 has a zero volume, p4 should be added to n1
+      rtree.insertAnExistingDataEntry(4);
+      assertEquals(3, rtree.Node_size(n1));
+      assertEquals(2, rtree.Node_size(n2));
+
+      // Case 2: COV is not empty, multiple nodes with zero volume, choose the one with min perimeter
+      rtree = new RRStarTree(4, 8);
+      xs[6] = 5; ys[6] = 7;
+      rtree.initializeDataEntries(xs, ys);
+      n1 = rtree.Node_createNodeWithChildren(true, 1, 7);
+      n2 = rtree.Node_createNodeWithChildren(true, 5, 6);
+      rtree.iRoot = rtree.Node_createNodeWithChildren(false, n1, n2);
+      // Both n1 and n2 cover p4 with zero volume, but n2 has a smaller perimeter
+      rtree.insertAnExistingDataEntry(4);
+      assertEquals(2, rtree.Node_size(n1));
+      assertEquals(3, rtree.Node_size(n2));
+
+      // Case 3: COV is not empty, all have non-zero volume, choose the one with min volume
+      rtree = new RRStarTree(4, 8);
+      points = readFile(fileName); // Reload the file
+      xs = points[0]; ys = points[1];
+      rtree.initializeDataEntries(xs, ys);
+      n1 = rtree.Node_createNodeWithChildren(true, 3, 9);
+      n2 = rtree.Node_createNodeWithChildren(true, 2, 10);
+      rtree.iRoot = rtree.Node_createNodeWithChildren(false, n1, n2);
+      // Both n1 and n2 cover p4 but n1 has a smaller volume
+      rtree.insertAnExistingDataEntry(4);
+      assertEquals(3, rtree.Node_size(n1));
+      assertEquals(2, rtree.Node_size(n2));
+
+      // Case 4: Some node has to be expanded. We add it to the node with smallest
+      // deltaPerim if this would not increase the perimetric overlap
+      rtree = new RRStarTree(4, 8);
+      points = readFile(fileName); // Reload the file
+      xs = points[0]; ys = points[1];
+      rtree.initializeDataEntries(xs, ys);
+      n1 = rtree.Node_createNodeWithChildren(true, 4, 6);
+      n2 = rtree.Node_createNodeWithChildren(true, 7, 10);
+      int n3 = rtree.Node_createNodeWithChildren(true, 2, 8);
+      rtree.iRoot = rtree.Node_createNodeWithChildren(false, n1, n2, n3);
+      rtree.insertAnExistingDataEntry(1);
+      assertEquals(3, rtree.Node_size(n1));
+      assertEquals(2, rtree.Node_size(n2));
+      assertEquals(2, rtree.Node_size(n3));
+
+      // Case 5: Recreate the same example in Figure 1 on page 802 in the paper
+      double[] x1s = new double[7];
+      double[] y1s = new double[7];
+      double[] x2s = new double[7];
+      double[] y2s = new double[7];
+      x1s[1] = 1; y1s[1] = 1; x2s[1] = 6; y2s[1] = 6; // E1
+      x1s[2] = 0; y1s[2] = 0; x2s[2] = 4; y2s[2] = 5; // E2
+      x1s[3] = 2; y1s[3] = 5.9; x2s[3] = 4; y2s[3] = 8; // E3
+      x1s[4] = 6.2; y1s[4] = 1; x2s[4] = 8; y2s[4] = 3; // E4
+      x1s[5] = 9; y1s[5] = 8; x2s[5] = 11; y2s[5] = 10; // E5
+      x1s[6] = 5; y1s[6] = 5; x2s[6] = 7; y2s[6] = 7; // Omega
+      rtree = new RRStarTree(4, 8);
+      rtree.initializeDataEntries(x1s, y1s, x2s, y2s);
+      int e1 = rtree.Node_createNodeWithChildren(true, 1);
+      int e2 = rtree.Node_createNodeWithChildren(true, 2);
+      int e3 = rtree.Node_createNodeWithChildren(true, 3);
+      int e4 = rtree.Node_createNodeWithChildren(true, 4);
+      int e5 = rtree.Node_createNodeWithChildren(true, 5);
+      rtree.iRoot = rtree.Node_createNodeWithChildren(false, e1, e2, e3, e4, e5);
+
+      rtree.insertAnExistingDataEntry(6); // Insert omega
+      // It should be added to E3 as described in the paper
+      assertEquals(2, rtree.Node_size(e3));
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
   public void testBuild() {
     try {
       String fileName = "src/test/resources/test2.points";
