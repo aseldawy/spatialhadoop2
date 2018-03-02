@@ -227,15 +227,18 @@ public class RRStarTree extends RTreeGuttman {
     // Compute the width and height of (t U o) ^ j
     double widthTOJ = Math.min(x2to, x2s[nodeJ]) -
         Math.max(x1to, x1s[nodeJ]);
+    widthTOJ = Math.max(0.0, widthTOJ);
     double heightTOJ = Math.min(y2to, y2s[nodeJ]) -
         Math.max(y1to, y1s[nodeJ]);
-
+    heightTOJ = Math.max(0.0, heightTOJ);
 
     // Compute the width and height of the intersection of nodes t and j
     double widthTJ = Math.min(x2s[nodeT], x2s[nodeJ]) -
         Math.max(x1s[nodeJ], x1s[nodeJ]);
+    widthTJ = Math.max(0.0, widthTJ);
     double heightTJ = Math.min(y2s[nodeT], y2s[nodeJ]) -
         Math.max(y1s[nodeJ], y1s[nodeJ]);
+    heightTJ = Math.max(0.0, heightTJ);
 
     return f == AggregateFunction.PERIMETER ?
         (widthTOJ + heightTOJ) - (widthTJ + heightTJ) :

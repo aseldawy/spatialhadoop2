@@ -26,6 +26,24 @@ public class RRStarTreeTest extends TestCase {
     assertEquals(3.0, dOvlpPerim);
     double dOvlpVol = rrStarTree.dOvlp(t, o, j, RRStarTree.AggregateFunction.VOLUME);
     assertEquals(5.0, dOvlpVol);
+
+    // Test when t and j are disjoint
+    entries[0] = new Rectangle2D.Double(0, 0, 2, 1);
+    rrStarTree = createRRStarWithDataEntries(entries);
+    t = rrStarTree.Node_createNodeWithChildren(true, 0);
+    j = rrStarTree.Node_createNodeWithChildren(true, 2);
+    o = 1;
+    dOvlpVol = rrStarTree.dOvlp(t, o, j, RRStarTree.AggregateFunction.VOLUME);
+    assertEquals(1.0, dOvlpVol);
+
+    // Test when (t U o) and j are disjoint
+    entries[2] = new Rectangle2D.Double(5, 5, 1, 1);
+    rrStarTree = createRRStarWithDataEntries(entries);
+    t = rrStarTree.Node_createNodeWithChildren(true, 0);
+    j = rrStarTree.Node_createNodeWithChildren(true, 2);
+    o = 1;
+    dOvlpVol = rrStarTree.dOvlp(t, o, j, RRStarTree.AggregateFunction.VOLUME);
+    assertEquals(0.0, dOvlpVol);
   }
 
   public void testCovers() {
