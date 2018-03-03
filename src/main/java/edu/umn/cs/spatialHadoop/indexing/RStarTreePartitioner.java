@@ -20,7 +20,7 @@ import java.io.IOException;
  * A partitioner that supports an R*-tree-based partitioning using the R*-tree
  * index published in (1990)
  * @see RStarTree
- * @see RStarTree#partitionPoints(double[], double[], int, boolean, RStarTree.AuxiliarySearchStructure)
+ * @see RStarTree#partitionPoints(double[], double[], int, int, boolean, RStarTree.AuxiliarySearchStructure)
  * @author Ahmed Eldawy
  *
  */

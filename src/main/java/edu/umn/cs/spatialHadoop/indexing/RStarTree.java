@@ -1,6 +1,5 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
-import com.google.common.collect.Lists;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
@@ -8,7 +7,6 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
-import java.awt.geom.Rectangle2D;
 import java.io.*;
 import java.util.*;
 
@@ -514,8 +512,6 @@ public class RStarTree extends RTreeGuttman {
       double splitCoord;
       /**The axis along where the separation happened. 0 for X and 1 for Y*/
       int axis;
-
-      SplitTask(){}
 
       SplitTask(int s, int e, double x1, double y1, double x2, double y2) {
         this.start = s;
