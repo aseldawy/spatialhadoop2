@@ -487,7 +487,8 @@ public class RStarTree extends RTreeGuttman {
    * in {@link #split(int, int)}
    * @param xs
    * @param ys
-   * @param capacity
+   * @param minPartitionSize minimum number of points to include in a partition
+   * @param maxPartitionSize maximum number of point in a partition
    * @param expandToInf when set to true, the returned partitions are expanded
    *                    to cover the entire space from, Negative Infinity to
    *                    Positive Infinity, in all dimensions.
@@ -498,9 +499,10 @@ public class RStarTree extends RTreeGuttman {
    */
   public static Rectangle[] partitionPoints(final double[] xs,
                                             final double[] ys,
-                                            int capacity,
-                                            boolean expandToInf,
-                                            AuxiliarySearchStructure aux) {
+                                            final int minPartitionSize,
+                                            final int maxPartitionSize,
+                                            final boolean expandToInf,
+                                            final AuxiliarySearchStructure aux) {
     class SplitTask {
       /**The range of points to partition*/
       int start, end;
@@ -571,10 +573,12 @@ public class RStarTree extends RTreeGuttman {
     // Temporary arrays for pre-caching min and max coordinates
     double[] group2Min = new double[xs.length];
     double[] group2Max = new double[xs.length];
+    double fractionMinSplitSize = Math.min(minPartitionSize, maxPartitionSize-minPartitionSize) / (double)maxPartitionSize;
+    fractionMinSplitSize = 0;
     while (!rangesToSplit.isEmpty()) {
       SplitTask range = rangesToSplit.pop();
 
-      if (range.end - range.start <= capacity) {
+      if (range.end - range.start <= maxPartitionSize) {
         Rectangle partitionMBR;
         if (expandToInf) {
           partitionMBR = new Rectangle(range.x1, range.y1, range.x2, range.y2);
@@ -600,7 +604,7 @@ public class RStarTree extends RTreeGuttman {
         continue;
       }
 
-      int minSplitSize = Math.max(capacity / 2, (range.end - range.start) / 2 - capacity);
+      int minSplitSize = Math.max(minPartitionSize, (int)((range.end - range.start) * fractionMinSplitSize));
       // ChooseSplitAxis
       // Sort the entries by each axis and compute S, the sum of all margin-values
       // of the different distributions
@@ -717,6 +721,20 @@ public class RStarTree extends RTreeGuttman {
           group1MaxX = xs[separator - 1];
           group1MinY = Math.min(group1MinY, ys[separator - 1]);
           group1MaxY = Math.max(group1MaxY, ys[separator - 1]);
+          
+          // Skip if k is invalid (either side induce an invalid size)
+          int size1 = separator - range.start;
+          int minCount1 = (int) Math.ceil(size1/(double) maxPartitionSize);
+          int maxCount1 = (int) Math.floor(size1 / (double) minPartitionSize);
+          if (maxCount1 < minCount1)
+            continue;
+          
+          int size2 = range.end - separator;
+          int minCount2 = (int) Math.ceil(size2 / (double)maxPartitionSize);
+          int maxCount2 = (int) Math.floor(size2 / (double) minPartitionSize);
+          if (maxCount2 < minCount2)
+            continue;
+          
           // Retrieve MBR of group 2
           double group2MinX = xs[separator];
           double group2MaxX = xs[range.end - 1];
@@ -755,6 +773,19 @@ public class RStarTree extends RTreeGuttman {
           double group2MaxY = ys[range.end - 1];
           double group2MinX = group2Min[separator];
           double group2MaxX = group2Max[separator];
+
+          // Skip if k is invalid (either side induce an invalid size)
+          int size1 = separator - range.start;
+          int minCount1 = (int) Math.ceil(size1 / (double)maxPartitionSize);
+          int maxCount1 = (int) Math.floor(size1 / (double)minPartitionSize);
+          if (maxCount1 < minCount1)
+            continue;
+          
+          int size2 = range.end - separator;
+          int minCount2 = (int) Math.ceil(size2 / (double)maxPartitionSize);
+          int maxCount2 = (int) Math.floor(size2 / (double)minPartitionSize);
+          if (maxCount2 < minCount2)
+            continue;
 
           // Choose the distribution with minimum area
           double area = (group1MaxX - group1MinX) * (group1MaxY - group1MinY) +

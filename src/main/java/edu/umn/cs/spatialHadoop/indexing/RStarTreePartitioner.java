@@ -108,7 +108,7 @@ public class RStarTreePartitioner extends Partitioner {
       mbrPoints.expand(points[i]);
     }
     aux = new RStarTree.AuxiliarySearchStructure();
-    Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity, true, aux);
+    Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity * 8 / 10, capacity, true, aux);
     x1s = new double[partitions.length];
     y1s = new double[partitions.length];
     x2s = new double[partitions.length];
