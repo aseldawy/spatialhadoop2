@@ -350,7 +350,7 @@ public class RStarTree extends RTreeGuttman {
   /**
    * A class that stores an auxiliary data structure used to search through
    * the partitions created using the function
-   * {@link #partitionPoints(double[], double[], int, boolean, AuxiliarySearchStructure)}
+   * {@link #partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure)}
    */
   public static class AuxiliarySearchStructure implements Writable {
     /**The first split to consider*/
