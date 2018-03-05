@@ -304,6 +304,12 @@ public class RRStarTree extends RTreeGuttman {
         (widthTOJ * heightTOJ) - (widthTJ * heightTJ);
   }
 
+  /**
+   * Split an overflow node with the given minimum size of each split
+   * @param iNode the index of the node to split
+   * @param minSplitSize Minimum size of each split, typically, {@link #minCapacity}
+   * @return
+   */
   @Override protected int split(int iNode, int minSplitSize) {
     if (isLeaf.get(iNode))
       return splitLeaf(iNode, minSplitSize);
@@ -311,6 +317,18 @@ public class RRStarTree extends RTreeGuttman {
       return splitNonLeaf(iNode, minSplitSize);
   }
 
+  /**
+   * Split a leaf node. This algorithm works in two steps as described on Page 803
+   * of the paper.
+   * <ol>
+   *   <li>Compute the split axis <em>a</em> as the one with the minimum sum of perimeter for all split candidates</li>
+   *   <li>If there are overlap-free split candidates, choose the one with minimum perimeter.
+   *   Otherwise, choose the candidate with minimum overlap (volume of perimeter)</li>
+   * </ol>
+   * @param iNode
+   * @param minSplitSize
+   * @return
+   */
   protected int splitLeaf(int iNode, int minSplitSize) {
     // Compute the partial terms used to compute wf
     double nodeCenter, nodeOrigin, nodeLength;
@@ -380,7 +398,7 @@ public class RRStarTree extends RTreeGuttman {
       mu = (1- 2 * minSplitSize / (maxCapcity + 1)) * asym;
       sigma = s * (1 + Math.abs(mu));
 
-      double sumMargin = computeSumPerimeter(iNode, minSplitSize, asym, mu, sigma);
+      double sumMargin = computeSumPerimeter(nodeChildren, nodeSize, minSplitSize, asym, mu, sigma);
       if (sumMargin < minSumMargin) {
         bestAxis = sortAttr;
         minSumMargin = sumMargin;
@@ -508,7 +526,7 @@ public class RRStarTree extends RTreeGuttman {
         double wg = f == AggregateFunction.VOLUME ?
             overlapMBR.getWidth() * overlapMBR.getHeight() :
             overlapMBR.getWidth() + overlapMBR.getHeight();
-        double w = wg * wf;
+        double w = wg / wf;
         if (w < minWeight) {
           chosenK = k;
           minWeight = w;
@@ -525,20 +543,20 @@ public class RRStarTree extends RTreeGuttman {
   /**
    * Compute the sum margin of the given node assuming that the children have
    * been already sorted along one of the dimensions.
-   * @param iNode the index of the node to compute for
+   * @param nodeChildren an array of the children of the node to determine
+   * @param nodeSize number of valid entries in the children array
    * @param minSplitSize the minimum split size to consider
    * @return
    */
-  private double computeSumPerimeter(int iNode, int minSplitSize, double asym,
+  private double computeSumPerimeter(int[] nodeChildren, int nodeSize, int minSplitSize, double asym,
                                      double mu, double sigma) {
-    IntArray nodeChildren = children.get(iNode);
     double sumMargin = 0.0;
     Rectangle mbr1 = new Rectangle();
     // Initialize the MBR of the first group to the minimum group size
     mbr1.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
         Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
     for (int i = 0; i < minSplitSize; i++){
-      int iChild = nodeChildren.get(i);
+      int iChild = nodeChildren[i];
       mbr1.expand(x1s[iChild], y1s[iChild]);
       mbr1.expand(x2s[iChild], y2s[iChild]);
     }
@@ -546,12 +564,12 @@ public class RRStarTree extends RTreeGuttman {
     // Pre-cache the MBRs for groups that start at position i and end at the end
     Rectangle mbr2 = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
         Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
-    double[] minX1 = new double[nodeChildren.size()];
-    double[] minY1 = new double[nodeChildren.size()];
-    double[] maxX2 = new double[nodeChildren.size()];
-    double[] maxY2 = new double[nodeChildren.size()];
-    for (int i = nodeChildren.size() - 1; i >= minSplitSize; i--) {
-      int iChild = nodeChildren.get(i);
+    double[] minX1 = new double[nodeSize];
+    double[] minY1 = new double[nodeSize];
+    double[] maxX2 = new double[nodeSize];
+    double[] maxY2 = new double[nodeSize];
+    for (int i = nodeSize - 1; i >= minSplitSize; i--) {
+      int iChild = nodeChildren[i];
       mbr2.expand(x1s[iChild], y1s[iChild]);
       mbr2.expand(x2s[iChild], y2s[iChild]);
       minX1[i] = mbr2.x1;
