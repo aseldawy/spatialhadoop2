@@ -1,10 +1,8 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
-import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 
-import java.awt.geom.Rectangle2D;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -134,13 +132,13 @@ public class RTreeGuttman {
   }
 
   /**
-   * Calculates the expansion that will happen if the given object is added
-   * to a given node.
+   * Calculates the volume (area) expansion that will happen if the given object
+   * is added to a given node.
    * @param iNode the ID of the node that would be expanded
    * @param iNewChild the ID of the object that would be added to the node
    * @return
    */
-  protected double Node_expansion(int iNode, int iNewChild) {
+  protected double Node_volumeExpansion(int iNode, int iNewChild) {
     double widthB4Expansion = x2s[iNode] - x1s[iNode];
     double heightB4Expansion = y2s[iNode] - y1s[iNode];
     double widthAfterExpansion = Math.max(x2s[iNode], x2s[iNewChild]) -
@@ -323,7 +321,7 @@ public class RTreeGuttman {
     double minExpansion = Double.POSITIVE_INFINITY;
     int iBestChild = 0;
     for (int iCandidateChild : children.get(iNode)) {
-      double expansion = Node_expansion(iCandidateChild, iEntry);
+      double expansion = Node_volumeExpansion(iCandidateChild, iEntry);
       if (expansion < minExpansion) {
         minExpansion = expansion;
         iBestChild = iCandidateChild;
@@ -437,8 +435,8 @@ public class RTreeGuttman {
         int nextEntry = -1;
         double maxDiff = Double.NEGATIVE_INFINITY;
         for (int nonAssignedEntry : nonAssignedNodes) {
-          double d1 = Node_expansion(group1, nonAssignedEntry);
-          double d2 = Node_expansion(group2, nonAssignedEntry);
+          double d1 = Node_volumeExpansion(group1, nonAssignedEntry);
+          double d2 = Node_volumeExpansion(group2, nonAssignedEntry);
           double diff = d1 - d2;
           if (nextEntry == -1 || Math.abs(diff) > Math.abs(maxDiff)) {
             maxDiff = diff;

@@ -206,7 +206,7 @@ public class RTreeGuttmanTest extends TestCase {
       double[][] points = readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
-      assertEquals(0.0, rtree.Node_expansion(rtree.iRoot, 0));
+      assertEquals(0.0, rtree.Node_volumeExpansion(rtree.iRoot, 0));
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

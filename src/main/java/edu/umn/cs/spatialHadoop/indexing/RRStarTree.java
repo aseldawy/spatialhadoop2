@@ -107,6 +107,8 @@ public class RRStarTree extends RTreeGuttman {
       // There are some nodes that do not need to be expanded to accommodate the object
       // If there are some children with zero volume (area), return the one with the smallest perimeter
       // Otherwise, return the child with the minimum volume (area)
+      // This is effectively the same as returning the first child when sorted
+      // lexicographically by (volume, perimeter)
       int bestChild = -1;
       double minVol = Double.POSITIVE_INFINITY;
       double minPerim = Double.POSITIVE_INFINITY;
@@ -130,6 +132,7 @@ public class RRStarTree extends RTreeGuttman {
     // A node has to be enlarged to accommodate the object
     // Sort the children of the node in ascending order of their delta_perim
     // For simplicity, we use insertion sort since the node size is small
+    // TODO we can speed this step up by precaching delta_perim values
     children.get(node).insertionSort(new Comparator<Integer>() {
       @Override
       public int compare(Integer child1, Integer child2) {
@@ -144,34 +147,35 @@ public class RRStarTree extends RTreeGuttman {
     // If dOvlpPerim = 0 between the first entry and all remaining entries
     // return the first entry
     IntArray nodeChildren = children.get(node);
-    boolean dOvlpPerimZero = true;
-    for (int iChild = 1; iChild < nodeChildren.size() && dOvlpPerimZero; iChild++) {
-      dOvlpPerimZero = dOvlp(nodeChildren.get(0), object,
-          nodeChildren.get(iChild), AggregateFunction.PERIMETER) == 0.0;
-    }
-    if (dOvlpPerimZero)
-      return nodeChildren.get(0);
-
     // Try to achieve an overlap optimized choice
     int p = 0;
     for (int iChild = 1; iChild < nodeChildren.size(); iChild++) {
       if (dOvlp(nodeChildren.get(0), object, nodeChildren.get(iChild), AggregateFunction.PERIMETER) > 0)
         p = iChild;
     }
-    IntArray cand = new IntArray();
+    if (p == 0) {
+      // dOvlpPerim = 0 between the first entry and all remaining entries.
+      // return the first entry
+      return nodeChildren.get(0);
+    }
+    assert cov.isEmpty();
     int c;
     // If there is an index i with vol(MBB(Ri U object)) = 0
     int iChildWithZeroVolExpansion = -1;
     for (int iChild = 0; iChild < nodeChildren.size(); iChild++) {
-      if (Node_expansion(nodeChildren.get(iChild), object) == 0) {
+      if (Node_volumeExpansion(nodeChildren.get(iChild), object) == 0) {
         iChildWithZeroVolExpansion = iChild;
         break;
       }
     }
+    IntArray cand = cov; // reuse the same IntArray for efficiency
+    // checkComp will fill in the deltaOverlap array with the computed value
+    // for each candidate
+    double[] sumDeltaOverlap = new double[nodeChildren.size()];
     if (iChildWithZeroVolExpansion != -1) {
-      c = checkComp(0, AggregateFunction.PERIMETER, cand, p, object, nodeChildren);
+      c = checkComp(0, AggregateFunction.PERIMETER, cand, sumDeltaOverlap, p, object, nodeChildren);
     } else {
-      c = checkComp(0, AggregateFunction.VOLUME, cand, p, object, nodeChildren);
+      c = checkComp(0, AggregateFunction.VOLUME, cand, sumDeltaOverlap, p, object, nodeChildren);
     }
     if (c != -1) // if (success)
       return nodeChildren.get(c);
@@ -179,9 +183,8 @@ public class RRStarTree extends RTreeGuttman {
     int iMinDeltaOverlap = -1;
     double minDeltaOverlap = Double.POSITIVE_INFINITY;
     for (int i : cand) {
-      double deltaOverlap = Node_expansion(nodeChildren.get(i), object);
-      if (deltaOverlap < minDeltaOverlap) {
-        minDeltaOverlap = deltaOverlap;
+      if (sumDeltaOverlap[i] < minDeltaOverlap) {
+        minDeltaOverlap = sumDeltaOverlap[i];
         iMinDeltaOverlap = i;
       }
     }
@@ -201,24 +204,26 @@ public class RRStarTree extends RTreeGuttman {
    * @param nodeChildren
    * @return
    */
-  protected int checkComp(int t, AggregateFunction f, IntArray cand, int p, int object, IntArray nodeChildren) {
+  protected int checkComp(int t, AggregateFunction f, IntArray cand, double[] sumDeltaOverlap,
+                          int p, int object, IntArray nodeChildren) {
     cand.add(t);
-    double sumDOvlpT = 0; // the accumulation of dOvlp(t, [0, p))
+    sumDeltaOverlap[t] = 0; // the accumulation of dOvlp(t, [0, p))
+    int c = -1;
     for (int j = 0; j < p; j++) {
       if (j == t)
         continue;
       double ovlpPerimTJ = dOvlp(nodeChildren.get(t), object, nodeChildren.get(j), f);
-      sumDOvlpT += ovlpPerimTJ;
       if (ovlpPerimTJ != 0 && !cand.contains(j)) {
-        int c = checkComp(j, f, cand, p, object, nodeChildren);
+        sumDeltaOverlap[t] += ovlpPerimTJ;
+        c = checkComp(j, f, cand, sumDeltaOverlap, p, object, nodeChildren);
         if (c != -1)
           break;
       }
     }
 
-    if (sumDOvlpT == 0) // i.e. delta Ovlp f t, [0, p) = 0
+    if (sumDeltaOverlap[t] == 0) // i.e. delta Ovlp f t, [0, p) = 0
       return t;
-    return -1;
+    return c;
   }
 
   /**
