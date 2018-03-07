@@ -179,6 +179,34 @@ public class RRStarTreeTest extends TestCase {
     }
   }
 
+  public void testSplit() {
+    try {
+      String fileName = "src/test/resources/test3.points";
+      double[][] points = readFile(fileName);
+      RRStarTree rtree = new RRStarTree(2, 9);
+
+      rtree.initializeFromPoints(points[0], points[1]);
+      assertEquals(rtree.numOfDataEntries(), 10);
+      Rectangle2D.Double[] expectedLeaves = {
+        new Rectangle2D.Double(1, 2, 5, 10),
+        new Rectangle2D.Double(7,3,6,4)
+      };
+      int numFound = 0;
+      for (RTreeGuttman.Node leaf : rtree.getAllLeaves()) {
+        for (int i = 0; i < expectedLeaves.length; i++) {
+          if (expectedLeaves[i] != null && expectedLeaves[i].equals(
+              new Rectangle2D.Double(leaf.x1, leaf.y1, leaf.x2-leaf.x1, leaf.y2-leaf.y1))) {
+            numFound++;
+          }
+        }
+      }
+      assertEquals(expectedLeaves.length, numFound);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
 
   private RRStarTree createRRStarWithDataEntries(Rectangle2D.Double[] entries) {
     double[] x1s = new double[entries.length];

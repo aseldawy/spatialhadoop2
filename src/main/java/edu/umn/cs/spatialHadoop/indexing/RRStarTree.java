@@ -325,17 +325,13 @@ public class RRStarTree extends RTreeGuttman {
    *   <li>If there are overlap-free split candidates, choose the one with minimum perimeter.
    *   Otherwise, choose the candidate with minimum overlap (volume of perimeter)</li>
    * </ol>
-   * @param iNode
+   * @param node
    * @param minSplitSize
    * @return
    */
-  protected int splitLeaf(int iNode, int minSplitSize) {
-    // Compute the partial terms used to compute wf
-    double nodeCenter, nodeOrigin, nodeLength;
-    double asym=0.0, mu=0.0, sigma=0.0;
-
-    int nodeSize = Node_size(iNode);
-    final int[] nodeChildren = children.get(iNode).underlyingArray();
+  protected int splitLeaf(int node, int minSplitSize) {
+    int nodeSize = Node_size(node);
+    final int[] nodeChildren = children.get(node).underlyingArray();
     // ChooseSplitAxis
     // Sort the entries by each axis and compute S, the sum of all margin-values
     // of the different distributions
@@ -378,27 +374,8 @@ public class RRStarTree extends RTreeGuttman {
     for (RStarTree.MultiIndexedSortable.Axis sortAttr : RStarTree.MultiIndexedSortable.Axis.values()) {
       sorter.setAttribute(sortAttr);
       quickSort.sort(sorter, 0, nodeSize);
-      switch (sortAttr) {
-        case X1: case X2:
-          // Split is along the x-axis
-          nodeCenter = (x1s[iNode] + x2s[iNode]) / 2;
-          nodeOrigin = xOBox[iNode];
-          nodeLength = (x2s[iNode] - x1s[iNode]);
-          break;
-        case Y1: case Y2:
-          // Split is along the y-axis
-          nodeCenter = (y1s[iNode] + y2s[iNode]) / 2;
-          nodeOrigin = yOBox[iNode];
-          nodeLength = (y2s[iNode] - y1s[iNode]);
-          break;
-        default:
-          throw new RuntimeException("Unknown sort attribute " + bestAxis);
-      }
-      asym = 2 * (nodeCenter - nodeOrigin) / nodeLength;
-      mu = (1- 2 * minSplitSize / (maxCapcity + 1)) * asym;
-      sigma = s * (1 + Math.abs(mu));
 
-      double sumMargin = computeSumPerimeter(nodeChildren, nodeSize, minSplitSize, asym, mu, sigma);
+      double sumMargin = computeSumPerimeter(nodeChildren, nodeSize, minSplitSize);
       if (sumMargin < minSumMargin) {
         bestAxis = sortAttr;
         minSumMargin = sumMargin;
@@ -410,41 +387,44 @@ public class RRStarTree extends RTreeGuttman {
       sorter.setAttribute(bestAxis);
       quickSort.sort(sorter, 0, nodeSize);
 
-      // Recalculate the weighting function for the selected axis
-      switch (bestAxis) {
-        case X1: case X2:
-          // Split is along the x-axis
-          nodeCenter = (x1s[iNode] + x2s[iNode]) / 2;
-          nodeOrigin = xOBox[iNode];
-          nodeLength = (x2s[iNode] - x1s[iNode]);
-          break;
-        case Y1: case Y2:
-          // Split is along the y-axis
-          nodeCenter = (y1s[iNode] + y2s[iNode]) / 2;
-          nodeOrigin = yOBox[iNode];
-          nodeLength = (y2s[iNode] - y1s[iNode]);
-          break;
-        default:
-          throw new RuntimeException("Unknown sort attribute " + bestAxis);
-      }
-      asym = 2 * (nodeCenter - nodeOrigin) / nodeLength;
-      mu = (1- 2 * minSplitSize / (maxCapcity + 1)) * asym;
-      sigma = s * (1 + Math.abs(mu));
     }
+    // Calculate the common terms for the weighting function along the chosen axis
+    double nodeCenter, nodeOrigin, nodeLength;
 
+    switch (bestAxis) {
+      case X1: case X2:
+        // Split is along the x-axis
+        nodeCenter = (x1s[node] + x2s[node]) / 2;
+        nodeOrigin = xOBox[node];
+        nodeLength = (x2s[node] - x1s[node]);
+        break;
+      case Y1: case Y2:
+        // Split is along the y-axis
+        nodeCenter = (y1s[node] + y2s[node]) / 2;
+        nodeOrigin = yOBox[node];
+        nodeLength = (y2s[node] - y1s[node]);
+        break;
+      default:
+        throw new RuntimeException("Unknown sort attribute " + bestAxis);
+    }
+    // Disable asymptotic splitting when splitting the root for the first time (i.e., root is leaf)
+    double asym = node == iRoot ? 0 : 2.0 * (nodeCenter - nodeOrigin) / nodeLength;
+    double mu = (1- 2 * minSplitSize / (maxCapcity + 1)) * asym;
+    double sigma = s * (1 + Math.abs(mu));
 
     // Along the chosen axis, choose the distribution with the minimum overlap value.
-    int chosenK = chooseSplitPoint(minSplitSize, mu, sigma, nodeSize, nodeChildren);
+    int chosenK = chooseSplitPoint(node, minSplitSize, mu, sigma, nodeSize, nodeChildren);
 
     // Split at the chosenK
     int separator = minSplitSize - 1 + chosenK;
-    int iNewNode = Node_split(iNode, separator);
+    int iNewNode = Node_split(node, separator);
     return iNewNode;
   }
 
   /**
    * Choose the split point along a chosen axis. This function assumes that the
    * entries are already sorted along a chosen axis.
+   * @param node the overfilled node being split
    * @param minSplitSize
    * @param mu
    * @param sigma
@@ -452,7 +432,7 @@ public class RRStarTree extends RTreeGuttman {
    * @param entries
    * @return
    */
-  private int chooseSplitPoint(int minSplitSize, double mu, double sigma, int numEntries, int[] entries) {
+  private int chooseSplitPoint(int node, int minSplitSize, double mu, double sigma, int numEntries, int[] entries) {
     Rectangle mbr1 = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
         Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
     // Initialize the MBR of the first group to the minimum group size
@@ -485,8 +465,16 @@ public class RRStarTree extends RTreeGuttman {
     // ... vol(MBB(S_{M+1-m,a})) = 0
     double volRightMostPart = (maxX2[numEntries - minSplitSize] - minX1[numEntries - minSplitSize]) *
         (maxY2[numEntries - minSplitSize] - minY1[numEntries - minSplitSize]);
-    AggregateFunction f = volLeftMostPart + volRightMostPart == 0 ?
+    AggregateFunction f = volLeftMostPart == 0 || volRightMostPart == 0 ?
         AggregateFunction.PERIMETER : AggregateFunction.VOLUME;
+
+    // Calculate perim_{max} as described on the top of page 805 in the paper
+    double maxPerimeter;
+    {
+      double sumPerim = (x2s[node] - x1s[node]) + (y2s[node] - y1s[node]);
+      double smallestEdge = Math.min(x2s[node] - x1s[node], y2s[node] - y1s[node]);
+      maxPerimeter = 2 * sumPerim - smallestEdge;
+    }
 
     // A flag that is raised once an overlap-free candidate is found
     boolean overlapFreeCandidates = false;
@@ -498,34 +486,37 @@ public class RRStarTree extends RTreeGuttman {
     for (int k = 1; k <= numPossibleSplits; k++) {
       int separator = minSplitSize + k - 1; // Separator = size of first group
       // Compute wf for this value of k (referred to as i in the RR*-tree paper)
-      double xi = 2 * k / (maxCapcity + 1) - 1;
+      double xi = 2.0 * separator / (maxCapcity + 1.0) - 1.0;
       double gaussianTerm = (xi - mu) / sigma;
       double wf = ys * (Math.exp(-gaussianTerm * gaussianTerm) - y1);
+      //System.out.printf("xi=%g, wf=%g\n", xi, wf);
 
       mbr1.expand(x1s[entries[separator-1]], y1s[entries[separator-1]]);
       mbr1.expand(x2s[entries[separator-1]], y2s[entries[separator-1]]);
 
       mbr2.set(minX1[separator], minY1[separator], maxX2[separator], maxY2[separator]);
 
-      Rectangle overlapMBR = mbr1.getIntersection(mbr2);
-      if (overlapFreeCandidates || overlapMBR == null) {
+      boolean overlapFree = mbr1.x2 < mbr2.x1 || mbr1.y2 < mbr2.y1 ||
+          mbr2.x2 < mbr1.x1 || mbr2.y2 < mbr1.y1;
+      if (overlapFree) {
         // If there are overlap-free split candidates on split axis a,
         // thereof, choose the candidate with minimum perimeter
-        if (overlapMBR == null) {
-          // This is an overlap-free candidate, calculate its perimeter
-          double wg = mbr1.getWidth() + mbr1.getHeight() + mbr2.getWidth() + mbr2.getHeight();
-          double w = wg * wf;
-          if (w < minWeight || !overlapFreeCandidates) {
-            minWeight = w;
-            chosenK = k;
-          }
-          overlapFreeCandidates = true;
+
+        // This is an overlap-free candidate, calculate its perimeter
+        double wg = mbr1.getWidth() + mbr1.getHeight() + mbr2.getWidth() + mbr2.getHeight() - maxPerimeter;
+        double w = wg * wf;
+        if (w < minWeight) {
+          minWeight = w;
+          chosenK = k;
         }
       } else {
+        double ovlpWidth = Math.min(mbr1.x2, mbr2.x2) -
+            Math.max(mbr1.x1, mbr2.x1);
+        double ovlpHeight = Math.min(mbr1.y2, mbr2.y2) -
+            Math.max(mbr1.y1, mbr2.y1);
         // choose the candidate with minimum overlap (volume or perimeter)
         double wg = f == AggregateFunction.VOLUME ?
-            overlapMBR.getWidth() * overlapMBR.getHeight() :
-            overlapMBR.getWidth() + overlapMBR.getHeight();
+            (ovlpWidth * ovlpHeight) : (ovlpWidth + ovlpHeight);
         double w = wg / wf;
         if (w < minWeight) {
           chosenK = k;
@@ -548,8 +539,7 @@ public class RRStarTree extends RTreeGuttman {
    * @param minSplitSize the minimum split size to consider
    * @return
    */
-  private double computeSumPerimeter(int[] nodeChildren, int nodeSize, int minSplitSize, double asym,
-                                     double mu, double sigma) {
+  private double computeSumPerimeter(int[] nodeChildren, int nodeSize, int minSplitSize) {
     double sumMargin = 0.0;
     Rectangle mbr1 = new Rectangle();
     // Initialize the MBR of the first group to the minimum group size
