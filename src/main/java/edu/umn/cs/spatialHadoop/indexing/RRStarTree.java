@@ -166,7 +166,7 @@ public class RRStarTree extends RTreeGuttman {
     int c;
     // If there is an index i with vol(MBB(Ri U object)) = 0
     int iChildWithZeroVolExpansion = -1;
-    for (int iChild = 0; iChild < nodeChildren.size(); iChild++) {
+    for (int iChild = 0; iChild <= p; iChild++) {
       if (Node_volumeExpansion(nodeChildren.get(iChild), object) == 0) {
         iChildWithZeroVolExpansion = iChild;
         break;
@@ -213,12 +213,12 @@ public class RRStarTree extends RTreeGuttman {
     cand.add(t);
     sumDeltaOverlap[t] = 0; // the accumulation of dOvlp(t, [0, p))
     int c = -1;
-    for (int j = 0; j < p; j++) {
+    for (int j = 0; j <= p; j++) {
       if (j == t)
         continue;
       double ovlpPerimTJ = dOvlp(nodeChildren.get(t), object, nodeChildren.get(j), f);
+      sumDeltaOverlap[t] += ovlpPerimTJ;
       if (ovlpPerimTJ != 0 && !cand.contains(j)) {
-        sumDeltaOverlap[t] += ovlpPerimTJ;
         c = checkComp(j, f, cand, sumDeltaOverlap, p, object, nodeChildren);
         if (c != -1)
           break;
@@ -386,8 +386,8 @@ public class RRStarTree extends RTreeGuttman {
     if (bestAxis != sorter.getAttribute()) {
       sorter.setAttribute(bestAxis);
       quickSort.sort(sorter, 0, nodeSize);
-
     }
+
     // Calculate the common terms for the weighting function along the chosen axis
     double nodeCenter, nodeOrigin, nodeLength;
 
@@ -409,8 +409,8 @@ public class RRStarTree extends RTreeGuttman {
     }
     // Disable asymptotic splitting when splitting the root for the first time (i.e., root is leaf)
     double asym = node == iRoot ? 0 : 2.0 * (nodeCenter - nodeOrigin) / nodeLength;
-    double mu = (1- 2 * minSplitSize / (maxCapcity + 1)) * asym;
-    double sigma = s * (1 + Math.abs(mu));
+    double mu = (1.0 - 2.0 * minSplitSize / (maxCapcity + 1)) * asym;
+    double sigma = s * (1.0 + Math.abs(mu));
 
     // Along the chosen axis, choose the distribution with the minimum overlap value.
     int chosenK = chooseSplitPoint(node, minSplitSize, mu, sigma, nodeSize, nodeChildren);
@@ -489,7 +489,6 @@ public class RRStarTree extends RTreeGuttman {
       double xi = 2.0 * separator / (maxCapcity + 1.0) - 1.0;
       double gaussianTerm = (xi - mu) / sigma;
       double wf = ys * (Math.exp(-gaussianTerm * gaussianTerm) - y1);
-      //System.out.printf("xi=%g, wf=%g\n", xi, wf);
 
       mbr1.expand(x1s[entries[separator-1]], y1s[entries[separator-1]]);
       mbr1.expand(x2s[entries[separator-1]], y2s[entries[separator-1]]);
@@ -568,16 +567,14 @@ public class RRStarTree extends RTreeGuttman {
       maxY2[i] = mbr2.y2;
     }
 
-    int numPossibleSplits = Node_size(iNode) - 2 * minSplitSize + 1;
+    int numPossibleSplits = nodeSize - 2 * minSplitSize + 1;
     for (int k = 1; k <= numPossibleSplits; k++) {
       int separator = minSplitSize + k - 1; // Separator = size of first group
-      mbr1.expand(x1s[nodeChildren.get(separator-1)], y1s[nodeChildren.get(separator-1)]);
-      mbr1.expand(x2s[nodeChildren.get(separator-1)], y2s[nodeChildren.get(separator-1)]);
+      mbr1.expand(x1s[nodeChildren[separator-1]], y1s[nodeChildren[separator-1]]);
+      mbr1.expand(x2s[nodeChildren[separator-1]], y2s[nodeChildren[separator-1]]);
 
-      mbr2.set(minX1[separator], minY1[separator],
-          maxX2[separator], maxY2[separator]);
-      sumMargin += mbr1.getWidth() + mbr1.getHeight();
-      sumMargin += mbr2.getWidth() + mbr2.getHeight();
+      mbr2.set(minX1[separator], minY1[separator], maxX2[separator], maxY2[separator]);
+      sumMargin += mbr1.getWidth() + mbr1.getHeight() + mbr2.getWidth() + mbr2.getHeight();
     }
     return sumMargin;
   }

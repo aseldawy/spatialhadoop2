@@ -202,7 +202,7 @@ public class IntArray implements Writable, Iterable<Integer> {
   }
 
   public void insertionSort(Comparator<Integer> c) {
-    for (int sortSize = 2; sortSize < size; sortSize++) {
+    for (int sortSize = 2; sortSize <= size; sortSize++) {
       int pivot = array[sortSize-1];
       int j = sortSize - 2;
       while (j >= 0 && c.compare(array[j], pivot) > 0) {

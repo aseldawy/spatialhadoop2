@@ -69,4 +69,18 @@ public class IntArrayTest extends TestCase {
 
     assertTrue("Array not sorted", Arrays.equals(new int[] {1,3,5,10}, array.toArray()));
   }
+
+  public void testInsertionSortTwoElements() {
+    IntArray array = new IntArray();
+    array.add(5);
+    array.add(3);
+    array.insertionSort(new Comparator<Integer>() {
+      @Override
+      public int compare(Integer o1, Integer o2) {
+        return o1 - o2;
+      }
+    });
+
+    assertTrue("Array not sorted", Arrays.equals(new int[] {3,5}, array.toArray()));
+  }
 }

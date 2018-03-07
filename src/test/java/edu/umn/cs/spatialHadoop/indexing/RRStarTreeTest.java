@@ -120,12 +120,12 @@ public class RRStarTreeTest extends TestCase {
       double[] y1s = new double[7];
       double[] x2s = new double[7];
       double[] y2s = new double[7];
-      x1s[1] = 1; y1s[1] = 1; x2s[1] = 6; y2s[1] = 6; // E1
-      x1s[2] = 0; y1s[2] = 0; x2s[2] = 4; y2s[2] = 5; // E2
-      x1s[3] = 2; y1s[3] = 5.9; x2s[3] = 4; y2s[3] = 8; // E3
-      x1s[4] = 6.2; y1s[4] = 1; x2s[4] = 8; y2s[4] = 3; // E4
-      x1s[5] = 9; y1s[5] = 8; x2s[5] = 11; y2s[5] = 10; // E5
-      x1s[6] = 5; y1s[6] = 5; x2s[6] = 7; y2s[6] = 7; // Omega
+      x1s[1] = 0.6; y1s[1] = 0.6; x2s[1] = 3.4; y2s[1] = 2.8; // E1
+      x1s[2] = 0; y1s[2] = 0; x2s[2] = 2.9; y2s[2] = 2.4; // E2
+      x1s[3] = 1.4; y1s[3] = 2.7; x2s[3] = 2.3; y2s[3] = 3.8; // E3
+      x1s[4] = 3.5; y1s[4] = 0.5; x2s[4] = 4.6; y2s[4] = 1.3; // E4
+      x1s[5] = 5.4; y1s[5] = 2.9; x2s[5] = 6.2; y2s[5] = 3.6; // E5
+      x1s[6] = 3.1; y1s[6] = 2.5; x2s[6] = 4; y2s[6] = 3.1; // Omega
       rtree = new RRStarTree(4, 8);
       rtree.initializeDataEntries(x1s, y1s, x2s, y2s);
       int e1 = rtree.Node_createNodeWithChildren(true, 1);
@@ -201,6 +201,31 @@ public class RRStarTreeTest extends TestCase {
         }
       }
       assertEquals(expectedLeaves.length, numFound);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+
+  public void testChooseSubtree() {
+    try {
+      String fileName = "src/test/resources/test4.points";
+      double[][] points = readFile(fileName);
+      RRStarTree rtree = new RRStarTree(2, 10);
+
+      rtree.initializeFromPoints(points[0], points[1]);
+      assertEquals(rtree.numOfDataEntries(), 14);
+      Rectangle2D.Double[] leaves = new Rectangle2D.Double[2];
+      int numLeaves = 0;
+      for (RTreeGuttman.Node leaf : rtree.getAllLeaves()) {
+        leaves[numLeaves++] = new Rectangle2D.Double(leaf.x1, leaf.y1,
+            leaf.x2-leaf.x1, leaf.y2-leaf.y1);
+      }
+
+      assertEquals(2, numLeaves);
+      assertFalse("Leaves should be disjoint", leaves[0].intersects(leaves[1]));
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {
