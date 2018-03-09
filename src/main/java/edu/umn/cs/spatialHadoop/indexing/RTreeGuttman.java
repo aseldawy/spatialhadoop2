@@ -43,7 +43,7 @@ public class RTreeGuttman {
   protected int numNodes;
 
   /**The index of the root in the list of nodes*/
-  protected int iRoot;
+  protected int root;
 
   /**
    * Make a room in the data structures to accommodate a new object whether
@@ -157,7 +157,6 @@ public class RTreeGuttman {
    */
   protected void Node_addChild(int iNode, int iNewChild) {
     this.children.get(iNode).add(iNewChild);
-    Node_expand(iNode, iNewChild);
   }
 
   /**
@@ -242,7 +241,7 @@ public class RTreeGuttman {
   }
 
   protected void insertAllDataEntries() {
-    iRoot = Node_createNodeWithChildren(true, 0);
+    root = Node_createNodeWithChildren(true, 0);
     // Insert one by one
     for (int i = 1; i < numEntries; i++)
       insertAnExistingDataEntry(i);
@@ -293,7 +292,7 @@ public class RTreeGuttman {
   protected void insertAnExistingDataEntry(int iEntry) {
     // The path from the root to the newly inserted record. Used for splitting.
     IntArray path = new IntArray();
-    int iCurrentVisitedNode = iRoot;
+    int iCurrentVisitedNode = root;
     path.add(iCurrentVisitedNode);
     // Descend in the tree until we find a leaf node to add the object to
     while (!isLeaf.get(iCurrentVisitedNode)) {
@@ -337,38 +336,38 @@ public class RTreeGuttman {
   /**
    * Adjust the tree after an insertion by making the necessary splits up to
    * the root.
-   * @param iLeafNode the index of the leaf node where the insertion happened
+   * @param leafNode the index of the leaf node where the insertion happened
    * @param path
    */
-  protected void adjustTree(int iLeafNode, IntArray path) {
+  protected void adjustTree(int leafNode, IntArray path) {
     int iNode;
-    int iNewNode = -1;
-    if (Node_size(iLeafNode) > maxCapcity) {
+    int newNode = -1;
+    if (Node_size(leafNode) > maxCapcity) {
       // Node full. Split into two
-      iNewNode = split(iLeafNode, minCapacity);
+      newNode = split(leafNode, minCapacity);
     }
     // AdjustTree. Ascend from the leaf node L
     while (!path.isEmpty()) {
       iNode = path.pop();
+      // Adjust covering rectangle in the node
+      Node_recalculateMBR(iNode);
       if (path.isEmpty()) {
         // The node is the root (no parent)
-        if (iNewNode != -1) {
+        if (newNode != -1) {
           // If the root is split, create a new root
-          iRoot = Node_createNodeWithChildren(false, iNode, iNewNode);
+          root = Node_createNodeWithChildren(false, iNode, newNode);
         }
         // If N is the root with no partner NN, stop.
       } else {
-        int iParent = path.peek();
-        // Adjust covering rectangle in parent entry
-        Node_expand(iParent, iNode);
-        if (iNewNode != -1) {
+        int parent = path.peek();
+        if (newNode != -1) {
           // If N has a partner NN resulting from an earlier split,
           // create a new entry ENN and add to the parent if there is room.
           // Add Enn to P if there is room
-          Node_addChild(iParent, iNewNode);
-          iNewNode = -1;
-          if (Node_size(iParent) >= maxCapcity) {
-            iNewNode = split(iParent, minCapacity);
+          Node_addChild(parent, newNode);
+          newNode = -1;
+          if (Node_size(parent) >= maxCapcity) {
+            newNode = split(parent, minCapacity);
           }
         }
       }
@@ -476,6 +475,9 @@ public class RTreeGuttman {
         nonAssignedNodes.remove(nextEntry);
       }
     }
+    // Recompute MBRs of the two nodes after split
+    Node_recalculateMBR(iNode);
+    Node_recalculateMBR(iNewNode);
     // Add the new node to the list of nodes and return its index
     return iNewNode;
   }
@@ -492,7 +494,7 @@ public class RTreeGuttman {
   public void search(double x1, double y1, double x2, double y2, IntArray results) {
     results.clear();
     IntArray nodesToSearch = new IntArray();
-    nodesToSearch.add(iRoot);
+    nodesToSearch.add(root);
     while (!nodesToSearch.isEmpty()) {
       int nodeToSearch = nodesToSearch.pop();
       if (isLeaf.get(nodeToSearch)) {
@@ -559,7 +561,7 @@ public class RTreeGuttman {
     // to the leaf.
     // Since the tree is balanced, any path would work
     int height = 0;
-    int iNode = iRoot;
+    int iNode = root;
     while (!isLeaf.get(iNode)) {
       height++;
       iNode = children.get(iNode).get(0);
@@ -659,7 +661,7 @@ public class RTreeGuttman {
      */
     protected void searchFirst() {
       nodesToSearch = new IntArray();
-      nodesToSearch.add(iRoot);
+      nodesToSearch.add(root);
       entry = new Entry();
       while (!nodesToSearch.isEmpty()) {
         // We keep the top of the stack for the subsequent next calls

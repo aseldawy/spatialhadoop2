@@ -6,6 +6,7 @@ import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 
+import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -55,6 +56,38 @@ public class RStarTreeTest extends TestCase {
     }
   }
 
+  public void testBuild2() {
+    try {
+      String fileName = "src/test/resources/test2.points";
+      double[][] points = readFile(fileName, 19);
+      RStarTree rtree = new RStarTree(2, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
+      assertEquals(rtree.numOfDataEntries(), 19);
+
+      Rectangle2D.Double[] expectedLeaves = {
+          new Rectangle2D.Double(1, 2, 13, 1),
+          new Rectangle2D.Double(3, 6, 3, 6),
+          new Rectangle2D.Double(9, 6, 10, 2),
+          new Rectangle2D.Double(12, 10, 3, 2),
+      };
+      int numFound = 0;
+      for (RTreeGuttman.Node leaf : rtree.getAllLeaves()) {
+        for (int i = 0; i < expectedLeaves.length; i++) {
+          if (expectedLeaves[i] != null && expectedLeaves[i].equals(
+              new Rectangle2D.Double(leaf.x1, leaf.y1, leaf.x2-leaf.x1, leaf.y2-leaf.y1))) {
+            numFound++;
+          }
+        }
+      }
+      assertEquals(expectedLeaves.length, numFound);
+
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
   public void testSplit() {
     try {
       String fileName = "src/test/resources/test2.points";
@@ -64,7 +97,7 @@ public class RStarTreeTest extends TestCase {
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 22);
       // Perform one split at the root
-      rtree.split(rtree.iRoot, 4);
+      rtree.split(rtree.root, 4);
 
       Iterable<RTreeGuttman.Node> leaves = rtree.getAllLeaves();
       int numOfLeaves = 0;
@@ -236,6 +269,11 @@ public class RStarTreeTest extends TestCase {
       fail("Error working with the test file");
     }
   }
+
+  private double[][] readFile(String fileName) throws IOException {
+    return readFile(fileName, Integer.MAX_VALUE);
+  }
+
   /**
    * Read a CSV file that contains one point per line in the format "x,y".
    * The points are returned as a 2D array where the first index indicates the
@@ -245,16 +283,17 @@ public class RStarTreeTest extends TestCase {
    * @return
    * @throws IOException
    */
-  private double[][] readFile(String fileName) throws IOException {
+  private double[][] readFile(String fileName, int maxLines) throws IOException {
     FileReader testPointsIn = new FileReader(fileName);
     char[] buffer = new char[(int) new File(fileName).length()];
     testPointsIn.read(buffer);
     testPointsIn.close();
 
     String[] lines = new String(buffer).split("\\s");
-    double[] xs = new double[lines.length];
-    double[] ys = new double[lines.length];
-    for (int iLine = 0; iLine < lines.length; iLine++) {
+    int numLines = Math.min(maxLines, lines.length);
+    double[] xs = new double[numLines];
+    double[] ys = new double[numLines];
+    for (int iLine = 0; iLine < numLines; iLine++) {
       String[] parts = lines[iLine].split(",");
       xs[iLine] = Double.parseDouble(parts[0]);
       ys[iLine] = Double.parseDouble(parts[1]);

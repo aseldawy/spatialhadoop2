@@ -140,7 +140,7 @@ public class RTreeGuttmanTest extends TestCase {
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(11, rtree.numOfDataEntries());
       // Make one split at the root
-      int iNode = rtree.iRoot;
+      int iNode = rtree.root;
       int iNewNode = rtree.split(iNode, 4);
       assertTrue("Too small size " + rtree.Node_size(iNewNode), rtree.Node_size(iNewNode) > 2);
       assertTrue("Too small size " + rtree.Node_size(iNode), rtree.Node_size(iNode) > 2);
@@ -206,7 +206,7 @@ public class RTreeGuttmanTest extends TestCase {
       double[][] points = readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
-      assertEquals(0.0, rtree.Node_volumeExpansion(rtree.iRoot, 0));
+      assertEquals(0.0, rtree.Node_volumeExpansion(rtree.root, 0));
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
     } catch (IOException e) {

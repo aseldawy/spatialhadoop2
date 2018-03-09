@@ -69,7 +69,7 @@ public class RRStarTreeTest extends TestCase {
       rtree.initializeDataEntries(xs, ys);
       int n1 = rtree.Node_createNodeWithChildren(true, 1, 7);
       int n2 = rtree.Node_createNodeWithChildren(true, 5, 6);
-      rtree.iRoot = rtree.Node_createNodeWithChildren(false, n1, n2);
+      rtree.root = rtree.Node_createNodeWithChildren(false, n1, n2);
       // n1 and n2 cover p4 but n1 has a zero volume, p4 should be added to n1
       rtree.insertAnExistingDataEntry(4);
       assertEquals(3, rtree.Node_size(n1));
@@ -81,7 +81,7 @@ public class RRStarTreeTest extends TestCase {
       rtree.initializeDataEntries(xs, ys);
       n1 = rtree.Node_createNodeWithChildren(true, 1, 7);
       n2 = rtree.Node_createNodeWithChildren(true, 5, 6);
-      rtree.iRoot = rtree.Node_createNodeWithChildren(false, n1, n2);
+      rtree.root = rtree.Node_createNodeWithChildren(false, n1, n2);
       // Both n1 and n2 cover p4 with zero volume, but n2 has a smaller perimeter
       rtree.insertAnExistingDataEntry(4);
       assertEquals(2, rtree.Node_size(n1));
@@ -94,7 +94,7 @@ public class RRStarTreeTest extends TestCase {
       rtree.initializeDataEntries(xs, ys);
       n1 = rtree.Node_createNodeWithChildren(true, 3, 9);
       n2 = rtree.Node_createNodeWithChildren(true, 2, 10);
-      rtree.iRoot = rtree.Node_createNodeWithChildren(false, n1, n2);
+      rtree.root = rtree.Node_createNodeWithChildren(false, n1, n2);
       // Both n1 and n2 cover p4 but n1 has a smaller volume
       rtree.insertAnExistingDataEntry(4);
       assertEquals(3, rtree.Node_size(n1));
@@ -109,7 +109,7 @@ public class RRStarTreeTest extends TestCase {
       n1 = rtree.Node_createNodeWithChildren(true, 4, 6);
       n2 = rtree.Node_createNodeWithChildren(true, 7, 10);
       int n3 = rtree.Node_createNodeWithChildren(true, 2, 8);
-      rtree.iRoot = rtree.Node_createNodeWithChildren(false, n1, n2, n3);
+      rtree.root = rtree.Node_createNodeWithChildren(false, n1, n2, n3);
       rtree.insertAnExistingDataEntry(1);
       assertEquals(3, rtree.Node_size(n1));
       assertEquals(2, rtree.Node_size(n2));
@@ -133,7 +133,7 @@ public class RRStarTreeTest extends TestCase {
       int e3 = rtree.Node_createNodeWithChildren(true, 3);
       int e4 = rtree.Node_createNodeWithChildren(true, 4);
       int e5 = rtree.Node_createNodeWithChildren(true, 5);
-      rtree.iRoot = rtree.Node_createNodeWithChildren(false, e1, e2, e3, e4, e5);
+      rtree.root = rtree.Node_createNodeWithChildren(false, e1, e2, e3, e4, e5);
 
       rtree.insertAnExistingDataEntry(6); // Insert omega
       // It should be added to E3 as described in the paper

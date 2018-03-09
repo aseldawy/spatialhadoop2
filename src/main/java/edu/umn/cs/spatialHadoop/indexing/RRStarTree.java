@@ -408,7 +408,7 @@ public class RRStarTree extends RTreeGuttman {
         throw new RuntimeException("Unknown sort attribute " + bestAxis);
     }
     // Disable asymptotic splitting when splitting the root for the first time (i.e., root is leaf)
-    double asym = node == iRoot ? 0 : 2.0 * (nodeCenter - nodeOrigin) / nodeLength;
+    double asym = node == root ? 0 : 2.0 * (nodeCenter - nodeOrigin) / nodeLength;
     double mu = (1.0 - 2.0 * minSplitSize / (maxCapcity + 1)) * asym;
     double sigma = s * (1.0 + Math.abs(mu));
 

@@ -27,7 +27,7 @@ public class RStarTree extends RTreeGuttman {
 
   public RStarTree(int minCapacity, int maxCapcity) {
     super(minCapacity, maxCapcity);
-    p = maxCapcity * 4 / 10;
+    p = maxCapcity * 3 / 10;
   }
 
   /**
@@ -36,7 +36,7 @@ public class RStarTree extends RTreeGuttman {
    * @param iLeafNode the leaf node that overflew
    */
   protected int overflowTreatment(int iLeafNode, IntArray path) {
-    if (iLeafNode != iRoot && !reinserting) {
+    if (iLeafNode != root && !reinserting) {
       // If the level is not the root level and this is the first call of
       // overflowTreatment in the given level during the insertion of one entry
       // invoke reInsert
@@ -55,46 +55,41 @@ public class RStarTree extends RTreeGuttman {
   /**
    * Delete and reinsert p elements from the given overflowing leaf node.
    * Described in Beckmann et al'90 Page 327
-   * @param iNode
+   * @param node
    */
-  protected void reInsert(int iNode, IntArray path) {
+  protected void reInsert(int node, IntArray path) {
     reinserting = true;
+    IntArray nodeChildren = children.get(node);
+    // Remove the last element (the one that caused the expansion)
+    int overflowEelement = nodeChildren.pop();
     // RI1 For all M+1 entries of a node N, compute the distance between
     // the centers of their rectangles and the center of the MBR of N
-    double nodeX = (x1s[iNode] + x2s[iNode]) / 2;
-    double nodeY = (y1s[iNode] + y2s[iNode]) / 2;
-    
-    final double[] distances2 = new double[Node_size(iNode)];
-    final IntArray nodeChildren = children.get(iNode);
-    for (int i = 0; i < nodeChildren.size(); i++) {
-      int iChild = nodeChildren.get(i);
-      double childX = (x1s[iChild] + x2s[iChild]) / 2;
-      double childY = (y1s[iChild] + y2s[iChild]) / 2;
-      double dx = childX - nodeX;
-      double dy = childY - nodeY;
-      distances2[i] = dx * dx + dy * dy;
-    }
+    final double nodeX = (x1s[node] + x2s[node]) / 2;
+    final double nodeY = (y1s[node] + y2s[node]) / 2;
 
     // RI2 Sort the entries in decreasing order of their distances
-    IndexedSortable sortDistance2 = new IndexedSortable() {
+    // TODO consider caching the distances for efficiency
+    nodeChildren.insertionSort(new Comparator<Integer>() {
       @Override
-      public int compare(int i, int j) {
-        double diff = distances2[i] - distances2[j];
+      public int compare(Integer child1, Integer child2) {
+        double childX = (x1s[child1] + x2s[child1]) / 2;
+        double childY = (y1s[child1] + y2s[child1]) / 2;
+        double dx = childX - nodeX;
+        double dy = childY - nodeY;
+        double distance1 = dx * dx + dy * dy;
+
+        childX = (x1s[child1] + x2s[child1]) / 2;
+        childY = (y1s[child1] + y2s[child1]) / 2;
+        dx = childX - nodeX;
+        dy = childY - nodeY;
+        double distance2 = dx * dx + dy * dy;
+
+        double diff = distance1 - distance2;
         if (diff < 0) return -1;
         if (diff > 0) return 1;
         return 0;
       }
-
-      @Override
-      public void swap(int i, int j) {
-        nodeChildren.swap(i, j);
-        double temp = distances2[i];
-        distances2[i] = distances2[j];
-        distances2[j] = temp;
-      }
-    };
-    QuickSort quickSort = new QuickSort();
-    quickSort.sort(sortDistance2, 0, nodeChildren.size());
+    });
 
     // RI3 Remove the first p entries from N and adjust the MBR of N
     // Eldawy: We chose to sort them by (increasing) distance and remove
@@ -112,6 +107,8 @@ public class RStarTree extends RTreeGuttman {
     // (=close reinsert), invoke Insert to reinsert the entries
     for (int iEntryToReinsert : entriesToReInsert)
       insertAnExistingDataEntry(iEntryToReinsert);
+    // Now, we can reinsert the overflow element again
+    insertAnExistingDataEntry(overflowEelement);
     reinserting = false;
   }
 
@@ -132,17 +129,17 @@ public class RStarTree extends RTreeGuttman {
     // AdjustTree. Ascend from the leaf node L
     while (!path.isEmpty()) {
       iNode = path.pop();
+      // Adjust covering rectangle in parent entry
+      Node_recalculateMBR(iNode);
       if (path.isEmpty()) {
         // The node is the root (no parent)
         if (iNewNode != -1) {
           // If the root is split, create a new root
-          iRoot = Node_createNodeWithChildren(false, iNode, iNewNode);
+          root = Node_createNodeWithChildren(false, iNode, iNewNode);
         }
         // If N is the root with no partner NN, stop.
       } else {
         int iParent = path.peek();
-        // Adjust covering rectangle in parent entry
-        Node_expand(iParent, iNode);
         if (iNewNode != -1) {
           // If N has a partner NN resulting from an earlier split,
           // create a new entry ENN and add to the parent if there is room.
