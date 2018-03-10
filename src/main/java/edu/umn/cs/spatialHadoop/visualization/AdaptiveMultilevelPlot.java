@@ -417,8 +417,8 @@ public class AdaptiveMultilevelPlot {
     if (size > threshold)
       return TileClass.ImageTile;
     // The code below is incorrect because the histogram is not 100% accurate
-    //if (size == 0)
-    //  return TileClass.EmptyTile;
+    if (size == 0)
+      return TileClass.EmptyTile;
 
     // It could be either a data tile or shallow/empty tile based on its parent size
     if (z == 0)

@@ -31,6 +31,159 @@ public class RStarTree extends RTreeGuttman {
   }
 
   /**
+   * Tests if the MBR of a node fully contains an object
+   * @param node
+   * @param object
+   * @return
+   */
+  protected boolean Node_contains(int node, int object) {
+    return x1s[object] >= x1s[node] && x2s[object] <= x2s[node] &&
+        y1s[object] >= y1s[node] && y2s[object] <= y2s[node];
+  }
+
+  /**
+   * Compute the enlargement of the overlap of two nodes if an object is added
+   * to the first node.
+   * In other words, it computes Area((T U O) ^ J) - Area(T ^ J),
+   * where T and J are the first and second noes, respectively, and O is the object
+   * to be added to T.
+   * @param nodeT
+   * @param object
+   * @param nodeJ
+   * @return
+   */
+  protected double Node_overlapAreaEnlargement(int nodeT, int object, int nodeJ) {
+    // Compute the MBB of (t U o)
+    double x1to = Math.min(x1s[nodeT], x1s[object]);
+    double y1to = Math.min(y1s[nodeT], y1s[object]);
+    double x2to = Math.max(x2s[nodeT], x2s[object]);
+    double y2to = Math.max(y2s[nodeT], y2s[object]);
+
+    // Compute the width and height of (t U o) ^ j
+    double widthTOJ = Math.min(x2to, x2s[nodeJ]) -
+        Math.max(x1to, x1s[nodeJ]);
+    widthTOJ = Math.max(0.0, widthTOJ);
+    double heightTOJ = Math.min(y2to, y2s[nodeJ]) -
+        Math.max(y1to, y1s[nodeJ]);
+    heightTOJ = Math.max(0.0, heightTOJ);
+
+    // Compute the width and height of the intersection of nodes t and j
+    double widthTJ = Math.min(x2s[nodeT], x2s[nodeJ]) -
+        Math.max(x1s[nodeT], x1s[nodeJ]);
+    widthTJ = Math.max(0.0, widthTJ);
+    double heightTJ = Math.min(y2s[nodeT], y2s[nodeJ]) -
+        Math.max(y1s[nodeT], y1s[nodeJ]);
+    heightTJ = Math.max(0.0, heightTJ);
+
+    return widthTOJ * heightTOJ - widthTJ * heightTJ;
+  }
+
+  /**
+   * The ChooseSubtree algorithm of the R*-tree as described on page 325 in
+   * the paper
+   * @param entry
+   * @param node
+   * @return
+   */
+  @Override protected int chooseSubtree(final int entry, int node) {
+    assert !isLeaf.get(node);
+    // If the child pointers in N do not point to leaves,
+    // determine the minimum area cost (as in regular R-tree)
+    if (!isLeaf.get(children.get(node).peek()))
+      return super.chooseSubtree(entry, node);
+
+    long t1 = System.nanoTime();
+    // If the child pointers in N point ot leaves, determine the minimum
+    // overlap cost
+    int bestChild = -1;
+    double minVolume = Double.POSITIVE_INFINITY;
+    final IntArray nodeChildren = children.get(node);
+    // If there are any nodes that completely covers the entry, choose the one
+    // with the least area
+    for (int child : nodeChildren) {
+      if (Node_contains(child, entry)) {
+        double volume = Node_area(child);
+        if (volume < minVolume) {
+          bestChild = child;
+          minVolume = volume;
+        }
+      }
+    }
+    // Found a zero-enlargement child with least volume
+    if (bestChild != -1) {
+      long t2 = System.nanoTime();
+      totalChooseSubtreeTime += t2 - t1;
+      return bestChild;
+    }
+
+    // From this point on, we know that ALL children have to be expanded
+
+    // Sort the children by their increasing order of area enlargements so that
+    // we can reduce the processing by considering the first P=32 children
+    final double[] volumeEnlargements = new double[nodeChildren.size()];
+    for (int iChild = 0; iChild < nodeChildren.size(); iChild++)
+      volumeEnlargements[iChild] = Node_volumeExpansion(nodeChildren.get(iChild), entry);
+    IndexedSortable volEnlargementsSortable = new IndexedSortable() {
+      @Override
+      public int compare(int i, int j) {
+        double diff = volumeEnlargements[i] - volumeEnlargements[j];
+        if (diff < 0) return -1;
+        if (diff > 0) return 1;
+        return 0;
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        nodeChildren.swap(i, j);
+        double temp = volumeEnlargements[i];
+        volumeEnlargements[i] = volumeEnlargements[j];
+        volumeEnlargements[j] = temp;
+      }
+    };
+    new QuickSort().sort(volEnlargementsSortable, 0, nodeChildren.size());
+    // Choose the entry N whose rectangle needs least overlap enlargement
+    // to include the new data rectangle.
+    double minOverlapEnlargement = Double.POSITIVE_INFINITY;
+    double minVolumeEnlargement = Double.POSITIVE_INFINITY;
+
+    // For efficiency, only consider the first 32 children in the sorted order
+    // of volume expansion
+    for (int iChild = 0; iChild < Math.min(32, nodeChildren.size()); iChild++) {
+      int child = nodeChildren.get(iChild);
+      double ovlpEnlargement = 0.0;
+      double volumeEnlargement = volumeEnlargements[iChild];
+      // If the MBB of the node expands, there could be some enlargement
+      for (int child2 : nodeChildren) {
+        if (child != child2) {
+          // Add the overlap and volume enlargements of this pair
+          ovlpEnlargement += Node_overlapAreaEnlargement(child, entry, child2);
+        }
+      }
+      if (ovlpEnlargement < minOverlapEnlargement) {
+        // Choose the entry whose rectangle needs least overlap enlargement to
+        // include the new data rectangle
+        bestChild = child;
+        minOverlapEnlargement = ovlpEnlargement;
+        minVolumeEnlargement = volumeEnlargement;
+      } else if (ovlpEnlargement == minOverlapEnlargement) {
+        // Resolve ties by choosing the entry whose rectangle needs least area enlargement
+        if (volumeEnlargement < minVolumeEnlargement) {
+          minVolumeEnlargement = volumeEnlargement;
+          bestChild = child;
+        } else if (volumeEnlargement == minVolumeEnlargement) {
+          // then the entry with rectangle of smallest area
+          if (Node_area(child) < Node_area(bestChild))
+            bestChild = child;
+        }
+      }
+    }
+    long t2 = System.nanoTime();
+    totalChooseSubtreeTime += t2 - t1;
+    assert bestChild != -1;
+    return bestChild;
+  }
+
+  /**
    * Treats a node that ran out of space by either forced reinsert of some
    * entries or splitting.
    * @param iLeafNode the leaf node that overflew
@@ -59,37 +212,45 @@ public class RStarTree extends RTreeGuttman {
    */
   protected void reInsert(int node, IntArray path) {
     reinserting = true;
-    IntArray nodeChildren = children.get(node);
+    double t1 = System.nanoTime();
+    final IntArray nodeChildren = children.get(node);
     // Remove the last element (the one that caused the expansion)
     int overflowEelement = nodeChildren.pop();
     // RI1 For all M+1 entries of a node N, compute the distance between
     // the centers of their rectangles and the center of the MBR of N
     final double nodeX = (x1s[node] + x2s[node]) / 2;
     final double nodeY = (y1s[node] + y2s[node]) / 2;
-
+    final double[] distances = new double[nodeChildren.size()];
+    for (int iChild = 0; iChild < nodeChildren.size(); iChild++) {
+      int child = nodeChildren.get(iChild);
+      double childX = (x1s[child] + x2s[child]) / 2;
+      double childY = (y1s[child] + y2s[child]) / 2;
+      double dx = childX - nodeX;
+      double dy = childY - nodeY;
+      distances[iChild] = dx * dx + dy * dy;
+    }
     // RI2 Sort the entries in decreasing order of their distances
-    // TODO consider caching the distances for efficiency
-    nodeChildren.insertionSort(new Comparator<Integer>() {
+    // Eldawy: We choose to sort them by increasing order and removing the
+    // the last p entries because removing the last elements from an array
+    // is simpler
+    IndexedSortable distanceSortable = new IndexedSortable() {
       @Override
-      public int compare(Integer child1, Integer child2) {
-        double childX = (x1s[child1] + x2s[child1]) / 2;
-        double childY = (y1s[child1] + y2s[child1]) / 2;
-        double dx = childX - nodeX;
-        double dy = childY - nodeY;
-        double distance1 = dx * dx + dy * dy;
-
-        childX = (x1s[child1] + x2s[child1]) / 2;
-        childY = (y1s[child1] + y2s[child1]) / 2;
-        dx = childX - nodeX;
-        dy = childY - nodeY;
-        double distance2 = dx * dx + dy * dy;
-
-        double diff = distance1 - distance2;
-        if (diff < 0) return -1;
-        if (diff > 0) return 1;
+      public int compare(int i, int j) {
+        double diff = distances[i] - distances[j];
+        if (diff > 0) return -1;
+        if (diff < 0) return 1;
         return 0;
       }
-    });
+
+      @Override
+      public void swap(int i, int j) {
+        nodeChildren.swap(i, j);
+        double temp = distances[i];
+        distances[i] = distances[j];
+        distances[j] = temp;
+      }
+    };
+    new QuickSort().sort(distanceSortable, 0, nodeChildren.size());
 
     // RI3 Remove the first p entries from N and adjust the MBR of N
     // Eldawy: We chose to sort them by (increasing) distance and remove
@@ -98,11 +259,8 @@ public class RStarTree extends RTreeGuttman {
     entriesToReInsert.append(nodeChildren, nodeChildren.size() - p, p);
     nodeChildren.resize(nodeChildren.size() - p);
 
-    // Eldawy: Since we're going to reinsert elements at the root, we ought to
-    // adjust the MBRs of all nodes along the path to the root, including N.
-    for (int i = path.size() - 1; i >= 0; i--)
-      Node_recalculateMBR(path.get(i));
-
+    double t2 = System.nanoTime();
+    totalReinsertTime += t2 - t1;
     // RI4: In the sort, defined in RI2, starting with the minimum distance
     // (=close reinsert), invoke Insert to reinsert the entries
     for (int iEntryToReinsert : entriesToReInsert)
@@ -172,6 +330,7 @@ public class RStarTree extends RTreeGuttman {
    */
   @Override
   protected int split(int iNode, int minSplitSize) {
+    long t1 = System.nanoTime();
     int nodeSize = Node_size(iNode);
     final int[] nodeChildren = children.get(iNode).underlyingArray();
     // ChooseSplitAxis
@@ -290,6 +449,9 @@ public class RStarTree extends RTreeGuttman {
     // Split at the chosenK
     int separator = minSplitSize - 1 + chosenK;
     int iNewNode = Node_split(iNode, separator);
+    long t2 = System.nanoTime();
+    this.totalSplitTime += t2 - t1;
+    numOfSplits++;
     return iNewNode;
   }
 

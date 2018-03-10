@@ -72,6 +72,7 @@ public class RStarTreeTest extends TestCase {
       };
       int numFound = 0;
       for (RTreeGuttman.Node leaf : rtree.getAllLeaves()) {
+        System.out.println(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y2).toWKT());
         for (int i = 0; i < expectedLeaves.length; i++) {
           if (expectedLeaves[i] != null && expectedLeaves[i].equals(
               new Rectangle2D.Double(leaf.x1, leaf.y1, leaf.x2-leaf.x1, leaf.y2-leaf.y1))) {
@@ -88,6 +89,27 @@ public class RStarTreeTest extends TestCase {
     }
   }
 
+  public void testBuild111() {
+    try {
+      String fileName = "src/test/resources/test111.points";
+      double[][] points = readFile(fileName);
+      RStarTree rtree = new RStarTree(6, 20);
+      rtree.initializeFromPoints(points[0], points[1]);
+      assertEquals(rtree.numOfDataEntries(), 111);
+
+      int numLeaves = 0;
+
+      for (RTreeGuttman.Node leaf : rtree.getAllLeaves()) {
+        numLeaves++;
+      }
+      assertEquals(9, numLeaves);
+
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
   public void testSplit() {
     try {
       String fileName = "src/test/resources/test2.points";

@@ -578,28 +578,42 @@ public class RRStarTree extends RTreeGuttman {
     }
     return sumMargin;
   }
-  enum RTreeType {Guttman, RStar, RRStar};
+  enum RTreeType {Guttman, RStar, RRStar, RStarBulk};
   public static void main(String[] args) throws IOException {
     //double[][] tweets = readFile("src/test/resources/test2.points");
     //int capacity = 12;
     long t1 = System.currentTimeMillis();
-    double[][] tweets = readFile("tweets_1m");
-    int capacity = 2000;
-    RTreeType type = RTreeType.Guttman;
-    RTreeGuttman rtree;
-    switch (type) {
-      case Guttman : rtree = new RTreeGuttman(capacity/2, capacity); break;
-      case RStar: rtree = new RStarTree(capacity/2, capacity); break;
-      case RRStar: rtree = new RRStarTree(capacity/2, capacity); break;
-      default: throw new RuntimeException("Unknown tree type "+type);
+    double[][] tweets = readFile("tweets_1m", 1000000);
+    //double[][] tweets = readFile("src/test/resources/test2.points", 11);
+    int M = 2000;
+    int m = 400;
+    RTreeType type = RTreeType.RStar;
+    if (type == RTreeType.RStarBulk) {
+      Rectangle[] partitions = RStarTree.partitionPoints(tweets[2], tweets[1], m, M, false, null);
+      for (Rectangle partition : partitions) {
+        System.out.println(partition.toWKT());
+      }
+    } else {
+      RTreeGuttman rtree;
+      switch (type) {
+        case Guttman : rtree = new RTreeGuttman(m, M); break;
+        case RStar: rtree = new RStarTree(m, M); break;
+        case RRStar: rtree = new RRStarTree(m, M); break;
+        default: throw new RuntimeException("Unknown tree type "+type);
+      }
+      rtree.initializeFromPoints(tweets[2], tweets[1]);
+      for (RTreeGuttman.Node leaf : rtree.getAllLeaves()) {
+        System.out.println(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y2).toWKT());
+      }
     }
-    rtree.initializeFromPoints(tweets[2], tweets[1]);
     long t2 = System.currentTimeMillis();
-    for (RTreeGuttman.Node leaf : rtree.getAllLeaves()) {
-      System.out.println(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y2).toWKT());
-    }
     System.out.printf("Built %s with %d entries in %f seconds\n",
-                type.toString(), rtree.numEntries, (t2-t1)*1E-3);
+                type.toString(), tweets[0].length, (t2-t1)*1E-3);
+    System.out.printf("Total split time is %f seconds\n", RTreeGuttman.totalSplitTime * 1E-9);
+    System.out.printf("Total number of splits is %d\n", RTreeGuttman.numOfSplits);
+    System.out.printf("Total choose subtree time is %f seconds\n", RTreeGuttman.totalChooseSubtreeTime*1E-9);
+    System.out.printf("Total reinsert time is %f seconds\n", RTreeGuttman.totalReinsertTime*1E-9);
+    System.out.printf("Total insertion time is %f seconds\n", RTreeGuttman.totalInsertionTime*1E-9);
   }
 
   /**
@@ -611,7 +625,7 @@ public class RRStarTree extends RTreeGuttman {
    * @return
    * @throws IOException
    */
-  private static double[][] readFile(String fileName) throws IOException {
+  private static double[][] readFile(String fileName, int maxN) throws IOException {
     FileReader testPointsIn = new FileReader(fileName);
     char[] buffer = new char[(int) new File(fileName).length()];
     testPointsIn.read(buffer);
@@ -619,9 +633,10 @@ public class RRStarTree extends RTreeGuttman {
 
     String[] lines = new String(buffer).split("\\s");
     int numDimensions = lines[0].split(",").length;
-    double[][] coords = new double[numDimensions][lines.length];
+    int numLines = Math.min(maxN, lines.length);
+    double[][] coords = new double[numDimensions][numLines];
 
-    for (int iLine = 0; iLine < lines.length; iLine++) {
+    for (int iLine = 0; iLine < numLines; iLine++) {
       String[] parts = lines[iLine].split(",");
       for (int iDim = 0; iDim < parts.length; iDim++)
         coords[iDim][iLine] = Double.parseDouble(parts[iDim]);
