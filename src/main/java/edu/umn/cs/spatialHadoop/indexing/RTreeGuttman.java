@@ -20,12 +20,6 @@ import java.util.List;
  * search were not implemented for simplicity.
  */
 public class RTreeGuttman {
-  public static long totalSplitTime;
-  public static long totalChooseSubtreeTime;
-  public static int numOfSplits;
-  public static double totalReinsertTime;
-  public static long totalInsertionTime;
-
   /** Maximum capacity of a node */
   protected final int maxCapcity;
 
@@ -295,7 +289,6 @@ public class RTreeGuttman {
    * @param iEntry - The index of the point in the array of points
    */
   protected void insertAnExistingDataEntry(int iEntry) {
-    long t1 = System.nanoTime();
     // The path from the root to the newly inserted record. Used for splitting.
     IntArray path = new IntArray();
     int iCurrentVisitedNode = root;
@@ -312,8 +305,6 @@ public class RTreeGuttman {
     // if necessary
     Node_addChild(iCurrentVisitedNode, iEntry);
     adjustTree(iCurrentVisitedNode, path);
-    long t2 = System.nanoTime();
-    totalInsertionTime += t2 - t1;
   }
 
   /**
@@ -323,7 +314,6 @@ public class RTreeGuttman {
    * @return
    */
   protected int chooseSubtree(int iEntry, int iNode) {
-    long t1 = System.nanoTime();
     // Node is not leaf. Choose a child node
     // 1. Choose the child with the minimum expansion
     double minExpansion = Double.POSITIVE_INFINITY;
@@ -339,8 +329,6 @@ public class RTreeGuttman {
           iBestChild = iCandidateChild;
       }
     }
-    long t2 = System.nanoTime();
-    totalChooseSubtreeTime += t2 - t1;
     return iBestChild;
   }
 
@@ -361,7 +349,7 @@ public class RTreeGuttman {
     while (!path.isEmpty()) {
       iNode = path.pop();
       // Adjust covering rectangle in the node
-      Node_recalculateMBR(iNode);
+      Node_expand(iNode, children.get(iNode).peek());
       if (path.isEmpty()) {
         // The node is the root (no parent)
         if (newNode != -1) {
@@ -393,7 +381,6 @@ public class RTreeGuttman {
    * @return
    */
   protected int split(int iNode, int minSplitSize) {
-    long t1 = System.nanoTime();
     IntArray nodeChildren = children.get(iNode);
     // Pick seeds
     // Indexes of the objects to be picked as seeds in the arrays xs and ys
@@ -490,9 +477,6 @@ public class RTreeGuttman {
     // Recompute MBRs of the two nodes after split
     Node_recalculateMBR(iNode);
     Node_recalculateMBR(iNewNode);
-    long t2 = System.nanoTime();
-    totalSplitTime += t2 - t1;
-    numOfSplits++;
     // Add the new node to the list of nodes and return its index
     return iNewNode;
   }

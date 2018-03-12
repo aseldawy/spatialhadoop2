@@ -582,8 +582,8 @@ public class RRStarTree extends RTreeGuttman {
   public static void main(String[] args) throws IOException {
     //double[][] tweets = readFile("src/test/resources/test2.points");
     //int capacity = 12;
-    long t1 = System.currentTimeMillis();
     double[][] tweets = readFile("tweets_1m", 1000000);
+    long t1 = System.nanoTime();
     //double[][] tweets = readFile("src/test/resources/test2.points", 11);
     int M = 2000;
     int m = 400;
@@ -606,14 +606,9 @@ public class RRStarTree extends RTreeGuttman {
         System.out.println(new Rectangle(leaf.x1, leaf.y1, leaf.x2, leaf.y2).toWKT());
       }
     }
-    long t2 = System.currentTimeMillis();
+    long t2 = System.nanoTime();
     System.out.printf("Built %s with %d entries in %f seconds\n",
-                type.toString(), tweets[0].length, (t2-t1)*1E-3);
-    System.out.printf("Total split time is %f seconds\n", RTreeGuttman.totalSplitTime * 1E-9);
-    System.out.printf("Total number of splits is %d\n", RTreeGuttman.numOfSplits);
-    System.out.printf("Total choose subtree time is %f seconds\n", RTreeGuttman.totalChooseSubtreeTime*1E-9);
-    System.out.printf("Total reinsert time is %f seconds\n", RTreeGuttman.totalReinsertTime*1E-9);
-    System.out.printf("Total insertion time is %f seconds\n", RTreeGuttman.totalInsertionTime*1E-9);
+                type.toString(), tweets[0].length, (t2-t1)*1E-9);
   }
 
   /**

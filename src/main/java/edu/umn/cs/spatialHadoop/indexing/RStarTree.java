@@ -92,7 +92,6 @@ public class RStarTree extends RTreeGuttman {
     if (!isLeaf.get(children.get(node).peek()))
       return super.chooseSubtree(entry, node);
 
-    long t1 = System.nanoTime();
     // If the child pointers in N point ot leaves, determine the minimum
     // overlap cost
     int bestChild = -1;
@@ -110,11 +109,8 @@ public class RStarTree extends RTreeGuttman {
       }
     }
     // Found a zero-enlargement child with least volume
-    if (bestChild != -1) {
-      long t2 = System.nanoTime();
-      totalChooseSubtreeTime += t2 - t1;
+    if (bestChild != -1)
       return bestChild;
-    }
 
     // From this point on, we know that ALL children have to be expanded
 
@@ -177,8 +173,6 @@ public class RStarTree extends RTreeGuttman {
         }
       }
     }
-    long t2 = System.nanoTime();
-    totalChooseSubtreeTime += t2 - t1;
     assert bestChild != -1;
     return bestChild;
   }
@@ -212,7 +206,6 @@ public class RStarTree extends RTreeGuttman {
    */
   protected void reInsert(int node, IntArray path) {
     reinserting = true;
-    double t1 = System.nanoTime();
     final IntArray nodeChildren = children.get(node);
     // Remove the last element (the one that caused the expansion)
     int overflowEelement = nodeChildren.pop();
@@ -259,8 +252,6 @@ public class RStarTree extends RTreeGuttman {
     entriesToReInsert.append(nodeChildren, nodeChildren.size() - p, p);
     nodeChildren.resize(nodeChildren.size() - p);
 
-    double t2 = System.nanoTime();
-    totalReinsertTime += t2 - t1;
     // RI4: In the sort, defined in RI2, starting with the minimum distance
     // (=close reinsert), invoke Insert to reinsert the entries
     for (int iEntryToReinsert : entriesToReInsert)
@@ -288,7 +279,7 @@ public class RStarTree extends RTreeGuttman {
     while (!path.isEmpty()) {
       iNode = path.pop();
       // Adjust covering rectangle in parent entry
-      Node_recalculateMBR(iNode);
+      Node_expand(iNode, children.get(iNode).peek());
       if (path.isEmpty()) {
         // The node is the root (no parent)
         if (iNewNode != -1) {
@@ -330,7 +321,6 @@ public class RStarTree extends RTreeGuttman {
    */
   @Override
   protected int split(int iNode, int minSplitSize) {
-    long t1 = System.nanoTime();
     int nodeSize = Node_size(iNode);
     final int[] nodeChildren = children.get(iNode).underlyingArray();
     // ChooseSplitAxis
@@ -374,7 +364,7 @@ public class RStarTree extends RTreeGuttman {
     QuickSort quickSort = new QuickSort();
     for (MultiIndexedSortable.Axis sortAttr : MultiIndexedSortable.Axis.values()) {
       sorter.setAttribute(sortAttr);
-      quickSort.sort(sorter, 0, nodeSize);
+      quickSort.sort(sorter, 0, nodeSize-1);
 
       double sumMargin = computeSumMargin(iNode, minSplitSize);
       if (sumMargin < minSumMargin) {
@@ -449,9 +439,6 @@ public class RStarTree extends RTreeGuttman {
     // Split at the chosenK
     int separator = minSplitSize - 1 + chosenK;
     int iNewNode = Node_split(iNode, separator);
-    long t2 = System.nanoTime();
-    this.totalSplitTime += t2 - t1;
-    numOfSplits++;
     return iNewNode;
   }
 
@@ -464,6 +451,7 @@ public class RStarTree extends RTreeGuttman {
    */
   private double computeSumMargin(int iNode, int minSplitSize) {
     IntArray nodeChildren = children.get(iNode);
+    int nodeSize = nodeChildren.size() - 1; // -1 excludes the overflow object
     double sumMargin = 0.0;
     Rectangle mbr1 = new Rectangle();
     // Initialize the MBR of the first group to the minimum group size
@@ -478,11 +466,11 @@ public class RStarTree extends RTreeGuttman {
     // Pre-cache the MBRs for groups that start at position i and end at the end
     Rectangle mbr2 = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
         Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
-    double[] minX1 = new double[nodeChildren.size()];
-    double[] minY1 = new double[nodeChildren.size()];
-    double[] maxX2 = new double[nodeChildren.size()];
-    double[] maxY2 = new double[nodeChildren.size()];
-    for (int i = nodeChildren.size() - 1; i >= minSplitSize; i--) {
+    double[] minX1 = new double[nodeSize];
+    double[] minY1 = new double[nodeSize];
+    double[] maxX2 = new double[nodeSize];
+    double[] maxY2 = new double[nodeSize];
+    for (int i = nodeSize - 1; i >= minSplitSize; i--) {
       int iChild = nodeChildren.get(i);
       mbr2.expand(x1s[iChild], y1s[iChild]);
       mbr2.expand(x2s[iChild], y2s[iChild]);
@@ -492,7 +480,7 @@ public class RStarTree extends RTreeGuttman {
       maxY2[i] = mbr2.y2;
     }
 
-    int numPossibleSplits = Node_size(iNode) - 2 * minSplitSize + 1;
+    int numPossibleSplits = nodeSize - 2 * minSplitSize + 1;
     for (int k = 1; k <= numPossibleSplits; k++) {
       int separator = minSplitSize + k - 1; // Separator = size of first group
       mbr1.expand(x1s[nodeChildren.get(separator-1)], y1s[nodeChildren.get(separator-1)]);

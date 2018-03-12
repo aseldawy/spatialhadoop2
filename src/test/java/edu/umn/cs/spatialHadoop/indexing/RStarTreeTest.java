@@ -62,7 +62,6 @@ public class RStarTreeTest extends TestCase {
       double[][] points = readFile(fileName, 19);
       RStarTree rtree = new RStarTree(2, 8);
       rtree.initializeFromPoints(points[0], points[1]);
-      assertEquals(rtree.numOfDataEntries(), 19);
 
       Rectangle2D.Double[] expectedLeaves = {
           new Rectangle2D.Double(1, 2, 13, 1),
