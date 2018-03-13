@@ -1,15 +1,15 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.io.MemoryInputStream;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
+import org.apache.hadoop.fs.FSDataInputStream;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
+import java.nio.ByteBuffer;
 
 /**
  * Unit test for the RTreeGuttman class
@@ -212,6 +212,78 @@ public class RTreeGuttmanTest extends TestCase {
     } catch (IOException e) {
       fail("Error working with the test file");
     }
+  }
+
+  public void testWrite() {
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
+      assertEquals(rtree.numOfDataEntries(), 11);
+      assertEquals(3, rtree.numOfNodes());
+      assertEquals(1, rtree.getHeight());
+
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      DataOutputStream dos = new DataOutputStream(baos);
+      rtree.write(dos);
+      dos.close();
+
+      ByteBuffer serializedTree = ByteBuffer.wrap(baos.toByteArray());
+      int footerOffset = serializedTree.getInt(serializedTree.limit() - 4);
+      // 4 bytes per data entry + 4 bytes per node (# of children) + (4 (offset) + 32 (MBR)) for each child (root excluded)
+      final int expectedFooterOffset = 11 * 4 + 3 * 4 + (14 - 1) * (8 * 4 + 4);
+      assertEquals(expectedFooterOffset, footerOffset);
+      // Check the MBR of the root
+      double x1 = serializedTree.getDouble(footerOffset);
+      double y1 = serializedTree.getDouble(footerOffset + 8);
+      double x2 = serializedTree.getDouble(footerOffset + 16);
+      double y2 = serializedTree.getDouble(footerOffset + 24);
+      assertEquals(1.0, x1);
+      assertEquals(2.0, y1);
+      assertEquals(12.0, x2);
+      assertEquals(12.0, y2);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
+  public void testRead() {
+    byte[] treeBytes = null;
+    try {
+      String fileName = "src/test/resources/test.points";
+      double[][] points = readFile(fileName);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeFromPoints(points[0], points[1]);
+      assertEquals(rtree.numOfDataEntries(), 11);
+      assertEquals(3, rtree.numOfNodes());
+      assertEquals(1, rtree.getHeight());
+
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      DataOutputStream dos = new DataOutputStream(baos);
+      rtree.write(dos);
+      dos.close();
+      treeBytes = baos.toByteArray();
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+
+    try {
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      FSDataInputStream fsdis = new FSDataInputStream(new MemoryInputStream(treeBytes));
+      rtree.readFields(fsdis, treeBytes.length);
+      IntArray results = new IntArray();
+      rtree.search(0, 0, 4.5, 10, results);
+      assertEquals(3, results.size());
+    } catch (IOException e) {
+      e.printStackTrace();
+      fail("Error opening the tree");
+    }
+
   }
 
   /**

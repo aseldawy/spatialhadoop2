@@ -60,11 +60,22 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
 /**
  * A disk-based R-tree that can be loaded using a bulk loading method and
  * never changed afterwards. It works with any shape given in the generic
- * parameter. To load the tree, use the {@link #bulkLoadWrite(byte[], int, int, int, DataOutput, Shape, boolean)}
+ * parameter. To construct the tree, use the {@link #bulkLoadWrite(byte[], int, int, int, DataOutput, Shape, boolean)}
  * method. To restore the tree from disk, use the {@link #readFields(DataInput)}
  * methods. To do queries against the tree, use the {@link #search(Shape, ResultCollector)},
  *  {@link #knn(double, double, int, ResultCollector2)} or
  *  {@link #spatialJoin(RTree, RTree, ResultCollector2, Reporter)}
+ *
+ * The format of the file is as follows:
+ * <ul>
+ *   <li>The first four bytes is an integer that represents the overall tree size</li>
+ *   <li>The header contains three 32-bit integers: tree height, node degree, and number of data entries</li>
+ *   <li>The next part contains the tree structure as a list of all nodes written in level-order traversal.</li>
+ *   <li>Each node contains the offset of the first data element stored under its subtree and the MBR of the node.</li>
+ *   <li>After the tree structure part, comes the tree data part which contains all the elements ordered by
+ *   their leaf-node ID. This means that all elements under each node (lear or internal) will be stored
+ *   as a contiguous block in the file increasing the querying efficiency.</li>
+ * </ul>
  * @author Ahmed Eldawy
  *
  * @param <T>
