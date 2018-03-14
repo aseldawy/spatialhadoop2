@@ -36,6 +36,7 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  * @author Ahmed Eldawy
  *
  */
+@Partitioner.GlobalIndexerMetadata(disjoint = true)
 public class QuadTreePartitioner extends Partitioner {
   /**The minimal bounding rectangle of the underlying file*/
   protected final Rectangle mbr = new Rectangle();
@@ -57,8 +58,7 @@ public class QuadTreePartitioner extends Partitioner {
   public QuadTreePartitioner() {
   }
   
-  @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
+  public QuadTreePartitioner(Rectangle mbr, Point[] points, int capacity) {
     this.mbr.set(mbr);
     long[] zValues = new long[points.length];
     for (int i = 0; i < points.length; i++)
@@ -252,36 +252,5 @@ public class QuadTreePartitioner extends Partitioner {
     }
     
     return cellInfo;
-  }
-
-  public static void main(String[] args) throws IOException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    
-    Path inPath = params.getInputPath();
-    long length = inPath.getFileSystem(params).getFileStatus(inPath).getLen();
-    ShapeIterRecordReader reader = new ShapeIterRecordReader(params,
-        new FileSplit(inPath, 0, length, new String[0]));
-    Rectangle key = reader.createKey();
-    ShapeIterator shapes = reader.createValue();
-    final Vector<Point> points = new Vector<Point>();
-    while (reader.next(key, shapes)) {
-      for (Shape s : shapes) {
-        points.add(s.getMBR().getCenterPoint());
-      }
-    }
-    Rectangle inMBR = (Rectangle)OperationsParams.getShape(params, "mbr");
-    
-    QuadTreePartitioner qtp = new QuadTreePartitioner();
-    qtp.createFromPoints(inMBR, points.toArray(new Point[points.size()]), 8);
-    System.out.println("x,y,partition");
-    for (Point p : points) {
-      int partition = qtp.overlapPartition(p);
-      System.out.println(p.x+","+p.y+","+partition);
-    }
-  
-    System.out.println("Partition count "+qtp.getPartitionCount());
-    for (int i = 0; i < qtp.getPartitionCount(); i++) {
-      System.out.println(qtp.getPartitionAt(i).toWKT());
-    }
   }
 }

@@ -36,16 +36,11 @@ public abstract class Partitioner implements Writable {
   private static final String PartitionerClass = "Partitioner.Class";
   private static final String PartitionerValue = "Partitioner.Value";
 
-  /**
-   * Populate this partitioner for a set of points and number of partitions
-   * @param mbr - the minimal bounding rectangle of the input space
-   * @param points - the points to be partitioned
-   * @param capacity - maximum number of points per partition
-   * @throws IllegalArgumentException if points are empty 
-   */
-  public abstract void createFromPoints(Rectangle mbr, Point[] points,
-      int capacity) throws IllegalArgumentException;
-  
+  @interface GlobalIndexerMetadata {
+    /**Whether this global indexer supports disjoint partitions or not*/
+    boolean disjoint();
+  }
+
   /**
    * Overlap a shape with partitions and calls a matcher for each overlapping
    * partition.

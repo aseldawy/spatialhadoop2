@@ -578,6 +578,7 @@ public class RRStarTree extends RTreeGuttman {
     }
     return sumMargin;
   }
+
   enum RTreeType {Guttman, RStar, RRStar, RStarBulk};
   public static void main(String[] args) throws IOException {
     //double[][] tweets = readFile("src/test/resources/test2.points");

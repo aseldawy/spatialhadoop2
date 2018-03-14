@@ -27,6 +27,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
+@Partitioner.GlobalIndexerMetadata(disjoint = true)
 public class STRPartitioner extends Partitioner {
   /**MBR of the input file*/
   private final Rectangle mbr = new Rectangle();
@@ -43,9 +44,8 @@ public class STRPartitioner extends Partitioner {
    */
   public STRPartitioner() {
   }
-  
-  @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
+
+  public STRPartitioner(Point[] points, int capacity) {
     // Apply the STR algorithm in two rounds
     // 1- First round, sort points by X and split into the given columns
     Arrays.sort(points, new Comparator<Point>() {

@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.indexing;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 import junit.framework.Test;
 import junit.framework.TestCase;
@@ -54,7 +55,7 @@ public class IndexerTest extends TestCase {
       OperationsParams params = new OperationsParams();
       params.setBoolean("local", false);
       params.setClass("shape", OSMPolygon.class, Shape.class);
-      params.setFloat("ratio", 1.0f);
+      params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
       params.set("sindex", "r*tree");
       Indexer.index(inPath, outPath, params);
     } catch (FileNotFoundException e) {
@@ -66,6 +67,30 @@ public class IndexerTest extends TestCase {
       fail("Error running the job");
     } catch (ClassNotFoundException e) {
       fail("Could not create the shape");
+    }
+  }
+
+  public void testCreatePartitioner() {
+    // Should not crash with an input file that contains empty geomtries
+    try {
+      Path inPath = new Path("src/test/resources/polys.osm");
+      Path outPath = new Path("temp");
+
+      OperationsParams params = new OperationsParams();
+      params.setClass("shape", OSMPolygon.class, Shape.class);
+      params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
+
+      Partitioner p = Indexer.createPartitioner(inPath, outPath, params, "r*tree");
+      assertTrue(p instanceof RStarTreePartitioner);
+
+      OperationsParams.setShape(params, "mbr", new Rectangle(0,0,10,10));
+      p = Indexer.createPartitioner(inPath, outPath, params, "grid");
+      assertTrue(p instanceof GridPartitioner);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      e.printStackTrace();
+      fail("Error working with the test file");
     }
   }
 }

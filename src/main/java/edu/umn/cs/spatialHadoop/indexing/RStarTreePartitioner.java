@@ -24,6 +24,7 @@ import java.io.IOException;
  * @author Ahmed Eldawy
  *
  */
+@Partitioner.GlobalIndexerMetadata(disjoint = true)
 public class RStarTreePartitioner extends Partitioner {
 
   /**MBR of the points used to partition the space*/
@@ -95,9 +96,8 @@ public class RStarTreePartitioner extends Partitioner {
    */
   public RStarTreePartitioner() {
   }
-  
-  @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
+
+  public RStarTreePartitioner(Point[] points, int capacity) {
     double[] xs = new double[points.length];
     double[] ys = new double[points.length];
     mbrPoints = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,

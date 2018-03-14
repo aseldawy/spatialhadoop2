@@ -46,6 +46,7 @@ import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
+ * An input format that reads globally and locally indexed datasets.
  * @author Ahmed Eldawy
  *
  */
@@ -78,7 +79,7 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
         CombineFileSplit csplit = (CombineFileSplit) split;
         extension = FileUtil.getExtensionWithoutCompression(path = csplit.getPath(0));
       } else {
-        throw new RuntimeException("Cannot process plits of type "+split.getClass());
+        throw new RuntimeException("Cannot process splits of type "+split.getClass());
       }
       // If this extension is for a compression, skip it and take the previous
       // extension

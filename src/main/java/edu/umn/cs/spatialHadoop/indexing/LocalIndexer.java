@@ -34,7 +34,6 @@ public interface LocalIndexer {
    */
   void setup(Configuration conf) throws IOException, InterruptedException;
   
-  
   /**
    * Returns the default extension for this local index. 
    */

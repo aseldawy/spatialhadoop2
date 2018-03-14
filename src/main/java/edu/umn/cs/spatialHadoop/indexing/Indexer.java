@@ -10,6 +10,8 @@ package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -253,6 +255,16 @@ public class Indexer {
    */
   public static Partitioner createPartitioner(Path[] ins, Path out,
       Configuration job, String partitionerName) throws IOException {
+
+    // Determine number of partitions
+    long inSize = 0;
+    for (Path in : ins) {
+      inSize += FileUtil.getPathSize(in.getFileSystem(job), in);
+    }
+    long estimatedOutSize = (long) (inSize * (1.0 + job.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f)));
+    FileSystem outFS = out.getFileSystem(job);
+    long outBlockSize = outFS.getDefaultBlockSize(out);
+
     try {
       Partitioner partitioner;
       Class<? extends Partitioner> partitionerClass =
@@ -265,63 +277,80 @@ public class Indexer {
           throw new RuntimeException("Unknown index type '"+partitionerName+"'");
         }
       }
-      
-      if (PartitionerReplicate.containsKey(partitionerName.toLowerCase())) {
-        boolean replicate = PartitionerReplicate.get(partitionerName.toLowerCase());
-        job.setBoolean("replicate", replicate);
-      }
-      partitioner = partitionerClass.newInstance();
-      
-      long t1 = System.currentTimeMillis();
-      final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-      // Determine number of partitions
-      long inSize = 0;
-      for (Path in : ins) {
-        inSize += FileUtil.getPathSize(in.getFileSystem(job), in);
-      }
-      long estimatedOutSize = (long) (inSize * (1.0 + job.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f)));
-      FileSystem outFS = out.getFileSystem(job);
-      long outBlockSize = outFS.getDefaultBlockSize(out);
 
-      final List<Point> sample = new ArrayList<Point>();
-      float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
-      long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
+      Partitioner.GlobalIndexerMetadata partitionerMetadata = partitionerClass.getAnnotation(Partitioner.GlobalIndexerMetadata.class);
+      boolean disjointSupported = partitionerMetadata != null && partitionerMetadata.disjoint();
 
-      LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
-      ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
-        @Override
-        public void collect(Point p) {
-          sample.add(p.clone());
+      if (job.getBoolean("disjoint", false) && !disjointSupported)
+        throw new RuntimeException("Partitioner " + partitionerClass.getName() + " does not support disjoint partitioning");
+
+      try {
+        Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Rectangle.class, int.class);
+        // Constructor needs an MBR and number of partitions
+        final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+        int numOfPartitions = (int) (estimatedOutSize / outBlockSize);
+        return (Partitioner) c.newInstance(inMBR, numOfPartitions);
+      } catch (NoSuchMethodException e) {
+        try {
+          Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Point[].class, int.class);
+          // Constructor needs a sample and capacity (no MBR)
+          final List<Point> sample = readSample(ins, job);
+          Point[] sampleArray = sample.toArray(new Point[sample.size()]);
+          int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.size() * outBlockSize / estimatedOutSize));
+          return (Partitioner) c.newInstance(sampleArray, partitionCapacity);
+        } catch (NoSuchMethodException e1) {
+          try {
+            Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Rectangle.class, Point[].class, int.class);
+            final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
+            final List<Point> sample = readSample(ins, job);
+            Point[] sampleArray = sample.toArray(new Point[sample.size()]);
+            int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.size() * outBlockSize / estimatedOutSize));
+            return (Partitioner) c.newInstance(inMBR, sampleArray, partitionCapacity);
+          } catch (NoSuchMethodException e2) {
+            throw new RuntimeException("Could not find a suitable constructor for the partitioner "+partitionerClass.getName());
+          }
         }
-      };
-
-      OperationsParams params2 = new OperationsParams(job);
-      params2.setFloat("ratio", sample_ratio);
-      params2.setLong("size", sample_size);
-      if (job.get("shape") != null)
-      params2.set("shape", job.get("shape"));
-      if (job.get("local") != null)
-      params2.set("local", job.get("local"));
-      params2.setClass("outshape", Point.class, Shape.class);
-      Sampler.sample(ins, resultCollector, params2);
-      long t2 = System.currentTimeMillis();
-      System.out.println("Total time for sampling in millis: "+(t2-t1));
-      LOG.info("Finished reading a sample of "+sample.size()+" records");
-      
-      int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.size() * outBlockSize / estimatedOutSize));
-      int numPartitions = Math.max(1, (int) Math.ceil((float)estimatedOutSize / outBlockSize));
-      LOG.info("Partitioning the space into "+numPartitions+" partitions with capacity of "+partitionCapacity);
-
-      partitioner.createFromPoints(inMBR, sample.toArray(new Point[sample.size()]), partitionCapacity);
-      
-      return partitioner;
+      }
     } catch (InstantiationException e) {
       e.printStackTrace();
       return null;
     } catch (IllegalAccessException e) {
       e.printStackTrace();
       return null;
+    } catch (InvocationTargetException e) {
+      e.printStackTrace();
+      return null;
     }
+  }
+
+  private static List<Point> readSample(Path[] ins, Configuration job) throws IOException {
+    long t1 = System.currentTimeMillis();
+
+    final List<Point> sample = new ArrayList<Point>();
+    float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
+    long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
+
+    LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
+    ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
+      @Override
+      public void collect(Point p) {
+        sample.add(p.clone());
+      }
+    };
+
+    OperationsParams params2 = new OperationsParams(job);
+    params2.setFloat("ratio", sample_ratio);
+    params2.setLong("size", sample_size);
+    if (job.get("shape") != null)
+    params2.set("shape", job.get("shape"));
+    if (job.get("local") != null)
+    params2.set("local", job.get("local"));
+    params2.setClass("outshape", Point.class, Shape.class);
+    Sampler.sample(ins, resultCollector, params2);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for sampling in millis: "+(t2-t1));
+    LOG.info("Finished reading a sample of "+sample.size()+" records");
+    return sample;
   }
 
   private static void indexLocal(Path inPath, final Path outPath,

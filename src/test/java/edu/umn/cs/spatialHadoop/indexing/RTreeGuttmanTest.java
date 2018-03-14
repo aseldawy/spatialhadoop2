@@ -283,7 +283,6 @@ public class RTreeGuttmanTest extends TestCase {
       e.printStackTrace();
       fail("Error opening the tree");
     }
-
   }
 
   /**
