@@ -12,10 +12,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.ArrayList;
+import java.util.*;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -61,40 +58,36 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
 public class Indexer {
   private static final Log LOG = LogFactory.getLog(Indexer.class);
   
-  private static final Map<String, Class<? extends Partitioner>> PartitionerClasses;
-  private static final Map<String, Class<? extends LocalIndexer>> LocalIndexes;
-  private static final Map<String, Boolean> PartitionerReplicate;
+  private static final Map<String, Class<? extends Partitioner>> GlobalIndexes;
+  private static final Map<String, Class<? extends LocalIndex>> LocalIndexes;
+  private static final Set<String> DisjointIndexes;
   
   static {
-    PartitionerClasses = new HashMap<String, Class<? extends Partitioner>>();
-    PartitionerClasses.put("grid", GridPartitioner.class);
-    PartitionerClasses.put("str", STRPartitioner.class);
-    PartitionerClasses.put("str+", STRPartitioner.class);
-    PartitionerClasses.put("rtree", RStarTreePartitioner.class);
-    PartitionerClasses.put("r+tree", RStarTreePartitioner.class);
-    PartitionerClasses.put("quadtree", QuadTreePartitioner.class);
-    PartitionerClasses.put("zcurve", ZCurvePartitioner.class);
-    PartitionerClasses.put("hilbert", HilbertCurvePartitioner.class);
-    PartitionerClasses.put("kdtree", KdTreePartitioner.class);
-    PartitionerClasses.put("r*tree", RStarTreePartitioner.class);
-    PartitionerClasses.put("r*tree+", RStarTreePartitioner.class);
+    GlobalIndexes = new HashMap<String, Class<? extends Partitioner>>();
+    GlobalIndexes.put("grid", GridPartitioner.class);
+    GlobalIndexes.put("str", STRPartitioner.class);
+    GlobalIndexes.put("str+", STRPartitioner.class);
+    GlobalIndexes.put("rtree", RStarTreePartitioner.class);
+    GlobalIndexes.put("r+tree", RStarTreePartitioner.class);
+    GlobalIndexes.put("quadtree", QuadTreePartitioner.class);
+    GlobalIndexes.put("zcurve", ZCurvePartitioner.class);
+    GlobalIndexes.put("hilbert", HilbertCurvePartitioner.class);
+    GlobalIndexes.put("kdtree", KdTreePartitioner.class);
+    GlobalIndexes.put("r*tree", RStarTreePartitioner.class);
+    GlobalIndexes.put("r*tree+", RStarTreePartitioner.class);
 
-    PartitionerReplicate = new HashMap<String, Boolean>();
-    PartitionerReplicate.put("grid", true);
-    PartitionerReplicate.put("str", false);
-    PartitionerReplicate.put("str+", true);
-    PartitionerReplicate.put("rtree", false);
-    PartitionerReplicate.put("r+tree", true);
-    PartitionerReplicate.put("quadtree", true);
-    PartitionerReplicate.put("zcurve", false);
-    PartitionerReplicate.put("hilbert", false);
-    PartitionerReplicate.put("kdtree", true);
-    PartitionerReplicate.put("r*tree", false);
-    PartitionerReplicate.put("r*tree+", true);
+    DisjointIndexes = new HashSet<String>();
+    DisjointIndexes.add("grid");
+    DisjointIndexes.add("str+");
+    DisjointIndexes.add("r+tree");
+    DisjointIndexes.add("quadtree");
+    DisjointIndexes.add("kdtree");
+    DisjointIndexes.add("r*tree+");
 
-    LocalIndexes = new HashMap<String, Class<? extends LocalIndexer>>();
-    LocalIndexes.put("rtree", RTreeLocalIndexer.class);
-    LocalIndexes.put("r+tree", RTreeLocalIndexer.class);
+    LocalIndexes = new HashMap<String, Class<? extends LocalIndex>>();
+    LocalIndexes.put("rtree", RRStarLocalIndex.class);
+    LocalIndexes.put("r+tree", RRStarLocalIndex.class);
+    LocalIndexes.put("r*tree", RRStarLocalIndex.class);
   }
 
 
@@ -192,7 +185,7 @@ public class Indexer {
     if (index == null)
       throw new RuntimeException("Index type is not set");
     long t1 = System.currentTimeMillis();
-    setLocalIndexer(conf, index);
+    setLocalIndex(conf, index);
     Partitioner partitioner = createPartitioner(inPath, outPath, conf, index);
     Partitioner.setPartitioner(conf, partitioner);
     
@@ -233,10 +226,10 @@ public class Indexer {
    * @param conf
    * @param sindex
    */
-  private static void setLocalIndexer(Configuration conf, String sindex) {
-    Class<? extends LocalIndexer> localIndexerClass = LocalIndexes.get(sindex);
-    if (localIndexerClass != null)
-      conf.setClass(LocalIndexer.LocalIndexerClass, localIndexerClass, LocalIndexer.class);
+  private static void setLocalIndex(Configuration conf, String sindex) {
+    Class<? extends LocalIndex> localIndexClass = LocalIndexes.get(sindex);
+    if (localIndexClass != null)
+      conf.setClass(LocalIndex.LocalIndexClass, localIndexClass, LocalIndex.class);
   }
 
   public static Partitioner createPartitioner(Path in, Path out,
@@ -268,7 +261,7 @@ public class Indexer {
     try {
       Partitioner partitioner;
       Class<? extends Partitioner> partitionerClass =
-          PartitionerClasses.get(partitionerName.toLowerCase());
+          GlobalIndexes.get(partitionerName.toLowerCase());
       if (partitionerClass == null) {
         // Try to parse the name as a class name
         try {
@@ -379,7 +372,7 @@ public class Indexer {
     
     // Copy splits to a final array to be used in parallel
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
-    boolean replicate = PartitionerReplicate.get(sindex);
+    boolean replicate = DisjointIndexes.contains(sindex);
     
     // Set input file MBR if not already set
     Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
@@ -388,7 +381,7 @@ public class Indexer {
       OperationsParams.setShape(conf, "mbr", inputMBR);
     }
     
-    setLocalIndexer(conf, sindex);
+    setLocalIndex(conf, sindex);
     final Partitioner partitioner = createPartitioner(inPath, outPath, conf, sindex);
 
     final IndexRecordWriter<Shape> recordWriter = new IndexRecordWriter<Shape>(

@@ -2,6 +2,7 @@ package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.util.IntArray;
+import org.apache.hadoop.io.DoubleWritable;
 import org.apache.hadoop.util.QuickSort;
 
 import java.io.File;
@@ -421,6 +422,9 @@ public class RRStarTree extends RTreeGuttman {
     return iNewNode;
   }
 
+  // TODO remove this variable
+  double minWeightFoundByLastCallOfChooseSplitPoint;
+
   /**
    * Choose the split point along a chosen axis. This function assumes that the
    * entries are already sorted along a chosen axis.
@@ -523,11 +527,101 @@ public class RRStarTree extends RTreeGuttman {
         }
       }
     }
+    minWeightFoundByLastCallOfChooseSplitPoint = minWeight;
     return chosenK;
   }
 
-  protected int splitNonLeaf(int iNode, int minSplitSize) {
-    throw new RuntimeException("Not yet supported");
+  protected int splitNonLeaf(int node, int minSplitSize) {
+    int nodeSize = Node_size(node);
+    final int[] nodeChildren = children.get(node).underlyingArray();
+    // Try all possible splits and choose the one with the best value
+
+    // Sort by x1, y1, x2, y2
+    RStarTree.MultiIndexedSortable sorter = new RStarTree.MultiIndexedSortable() {
+      public Axis attribute;
+
+      @Override
+      public void setAttribute(Axis att) { this.attribute = att; }
+
+      @Override
+      public Axis getAttribute() { return attribute; }
+
+      @Override
+      public int compare(int i, int j) {
+        double diff;
+        switch (attribute) {
+          case X1: diff = x1s[nodeChildren[i]] - x1s[nodeChildren[j]]; break;
+          case Y1: diff = y1s[nodeChildren[i]] - y1s[nodeChildren[j]]; break;
+          case X2: diff = x2s[nodeChildren[i]] - x2s[nodeChildren[j]]; break;
+          case Y2: diff = y2s[nodeChildren[i]] - y2s[nodeChildren[j]]; break;
+          default: diff = 0;
+        }
+        if (diff < 0) return -1;
+        if (diff > 0) return 1;
+        return 0;
+      }
+
+      @Override
+      public void swap(int i, int j) {
+        int t = nodeChildren[i];
+        nodeChildren[i] = nodeChildren[j];
+        nodeChildren[j] = t;
+      }
+    };
+    double minWeight = Double.POSITIVE_INFINITY;
+    int chosenK = -1;
+    RStarTree.MultiIndexedSortable.Axis bestAxis = null;
+    QuickSort quickSort = new QuickSort();
+
+    for (RStarTree.MultiIndexedSortable.Axis sortAttr : RStarTree.MultiIndexedSortable.Axis.values()) {
+      sorter.setAttribute(sortAttr);
+      quickSort.sort(sorter, 0, nodeSize);
+
+      // Calculate the common terms for the weighting function along the chosen axis
+      double nodeCenter, nodeOrigin, nodeLength;
+
+      switch (sortAttr) {
+        case X1: case X2:
+          // Split is along the x-axis
+          nodeCenter = (x1s[node] + x2s[node]) / 2;
+          nodeOrigin = xOBox[node];
+          nodeLength = (x2s[node] - x1s[node]);
+          break;
+        case Y1: case Y2:
+          // Split is along the y-axis
+          nodeCenter = (y1s[node] + y2s[node]) / 2;
+          nodeOrigin = yOBox[node];
+          nodeLength = (y2s[node] - y1s[node]);
+          break;
+        default:
+          throw new RuntimeException("Unknown sort attribute " + bestAxis);
+      }
+      // Disable asymptotic splitting when splitting the root for the first time (i.e., root is leaf)
+      double asym = node == root ? 0 : 2.0 * (nodeCenter - nodeOrigin) / nodeLength;
+      double mu = (1.0 - 2.0 * minSplitSize / (maxCapcity + 1)) * asym;
+      double sigma = s * (1.0 + Math.abs(mu));
+
+      // Along the chosen axis, choose the distribution with the minimum overlap value.
+      int bestKAlongThisAxis = chooseSplitPoint(node, minSplitSize, mu, sigma, nodeSize, nodeChildren);
+      double bestWeightAlongThisAxis = minWeightFoundByLastCallOfChooseSplitPoint;
+      if (bestWeightAlongThisAxis < minWeight) {
+        minWeight = bestWeightAlongThisAxis;
+        bestAxis = sortAttr;
+        chosenK = bestKAlongThisAxis;
+      }
+
+    }
+
+    // Choose the axis with the minimum S as split axis.
+    if (bestAxis != sorter.getAttribute()) {
+      sorter.setAttribute(bestAxis);
+      quickSort.sort(sorter, 0, nodeSize);
+    }
+
+    // Split at the chosenK
+    int separator = minSplitSize - 1 + chosenK;
+    int iNewNode = Node_split(node, separator);
+    return iNewNode;
   }
 
   /**
@@ -588,7 +682,7 @@ public class RRStarTree extends RTreeGuttman {
     //double[][] tweets = readFile("src/test/resources/test2.points", 11);
     int M = 2000;
     int m = 400;
-    RTreeType type = RTreeType.RStar;
+    RTreeType type = RTreeType.Guttman;
     if (type == RTreeType.RStarBulk) {
       Rectangle[] partitions = RStarTree.partitionPoints(tweets[2], tweets[1], m, M, false, null);
       for (Rectangle partition : partitions) {

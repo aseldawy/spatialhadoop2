@@ -208,6 +208,20 @@ public class RRStarTreeTest extends TestCase {
     }
   }
 
+  public void testSplitNonLeaf() {
+    try {
+      String fileName = "src/test/resources/test2.points";
+      double[][] points = readFile(fileName);
+      RRStarTree rtree = new RRStarTree(2, 4);
+
+      rtree.initializeFromPoints(points[0], points[1]);
+      assertEquals(rtree.numOfDataEntries(), 22);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
 
   public void testChooseSubtree() {
     try {

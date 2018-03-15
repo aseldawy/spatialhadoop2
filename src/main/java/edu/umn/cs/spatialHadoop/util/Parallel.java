@@ -60,11 +60,11 @@ public class Parallel {
   public static <T> List<T> forEach(int size, RunnableRange<T> r) throws InterruptedException {
     return forEach(0, size, r, Runtime.getRuntime().availableProcessors());
   }
-  
+
   public static <T> List<T> forEach(int size, RunnableRange<T> r, int parallelism) throws InterruptedException {
-      return forEach(0, size, r, parallelism);
-    }
-  
+    return forEach(0, size, r, parallelism);
+  }
+
   public static <T> List<T> forEach(int start, int end, RunnableRange<T> r, int parallelism) throws InterruptedException {
     Vector<T> results = new Vector<T>();
     if (end <= start)

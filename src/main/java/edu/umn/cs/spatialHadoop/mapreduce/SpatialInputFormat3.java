@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -90,6 +91,9 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       if (extension.equals("rtree")) {
         // File is locally indexed as RTree
         return (RecordReader)new RTreeRecordReader3<V>();
+      }
+      if (extension.equals(RRStarLocalIndex.Extension)) {
+        return (RecordReader) new LocalIndexRecordReader<V>(RRStarLocalIndex.class);
       }
       // For backward compatibility, check if the file is RTree indexed from
       // its signature

@@ -24,7 +24,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 public interface LocalIndexer {
   
   /**The name of the configuration line that stores local indexer class*/
-  public static final String LocalIndexerClass = "LocalIndexer.ClassName";
+  public static final String LocalIndexClass = "LocalIndexer.ClassName";
   
   /**
    * Setup this instance of LocalIndexer for the specified job.

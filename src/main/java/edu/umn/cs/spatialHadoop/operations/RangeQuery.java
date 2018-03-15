@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.mapreduce.LocalIndexRecordReader;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -147,7 +148,9 @@ public class RangeQuery {
             } else if (reader instanceof RTreeRecordReader3) {
               ((RTreeRecordReader3)reader).initialize(fsplit, params);
             } else if (reader instanceof HDFRecordReader) {
-              ((HDFRecordReader)reader).initialize(fsplit, params);
+              ((HDFRecordReader) reader).initialize(fsplit, params);
+            } else if (reader instanceof LocalIndexRecordReader) {
+              ((LocalIndexRecordReader) reader).initialize(fsplit, params);
             } else {
               throw new RuntimeException("Unknown record reader");
             }

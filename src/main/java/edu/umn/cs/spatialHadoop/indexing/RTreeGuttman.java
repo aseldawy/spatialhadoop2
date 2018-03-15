@@ -4,8 +4,9 @@ import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Writable;
+import sun.security.krb5.internal.crypto.Des;
 
+import java.io.Closeable;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -23,7 +24,7 @@ import java.util.*;
  * in memory and use it for the partitioning. So, the disk-based mapping and
  * search were not implemented for simplicity.
  */
-public class RTreeGuttman {
+public class RTreeGuttman implements Closeable {
   /** Maximum capacity of a node */
   protected final int maxCapcity;
 
@@ -50,6 +51,15 @@ public class RTreeGuttman {
 
   /**Only when processing an on-disk tree. Stores the offset of each data entry in the file*/
   protected int[] entryOffsets;
+
+  /**A deserializer that reads objects stored on disk*/
+  private Deserializer<?> deser;
+
+  /**The input stream that points to the underlying file*/
+  private FSDataInputStream in;
+
+  /**When reading the tree from disk. The offset of the beginning of the tree*/
+  private long treeStartOffset;
 
   /**
    * Make a room in the data structures to accommodate a new object whether
@@ -504,209 +514,6 @@ public class RTreeGuttman {
   }
 
   /**
-   * Serializes the tree and its data entries to an output stream. Notice that
-   * this is not supposed to be used as an external tree format where you can insert
-   * and delete entries. Rather, it is like a static copy of the tree where you
-   * can search or load back in memory. The format of the tree on disk is as
-   * described below.
-   * <ul>
-   *   <li>
-   *     Data Entries: First, all data entries are written in an order that is consistent
-   *   with the R-tree structure. This order will guarantee that all data entries
-   *   under any node (from the root to leaves) will be adjacent in that order.
-   *   </li>
-   *   <li>
-   *     Tree structure: This part contains the structure of the tree represented
-   *   by its nodes. The nodes are stored in a level order traversal. This guarantees
-   *   that the root will always be the first node and that all siblings will be
-   *   stored consecutively. Each node contains the following information:
-   *   (1) (n) Number of children as a 32-bit integer,
-   *   (2) n Pairs of (child offset, MBR=(x1, y1, x2, y2). The child offset is
-   *   the offset of the beginning of the child data (node or data entry) in the
-   *   tree where 0 is the offset of the first data entry.
-   *   </li>
-   *   <li>
-   *     Tree footer: This section contains some meta data about the tree as
-   *     follows. All integers are 32-bits.
-   *     (1) MBR of the root as (x1, y1, x2, y2),
-   *     (2) Number of data entries,
-   *     (3) Number of non-leaf nodes,
-   *     (4) Number of leaf nodes,
-   *     (5) Full name of the data class which must be a subclass of
-   *     {@link org.apache.hadoop.io.Writable}. The name is stored in UTF-8 format
-   *     using the method {@link DataOutput#writeUTF(String)}.
-   *     (7) Tree structure offset: offset of the beginning of the tree structure section
-   *     (6) Footer offset: offset of the beginning of the footer as a 32-bit integer.
-   *   </li>
-   *
-   * </ul>
-   * @param out
-   * @throws IOException
-   */
-  public void write(DataOutput out) throws IOException {
-    // Tree data: write the data entries in the tree order
-    // Since we write the data first, we will have to traverse the tree twice
-    // first time to visit and write the data entries in the tree order,
-    // and second time to visit and write the tree nodes in the tree order.
-    Deque<Integer> nodesToVisit = new ArrayDeque<Integer>();
-    nodesToVisit.add(root);
-    int[] objectOffsets = new int[numOfDataEntries() + numOfNodes()];
-    // Keep track of the offset of each data object from the beginning of the
-    // data section
-    int dataOffset = 0;
-    // Keep track of the offset of each node from the beginning of the tree
-    // structure section
-    int nodeOffset = 0;
-    while (!nodesToVisit.isEmpty()) {
-      int node = nodesToVisit.removeLast();
-      // The node is supposed to be written in this order.
-      // Measure its offset and accumulate its size
-      objectOffsets[node] = nodeOffset;
-      nodeOffset += 4 + (4 + 8 * 4) * Node_size(node);
-
-      if (isLeaf.get(node)) {
-        // Leaf node, write the data entries in order
-        // TODO check if we have non-null data entries
-        for (int child : children.get(node)) {
-          objectOffsets[child] = dataOffset;
-          out.writeInt(child); dataOffset += 4;
-        }
-      } else {
-        // Internal node, recursively traverse its children
-        for (int child : children.get(node))
-          nodesToVisit.addLast(child);
-      }
-    }
-    // Update node offsets as they are written after the data entries
-    for (int i = 0; i < numNodes; i++)
-      objectOffsets[i + numEntries] += dataOffset;
-
-    // Tree structure: Write the nodes in tree order
-    nodesToVisit.add(root);
-    while (!nodesToVisit.isEmpty()) {
-      int node = nodesToVisit.removeLast();
-      // (1) Number of children
-      out.writeInt(Node_size(node));
-      for (int child : children.get(node)) {
-        // (2) Write the offset of the child
-        out.writeInt(objectOffsets[child]);
-        // (3) Write the MBR of each child
-        out.writeDouble(x1s[child]);
-        out.writeDouble(y1s[child]);
-        out.writeDouble(x2s[child]);
-        out.writeDouble(y2s[child]);
-      }
-      // If node is internal, add its children to the nodes to be visited
-      if (!isLeaf.get(node)) {
-        for (int child : children.get(node))
-          nodesToVisit.addLast(child);
-      }
-    }
-
-    // Tree footer
-    int footerOffset = dataOffset + nodeOffset;
-    // (1) MBR of the root
-    out.writeDouble(x1s[root]);
-    out.writeDouble(y1s[root]);
-    out.writeDouble(x2s[root]);
-    out.writeDouble(y2s[root]);
-    // (2) Number of data entries
-    out.writeInt(numOfDataEntries());
-    // (3) Number of non-leaf nodes
-    out.writeInt((int) (numOfNodes() - isLeaf.countOnes()));
-    // (4) Number of leaf nodes
-    out.writeInt((int) isLeaf.countOnes());
-    // (5) Full name of the data class
-    out.writeUTF(IntWritable.class.getName());
-    // (6) Offset of the tree structure section
-    out.writeInt(dataOffset);
-    // (7) Offset of the footer
-    out.writeInt(footerOffset);
-  }
-
-  /**
-   * Read an R-tree stored using the method {@link #write(DataOutput)}
-   * @param in
-   * @param length
-   * @throws IOException
-   */
-  public void readFields(FSDataInputStream in, long length) throws IOException {
-    long offset = in.getPos();
-    in.seek(offset + length - 4);
-    long footerOffset = offset + in.readInt();
-    in.seek(footerOffset);
-    double rootx1 = in.readDouble();
-    double rooty1 = in.readDouble();
-    double rootx2 = in.readDouble();
-    double rooty2 = in.readDouble();
-    this.numEntries = in.readInt();
-    int numNonLeaves = in.readInt();
-    int numLeaves = in.readInt();
-    this.numNodes = numNonLeaves + numLeaves;
-    String dataClassName = in.readUTF();
-    long treeStructureOffset = offset + in.readInt();
-
-    // Initialize the data structures to store objects
-    this.x1s = new double[numEntries + numNodes];
-    this.y1s = new double[numEntries + numNodes];
-    this.x2s = new double[numEntries + numNodes];
-    this.y2s = new double[numEntries + numNodes];
-    this.isLeaf = new BitArray(numEntries + numNodes);
-    this.children = new ArrayList<IntArray>(numEntries + numNodes);
-    for (int i = 0; i < numEntries + numNodes; i++)
-      this.children.add(null);
-
-    // Read the tree structure and keep it all in memory
-    // Store root MBR
-    x1s[root] = rootx1;
-    y1s[root] = rooty1;
-    x2s[root] = rootx2;
-    y2s[root] = rooty2;
-    // Read other nodes information
-
-    // First, scan the nodes once to map node offsets to IDs
-    // Map the offset of some nodes to their index in the node list
-    Map<Integer, Integer> nodeOffsetToIndex = new HashMap<Integer, Integer>();
-    in.seek(treeStructureOffset);
-    int nodeID = numEntries;
-    this.root = nodeID; // First node is always the root
-    while (nodeID < this.numNodes + this.numEntries) {
-      int nodeOffset = (int) (in.getPos() - offset);
-      nodeOffsetToIndex.put(nodeOffset, nodeID);
-      int nodeSize = in.readInt();
-      in.skipBytes(nodeSize * (4 + 8 * 4)); // Skip offset and MBR
-      nodeID++;
-    }
-    // Second, read nodes data and store them in the object
-    in.seek(treeStructureOffset);
-    nodeID = numEntries;
-    int entryID = 0; // Number entries starting at zero
-    entryOffsets = new int[numEntries];
-    while (nodeID < this.numNodes + numEntries) {
-      boolean leafNode = nodeID >= (numEntries + numNonLeaves);
-      isLeaf.set(nodeID, leafNode);
-      // (1) Node size
-      int nodeSize = in.readInt();
-      // (2) Offset of the first child
-      IntArray nodeChildren = new IntArray();
-      children.set(nodeID, nodeChildren);
-      for (int i = 0; i < nodeSize; i++) {
-        int childOffset = in.readInt();
-        int childID = leafNode ? entryID++ : nodeOffsetToIndex.get(childOffset);
-        if (leafNode)
-          entryOffsets[childID] = childOffset;
-        nodeChildren.add(childID);
-        // (3) Child MBR
-        x1s[childID] = in.readDouble();
-        y1s[childID] = in.readDouble();
-        x2s[childID] = in.readDouble();
-        y2s[childID] = in.readDouble();
-      }
-      nodeID++;
-    }
-  }
-
-  /**
    * Search for all the entries that overlap a given query rectangle
    * @param x1
    * @param y1
@@ -804,7 +611,7 @@ public class RTreeGuttman {
   /**
    * A class used to iterate over the data entries in the R-tree
    */
-  public static class Entry {
+  public class Entry {
     public int id;
     public double x1, y1, x2, y2;
 
@@ -813,6 +620,13 @@ public class RTreeGuttman {
     @Override
     public String toString() {
       return String.format("Entry #%d (%f, %f, %f, %f)", id, x1, y1, x2, y2);
+    }
+
+    public Object getObject() throws IOException {
+      if (deser == null)
+        return null;
+      in.seek(treeStartOffset + entryOffsets[id]);
+      return deser.deserialize(in, entryOffsets[id+1] - entryOffsets[id]);
     }
   }
 
@@ -1022,6 +836,226 @@ public class RTreeGuttman {
     public void remove() {
       throw new RuntimeException("Not supported");
     }
+  }
+
+  /**
+   * An interface for serializing objects given their entry number
+   */
+  public interface Serializer {
+    int serialize(DataOutput out, int iObject) throws IOException;
+  }
+
+  public interface Deserializer<O> {
+    O deserialize(DataInput in, int length) throws IOException;
+  }
+
+  /**
+   * Serializes the tree and its data entries to an output stream. Notice that
+   * this is not supposed to be used as an external tree format where you can insert
+   * and delete entries. Rather, it is like a static copy of the tree where you
+   * can search or load back in memory. The format of the tree on disk is as
+   * described below.
+   * <ul>
+   *   <li>
+   *     Data Entries: First, all data entries are written in an order that is consistent
+   *   with the R-tree structure. This order will guarantee that all data entries
+   *   under any node (from the root to leaves) will be adjacent in that order.
+   *   </li>
+   *   <li>
+   *     Tree structure: This part contains the structure of the tree represented
+   *   by its nodes. The nodes are stored in a level order traversal. This guarantees
+   *   that the root will always be the first node and that all siblings will be
+   *   stored consecutively. Each node contains the following information:
+   *   (1) (n) Number of children as a 32-bit integer,
+   *   (2) n Pairs of (child offset, MBR=(x1, y1, x2, y2). The child offset is
+   *   the offset of the beginning of the child data (node or data entry) in the
+   *   tree where 0 is the offset of the first data entry.
+   *   </li>
+   *   <li>
+   *     Tree footer: This section contains some meta data about the tree as
+   *     follows. All integers are 32-bits.
+   *     (1) MBR of the root as (x1, y1, x2, y2),
+   *     (2) Number of data entries,
+   *     (3) Number of non-leaf nodes,
+   *     (4) Number of leaf nodes,
+   *     (5) Tree structure offset: offset of the beginning of the tree structure section
+   *     (6) Footer offset: offset of the beginning of the footer as a 32-bit integer.
+   *     (7) Tree size: Total tree size in bytes including data+structure+footer
+   *   </li>
+   *
+   * </ul>
+   * @param out
+   * @throws IOException
+   */
+  public void write(DataOutput out, Serializer ser) throws IOException {
+    // Tree data: write the data entries in the tree order
+    // Since we write the data first, we will have to traverse the tree twice
+    // first time to visit and write the data entries in the tree order,
+    // and second time to visit and write the tree nodes in the tree order.
+    Deque<Integer> nodesToVisit = new ArrayDeque<Integer>();
+    nodesToVisit.add(root);
+    int[] objectOffsets = new int[numOfDataEntries() + numOfNodes()];
+    // Keep track of the offset of each data object from the beginning of the
+    // data section
+    int dataOffset = 0;
+    // Keep track of the offset of each node from the beginning of the tree
+    // structure section
+    int nodeOffset = 0;
+    while (!nodesToVisit.isEmpty()) {
+      int node = nodesToVisit.removeFirst();
+      // The node is supposed to be written in this order.
+      // Measure its offset and accumulate its size
+      objectOffsets[node] = nodeOffset;
+      nodeOffset += 4 + (4 + 8 * 4) * Node_size(node);
+
+      if (isLeaf.get(node)) {
+        // Leaf node, write the data entries in order
+        for (int child : children.get(node)) {
+          objectOffsets[child] = dataOffset;
+          if (ser != null)
+            dataOffset += ser.serialize(out, child);
+        }
+      } else {
+        // Internal node, recursively traverse its children
+        for (int child : children.get(node))
+          nodesToVisit.addLast(child);
+      }
+    }
+    // Update node offsets as they are written after the data entries
+    for (int i = 0; i < numNodes; i++)
+      objectOffsets[i + numEntries] += dataOffset;
+
+    // Tree structure: Write the nodes in tree order
+    nodesToVisit.add(root);
+    while (!nodesToVisit.isEmpty()) {
+      int node = nodesToVisit.removeFirst();
+      // (1) Number of children
+      out.writeInt(Node_size(node));
+      for (int child : children.get(node)) {
+        // (2) Write the offset of the child
+        out.writeInt(objectOffsets[child]);
+        // (3) Write the MBR of each child
+        out.writeDouble(x1s[child]);
+        out.writeDouble(y1s[child]);
+        out.writeDouble(x2s[child]);
+        out.writeDouble(y2s[child]);
+      }
+      // If node is internal, add its children to the nodes to be visited
+      if (!isLeaf.get(node)) {
+        for (int child : children.get(node))
+          nodesToVisit.addLast(child);
+      }
+    }
+
+    // Tree footer
+    int footerOffset = dataOffset + nodeOffset;
+    // (1) MBR of the root
+    out.writeDouble(x1s[root]);
+    out.writeDouble(y1s[root]);
+    out.writeDouble(x2s[root]);
+    out.writeDouble(y2s[root]);
+    // (2) Number of data entries
+    out.writeInt(numOfDataEntries());
+    // (3) Number of non-leaf nodes
+    out.writeInt((int) (numOfNodes() - isLeaf.countOnes()));
+    // (4) Number of leaf nodes
+    out.writeInt((int) isLeaf.countOnes());
+    // (5) Offset of the tree structure section
+    out.writeInt(dataOffset);
+    // (6) Offset of the footer
+    out.writeInt(footerOffset);
+    // (7) Size of the entire tree
+    int footerSize = 4 * 8 + 6 * 4;
+    out.writeInt(footerOffset + footerSize);
+  }
+
+  /**
+   * Read an R-tree stored using the method {@link #write(DataOutput, Serializer)}
+   * @param in
+   * @param length
+   * @throws IOException
+   */
+  public void readFields(FSDataInputStream in, long length, Deserializer<?> deser) throws IOException {
+    this.in = in;
+    this.deser = deser;
+    this.treeStartOffset = in.getPos();
+    in.seek(treeStartOffset + length - 8);
+    int footerOffset = in.readInt();
+    in.seek(treeStartOffset + footerOffset);
+    double rootx1 = in.readDouble();
+    double rooty1 = in.readDouble();
+    double rootx2 = in.readDouble();
+    double rooty2 = in.readDouble();
+    this.numEntries = in.readInt();
+    int numNonLeaves = in.readInt();
+    int numLeaves = in.readInt();
+    this.numNodes = numNonLeaves + numLeaves;
+    int treeStructureOffset = in.readInt();
+
+    // Initialize the data structures to store objects
+    this.x1s = new double[numEntries + numNodes];
+    this.y1s = new double[numEntries + numNodes];
+    this.x2s = new double[numEntries + numNodes];
+    this.y2s = new double[numEntries + numNodes];
+    this.isLeaf = new BitArray(numEntries + numNodes);
+    this.children = new ArrayList<IntArray>(numEntries + numNodes);
+    for (int i = 0; i < numEntries + numNodes; i++)
+      this.children.add(null);
+
+    // Read the tree structure and keep it all in memory
+    // Store root MBR
+    x1s[root] = rootx1;
+    y1s[root] = rooty1;
+    x2s[root] = rootx2;
+    y2s[root] = rooty2;
+    // Read other nodes information
+
+    // First, scan the nodes once to map node offsets to IDs
+    // Map the offset of some nodes to their index in the node list
+    Map<Integer, Integer> nodeOffsetToIndex = new HashMap<Integer, Integer>();
+    in.seek(treeStartOffset + treeStructureOffset);
+    int nodeID = numEntries;
+    this.root = nodeID; // First node is always the root
+    while (nodeID < this.numNodes + this.numEntries) {
+      int nodeOffset = (int) (in.getPos() - treeStartOffset);
+      nodeOffsetToIndex.put(nodeOffset, nodeID);
+      int nodeSize = in.readInt();
+      in.skipBytes(nodeSize * (4 + 8 * 4)); // Skip offset and MBR
+      nodeID++;
+    }
+    // Second, read nodes data and store them in the object
+    in.seek(treeStartOffset + treeStructureOffset);
+    nodeID = numEntries;
+    int entryID = 0; // Number entries starting at zero
+    entryOffsets = new int[numEntries+1];
+    while (nodeID < this.numNodes + numEntries) {
+      boolean leafNode = nodeID >= (numEntries + numNonLeaves);
+      isLeaf.set(nodeID, leafNode);
+      // (1) Node size
+      int nodeSize = in.readInt();
+      // (2) Offset of the first child
+      IntArray nodeChildren = new IntArray();
+      children.set(nodeID, nodeChildren);
+      for (int i = 0; i < nodeSize; i++) {
+        int childOffset = in.readInt();
+        int childID = leafNode ? entryID++ : nodeOffsetToIndex.get(childOffset);
+        if (leafNode)
+          entryOffsets[childID] = childOffset;
+        nodeChildren.add(childID);
+        // (3) Child MBR
+        x1s[childID] = in.readDouble();
+        y1s[childID] = in.readDouble();
+        x2s[childID] = in.readDouble();
+        y2s[childID] = in.readDouble();
+      }
+      nodeID++;
+    }
+    entryOffsets[entryID] = (int) treeStructureOffset;
+  }
+
+  public void close() throws IOException {
+    if (in != null)
+      in.close();
   }
 
 }

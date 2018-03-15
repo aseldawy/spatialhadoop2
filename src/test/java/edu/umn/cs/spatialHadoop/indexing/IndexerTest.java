@@ -1,9 +1,11 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.operations.RangeQuery;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 import junit.framework.Test;
 import junit.framework.TestCase;
@@ -91,6 +93,28 @@ public class IndexerTest extends TestCase {
     } catch (IOException e) {
       e.printStackTrace();
       fail("Error working with the test file");
+    }
+  }
+
+  public void testLocalIndexing() {
+    try {
+      Path inPath = new Path("src/test/resources/test.points");
+
+      OperationsParams params = new OperationsParams();
+      params.setBoolean("local", false);
+      params.setClass("shape", Point.class, Shape.class);
+      params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
+      params.setClass("sindex", RStarTreePartitioner.class, Partitioner.class);
+      params.setClass(LocalIndex.LocalIndexClass, RRStarLocalIndex.class, LocalIndex.class);
+      Indexer.index(inPath, outPath, params);
+
+      // Test with range query
+      long resultSize = RangeQuery.rangeQueryLocal(outPath,
+          new Rectangle(0, 0, 5, 5), new Point(), params, null);
+      assertEquals(2, resultSize);
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail("Error while building the index");
     }
   }
 }
