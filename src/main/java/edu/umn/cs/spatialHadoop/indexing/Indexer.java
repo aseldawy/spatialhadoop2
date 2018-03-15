@@ -58,39 +58,6 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
 public class Indexer {
   private static final Log LOG = LogFactory.getLog(Indexer.class);
   
-  private static final Map<String, Class<? extends Partitioner>> GlobalIndexes;
-  private static final Map<String, Class<? extends LocalIndex>> LocalIndexes;
-  private static final Set<String> DisjointIndexes;
-  
-  static {
-    GlobalIndexes = new HashMap<String, Class<? extends Partitioner>>();
-    GlobalIndexes.put("grid", GridPartitioner.class);
-    GlobalIndexes.put("str", STRPartitioner.class);
-    GlobalIndexes.put("str+", STRPartitioner.class);
-    GlobalIndexes.put("rtree", RStarTreePartitioner.class);
-    GlobalIndexes.put("r+tree", RStarTreePartitioner.class);
-    GlobalIndexes.put("quadtree", QuadTreePartitioner.class);
-    GlobalIndexes.put("zcurve", ZCurvePartitioner.class);
-    GlobalIndexes.put("hilbert", HilbertCurvePartitioner.class);
-    GlobalIndexes.put("kdtree", KdTreePartitioner.class);
-    GlobalIndexes.put("r*tree", RStarTreePartitioner.class);
-    GlobalIndexes.put("r*tree+", RStarTreePartitioner.class);
-
-    DisjointIndexes = new HashSet<String>();
-    DisjointIndexes.add("grid");
-    DisjointIndexes.add("str+");
-    DisjointIndexes.add("r+tree");
-    DisjointIndexes.add("quadtree");
-    DisjointIndexes.add("kdtree");
-    DisjointIndexes.add("r*tree+");
-
-    LocalIndexes = new HashMap<String, Class<? extends LocalIndex>>();
-    LocalIndexes.put("rtree", RRStarLocalIndex.class);
-    LocalIndexes.put("r+tree", RRStarLocalIndex.class);
-    LocalIndexes.put("r*tree", RRStarLocalIndex.class);
-  }
-
-
   /**
    * The map function that partitions the data using the configured partitioner
    * @author Eldawy
@@ -181,12 +148,20 @@ public class Indexer {
     }
     
     // Set the correct partitioner according to index type
-    String index = conf.get("sindex");
-    if (index == null)
-      throw new RuntimeException("Index type is not set");
+    String sindex = conf.get("sindex");
+    SpatialSite.SpatialIndex spatialIndex = sindex == null ?
+        new SpatialSite.SpatialIndex() :
+        SpatialSite.CommonSpatialIndex.get(sindex);
+    if (conf.get("gindex") != null)
+      spatialIndex.gindex = SpatialSite.getGlobalIndex(conf.get("gindex"));
+    if (conf.get("lindex") != null)
+      spatialIndex.lindex = SpatialSite.getLocalIndex(conf.get("lindex"));
+    spatialIndex.disjoint = conf.getBoolean("disjoint", spatialIndex.disjoint);
+
     long t1 = System.currentTimeMillis();
-    setLocalIndex(conf, index);
-    Partitioner partitioner = createPartitioner(inPath, outPath, conf, index);
+    if (spatialIndex.lindex != null)
+      conf.setClass(LocalIndex.LocalIndexClass, spatialIndex.lindex, LocalIndex.class);
+    Partitioner partitioner = initializeGlobalIndex(inPath, outPath, conf, spatialIndex.gindex);
     Partitioner.setPartitioner(conf, partitioner);
     
     long t2 = System.currentTimeMillis();
@@ -221,20 +196,9 @@ public class Indexer {
     return job;
   }
 
-  /**
-   * Set the local indexer for the given job configuration.
-   * @param conf
-   * @param sindex
-   */
-  private static void setLocalIndex(Configuration conf, String sindex) {
-    Class<? extends LocalIndex> localIndexClass = LocalIndexes.get(sindex);
-    if (localIndexClass != null)
-      conf.setClass(LocalIndex.LocalIndexClass, localIndexClass, LocalIndex.class);
-  }
-
-  public static Partitioner createPartitioner(Path in, Path out,
-      Configuration job, String partitionerName) throws IOException {
-    return createPartitioner(new Path[] {in}, out, job, partitionerName);
+  public static Partitioner initializeGlobalIndex(Path in, Path out,
+      Configuration job, Class<? extends Partitioner> gindex) throws IOException {
+    return initializeGlobalIndex(new Path[] {in}, out, job, gindex);
   }
 
   /**
@@ -242,12 +206,12 @@ public class Indexer {
    * @param ins
    * @param out
    * @param job
-   * @param partitionerName
+   * @param partitionerClass
    * @return
    * @throws IOException
    */
-  public static Partitioner createPartitioner(Path[] ins, Path out,
-      Configuration job, String partitionerName) throws IOException {
+  public static Partitioner initializeGlobalIndex(Path[] ins, Path out,
+      Configuration job, Class<? extends Partitioner> partitionerClass) throws IOException {
 
     // Determine number of partitions
     long inSize = 0;
@@ -260,16 +224,6 @@ public class Indexer {
 
     try {
       Partitioner partitioner;
-      Class<? extends Partitioner> partitionerClass =
-          GlobalIndexes.get(partitionerName.toLowerCase());
-      if (partitionerClass == null) {
-        // Try to parse the name as a class name
-        try {
-          partitionerClass = Class.forName(partitionerName).asSubclass(Partitioner.class);
-        } catch (ClassNotFoundException e) {
-          throw new RuntimeException("Unknown index type '"+partitionerName+"'");
-        }
-      }
 
       Partitioner.GlobalIndexerMetadata partitionerMetadata = partitionerClass.getAnnotation(Partitioner.GlobalIndexerMetadata.class);
       boolean disjointSupported = partitionerMetadata != null && partitionerMetadata.disjoint();
@@ -350,8 +304,16 @@ public class Indexer {
       OperationsParams params) throws IOException, InterruptedException {
     Job job = Job.getInstance(params);
     final Configuration conf = job.getConfiguration();
-    
-    final String sindex = conf.get("sindex");
+
+    String sindex = conf.get("sindex");
+    SpatialSite.SpatialIndex spatialIndex = sindex == null ?
+        new SpatialSite.SpatialIndex() :
+        SpatialSite.CommonSpatialIndex.get(sindex);
+    if (conf.get("gindex") != null)
+      spatialIndex.gindex = SpatialSite.getGlobalIndex(conf.get("gindex"));
+    if (conf.get("lindex") != null)
+      spatialIndex.lindex = SpatialSite.getLocalIndex(conf.get("lindex"));
+    spatialIndex.disjoint = conf.getBoolean("disjoint", spatialIndex.disjoint);
     
     // Start reading input file
     List<InputSplit> splits = new ArrayList<InputSplit>();
@@ -372,20 +334,20 @@ public class Indexer {
     
     // Copy splits to a final array to be used in parallel
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
-    boolean replicate = DisjointIndexes.contains(sindex);
-    
+
     // Set input file MBR if not already set
     Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
     if (inputMBR == null) {
       inputMBR = FileMBR.fileMBR(inPath, new OperationsParams(conf));
       OperationsParams.setShape(conf, "mbr", inputMBR);
     }
-    
-    setLocalIndex(conf, sindex);
-    final Partitioner partitioner = createPartitioner(inPath, outPath, conf, sindex);
+
+    if (spatialIndex.lindex != null)
+      conf.setClass(LocalIndex.LocalIndexClass, spatialIndex.lindex, LocalIndex.class);
+    final Partitioner partitioner = initializeGlobalIndex(inPath, outPath, conf, spatialIndex.gindex);
 
     final IndexRecordWriter<Shape> recordWriter = new IndexRecordWriter<Shape>(
-        partitioner, replicate, sindex, outPath, conf);
+        partitioner, spatialIndex.disjoint, sindex, outPath, conf);
     for (FileSplit fsplit : fsplits) {
       RecordReader<Rectangle, Iterable<Shape>> reader = inputFormat.createRecordReader(fsplit, null);
       if (reader instanceof SpatialRecordReader3) {
@@ -402,7 +364,7 @@ public class Indexer {
 
       while (reader.nextKeyValue()) {
         Iterable<Shape> shapes = reader.getCurrentValue();
-        if (replicate) {
+        if (spatialIndex.disjoint) {
           for (final Shape s : shapes) {
             partitioner.overlapPartitions(s, new ResultCollector<Integer>() {
               @Override

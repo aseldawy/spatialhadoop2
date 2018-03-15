@@ -1,0 +1,58 @@
+# Default configuration for SpatialHadoop
+
+# Short names for common shapes
+Shapes:
+  point: edu.umn.cs.spatialHadoop.core.Point
+  rect: edu.umn.cs.spatialHadoop.core.Rectangle
+  wkt: edu.umn.cs.spatialHadoop.core.OGCJTSShape
+  tiger: edu.umn.cs.spatialHadoop.TigerShape
+  osm: edu.umn.cs.spatialHadoop.osm.OSMPolygon
+  osmpoly: edu.umn.cs.spatialHadoop.osm.OSMPolygon
+  osmpoint: edu.umn.cs.spatialHadoop.osm.OSMPoint
+  ogc: edu.umn.cs.spatialHadoop.core.OGCJTSShape
+  nasapoint: edu.umn.cs.spatialHadoop.nasa.NASAPoint
+  nasarect: edu.umn.cs.spatialHadoop.nasa.NASARectangle
+  csv: edu.umn.cs.spatialHadoop.core.CSVOGC
+
+# Short names for common global indexes
+GlobalIndexes:
+  grid: edu.umn.cs.spatialHadoop.indexing.GridPartitioner
+  str: edu.umn.cs.spatialHadoop.indexing.STRPartitioner
+  rstree: edu.umn.cs.spatialHadoop.indexing.RStarTreePartitioner
+  kdtree: edu.umn.cs.spatialHadoop.indexing.KdTreePartitioner
+  zcurve: edu.umn.cs.spatialHadoop.indexing.ZCurvePartitioner
+  hilbert: edu.umn.cs.spatialHadoop.indexing.HilbertCurvePartitioner
+  quadtree: edu.umn.cs.spatialHadoop.indexing.QuadTreePartitioner
+
+# Short names for common local indexes
+LocalIndexes:
+  rrstree: edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex
+
+# Short name for spatial indexes that combine global, local, and disjoint
+SpatialIndexes:
+  - short-name: grid
+    gindex: grid
+    disjoint: true
+
+  - short-name: rtree
+    gindex: rstree
+    local: rrstree
+
+  - short-name: r+tree
+    gindex: rstree
+    lindex: rrstree
+    disjoint: true
+
+  - short-name: quadtree
+    gindex: quadtree
+    disjoint: true
+
+  - short-name: kdtree
+    gindex: kdtree
+    disjoint: true
+
+  - short-name: zcurve
+    gindex: zcurve
+
+  - short-name: hilbert
+    gindex: hilbert

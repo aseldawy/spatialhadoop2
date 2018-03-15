@@ -380,42 +380,35 @@ public class OperationsParams extends Configuration {
 		} catch (Exception e) {
 		  // shapeClass is not an explicit class name
 		  String shapeTypeI = shapeType.toLowerCase();
-		  if (shapeTypeI.startsWith("rect")) {
-		    shape = new Rectangle();
-		  } else if (shapeTypeI.startsWith("point")) {
-		    shape = new Point();
-		  } else if (shapeTypeI.startsWith("tiger")) {
-		    shape = new TigerShape();
-		  } else if (shapeTypeI.startsWith("osm")) {
-		    shape = new OSMPolygon();
-		  } else if (shapeTypeI.startsWith("poly")) {
-		    shape = new Polygon();
-		  } else if (shapeTypeI.startsWith("ogc")) {
-		    shape = new OGCESRIShape();
-		  } else if (shapeTypeI.startsWith("wkt")) {
-		    shape = new OGCJTSShape();
-		  } else if (shapeTypeI.startsWith("nasapoint")) {
-		    shape = new NASAPoint();
-		  } else if (shapeTypeI.startsWith("nasarect")) {
-		    shape = new NASARectangle();
-		  } else if (shapeTypeI.startsWith("text")) {
-		    shape = new Text2();
-		  } else {
-		    // Couldn't detect shape from short name or full class name
-		    // May be it's an actual value that we can parse
-		    if (shapeType.split(",").length == 2) {
-		      // A point
-		      shape = new Point();
-		      shape.fromText(new Text((String) conf.get(key)));
-		    } else if (shapeType.split(",").length == 4) {
-		      // A rectangle
-		      shape = new Rectangle();
-		      shape.fromText(new Text((String) conf.get(key)));
-		    } else {
-		      LOG.warn("unknown shape type: '" + conf.get(key) + "'");
-		      return null;
-		    }
-		  }
+		  Class<? extends Shape> shapeClass = SpatialSite.getShape(shapeTypeI);
+		  if (shapeClass != null) {
+				try {
+					shape = shapeClass.newInstance();
+				} catch (InstantiationException e1) {
+					e1.printStackTrace();
+					return null;
+				} catch (IllegalAccessException e1) {
+					e1.printStackTrace();
+					return null;
+				}
+			} else if (shapeTypeI.equalsIgnoreCase("text")) {
+		  	shape = new Text2();
+			} else {
+				// Couldn't detect shape from short name or full class name
+				// May be it's an actual value that we can parse
+				if (shapeType.split(",").length == 2) {
+					// A point
+					shape = new Point();
+					shape.fromText(new Text((String) conf.get(key)));
+				} else if (shapeType.split(",").length == 4) {
+					// A rectangle
+					shape = new Rectangle();
+					shape.fromText(new Text((String) conf.get(key)));
+				} else {
+					LOG.warn("unknown shape type: '" + conf.get(key) + "'");
+					return null;
+				}
+			}
 		}
 
 		if (shapeValue != null)

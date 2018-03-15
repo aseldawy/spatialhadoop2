@@ -60,7 +60,7 @@ public class IndexerTest extends TestCase {
       params.setBoolean("local", false);
       params.setClass("shape", OSMPolygon.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
-      params.set("sindex", "r*tree");
+      params.set("sindex", "rtree");
       Indexer.index(inPath, outPath, params);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
@@ -84,11 +84,11 @@ public class IndexerTest extends TestCase {
       params.setClass("shape", OSMPolygon.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
 
-      Partitioner p = Indexer.createPartitioner(inPath, outPath, params, "r*tree");
+      Partitioner p = Indexer.initializeGlobalIndex(inPath, outPath, params, RStarTreePartitioner.class);
       assertTrue(p instanceof RStarTreePartitioner);
 
       OperationsParams.setShape(params, "mbr", new Rectangle(0,0,10,10));
-      p = Indexer.createPartitioner(inPath, outPath, params, "grid");
+      p = Indexer.initializeGlobalIndex(inPath, outPath, params, GridPartitioner.class);
       assertTrue(p instanceof GridPartitioner);
     } catch (FileNotFoundException e) {
       fail("Error opening test file");
@@ -106,8 +106,8 @@ public class IndexerTest extends TestCase {
       params.setBoolean("local", false);
       params.setClass("shape", Point.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
-      params.setClass("sindex", RStarTreePartitioner.class, Partitioner.class);
-      params.setClass(LocalIndex.LocalIndexClass, RRStarLocalIndex.class, LocalIndex.class);
+      params.setClass("gindex", RStarTreePartitioner.class, Partitioner.class);
+      params.setClass("lindex", RRStarLocalIndex.class, LocalIndex.class);
       Indexer.index(inPath, outPath, params);
 
       // Test with range query

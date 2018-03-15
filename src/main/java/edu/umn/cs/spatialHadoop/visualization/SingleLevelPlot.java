@@ -453,7 +453,7 @@ public class SingleLevelPlot {
         partitioner = new GridPartitioner(inputMBR, gridSize, gridSize);
       } else {
         // Use a standard partitioner as created by the indexer
-        partitioner = Indexer.createPartitioner(inFiles, outFile, conf, partition);
+        partitioner = Indexer.initializeGlobalIndex(inFiles, outFile, conf, SpatialSite.getGlobalIndex(partition));
       }
       Shape shape = params.getShape("shape");
       job.setMapperClass(RepartitionPlotMap.class);
