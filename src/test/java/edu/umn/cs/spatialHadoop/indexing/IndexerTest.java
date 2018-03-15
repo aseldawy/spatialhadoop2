@@ -46,12 +46,14 @@ public class IndexerTest extends TestCase {
     super.tearDown();
     // Clean up temporary file
     FileSystem outFS = outPath.getFileSystem(new Configuration());
-    outFS.deleteOnExit(outPath);
+    outFS.delete(outPath, true);
   }
 
   public void testEmptyGeometries() {
     // Should not crash with an input file that contains empty geomtries
     try {
+      FileSystem outFS = outPath.getFileSystem(new Configuration());
+      outFS.delete(outPath, true);
       Path inPath = new Path("src/test/resources/polys.osm");
 
       OperationsParams params = new OperationsParams();
