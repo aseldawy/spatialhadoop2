@@ -43,7 +43,7 @@ SpatialIndexes:
 
   - short-name: rtree
     gindex: rstree
-    local: rrstree
+    lindex: rrstree
 
   - short-name: r+tree
     gindex: rstree

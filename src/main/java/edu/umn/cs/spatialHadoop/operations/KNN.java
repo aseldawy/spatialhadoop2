@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import edu.umn.cs.spatialHadoop.mapreduce.LocalIndexRecordReader;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -517,6 +518,8 @@ public class KNN {
           ((SpatialRecordReader3)reader).initialize(fsplit, params);
         } else if (reader instanceof RTreeRecordReader3) {
           ((RTreeRecordReader3)reader).initialize(fsplit, params);
+        } else if (reader instanceof LocalIndexRecordReader) {
+          ((LocalIndexRecordReader)reader).initialize(fsplit, params);
         } else if (reader instanceof HDFRecordReader) {
           ((HDFRecordReader)reader).initialize(fsplit, params);
         } else {
