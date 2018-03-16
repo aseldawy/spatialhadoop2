@@ -440,8 +440,10 @@ public class Indexer {
     System.out.println("<input file> - (*) Path to input file");
     System.out.println("<output file> - (*) Path to output file");
     System.out.println("shape:<point|rectangle|polygon> - (*) Type of shapes stored in input file");
-    System.out.println("sindex:<index> - (*) Type of spatial index (grid|str|str+|quadtree|zcurve|kdtree)");
-    System.out.println("-overwrite - Overwrite output file without noitce");
+    System.out.println("sindex:<index> - Type of spatial index (grid|str|str+|rtree|r+tree|quadtree|zcurve|hilbert|kdtree)");
+    System.out.println("gindex:<index> - Type of the global index (grid|str|rstree|kdtree|zcurve|hilbert|quadtree)");
+    System.out.println("lindex:<index> - Type of the local index (rrstree)");
+    System.out.println("-overwrite - Overwrite output file without notice");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
@@ -454,11 +456,6 @@ public class Indexer {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
     
     if (!params.checkInputOutput(true)) {
-      printUsage();
-      return;
-    }
-    if (params.get("sindex") == null) {
-      System.err.println("Please specify type of index to build (grid, rtree, r+tree, str, str+)");
       printUsage();
       return;
     }

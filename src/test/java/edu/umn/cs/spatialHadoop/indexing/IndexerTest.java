@@ -102,6 +102,24 @@ public class IndexerTest extends TestCase {
     }
   }
 
+  public void testShouldWorkWithoutSIndex() {
+    try {
+      FileSystem outFS = outPath.getFileSystem(new Configuration());
+      outFS.delete(outPath, true);
+      Path inPath = new Path("src/test/resources/polys.osm");
+
+      OperationsParams params = new OperationsParams();
+      params.setBoolean("local", true);
+      params.setClass("shape", OSMPolygon.class, Shape.class);
+      params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
+      params.set("gindex", "rstree");
+      Indexer.index(inPath, outPath, params);
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail("Error indexing the file with an rtree global index");
+    }
+  }
+
   public void testCreatePartitioner() {
     // Should not crash with an input file that contains empty geomtries
     try {
