@@ -29,8 +29,6 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  */
 @Partitioner.GlobalIndexerMetadata(disjoint = true)
 public class STRPartitioner extends Partitioner {
-  /**MBR of the input file*/
-  private final Rectangle mbr = new Rectangle();
   /**Number of rows and columns*/
   private int columns, rows;
   /**Locations of vertical strips*/
@@ -53,7 +51,12 @@ public class STRPartitioner extends Partitioner {
       public int compare(Point a, Point b) {
         return a.x < b.x? -1 : (a.x > b.x? 1 : 0);
       }});
-    // Calculate partitioning numbers based on a grid
+    Rectangle mbr = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+        Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+    for (Point p : points) {
+      mbr.expand(p);
+    }
+    // Calculate number of columns and rows based on a grid
     int numSplits = (int) Math.ceil((double)points.length / capacity);
     GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
     gridInfo.calculateCellDimensions(numSplits);
@@ -62,11 +65,11 @@ public class STRPartitioner extends Partitioner {
     this.xSplits = new double[columns];
     this.ySplits = new double[rows * columns];
     int prev_quantile = 0;
-    this.mbr.set(mbr);
+
     for (int column = 0; column < columns; column++) {
       int col_quantile = (column + 1) * points.length / columns;
       // Determine the x split for this column. Last column has a special handling
-      this.xSplits[column] = col_quantile == points.length ? mbr.x2 : points[col_quantile-1].x;
+      this.xSplits[column] = col_quantile == points.length ? Double.POSITIVE_INFINITY : points[col_quantile-1].x;
       // 2- Partition this column vertically in the same way
       Arrays.sort(points, prev_quantile, col_quantile, new Comparator<Point>() {
         @Override
@@ -79,7 +82,7 @@ public class STRPartitioner extends Partitioner {
         int row_quantile = (prev_quantile * (rows - (row+1)) +
             col_quantile * (row+1)) / rows;
         // Determine y split for this row. Last row has a special handling
-        this.ySplits[column * rows + row] = row_quantile == col_quantile ? mbr.y2 : points[row_quantile].y;
+        this.ySplits[column * rows + row] = row_quantile == col_quantile ? Double.POSITIVE_INFINITY : points[row_quantile].y;
       }
       
       prev_quantile = col_quantile;
@@ -88,7 +91,6 @@ public class STRPartitioner extends Partitioner {
 
   @Override
   public void write(DataOutput out) throws IOException {
-    mbr.write(out);
     out.writeInt(columns);
     out.writeInt(rows);
     ByteBuffer bbuffer = ByteBuffer.allocate((xSplits.length + ySplits.length) * 8);
@@ -103,7 +105,6 @@ public class STRPartitioner extends Partitioner {
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    mbr.readFields(in);
     columns = in.readInt();
     rows = in.readInt();
     xSplits = new double[columns];
@@ -128,11 +129,7 @@ public class STRPartitioner extends Partitioner {
 
   @Override
   public void overlapPartitions(Shape shape, ResultCollector<Integer> matcher) {
-    if (shape == null)
-      return;
     Rectangle shapeMBR = shape.getMBR();
-    if (shapeMBR == null)
-      return;
     // Replicate to all overlapping partitions
     // Find first and last matching columns
     int col1 = Arrays.binarySearch(xSplits, shapeMBR.x1);
@@ -158,13 +155,10 @@ public class STRPartitioner extends Partitioner {
   
   @Override
   public int overlapPartition(Shape shape) {
-    if (shape == null)
-      return -1;
-    Rectangle shapeMBR = shape.getMBR();
-    if (shapeMBR == null)
-      return -1;
+    if (xSplits.length == 0)
+      return 0;
     // Assign to only one partition
-    Point center = shapeMBR.getCenterPoint();
+    Point center = shape.getMBR().getCenterPoint();
     int col = Arrays.binarySearch(xSplits, center.x);
     if (col < 0)
       col = -col - 1;
@@ -184,9 +178,9 @@ public class STRPartitioner extends Partitioner {
     int col = id / rows;
     int row = id % rows;
     double y2 = ySplits[id];
-    double y1 = row == 0? mbr.y1 : ySplits[id-1];
+    double y1 = row == 0? Double.NEGATIVE_INFINITY : ySplits[id-1];
     double x2 = xSplits[col];
-    double x1 = col == 0? mbr.x1 : xSplits[col-1];
+    double x1 = col == 0? Double.NEGATIVE_INFINITY : xSplits[col-1];
     return new CellInfo(id, x1, y1, x2, y2);
   }
 }

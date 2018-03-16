@@ -149,9 +149,11 @@ public class Indexer {
     
     // Set the correct partitioner according to index type
     String sindex = conf.get("sindex");
-    SpatialSite.SpatialIndex spatialIndex = sindex == null ?
-        new SpatialSite.SpatialIndex() :
-        SpatialSite.CommonSpatialIndex.get(sindex);
+    SpatialSite.SpatialIndex spatialIndex;
+    if (sindex != null && SpatialSite.CommonSpatialIndex.containsKey(sindex))
+      spatialIndex = SpatialSite.CommonSpatialIndex.get(sindex);
+    else
+      spatialIndex = new SpatialSite.SpatialIndex();
     if (conf.get("gindex") != null)
       spatialIndex.gindex = SpatialSite.getGlobalIndex(conf.get("gindex"));
     if (conf.get("lindex") != null)
@@ -235,7 +237,7 @@ public class Indexer {
         Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Rectangle.class, int.class);
         // Constructor needs an MBR and number of partitions
         final Rectangle inMBR = (Rectangle) OperationsParams.getShape(job, "mbr");
-        int numOfPartitions = (int) (estimatedOutSize / outBlockSize);
+        int numOfPartitions = (int) Math.ceil((double)estimatedOutSize / outBlockSize);
         return (Partitioner) c.newInstance(inMBR, numOfPartitions);
       } catch (NoSuchMethodException e) {
         try {
@@ -366,7 +368,12 @@ public class Indexer {
         Iterable<Shape> shapes = reader.getCurrentValue();
         if (spatialIndex.disjoint) {
           for (final Shape s : shapes) {
-            partitioner.overlapPartitions(s, new ResultCollector<Integer>() {
+            if (s == null)
+              continue;
+            Rectangle mbr = s.getMBR();
+            if (mbr == null)
+              continue;
+            partitioner.overlapPartitions(mbr, new ResultCollector<Integer>() {
               @Override
               public void collect(Integer id) {
                 partitionID.set(id);
@@ -380,7 +387,12 @@ public class Indexer {
           }
         } else {
           for (final Shape s : shapes) {
-            int pid = partitioner.overlapPartition(s);
+            if (s == null)
+              continue;
+            Rectangle mbr = s.getMBR();
+            if (mbr == null)
+              continue;
+            int pid = partitioner.overlapPartition(mbr);
             if (pid != -1) {
               partitionID.set(pid);
               recordWriter.write(partitionID, s);

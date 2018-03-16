@@ -13,6 +13,7 @@ import junit.framework.TestSuite;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.Job;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -50,27 +51,54 @@ public class IndexerTest extends TestCase {
   }
 
   public void testEmptyGeometries() {
-    // Should not crash with an input file that contains empty geomtries
+    // Should not crash with an input file that contains empty geometries
     try {
       FileSystem outFS = outPath.getFileSystem(new Configuration());
       outFS.delete(outPath, true);
-      Path inPath = new Path("src/test/resources/polys.osm");
 
+      Path inPath = new Path("src/test/resources/polys.osm");
+      // Test MapReduce implementation
       OperationsParams params = new OperationsParams();
       params.setBoolean("local", false);
       params.setClass("shape", OSMPolygon.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
       params.set("sindex", "rtree");
       Indexer.index(inPath, outPath, params);
-    } catch (FileNotFoundException e) {
-      fail("Error opening test file");
-    } catch (IOException e) {
+
+      // Test local implementation
+      outFS.delete(outPath, true);
+      params.setBoolean("local", true);
+      Indexer.index(inPath, outPath, params);
+
+      // Test local implementation with disjoint partition
+      outFS.delete(outPath, true);
+      params.setBoolean("local", true);
+      params.set("sindex", "str+");
+      Indexer.index(inPath, outPath, params);
+    } catch (Exception e) {
       e.printStackTrace();
-      fail("Error working with the test file");
-    } catch (InterruptedException e) {
-      fail("Error running the job");
-    } catch (ClassNotFoundException e) {
-      fail("Could not create the shape");
+      fail("Error indexing the file");
+    }
+  }
+
+  public void testCommonIndexes() {
+    String[] indexes = {"grid", "str", "str+", "rtree", "r+tree", "hilbert", "zcurve", "quadtree"};
+    for (String index : indexes) {
+      try {
+        FileSystem outFS = outPath.getFileSystem(new Configuration());
+        outFS.delete(outPath, true);
+        Path inPath = new Path("src/test/resources/polys.osm");
+
+        OperationsParams params = new OperationsParams();
+        params.setBoolean("local", true);
+        params.setClass("shape", OSMPolygon.class, Shape.class);
+        params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
+        params.set("sindex", index);
+        Indexer.index(inPath, outPath, params);
+      } catch (Exception e) {
+        e.printStackTrace();
+        fail("Error indexing the file with "+index);
+      }
     }
   }
 
@@ -117,6 +145,32 @@ public class IndexerTest extends TestCase {
     } catch (Exception e) {
       e.printStackTrace();
       fail("Error while building the index");
+    }
+  }
+
+  public void testWorkWithSmallFiles() {
+    // Should not crash with an input file that contains empty geomtries
+    try {
+      FileSystem outFS = outPath.getFileSystem(new Configuration());
+      outFS.delete(outPath, true);
+      Path inPath = new Path("src/test/resources/test.points");
+
+      OperationsParams params = new OperationsParams();
+      params.setBoolean("local", false);
+      params.setClass("shape", Point.class, Shape.class);
+      params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
+      params.set("sindex", "grid");
+      Job job = Indexer.index(inPath, outPath, params);
+      assertTrue("Job failed!", job.isSuccessful());
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      e.printStackTrace();
+      fail("Error working with the test file");
+    } catch (InterruptedException e) {
+      fail("Error running the job");
+    } catch (ClassNotFoundException e) {
+      fail("Could not create the shape");
     }
   }
 }

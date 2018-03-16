@@ -18,6 +18,7 @@ import java.io.UnsupportedEncodingException;
 import java.lang.Thread.State;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -383,7 +384,7 @@ public class IndexOutputFormat<S extends Shape>
             if (task != null)
               task.setStatus("Closing! "+closingThreads.size()+" remaining");
           }
-        } catch (ArrayIndexOutOfBoundsException e) {
+        } catch (ArrayIndexOutOfBoundsException NoSuchElementException) {
           // The array of threads has gone empty. Nothing to do
         }
         if (task != null)

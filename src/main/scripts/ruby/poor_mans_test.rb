@@ -64,17 +64,10 @@ end
 
 def read_results(hdfs_path)
   # Read file status
-  matches, file_status = `hadoop fs -ls '#{hdfs_path}'`.split(/[\r\n]/, 2)
-  num_of_matches = $1.to_i if matches =~ /Found (\d+) items/
-  if num_of_matches == 1
-    # Matched one file. Read its contents
-    files_to_read = [hdfs_path]
-  else
-    # A directory that contains multiple files
-    files_to_read = file_status.split(/[\r\n]/).grep(/^[^d]/).grep(/\/[^_][^\/]+$/).map do |line|
-      line.split.last
-    end
-  end
+  matches = `hadoop fs -ls '#{hdfs_path}'`.split(/[\r\n]/)
+  files_to_read = matches.grep(/^[rwx\-sd]{10}/).map {|l| l.split.last}
+  # remove hidden files
+  files_to_read.delete_if {|x| x =~ /^[\._]/ || x=~ /\/[\._]/}
   return `hadoop fs -cat #{files_to_read.join(' ')}`.split(/[\r\n]/).sort
 end
 
@@ -112,7 +105,6 @@ def test_range_query
         range_query(indexed_file, "results_#{sindex}_local", query, '-local')
         results_indexed_mr = read_results("results_#{sindex}_local")
         raise "Results of #{sindex} file does not match the heap file" unless array_equal?(results_indexed_mr, results_heap_mr)
-
       end
     end
   end

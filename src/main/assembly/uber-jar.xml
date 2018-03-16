@@ -31,6 +31,7 @@
         <include>com.esri.geometry:esri-geometry-api</include>
         <include>javax.mail:javax.mail-api</include>
         <include>com.sun.mail:javax.mail</include>
+        <include>org.yaml:snakeyaml</include>
       </includes>
       <unpack>true</unpack>
       <useTransitiveDependencies>false</useTransitiveDependencies>
