@@ -19,10 +19,8 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 
 /**
  * Information about a specific cell in a grid.
- * Note: Whenever you change the instance variables that need to
- * be stored in disk, you have to manually fix the implementation of class
- * BlockListAsLongs
- * @author aseldawy
+
+ * @author Ahmed Eldawy
  *
  */
 public class CellInfo extends Rectangle {

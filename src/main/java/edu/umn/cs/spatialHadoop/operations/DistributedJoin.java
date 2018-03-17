@@ -57,13 +57,11 @@ import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.indexing.RTree;
 import edu.umn.cs.spatialHadoop.mapred.BinaryRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.BinarySpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.DefaultBlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
-import edu.umn.cs.spatialHadoop.mapred.RTreeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeArrayRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
@@ -256,36 +254,6 @@ public class DistributedJoin {
 						}, reporter);
 					}
 				}
-			} else if (value.first instanceof RTree
-					&& value.second instanceof RTree) {
-				// Join two R-trees
-				@SuppressWarnings("unchecked")
-				RTree<Shape> r1 = (RTree<Shape>) value.first;
-				@SuppressWarnings("unchecked")
-				RTree<Shape> r2 = (RTree<Shape>) value.second;
-				RTree.spatialJoin(r1, r2, new ResultCollector2<Shape, Shape>() {
-					@Override
-					public void collect(Shape r, Shape s) {
-						try {
-							if (dupAvoidanceMBR == null) {
-								output.collect(r, s);
-							} else {
-								// Reference point duplicate avoidance technique
-								// The reference point is the lowest corner of
-								// the intersection
-								// rectangle (the point with the least
-								// dimensions of both x and
-								// y in the intersection rectangle)
-								double intersectionX = Math.max(r.getMBR().x1, s.getMBR().x1);
-								double intersectionY = Math.max(r.getMBR().y1, s.getMBR().y1);
-                if (dupAvoidanceMBR.contains(intersectionX, intersectionY))
-									output.collect(r, s);
-							}
-						} catch (IOException e) {
-							e.printStackTrace();
-						}	
-					}
-				}, reporter);
 			} else {
 				throw new RuntimeException("Cannot join "
 						+ value.first.getClass() + " with "
@@ -407,23 +375,6 @@ public class DistributedJoin {
 								}, reporter);
 					}
 				}
-			} else if (value.first instanceof RTree
-					&& value.second instanceof RTree) {
-				// Join two R-trees
-				@SuppressWarnings("unchecked")
-				RTree<Shape> r1 = (RTree<Shape>) value.first;
-				@SuppressWarnings("unchecked")
-				RTree<Shape> r2 = (RTree<Shape>) value.second;
-				RTree.spatialJoin(r1, r2, new ResultCollector2<Shape, Shape>() {
-					@Override
-					public void collect(Shape r, Shape s) {
-						try {
-							output.collect(r, s);
-						} catch (IOException e) {
-							e.printStackTrace();
-						}	
-					}
-				}, reporter);
 			} else {
 				throw new RuntimeException("Cannot join "
 						+ value.first.getClass() + " with "
@@ -473,49 +424,6 @@ public class DistributedJoin {
 				throws IOException {
 			reporter.progress();
 			return new DJRecordReader(job, (CombineFileSplit) split);
-		}
-	}
-
-	/**
-	 * Input format that returns a record reader that reads a pair of arrays of
-	 * shapes
-	 * 
-	 * @author Ahmed Eldawy
-	 *
-	 */
-	public static class DJInputFormatRTree<S extends Shape> extends
-			BinarySpatialInputFormat<Rectangle, RTree<S>> {
-
-		/**
-		 * Reads a pair of arrays of shapes
-		 * 
-		 * @author Ahmed Eldawy
-		 *
-		 */
-		public static class DJRecordReader<S extends Shape> extends
-				BinaryRecordReader<Rectangle, RTree<S>> {
-			public DJRecordReader(Configuration conf,
-					CombineFileSplit fileSplits) throws IOException {
-				super(conf, fileSplits);
-			}
-
-			@Override
-			protected RecordReader<Rectangle, RTree<S>> createRecordReader(
-					Configuration conf, CombineFileSplit split, int i)
-					throws IOException {
-				FileSplit fsplit = new FileSplit(split.getPath(i),
-						split.getStartOffsets()[i], split.getLength(i),
-						split.getLocations());
-				return new RTreeRecordReader<S>(conf, fsplit);
-			}
-		}
-
-		@Override
-		public RecordReader<PairWritable<Rectangle>, PairWritable<RTree<S>>> getRecordReader(
-				InputSplit split, JobConf job, Reporter reporter)
-				throws IOException {
-			reporter.progress();
-			return new DJRecordReader<S>(job, (CombineFileSplit) split);
 		}
 	}
 
@@ -666,20 +574,15 @@ public class DistributedJoin {
 		
 		LOG.info("Joining " + inFiles[0] + " X " + inFiles[1]);
 
-		if (SpatialSite.isRTree(fs[0], inFiles[0])
-				&& SpatialSite.isRTree(fs[1], inFiles[1])) {
-			job.setInputFormat(DJInputFormatRTree.class);
+		if (isOneShotReadMode) {
+			// Ensure all objects are read in one shot
+			job.setInt(SpatialSite.MaxBytesInOneRead, -1);
+			job.setInt(SpatialSite.MaxShapesInOneRead, -1);
 		} else {
-			if (isOneShotReadMode) {
-				// Ensure all objects are read in one shot
-				job.setInt(SpatialSite.MaxBytesInOneRead, -1);
-				job.setInt(SpatialSite.MaxShapesInOneRead, -1);
-			} else {
-				job.setInt(SpatialSite.MaxBytesInOneRead, maxBytesInOneRead);
-				job.setInt(SpatialSite.MaxShapesInOneRead, maxShapesInOneRead);
-			}
-			job.setInputFormat(DJInputFormatArray.class);
+			job.setInt(SpatialSite.MaxBytesInOneRead, maxBytesInOneRead);
+			job.setInt(SpatialSite.MaxShapesInOneRead, maxShapesInOneRead);
 		}
+		job.setInputFormat(DJInputFormatArray.class);
 
 		// Set input paths and map function
 		if (inFiles[0].equals(inFiles[1])) {

@@ -52,7 +52,6 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -334,8 +333,6 @@ public class Union {
                 inputFormat.createRecordReader(fsplit, null);
             if (reader instanceof SpatialRecordReader3) {
               ((SpatialRecordReader3)reader).initialize(fsplit, params);
-            } else if (reader instanceof RTreeRecordReader3) {
-              ((RTreeRecordReader3)reader).initialize(fsplit, params);
             } else if (reader instanceof HDFRecordReader) {
               ((HDFRecordReader)reader).initialize(fsplit, params);
             } else {

@@ -88,20 +88,11 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
         // HDF File. Create HDFRecordReader
         return (RecordReader)new HDFRecordReader();
       }
-      if (extension.equals("rtree")) {
-        // File is locally indexed as RTree
-        return (RecordReader)new RTreeRecordReader3<V>();
-      }
       if (extension.equals(RRStarLocalIndex.Extension)) {
         return (RecordReader) new LocalIndexRecordReader<V>(RRStarLocalIndex.class);
       }
-      // For backward compatibility, check if the file is RTree indexed from
-      // its signature
-      Configuration conf = context != null? context.getConfiguration() : new Configuration();
-      if (SpatialSite.isRTree(path.getFileSystem(conf), path)) {
-        return (RecordReader)new RTreeRecordReader3<V>();
-      }
       // Check if a custom record reader is configured with this extension
+      Configuration conf = context != null? context.getConfiguration() : new Configuration();
       Class<?> recordReaderClass = conf.getClass("SpatialInputFormat."
           + extension + ".recordreader", SpatialRecordReader3.class);
       try {

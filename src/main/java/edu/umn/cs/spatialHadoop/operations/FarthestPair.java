@@ -41,7 +41,6 @@ import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapred.PairWritable;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -311,8 +310,6 @@ public class FarthestPair {
             inputFormat.createRecordReader(fsplit, null);
         if (reader instanceof SpatialRecordReader3) {
           ((SpatialRecordReader3)reader).initialize(fsplit, context);
-        } else if (reader instanceof RTreeRecordReader3) {
-          ((RTreeRecordReader3)reader).initialize(fsplit, context);
         } else if (reader instanceof HDFRecordReader) {
           ((HDFRecordReader)reader).initialize(fsplit, context);
         } else {
@@ -438,8 +435,6 @@ public class FarthestPair {
                 inputFormat.createRecordReader(fsplit, null);
             if (reader instanceof SpatialRecordReader3) {
               ((SpatialRecordReader3)reader).initialize(fsplit, params);
-            } else if (reader instanceof RTreeRecordReader3) {
-              ((RTreeRecordReader3)reader).initialize(fsplit, params);
             } else if (reader instanceof HDFRecordReader) {
               ((HDFRecordReader)reader).initialize(fsplit, params);
             } else {

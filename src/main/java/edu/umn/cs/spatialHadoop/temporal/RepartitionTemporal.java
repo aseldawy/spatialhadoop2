@@ -37,7 +37,6 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.mapred.CombinedSpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
-import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import edu.umn.cs.spatialHadoop.operations.Repartition;
 import edu.umn.cs.spatialHadoop.util.NASADatasetUtil;
@@ -129,9 +128,6 @@ public class RepartitionTemporal extends Repartition {
 		if (sindex.equals("grid") || sindex.equals("str")
 				|| sindex.equals("str+")) {
 			job.setOutputFormat(GridOutputFormat.class);
-		} else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
-			// For now, the two types of local index are the same
-			job.setOutputFormat(RTreeGridOutputFormat.class);
 		} else {
 			throw new RuntimeException("Unsupported spatial index: " + sindex);
 		}
@@ -190,9 +186,6 @@ public class RepartitionTemporal extends Repartition {
 		if (sindex.equals("grid") || sindex.equals("str")
 				|| sindex.equals("str+")) {
 			job.setOutputFormat(GridOutputFormat.class);
-		} else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
-			// For now, the two types of local index are the same
-			job.setOutputFormat(RTreeGridOutputFormat.class);
 		} else {
 			throw new RuntimeException("Unsupported spatial index: " + sindex);
 		}

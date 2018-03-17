@@ -409,6 +409,7 @@ public class RRStarTree extends RTreeGuttman {
         throw new RuntimeException("Unknown sort attribute " + bestAxis);
     }
     // Disable asymptotic splitting when splitting the root for the first time (i.e., root is leaf)
+    // This function is only called for splitting a leaf node
     double asym = node == root ? 0 : 2.0 * (nodeCenter - nodeOrigin) / nodeLength;
     double mu = (1.0 - 2.0 * minSplitSize / (maxCapcity + 1)) * asym;
     double sigma = s * (1.0 + Math.abs(mu));
@@ -568,9 +569,9 @@ public class RRStarTree extends RTreeGuttman {
         nodeChildren[j] = t;
       }
     };
-    double minWeight = Double.POSITIVE_INFINITY;
-    int chosenK = -1;
-    RStarTree.MultiIndexedSortable.Axis bestAxis = null;
+    double minWeightAmongAllAxes = Double.POSITIVE_INFINITY;
+    int kWithMinWeight = -1;
+    RStarTree.MultiIndexedSortable.Axis axisWithMinWeight = null;
     QuickSort quickSort = new QuickSort();
 
     for (RStarTree.MultiIndexedSortable.Axis sortAttr : RStarTree.MultiIndexedSortable.Axis.values()) {
@@ -594,32 +595,32 @@ public class RRStarTree extends RTreeGuttman {
           nodeLength = (y2s[node] - y1s[node]);
           break;
         default:
-          throw new RuntimeException("Unknown sort attribute " + bestAxis);
+          throw new RuntimeException("Unknown sort attribute " + axisWithMinWeight);
       }
-      // Disable asymptotic splitting when splitting the root for the first time (i.e., root is leaf)
-      double asym = node == root ? 0 : 2.0 * (nodeCenter - nodeOrigin) / nodeLength;
+      // For non-leaf nodes, always use asymmetric splitting
+      double asym = 2.0 * (nodeCenter - nodeOrigin) / nodeLength;
       double mu = (1.0 - 2.0 * minSplitSize / (maxCapcity + 1)) * asym;
       double sigma = s * (1.0 + Math.abs(mu));
 
       // Along the chosen axis, choose the distribution with the minimum overlap value.
       int bestKAlongThisAxis = chooseSplitPoint(node, minSplitSize, mu, sigma, nodeSize, nodeChildren);
       double bestWeightAlongThisAxis = minWeightFoundByLastCallOfChooseSplitPoint;
-      if (bestWeightAlongThisAxis < minWeight) {
-        minWeight = bestWeightAlongThisAxis;
-        bestAxis = sortAttr;
-        chosenK = bestKAlongThisAxis;
+      if (bestWeightAlongThisAxis < minWeightAmongAllAxes) {
+        minWeightAmongAllAxes = bestWeightAlongThisAxis;
+        axisWithMinWeight = sortAttr;
+        kWithMinWeight = bestKAlongThisAxis;
       }
 
     }
 
     // Choose the axis with the minimum S as split axis.
-    if (bestAxis != sorter.getAttribute()) {
-      sorter.setAttribute(bestAxis);
+    if (axisWithMinWeight != sorter.getAttribute()) {
+      sorter.setAttribute(axisWithMinWeight);
       quickSort.sort(sorter, 0, nodeSize);
     }
 
     // Split at the chosenK
-    int separator = minSplitSize - 1 + chosenK;
+    int separator = minSplitSize - 1 + kWithMinWeight;
     int iNewNode = Node_split(node, separator);
     return iNewNode;
   }

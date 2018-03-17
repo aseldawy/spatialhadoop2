@@ -296,8 +296,8 @@ end
 
 # Main
 if $0 == __FILE__
-  test_range_query
-  test_dup_avoidance_in_range_query
+  #test_range_query
+  #test_dup_avoidance_in_range_query
   test_knn
   test_spatial_join
   test_custom_class

@@ -57,7 +57,6 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -230,8 +229,6 @@ public class FileMBR {
                 inputFormat.createRecordReader(fsplit, null);
             if (reader instanceof SpatialRecordReader3) {
               ((SpatialRecordReader3)reader).initialize(fsplit, params);
-            } else if (reader instanceof RTreeRecordReader3) {
-              ((RTreeRecordReader3)reader).initialize(fsplit, params);
             } else if (reader instanceof HDFRecordReader) {
               ((HDFRecordReader)reader).initialize(fsplit, params);
             } else {
@@ -319,7 +316,7 @@ public class FileMBR {
   /**
    * Computes the MBR of the input file using an aggregate MapReduce job.
    * 
-   * @param inFile - Path to input file
+   * @param inFiles - An array of paths to input files
    * @param params - Additional operation parameters
    * @return
    * @throws IOException
@@ -398,7 +395,7 @@ public class FileMBR {
 
   /**
    * Returns the MBR of a file given that it is globally indexed.
-   * @param file
+   * @param files
    * @return
    * @throws IOException 
    */

@@ -14,6 +14,8 @@ import java.io.OutputStream;
 import java.util.Iterator;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.indexing.RRStarTree;
+import edu.umn.cs.spatialHadoop.indexing.RStarTreePartitioner;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -44,7 +46,6 @@ import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.GridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Point;
-import edu.umn.cs.spatialHadoop.core.RTreeGridRecordWriter;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -52,10 +53,8 @@ import edu.umn.cs.spatialHadoop.core.ShapeRecordWriter;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.indexing.RTree;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.GridOutputFormat;
-import edu.umn.cs.spatialHadoop.mapred.RTreeGridOutputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 
@@ -343,11 +342,9 @@ public class Repartition {
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
 
     FileOutputFormat.setOutputPath(job,outPath);
-    if (sindex.equals("grid") || sindex.equals("str") || sindex.equals("str+")) {
+    if (sindex.equals("grid") || sindex.equals("str") || sindex.equals("str+") ||
+        sindex.equals("rtree") || sindex.equals("r+tree")) {
       job.setOutputFormat(GridOutputFormat.class);
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
-      // For now, the two types of local index are the same
-      job.setOutputFormat(RTreeGridOutputFormat.class);
     } else {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
@@ -412,11 +409,9 @@ public class Repartition {
     job.setNumMapTasks(10 * Math.max(1, clusterStatus.getMaxMapTasks()));
 
     FileOutputFormat.setOutputPath(job,outPath);
-    if (sindex.equals("grid") || sindex.equals("str") || sindex.equals("str+")) {
+    if (sindex.equals("grid") || sindex.equals("str") || sindex.equals("str+") ||
+        sindex.equals("rtree") || sindex.equals("r+tree")) {
       job.setOutputFormat(GridOutputFormat.class);
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
-      // For now, the two types of local index are the same
-      job.setOutputFormat(RTreeGridOutputFormat.class);
     } else {
       throw new RuntimeException("Unsupported spatial index: "+sindex);
     }
@@ -490,22 +485,20 @@ public class Repartition {
     } else {
       approxMBR = fileMBR;
     }
-    GridInfo gridInfo = new GridInfo(approxMBR.x1, approxMBR.y1, approxMBR.x2, approxMBR.y2);
     FileSystem outFs = outFile.getFileSystem(params);
     @SuppressWarnings("deprecation")
 	long blocksize = outFs.getDefaultBlockSize();
-    gridInfo.calculateCellDimensions(Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize)));
-    if (fileMBR == null)
-      gridInfo.set(-Double.MAX_VALUE, -Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE);
-    else
-      gridInfo.set(fileMBR);
-    
-    Rectangle[] rectangles = RTree.packInRectangles(gridInfo,
-            sample.toArray(new Point[sample.size()]));
-    CellInfo[] cellsInfo = new CellInfo[rectangles.length];
-    for (int i = 0; i < rectangles.length; i++)
-      cellsInfo[i] = new CellInfo(i + 1, rectangles[i]);
-    
+    int numPartitions = Math.max(1, (int)((inFileSize + blocksize / 2) / blocksize));
+
+    RStarTreePartitioner rstree = new RStarTreePartitioner(
+        sample.toArray(new Point[sample.size()]),
+        sample.size() / numPartitions);
+
+
+    CellInfo[] cellsInfo = new CellInfo[rstree.getPartitionCount()];
+    for (int i = 0; i < rstree.getPartitionCount(); i++)
+      cellsInfo[i] = new CellInfo(i + 1, rstree.getPartitionAt(i));
+
     return cellsInfo;
   }
   
@@ -611,12 +604,9 @@ public class Repartition {
     JobConf job = new JobConf(params, Repartition.class);
 
     ShapeRecordWriter<Shape> writer;
-    if (sindex.equals("grid") ||
-      sindex.equals("str") || sindex.equals("str+")) {
+    if (sindex.equals("grid") || sindex.equals("str") || sindex.equals("str+") ||
+        sindex.equals("rtree") || sindex.equals("r+tree")) {
       writer = new GridRecordWriter<Shape>(outFile, job, null, cells);
-    } else if (sindex.equals("rtree") || sindex.equals("r+tree")) {
-      writer = new RTreeGridRecordWriter<Shape>(outFile, job, null, cells);
-      writer.setStockObject(shape);
     } else {
       throw new RuntimeException("Unupoorted spatial idnex: "+sindex);
     }

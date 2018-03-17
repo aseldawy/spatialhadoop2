@@ -42,7 +42,6 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.indexing.RTree;
 
 /**
  * A base class to read shapes from files. It reads either single shapes,
@@ -316,7 +315,7 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
       boolean skipFirstLine = getPos() != 0;
       if (buffer != null && skipFirstLine) {
         // Search for the first occurrence of a new line
-        int eol = RTree.skipToEOL(buffer, 0);
+        int eol = skipToEOL(buffer, 0);
         // If we found an end of line in the buffer, we do not need to skip
         // a line from the open stream. This happens if the EOL returned is
         // beyond the end of buffer and the buffer is not a complete line
@@ -363,20 +362,12 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
    * @throws IOException
    */
   protected boolean nextLine(Text value) throws IOException {
-    if (blockType == BlockType.RTREE && pos == 8) {
-      // File is positioned at the RTree header
-      // Skip the header and go to first data object in file
-      pos += RTree.skipHeader(in);
-      LOG.info("Skipped R-tree to position: "+pos);
-      // Reinitialize record reader at the new position
-      lineReader = new LineReader(in);
-    }
     while (getFilePosition() <= end) {
       value.clear();
       int b = 0;
       if (buffer != null) {
         // Read the first line encountered in buffer
-        int eol = RTree.skipToEOL(buffer, 0);
+        int eol = skipToEOL(buffer, 0);
         b += eol;
         value.append(buffer, 0, eol);
         if (eol < buffer.length) {
@@ -561,30 +552,13 @@ public abstract class SpatialRecordReader<K, V> implements RecordReader<K, V> {
     }
     
   }
-  
-  /**
-   * Reads the next RTree from file. The file must be part of an R-tree index.
-   * If the file is not locally indexed using an R-tree, a runtime exception
-   * is thrown. If the file is locally indexed using an R-tree, the R-tree
-   * is consumed from the file and parsed by calling
-   * {@link RTree#readFields(DataInput)} on the input stream.
-   * @param rtree
-   * @return
-   * @throws IOException
-   */
-  protected boolean nextRTree(RTree<? extends Shape> rtree) throws IOException {
-    if (blockType == BlockType.RTREE) {
-      if (getPos() != 8)
-        return false;
-      // Signature was already read in initialization.
-      buffer = null;
-      DataInput dataIn = in instanceof DataInput?
-          (DataInput) in : new DataInputStream(in);
-      rtree.readFields(dataIn);
-      pos++;
-      return true;
-    } else {
-      throw new RuntimeException("Not implemented");
-    }
+
+  public static int skipToEOL(byte[] bytes, int startOffset) {
+    int eol = startOffset;
+    while (eol < bytes.length && (bytes[eol] != '\n' && bytes[eol] != '\r'))
+      eol++;
+    while (eol < bytes.length && (bytes[eol] == '\n' || bytes[eol] == '\r'))
+      eol++;
+    return eol;
   }
 }

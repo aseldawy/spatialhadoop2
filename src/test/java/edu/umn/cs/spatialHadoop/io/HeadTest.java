@@ -44,18 +44,4 @@ public class HeadTest extends TestCase {
       throw new RuntimeException("Error running test", e);
     }
   }
-  
-  public void testRTreeFile() {
-    try {
-      Path inFile = new Path("src/test/resources/test.rtree");
-      FileSystem fs = inFile.getFileSystem(new Configuration());
-      String[] headLines = Head.head(fs, inFile, 2);
-      
-      assertEquals(2, headLines.length);
-      assertEquals("200,728,210,767", headLines[0]);
-      assertEquals("277,145,324,246", headLines[1]);
-    } catch (Exception e) {
-      throw new RuntimeException("Error running test", e);
-    }
-  }
 }
