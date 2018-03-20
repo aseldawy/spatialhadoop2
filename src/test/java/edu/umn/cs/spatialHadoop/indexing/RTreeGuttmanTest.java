@@ -320,6 +320,27 @@ public class RTreeGuttmanTest extends TestCase {
     }
   }
 
+  public void testHollowRTree() {
+    try {
+      String fileName = "src/test/resources/test.rect";
+      double[][] rects = readFile(fileName);
+      RTreeGuttman rtree = new RTreeGuttman(4, 8);
+      rtree.initializeHollowRTree(rects[0], rects[1], rects[2], rects[3]);
+      int numLeaves = 0;
+      for (Object leaf : rtree.getAllLeaves())
+        numLeaves++;
+      assertEquals(14, numLeaves);
+      assertEquals(0, rtree.numOfDataEntries());
+
+      int i = rtree.noInsert(999, 200, 999, 200);
+      assertEquals(12, i);
+    } catch (FileNotFoundException e) {
+      fail("Error opening test file");
+    } catch (IOException e) {
+      fail("Error working with the test file");
+    }
+  }
+
   /**
    * Read a CSV file that contains one point per line in the format "x,y".
    * The points are returned as a 2D array where the first index indicates the

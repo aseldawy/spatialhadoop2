@@ -609,6 +609,60 @@ public class RTreeGuttman implements Closeable {
   }
 
   /**
+   * Creates an R-tree that contains only nodes (no data entries). The given
+   * coordinates are used for the leaf nodes. This tree is used to model an R-tree
+   * and use the different R-tree algorithms to test where an entry would end up
+   * in the R-tree (without really inserting it).
+   * @param x1
+   * @param y1
+   * @param x2
+   * @param y2
+   * @see #noInsert(double, double, double, double)
+   */
+  protected void initializeHollowRTree(double[] x1, double[] y1, double[] x2, double[] y2) {
+    // 1- Create a regular R-tree with the given rectangles as data entries.
+    initializeFromRects(x1, y1, x2, y2);
+
+    // 2- Convert all data entries to empty leaf nodes
+    for (int i = 0; i < numEntries; i++)
+      isLeaf.set(i, true);
+
+    for (int i = numEntries; i < numNodes + numEntries; i++)
+      isLeaf.set(i, false);
+
+    numNodes += numEntries;
+    numEntries = 0;
+
+    // Make sure we have a room for an extra object which will be used in noInsert
+    makeRoomForOneMoreObject();
+  }
+
+  /**
+   * Simulates an insertion of a record and returns the ID of the leaf node
+   * it will end up in (without really inserting it).
+   * @param x1
+   * @param y1
+   * @param x2
+   * @param y2
+   * @return
+   */
+  protected int noInsert(double x1, double y1, double x2, double y2) {
+    int i = numEntries + numNodes;
+    x1s[i] = x1;
+    y1s[i] = y1;
+    x2s[i] = x2;
+    y2s[i] = y2;
+
+    // Descend fro the root until reaching a leaf node
+    int p = root;
+    while (!isLeaf.get(p))
+      p = chooseSubtree(i, p);
+
+    // Return the index of the leaf node without really inserting the element
+    return p;
+  }
+
+  /**
    * A class used to iterate over the data entries in the R-tree
    */
   public class Entry {
