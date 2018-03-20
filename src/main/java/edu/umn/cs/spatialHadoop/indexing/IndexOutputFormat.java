@@ -18,7 +18,6 @@ import java.io.UnsupportedEncodingException;
 import java.lang.Thread.State;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -54,8 +53,7 @@ public class IndexOutputFormat<S extends Shape>
   
   /**Maximum number of active closing threads*/
   private static final int MaxClosingThreads = Runtime.getRuntime().availableProcessors() * 2;
-  
-  
+
   /**New line marker to separate records*/
   protected static byte[] NEW_LINE;
   
@@ -96,15 +94,15 @@ public class IndexOutputFormat<S extends Shape>
     private OutputStream masterFile;
     /**List of errors that happened by a background thread*/
     private Vector<Throwable> listOfErrors = new Vector<Throwable>();
-    /**Whether records are replicated in the index or distributed*/
-    private boolean replicated;
+    /**Whether records are replicated in the index to keep the partitions disjoint*/
+    private boolean disjoint;
     /**Type of shapes written to the output. Needed to build local indexes*/
     private S shape;
     /**The class of the local indexer*/
     private Class<? extends LocalIndex> localIndexClass;
 
     /**The extension of written files*/
-    private String extension;
+    private String localIndexExtension;
 
     public IndexRecordWriter(TaskAttemptContext task, Path outPath) throws IOException, InterruptedException {
       this(task, Integer.toString(task.getTaskAttemptID().getTaskID().getId()), outPath, null);
@@ -114,46 +112,46 @@ public class IndexOutputFormat<S extends Shape>
         Progressable progress)
         throws IOException, InterruptedException {
       conf = task.getConfiguration();
-      String sindex = conf.get("sindex");
-      this.replicated = conf.getBoolean("replicate", false);
+      this.disjoint = conf.getBoolean(Partitioner.PartitionerDisjoint, false);
       this.outFS = outPath.getFileSystem(conf);
       this.outPath = outPath;
       this.partitioner = Partitioner.getPartitioner(conf);
       localIndexClass = conf.getClass(LocalIndex.LocalIndexClass, null, LocalIndex.class);
       if (localIndexClass != null) {
         try {
-          extension = (String) localIndexClass.getField("Extension").get(null);
+          localIndexExtension = (String) localIndexClass.getField("Extension").get(null);
         } catch (IllegalAccessException e) {
           e.printStackTrace();
         } catch (NoSuchFieldException e) {
           e.printStackTrace();
         }
       }
+      String globalIndexExtension = conf.get(Partitioner.PartitionerExtension);
       Path masterFilePath = name == null ?
-          new Path(outPath, String.format("_master.%s", sindex)) :
-            new Path(outPath, String.format("_master_%s.%s", name, sindex));
+          new Path(outPath, String.format("_master.%s", globalIndexExtension)) :
+            new Path(outPath, String.format("_master_%s.%s", name, globalIndexExtension));
       this.masterFile = outFS.create(masterFilePath);
     }
 
-    public IndexRecordWriter(Partitioner partitioner, boolean replicate,
-        String sindex, Path outPath, Configuration conf)
+    public IndexRecordWriter(Partitioner partitioner, Path outPath, Configuration conf)
             throws IOException, InterruptedException {
       this.conf = conf;
-      this.replicated = replicate;
+      this.disjoint = conf.getBoolean(Partitioner.PartitionerDisjoint, false);
       this.outFS = outPath.getFileSystem(conf);
       this.outPath = outPath;
       this.partitioner = partitioner;
       localIndexClass = conf.getClass(LocalIndex.LocalIndexClass, null, LocalIndex.class);
       if (localIndexClass != null) {
         try {
-          extension = (String) localIndexClass.getField("Extension").get(null);
+          localIndexExtension = (String) localIndexClass.getField("Extension").get(null);
         } catch (IllegalAccessException e) {
           e.printStackTrace();
         } catch (NoSuchFieldException e) {
           e.printStackTrace();
         }
       }
-      Path masterFilePath =  new Path(outPath, "_master."+ sindex);
+      String globalIndexExtension = conf.get(Partitioner.PartitionerExtension);
+      Path masterFilePath =  new Path(outPath, "_master."+ globalIndexExtension);
       this.masterFile = outFS.create(masterFilePath);
     }
     
@@ -219,7 +217,7 @@ public class IndexOutputFormat<S extends Shape>
               }
             }
             
-            if (replicated) {
+            if (disjoint) {
               // If data is replicated, we need to shrink down the size of the
               // partition to keep partitions disjoint
               partitionInfo.set(partitionInfo.getIntersection(partitioner.getPartition(id)));
@@ -343,12 +341,12 @@ public class IndexOutputFormat<S extends Shape>
     private Path getPartitionFile(int id) throws IOException {
       String format = "part-%05d";
       if (localIndexClass != null)
-        format += "."+extension;
+        format += "."+localIndexExtension;
       Path partitionPath = new Path(outPath, String.format(format, id));
       if (outFS.exists(partitionPath)) {
         format = "part-%05d-%03d";
         if (localIndexClass != null)
-          format += "."+extension;
+          format += "."+localIndexExtension;
         int i = 0;
         do {
           partitionPath = new Path(outPath, String.format(format, id, ++i));

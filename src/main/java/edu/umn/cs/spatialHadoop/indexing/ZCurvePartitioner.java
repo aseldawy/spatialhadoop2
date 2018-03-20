@@ -28,6 +28,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
+@Partitioner.GlobalIndexerMetadata(disjoint = false, extension = "zcurve")
 public class ZCurvePartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(ZCurvePartitioner.class);
 

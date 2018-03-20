@@ -9,13 +9,13 @@
 package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.Random;
+import java.util.*;
 
+import edu.umn.cs.spatialHadoop.core.*;
+import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -42,10 +42,6 @@ import org.apache.hadoop.mapred.Task;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.Point;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.ResultCollector;
-import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
@@ -65,7 +61,37 @@ public class Sampler {
    * directory.
    */
   public static long sizeOfLastProcessedFile;
-  
+
+  public static List<Point> readSample(Path[] ins, Configuration job) throws IOException {
+    long t1 = System.currentTimeMillis();
+
+    final List<Point> sample = new ArrayList<Point>();
+    float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
+    long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
+
+    LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
+    ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
+      @Override
+      public void collect(Point p) {
+        sample.add(p.clone());
+      }
+    };
+
+    OperationsParams params2 = new OperationsParams(job);
+    params2.setFloat("ratio", sample_ratio);
+    params2.setLong("size", sample_size);
+    if (job.get("shape") != null)
+    params2.set("shape", job.get("shape"));
+    if (job.get("local") != null)
+    params2.set("local", job.get("local"));
+    params2.setClass("outshape", Point.class, Shape.class);
+    sample(ins, resultCollector, params2);
+    long t2 = System.currentTimeMillis();
+    System.out.println("Total time for sampling in millis: "+(t2-t1));
+    LOG.info("Finished reading a sample of "+sample.size()+" records");
+    return sample;
+  }
+
   public static class Map extends MapReduceBase implements
   Mapper<Rectangle, Text, IntWritable, Text> {
 

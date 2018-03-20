@@ -24,6 +24,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import edu.umn.cs.spatialHadoop.indexing.*;
+import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -639,6 +640,32 @@ public class SpatialSite {
       }
     }
     return type;
+  }
+
+  /**
+   * Retrieves or computes the MBR of the given path or paths. This function works in
+   * the following order.
+   * <ol>
+   *   <li>If the configuration contains a key "mbr", it is retrieved and returned.</li>
+   *   <li>If the given path is globally indexed, the MBR is retrieved from the global index.</li>
+   *   <li>A {@link FileMBR} job runs to compute the MBR.</li>
+   * </ol>
+   * In the cases of 2 and 3, the computed MBR is also set in the configuration
+   * using the key "mbr" for future use.
+   * @param conf
+   * @param paths
+   * @return
+   */
+  public static Rectangle getMBR(Configuration conf, Path ... paths) throws IOException, InterruptedException {
+    // Set input file MBR if not already set
+    Rectangle fileMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
+    if (fileMBR == null) {
+      fileMBR = new Partition();
+      for (Path path : paths)
+        fileMBR.expand(FileMBR.fileMBR(path, new OperationsParams(conf)));
+      OperationsParams.setShape(conf, "mbr", fileMBR);
+    }
+    return fileMBR;
   }
 
   /**

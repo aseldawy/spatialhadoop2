@@ -1,22 +1,22 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.Point;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.core.*;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.PrintStream;
 
 /**
  * Unit test for the index construction operation
@@ -153,6 +153,7 @@ public class IndexerTest extends TestCase {
       params.setClass("shape", Point.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
       params.setClass("gindex", RStarTreePartitioner.class, Partitioner.class);
+      params.set(Partitioner.PartitionerExtension, "rstar");
       params.setClass("lindex", RRStarLocalIndex.class, LocalIndex.class);
       Indexer.index(inPath, outPath, params);
 
@@ -167,7 +168,7 @@ public class IndexerTest extends TestCase {
   }
 
   public void testWorkWithSmallFiles() {
-    // Should not crash with an input file that contains empty geomtries
+    assertEquals(1, GridPartitioner.class.getAnnotations().length);
     try {
       FileSystem outFS = outPath.getFileSystem(new Configuration());
       outFS.delete(outPath, true);
@@ -189,6 +190,41 @@ public class IndexerTest extends TestCase {
       fail("Error running the job");
     } catch (ClassNotFoundException e) {
       fail("Could not create the shape");
+    }
+  }
+
+  public void testRepartitioner() {
+    try {
+      Path refPath = new Path(outPath.getParent(), "refpath");
+      Configuration conf = new Configuration();
+      FileSystem outFS = refPath.getFileSystem(conf);
+      outFS.delete(refPath, true);
+
+      outFS.mkdirs(refPath);
+      FSDataOutputStream out = outFS.create(new Path(refPath, "_master.rtree"));
+      PrintStream ps = new PrintStream(out);
+      Partition[] fakePartitions = {
+          new Partition("data1", new CellInfo(1, 0, 0, 10, 10)),
+          new Partition("data2", new CellInfo(2, 20, 5, 30, 50)),
+      };
+      for (Partition p : fakePartitions)
+        ps.println(p.toText(new Text()));
+      ps.close();
+
+      Partitioner p = Indexer.initializeRepartition(refPath, conf);
+
+      assertTrue("Invalid partitioner created", p instanceof CellPartitioner);
+      assertEquals(2, p.getPartitionCount());
+
+      // Run the repartition job
+      OperationsParams params = new OperationsParams();
+      params.set("shape", "rect");
+      outFS.delete(outPath, true);
+      Indexer.repartition(new Path("src/test/resources/test.rect"), outPath, refPath, params);
+      assertTrue("Output file not created", outFS.exists(outPath));
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail("Error while running test!");
     }
   }
 }

@@ -32,6 +32,7 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  * @author Ahmed Eldawy
  *
  */
+@Partitioner.GlobalIndexerMetadata(disjoint = false, extension = "hilbert")
 public class HilbertCurvePartitioner extends Partitioner {
   /**Splits along the Hilbert curve*/
   protected int[] splits;

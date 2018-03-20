@@ -601,6 +601,14 @@ public class RTreeGuttman implements Closeable {
   }
 
   /**
+   * The total number of leaf nodes.
+   * @return
+   */
+  public int getNumLeaves() {
+    return (int) isLeaf.countOnes();
+  }
+
+  /**
    * Retrieve all the leaf nodes in the tree.
    * @return
    */

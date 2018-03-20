@@ -27,7 +27,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true)
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "str")
 public class STRPartitioner extends Partitioner {
   /**Number of rows and columns*/
   private int columns, rows;

@@ -36,7 +36,7 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true)
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "quadtree")
 public class QuadTreePartitioner extends Partitioner {
   /**The minimal bounding rectangle of the underlying file*/
   protected final Rectangle mbr = new Rectangle();

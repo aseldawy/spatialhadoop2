@@ -24,7 +24,7 @@ import java.io.IOException;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true)
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstar")
 public class RStarTreePartitioner extends Partitioner {
 
   /**MBR of the points used to partition the space*/

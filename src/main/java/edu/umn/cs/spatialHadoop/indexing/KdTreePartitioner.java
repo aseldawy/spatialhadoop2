@@ -36,7 +36,7 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true)
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "kdtree")
 public class KdTreePartitioner extends Partitioner {
   /**MBR of the input file*/
   private final Rectangle mbr = new Rectangle();

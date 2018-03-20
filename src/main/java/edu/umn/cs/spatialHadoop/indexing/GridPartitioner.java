@@ -30,7 +30,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true)
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "grid")
 public class GridPartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(GridPartitioner.class);
 

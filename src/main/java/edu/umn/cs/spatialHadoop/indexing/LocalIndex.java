@@ -15,7 +15,7 @@ import java.io.IOException;
 public interface LocalIndex<S extends Shape> extends Closeable {
 
   /**The name of the configuration line that stores the local index class name*/
-  public static final String LocalIndexClass = "LocalIndex.LocalIndexClass";
+  String LocalIndexClass = "LocalIndex.LocalIndexClass";
 
   /**
    * Initializes the local indexer with a configuration
