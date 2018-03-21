@@ -11,7 +11,6 @@ package edu.umn.cs.spatialHadoop.operations;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.ProgramDriver;
 
-import edu.umn.cs.spatialHadoop.RandomSpatialGenerator;
 import edu.umn.cs.spatialHadoop.ReadFile;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree;
@@ -19,7 +18,6 @@ import edu.umn.cs.spatialHadoop.nasa.HDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.HDFToText;
 import edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot;
 import edu.umn.cs.spatialHadoop.nasa.ShahedServer;
-import edu.umn.cs.spatialHadoop.nasa.SpatioAggregateQueries;
 import edu.umn.cs.spatialHadoop.visualization.GeometricPlot;
 import edu.umn.cs.spatialHadoop.visualization.HadoopvizServer;
 import edu.umn.cs.spatialHadoop.visualization.HeatMapPlot;
@@ -61,9 +59,6 @@ public class Main {
           "SJMR algorithm");
       
       pgd.addClass("index", Indexer.class,
-          "Spatially index a file using a specific indexer");
-      
-      pgd.addClass("oldindex", Repartition.class,
           "Spatially index a file using a specific indexer");
       
       pgd.addClass("mbr", FileMBR.class,
@@ -123,9 +118,6 @@ public class Main {
       pgd.addClass("vizserver", ShahedServer.class,
           "Starts a server that handles visualization requests");
 
-      pgd.addClass("staggquery", SpatioAggregateQueries.class,
-          "Runs a spatio temporal aggregate query on HDF files");
-      
       pgd.addClass("shahedindexer", AggregateQuadTree.class,
           "Creates a multilevel spatio-temporal indexer for NASA data");
       

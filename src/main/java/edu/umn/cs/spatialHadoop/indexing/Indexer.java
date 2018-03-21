@@ -110,7 +110,6 @@ public class Indexer {
     }
   }
 
-  
   public static class PartitionerReduce<S extends Shape>
     extends Reducer<IntWritable, Shape, IntWritable, Shape> {
 

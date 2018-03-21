@@ -15,6 +15,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.core.*;
+import edu.umn.cs.spatialHadoop.indexing.Indexer;
+import edu.umn.cs.spatialHadoop.indexing.Partitioner;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -49,12 +52,6 @@ import org.apache.hadoop.util.IndexedSortable;
 import org.apache.hadoop.util.QuickSort;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.core.ResultCollector2;
-import edu.umn.cs.spatialHadoop.core.Shape;
-import edu.umn.cs.spatialHadoop.core.SpatialAlgorithms;
-import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.mapred.BinaryRecordReader;
@@ -68,8 +65,6 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMap;
-import edu.umn.cs.spatialHadoop.operations.Repartition.RepartitionMapNoReplication;
 import edu.umn.cs.spatialHadoop.util.Progressable;
 
 /**
@@ -118,6 +113,60 @@ public class DistributedJoin {
 					});
 		}
 	}
+
+	/**
+	 * The map function that partitions the data using the configured partitioner
+	 * @author Eldawy
+	 *
+	 */
+	public static class PartitionerMap extends MapReduceBase
+		implements Mapper<Rectangle, Iterable<? extends Shape>, IntWritable, Shape> {
+
+		/**The partitioner used to partitioner the data across reducers*/
+		private Partitioner partitioner;
+		/**
+		 * Whether to replicate a record to all overlapping partitions or to assign
+		 * it to only one partition
+		 */
+		private boolean replicate;
+
+		@Override
+		public void configure(JobConf job) {
+			super.configure(job);
+			this.partitioner = Partitioner.getPartitioner(job);
+			this.replicate = job.getBoolean("replicate", false);
+		}
+
+		@Override
+		public void map(Rectangle key, Iterable<? extends Shape> shapes,
+										final OutputCollector<IntWritable, Shape> output, Reporter reporter) throws IOException {
+			final IntWritable partitionID = new IntWritable();
+			for (final Shape shape : shapes) {
+				Rectangle shapeMBR = shape.getMBR();
+				if (shapeMBR == null)
+					continue;
+				if (replicate) {
+					partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
+						@Override
+						public void collect(Integer r) {
+							partitionID.set(r);
+							try {
+								output.collect(partitionID, shape);
+							} catch (IOException e) {
+								LOG.warn("Error checking overlapping partitions", e);
+							}
+						}
+					});
+				} else {
+					partitionID.set(partitioner.overlapPartition(shape));
+					if (partitionID.get() >= 0)
+						output.collect(partitionID, shape);
+				}
+				reporter.progress();
+			}
+		}
+	}
+
 
 	static class SelfJoinMap extends MapReduceBase implements
 			Mapper<Rectangle, ArrayWritable, Shape, Shape> {
@@ -465,78 +514,6 @@ public class DistributedJoin {
 	}
 
 	/**
-	 * Repartition a file to match the partitioning of the other file.
-	 * @param files Input files to partition
-	 * @param file_to_repartition
-	 * @param params
-	 * @throws IOException
-	 * @throws InterruptedException
-	 */
-	protected static void repartitionStep(final Path[] files,
-			int file_to_repartition, OperationsParams params)
-			throws IOException, InterruptedException {
-
-		// Do the repartition step
-		long t1 = System.currentTimeMillis();
-
-		// Repartition the smaller file
-		Path partitioned_file;
-		FileSystem fs = files[file_to_repartition].getFileSystem(params);
-		do {
-			partitioned_file = new Path(files[file_to_repartition].getName()
-					+ ".repartitioned_" + (int) (Math.random() * 1000000));
-		} while (fs.exists(partitioned_file));
-
-		// Get the cells to use for repartitioning
-		GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs,
-				files[1 - file_to_repartition]);
-		CellInfo[] cells = SpatialSite.cellsOf(fs,
-				files[1 - file_to_repartition]);
-
-		// Repartition the file to match the other file
-		boolean isReplicated = gindex.isReplicated();
-		boolean isCompact = gindex.isCompact();
-		String sindex;
-		if (isReplicated && !isCompact)
-			sindex = "grid";
-		else if (isReplicated && isCompact)
-			sindex = "r+tree";
-		else if (!isReplicated && isCompact)
-			sindex = "rtree";
-		else
-			throw new RuntimeException("Unknown index at: "
-					+ files[1 - file_to_repartition]);
-
-		params.set("sindex", sindex);
-
-		if (isGeneralRepartitionMode) {
-			// Repartition the smaller file with heuristics cells info (general
-			// indexing)
-			Repartition.repartitionMapReduce(files[file_to_repartition],
-					partitioned_file, null, params);
-		} else {
-			// Repartition the smaller file on the larger file (specific
-			// indexing)
-			Repartition.repartitionMapReduce(files[file_to_repartition],
-					partitioned_file, cells, params);
-		}
-
-		long t2 = System.currentTimeMillis();
-		System.out.println("Repartition time " + (t2 - t1) + " millis");
-
-		// Continue with the join step
-		if (fs.exists(partitioned_file)) {
-			// An output file might not existent if the two files are disjoint
-
-			// Replace the smaller file with its repartitioned copy
-			files[file_to_repartition] = partitioned_file;
-
-			// Delete temporary repartitioned file upon exit
-			fs.deleteOnExit(partitioned_file);
-		}
-	}
-
-	/**
 	 * Performs a redistribute join between the given files using the
    * redistribute join algorithm. Currently, we only support a pair of files.
 	 * @param inFiles
@@ -840,15 +817,7 @@ public class DistributedJoin {
 					+ inputFiles[1 - fileToRepartition]);
 		params.set("sindex", sindex);
 
-		// Decide which map function to use based on the type of global index
-		if (sindex.equals("rtree") || sindex.equals("str")) {
-			// Repartition without replication
-			repartitionJoinJob
-					.setMapperClass(RepartitionMapNoReplication.class);
-		} else {
-			// Repartition with replication (grid and r+tree)
-			repartitionJoinJob.setMapperClass(RepartitionMap.class);
-		}
+		repartitionJoinJob.setMapperClass(PartitionerMap.class);
 		repartitionJoinJob.setMapOutputKeyClass(IntWritable.class);
 		repartitionJoinJob.setMapOutputValueClass(stockShape.getClass());
 		ShapeInputFormat.setInputPaths(repartitionJoinJob,
@@ -893,6 +862,46 @@ public class DistributedJoin {
 
 		return resultCount;
 	}
+	protected static void repartitionStep(final Path[] files,
+																				int file_to_repartition, OperationsParams params)
+			throws IOException, InterruptedException, ClassNotFoundException {
+
+		// Do the repartition step
+		long t1 = System.currentTimeMillis();
+
+		// Repartition the smaller file
+		Path partitioned_file;
+		FileSystem fs = files[file_to_repartition].getFileSystem(params);
+		do {
+			partitioned_file = new Path(files[file_to_repartition].getName()
+					+ ".repartitioned_" + (int) (Math.random() * 1000000));
+		} while (fs.exists(partitioned_file));
+
+		if (isGeneralRepartitionMode) {
+			// Repartition the smaller file with heuristics cells info (general
+			// indexing)
+			Indexer.index(files[file_to_repartition], partitioned_file, params);
+		} else {
+			// Repartition the smaller file on the larger file (specific
+			// indexing)
+			Indexer.repartition(files[file_to_repartition], partitioned_file,
+					files[1 - file_to_repartition], params);
+		}
+
+		long t2 = System.currentTimeMillis();
+		System.out.println("Repartition time " + (t2 - t1) + " millis");
+
+		// Continue with the join step
+		if (fs.exists(partitioned_file)) {
+			// An output file might not existent if the two files are disjoint
+
+			// Replace the smaller file with its repartitioned copy
+			files[file_to_repartition] = partitioned_file;
+
+			// Delete temporary repartitioned file upon exit
+			fs.deleteOnExit(partitioned_file);
+		}
+	}
 
 	/**
 	 * Spatially joins two files.
@@ -905,7 +914,7 @@ public class DistributedJoin {
 	 */
 	@SuppressWarnings("unchecked")
 	public static long distributedJoinSmart(final Path[] inputFiles,
-			Path userOutputPath, OperationsParams params) throws IOException, InterruptedException {
+			Path userOutputPath, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
 		Path[] originalInputFiles = inputFiles.clone();
 		FileSystem outFs = inputFiles[0].getFileSystem(params);
 		Path outputPath = userOutputPath;
@@ -1078,7 +1087,7 @@ public class DistributedJoin {
 		GenericOptionsParser.printGenericCommandUsage(System.out);
 	}
 
-	public static void main(String[] args) throws IOException, InterruptedException {
+	public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
 		OperationsParams params = new OperationsParams(
 				new GenericOptionsParser(args));
 		Path[] allFiles = params.getPaths();

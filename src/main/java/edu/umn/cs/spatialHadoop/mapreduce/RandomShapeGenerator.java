@@ -6,20 +6,22 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-package edu.umn.cs.spatialHadoop.mapred;
+package edu.umn.cs.spatialHadoop.mapreduce;
 
 import java.io.IOException;
 import java.util.Random;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.RecordReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
  * A record reader that generates random shapes in a specified area out of
@@ -28,7 +30,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
  *
  * @param <S>
  */
-public class RandomShapeGenerator<S extends Shape> implements RecordReader<Rectangle, S> {
+public class RandomShapeGenerator<S extends Shape> extends RecordReader<Rectangle, S> {
 
   private static final byte[] NEW_LINE =
       System.getProperty("line.separator").getBytes();
@@ -68,24 +70,27 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   private double circleThickness;
   
   
-  /**
-   * Initialize from a FileSplit
-   * @param job
-   * @param split
-   * @throws IOException
-   */
-  @SuppressWarnings("unchecked")
-  public RandomShapeGenerator(Configuration job,
-      RandomInputFormat.GeneratedSplit split) throws IOException {
-    this(split.length, OperationsParams.getShape(job, "mbr").getMBR(),
-        SpatialSite.getDistributionType(job, "type", DistributionType.UNIFORM),
-        job.getInt("rectsize", 100),
-        split.index + job.getLong("seed", System.currentTimeMillis()),
-        job.getFloat("thickness", 1));
-    setShape((S) SpatialSite.createStockShape(job));
+  public RandomShapeGenerator() {
+    this.mbr = new Rectangle();
   }
 
-  public RandomShapeGenerator(long size, Rectangle mbr,
+
+  @Override
+  public void initialize(InputSplit split, TaskAttemptContext context) throws IOException {
+    Configuration conf = context.getConfiguration();
+    RandomInputFormat.GeneratedSplit gsplit = (RandomInputFormat.GeneratedSplit) split;
+    totalSize = gsplit.getLength();
+    mbr.set(OperationsParams.getShape(conf, "mbr"));
+    this.type = SpatialSite.getDistributionType(conf, "type", DistributionType.UNIFORM);
+    this.rectsize = conf.getInt("rectsize", 100);
+    long seed = gsplit.index + conf.getLong("seed", System.currentTimeMillis());
+    this.random = new Random(seed);
+    if (type == DistributionType.CIRCLE)
+      this.circleThickness = conf.getFloat("thickness", 1);
+    setShape((S) SpatialSite.createStockShape(conf));
+  }
+
+  public void initialize(long size, Rectangle mbr,
       DistributionType type, int rectsize, long seed, double circleThickness) {
     this.totalSize = size;
     this.mbr = mbr;
@@ -101,14 +106,19 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   }
 
   @Override
-  public boolean next(Rectangle key, S value) throws IOException {
+  public void close() throws IOException {
+    // Nothing
+  }
+
+  @Override
+  public boolean nextKeyValue() throws IOException, InterruptedException {
     // Generate a random shape
-    generateShape(value, mbr, type, rectsize, random, circleThickness);
-    
+    generateShape(shape, mbr, type, rectsize, random, circleThickness);
+
     // Serialize it to text first to make it easy count its size
     text.clear();
-    value.toText(text);
-    
+    shape.toText(text);
+
     // Check if desired generated size has been reached
     if (text.getLength() + NEW_LINE.length + generatedSize > totalSize)
       return false;
@@ -119,25 +129,13 @@ public class RandomShapeGenerator<S extends Shape> implements RecordReader<Recta
   }
 
   @Override
-  public Rectangle createKey() {
-    Rectangle key = new Rectangle();
-    key.invalidate();
-    return key;
+  public Rectangle getCurrentKey() throws IOException, InterruptedException {
+    return mbr;
   }
 
   @Override
-  public S createValue() {
+  public S getCurrentValue() throws IOException, InterruptedException {
     return shape;
-  }
-
-  @Override
-  public long getPos() throws IOException {
-    return generatedSize;
-  }
-
-  @Override
-  public void close() throws IOException {
-    // Nothing
   }
 
   @Override
