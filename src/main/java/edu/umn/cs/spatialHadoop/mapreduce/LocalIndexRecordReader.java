@@ -27,7 +27,10 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * Reads a file that contains R-trees.
@@ -133,7 +136,7 @@ public class LocalIndexRecordReader<V extends Shape> extends
     // Seek to the next local index
     in.seek(indexEnd - 4);
     int indexSize = in.readInt();
-    long indexStart = indexEnd - indexSize;
+    long indexStart = indexEnd - indexSize - 4;
 
     try {
       LocalIndex<V> localIndex = localIndexClass.newInstance();
@@ -171,7 +174,36 @@ public class LocalIndexRecordReader<V extends Shape> extends
   public Partition getCurrentKey() throws IOException, InterruptedException {
     return cellMBR;
   }
-  
+
+  /**
+   * Create one split for each data chunk in the given locally indexed file
+   * @param fs
+   * @param file
+   * @param localIndexClass
+   * @return
+   */
+  public static Collection<? extends FileSplit> createDataSplits(FileSystem fs,
+         Path file, Class<? extends LocalIndex> localIndexClass)
+      throws IOException, IllegalAccessException, InstantiationException {
+    LocalIndex lindex = localIndexClass.newInstance();
+    List<FileSplit> splits = new ArrayList<FileSplit>();
+    FSDataInputStream in = fs.open(file);
+    long indexEnd = fs.getFileStatus(file).getLen();
+    while (indexEnd > 0) {
+      // Seek to the next local index
+      in.seek(indexEnd - 4);
+      int indexSize = in.readInt();
+      long indexStart = indexEnd - indexSize - 4;
+      in.seek(indexStart);
+      lindex.read(in, indexStart, indexEnd, null);
+      FileSplit fsplit = new FileSplit(file, lindex.getDataStart(),
+          lindex.getDataEnd(), null);
+      splits.add(fsplit);
+      indexEnd = indexStart;
+    }
+    return splits;
+  }
+
   public static class DuplicateAvoidanceIterator<V extends Shape> implements Iterable<V>, Iterator<V> {
     /**MBR of the containing cell to run the reference point technique*/
     private Rectangle cellMBR;

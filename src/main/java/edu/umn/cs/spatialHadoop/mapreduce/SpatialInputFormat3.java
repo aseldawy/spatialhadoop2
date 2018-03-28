@@ -211,9 +211,6 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       // an R-tree signature, we never split a file read over HTTP
       if (fs instanceof HTTPFileSystem)
         return false;
-      // ... and never split a file less than 150MB to perform better with many small files
-      if (fs.getFileStatus(file).getLen() < 150 * 1024 * 1024)
-        return false;
       return !SpatialSite.isRTree(fs, file);
     } catch (IOException e) {
       LOG.warn("Error while determining whether a file is splittable", e);

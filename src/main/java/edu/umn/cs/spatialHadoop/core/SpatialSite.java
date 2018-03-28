@@ -239,6 +239,20 @@ public class SpatialSite {
   }
 
   /**
+   * Retrieve the local index for a given file given its extension
+   * @param path
+   * @return
+   */
+  public static Class<? extends LocalIndex> getLocalIndex(Path path) {
+    String name = path.getName();
+    int lastDot = name.lastIndexOf('.');
+    if (lastDot == -1)
+      return null;
+    String extension = name.substring(lastDot+1);
+    return getLocalIndex(extension);
+  }
+
+  /**
    * It sets the given class in the configuration and, in addition, it sets
    * the jar of that class to the class path of this job which allows it to
    * run correctly in a distributed mode.

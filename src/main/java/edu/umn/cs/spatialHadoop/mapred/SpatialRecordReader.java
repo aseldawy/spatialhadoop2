@@ -57,7 +57,6 @@ import edu.umn.cs.spatialHadoop.indexing.Partition;
  * @see ShapeLineRecordReader
  * @see ShapeRecordReader
  * @see ShapeArrayRecordReader
- * @see RTreeRecordReader
  * @author Ahmed Eldawy
  *
  */

@@ -167,6 +167,14 @@ public class RandomSpatialGenerator {
     System.out.println("Generation time: "+(t2-t1)+" millis");
   }
 
+  public static void generateFile(Path file, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
+    if (OperationsParams.isLocal(params, file)) {
+      generateFileLocal(file, params);
+    } else {
+      generateMapReduce(file, params);
+    }
+  }
+
   private static void printUsage() {
     System.out.println("Generates a file with random shapes");
     System.out.println("Parameters (* marks required parameters):");

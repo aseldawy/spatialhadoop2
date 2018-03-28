@@ -38,6 +38,19 @@ public interface LocalIndex<S extends Shape> extends Closeable {
       throws IOException, InterruptedException;
 
   /**
+   * Get the starting offset of the data part
+   * @return
+   */
+  long getDataStart();
+
+  /**
+   * Get the offset of the first byte right after the data. The data size should
+   * be {@link #getDataEnd()} - {@link #getDataStart()}
+   * @return
+   */
+  long getDataEnd();
+
+  /**
    * Points the local index to an input stream
    * @param in
    * @param start

@@ -61,6 +61,9 @@ public class RTreeGuttman implements Closeable {
   /**When reading the tree from disk. The offset of the beginning of the tree*/
   private long treeStartOffset;
 
+  /**The total size of the data chunk*/
+  private int totalDataSize;
+
   /**
    * Make a room in the data structures to accommodate a new object whether
    * it is a node or a data entry.
@@ -671,6 +674,15 @@ public class RTreeGuttman implements Closeable {
   }
 
   /**
+   * Only when the tree is read from file, return the total size of the data part
+   * in bytes.
+   * @return
+   */
+  public int getTotalDataSize() {
+    return totalDataSize;
+  }
+
+  /**
    * A class used to iterate over the data entries in the R-tree
    */
   public class Entry {
@@ -1053,6 +1065,7 @@ public class RTreeGuttman implements Closeable {
     int numLeaves = in.readInt();
     this.numNodes = numNonLeaves + numLeaves;
     int treeStructureOffset = in.readInt();
+    this.totalDataSize = treeStructureOffset;
 
     // Initialize the data structures to store objects
     this.x1s = new double[numEntries + numNodes];
@@ -1112,7 +1125,7 @@ public class RTreeGuttman implements Closeable {
       }
       nodeID++;
     }
-    entryOffsets[entryID] = (int) treeStructureOffset;
+    entryOffsets[entryID] = treeStructureOffset;
   }
 
   public void close() throws IOException {

@@ -1,7 +1,9 @@
 package edu.umn.cs.spatialHadoop.mapreduce;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.TestHelper;
 import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex;
 import edu.umn.cs.spatialHadoop.indexing.RTreeGuttman;
 import edu.umn.cs.spatialHadoop.operations.Head;
@@ -12,12 +14,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
-import java.io.DataOutput;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 
 /**
  * Unit test for the utility class {@link Head}.
@@ -55,44 +55,32 @@ public class LocalIndexRecordReaderTest extends TestCase {
   public void testReadingConcatenatedLocalIndexes() {
     try {
       // Index the first file
-      final double[][] coords = readFile("src/test/resources/test.points");
-      RTreeGuttman rtree = new RTreeGuttman(4, 8);
-      rtree.initializeFromPoints(coords[0], coords[1]);
+      OperationsParams params = new OperationsParams();
+      Path concatFile = new Path("concat.rtree");
+      FileSystem fs = concatFile.getFileSystem(params);
+      FSDataOutputStream out = fs.create(concatFile, true);
+      RRStarLocalIndex localIndexer = new RRStarLocalIndex();
+      localIndexer.setup(params);
 
-      Configuration conf = new Configuration();
-      FileSystem fs = outPath.getFileSystem(conf);
-      FSDataOutputStream out = fs.create(outPath);
-      rtree.write(out, new RTreeGuttman.Serializer() {
-        @Override
-        public int serialize(DataOutput out, int iObject) throws IOException {
-          String line = coords[0][iObject] + "," + coords[1][iObject]+"\n";
-          byte[] data = line.getBytes();
-          out.write(data);
-          return data.length;
-        }
-      });
+      File[] inputFiles = new File[] {
+          new File("src/test/resources/test.points"),
+          new File("src/test/resources/test111.points"),
+      };
 
-      // Index the second file
-      final double[][] coords2 = readFile("src/test/resources/test111.points");
-      rtree = new RTreeGuttman(4, 8);
-      rtree.initializeFromPoints(coords2[0], coords2[1]);
-
-      rtree.write(out, new RTreeGuttman.Serializer() {
-        @Override
-        public int serialize(DataOutput out, int iObject) throws IOException {
-          String line = coords2[0][iObject] + "," + coords2[1][iObject]+"\n";
-          byte[] data = line.getBytes();
-          out.write(data);
-          return data.length;
-        }
-      });
+      for (File file : inputFiles) {
+        String tempRtreeFile = "temp.rtree";
+        localIndexer.buildLocalIndex(file, new Path(tempRtreeFile), new Point());
+        InputStream in = new FileInputStream(tempRtreeFile);
+        IOUtils.copyBytes(in, out, params, false);
+        in.close();
+      }
       out.close();
 
       // Now search the concatenated file using LocalIndexRecordReader
-      OperationsParams.setShape(conf, "shape", new Point());
+      OperationsParams.setShape(params, "shape", new Point());
       LocalIndexRecordReader<Point> lindex =
           new LocalIndexRecordReader<Point>(RRStarLocalIndex.class);
-      lindex.initialize(new FileSplit(outPath, 0, fs.getFileStatus(outPath).getLen(), new String[0]), conf);
+      lindex.initialize(new FileSplit(concatFile, 0, fs.getFileStatus(concatFile).getLen(), new String[0]), params);
       int count = 0;
       while (lindex.nextKeyValue()) {
         Iterable<? extends Point> points = lindex.getCurrentValue();

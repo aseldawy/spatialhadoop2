@@ -40,6 +40,9 @@ public class RRStarLocalIndex<S extends Shape> implements LocalIndex<S> {
 
   protected DataIterator<S> iter;
 
+  /**The start and end offsets of the data chunk*/
+  protected long dataStart, dataEnd;
+
   @Override
   public void setup(Configuration conf) {
     this.conf = conf;
@@ -107,14 +110,26 @@ public class RRStarLocalIndex<S extends Shape> implements LocalIndex<S> {
         return recordOffsets.get(iObject+1) - recordOffsets.get(iObject);
       }
     });
+    int indexSize = (int) out.getPos();
+    out.writeInt(indexSize);
     out.close();
+  }
+
+  @Override
+  public long getDataStart() {
+    return dataStart;
+  }
+
+  @Override
+  public long getDataEnd() {
+    return dataEnd;
   }
 
   @Override
   public void read(FSDataInputStream in, long start, long end, final S mutableShape) throws IOException {
     if (underlyingRTree == null)
       underlyingRTree = new RTreeGuttman(0, 0);
-    underlyingRTree.readFields(in, end - start, new RTreeGuttman.Deserializer<S>() {
+    underlyingRTree.readFields(in, end - start - 4, new RTreeGuttman.Deserializer<S>() {
       private Text line = new Text2();
       @Override
       public S deserialize(DataInput in, int length) throws IOException {
@@ -125,6 +140,8 @@ public class RRStarLocalIndex<S extends Shape> implements LocalIndex<S> {
         return mutableShape;
       }
     });
+    dataStart = start;
+    dataEnd = start + underlyingRTree.getTotalDataSize();
   }
 
   @Override
