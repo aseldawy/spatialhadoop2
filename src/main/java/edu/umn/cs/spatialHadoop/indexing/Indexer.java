@@ -52,7 +52,7 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
  *
  */
 @OperationMetadata(shortName = "index",
-    description = "Builds a spatial index for a file"
+description = "Builds a spatial index for a file"
 )
 public class Indexer {
   private static final Log LOG = LogFactory.getLog(Indexer.class);
