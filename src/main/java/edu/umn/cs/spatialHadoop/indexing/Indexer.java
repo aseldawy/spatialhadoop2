@@ -444,7 +444,6 @@ public class Indexer {
     }
   }
 
-
   protected static void printUsage() {
     System.out.println("Builds a spatial index on an input file");
     System.out.println("Parameters (* marks required parameters):");
