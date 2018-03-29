@@ -423,10 +423,12 @@ public class IndexOutputFormat<S extends Shape>
       if (resultFiles.length == 0) {
         LOG.warn("No _master files were written by reducers");
       } else {
-        String sindex = conf.get("sindex");
-        Path masterPath = new Path(outPath, "_master." + sindex);
+        String sampleName = resultFiles[0].getPath().getName();
+        int lastDot = sampleName.lastIndexOf('.');
+        String extension = sampleName.substring(lastDot+1);
+        Path masterPath = new Path(outPath, "_master." + extension);
         OutputStream destOut = outFs.create(masterPath);
-        Path wktPath = new Path(outPath, "_"+sindex+".wkt");
+        Path wktPath = new Path(outPath, "_"+extension+".wkt");
         PrintStream wktOut = new PrintStream(outFs.create(wktPath));
         wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
         Text tempLine = new Text2();

@@ -102,7 +102,27 @@ public class IndexerTest extends TestCase {
     }
   }
 
-  public void testShouldWorkWithoutSIndex() {
+  public void testShouldWorkWithoutSIndexInMapReduceMode() {
+    try {
+      FileSystem outFS = outPath.getFileSystem(new Configuration());
+      outFS.delete(outPath, true);
+      Path inPath = new Path("src/test/resources/polys.osm");
+
+      OperationsParams params = new OperationsParams();
+      params.setBoolean("local", false);
+      params.setClass("shape", OSMPolygon.class, Shape.class);
+      params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
+      params.set("gindex", "rstar");
+      Indexer.index(inPath, outPath, params);
+      assertTrue("Global index file not found!",
+          outFS.exists(new Path(outPath, "_master.rstar")));
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail("Error indexing the file with an rtree global index");
+    }
+  }
+
+  public void testShouldWorkWithoutSIndexInLocalMode() {
     try {
       FileSystem outFS = outPath.getFileSystem(new Configuration());
       outFS.delete(outPath, true);
@@ -114,11 +134,14 @@ public class IndexerTest extends TestCase {
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
       params.set("gindex", "rstar");
       Indexer.index(inPath, outPath, params);
+      assertTrue("Global index file not found!",
+          outFS.exists(new Path(outPath, "_master.rstar")));
     } catch (Exception e) {
       e.printStackTrace();
       fail("Error indexing the file with an rtree global index");
     }
   }
+
 
   public void testCreatePartitioner() {
     // Should not crash with an input file that contains empty geomtries
@@ -153,7 +176,6 @@ public class IndexerTest extends TestCase {
       params.setClass("shape", Point.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
       params.setClass("gindex", RStarTreePartitioner.class, Partitioner.class);
-      params.set(Partitioner.PartitionerExtension, "rstar");
       params.setClass("lindex", RRStarLocalIndex.class, LocalIndex.class);
       Indexer.index(inPath, outPath, params);
 

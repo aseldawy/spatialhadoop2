@@ -131,7 +131,7 @@ public class Indexer {
     }
   }
 
-  private static Job indexMapReduce(Path inPath, Path outPath, Partitioner partitioner,
+  static Job indexMapReduce(Path inPath, Path outPath, Partitioner partitioner,
       OperationsParams paramss) throws IOException, InterruptedException,
       ClassNotFoundException {
     Job job = new Job(paramss, "Indexer");
@@ -258,20 +258,9 @@ public class Indexer {
     recordWriter.close(null);
     
     // Write the WKT-formatted master file
-    Path masterPath = new Path(outPath, "_master." + globalIndexExtension);
     FileSystem outFs = outPath.getFileSystem(params);
-    Path wktPath = new Path(outPath, "_"+globalIndexExtension+".wkt");
-    PrintStream wktOut = new PrintStream(outFs.create(wktPath));
-    wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
-    Text tempLine = new Text2();
-    Partition tempPartition = new Partition();
-    LineReader in = new LineReader(outFs.open(masterPath));
-    while (in.readLine(tempLine) > 0) {
-      tempPartition.fromText(tempLine);
-      wktOut.println(tempPartition.toWKT());
-    }
-    in.close();
-    wktOut.close();
+    Path masterPath = new Path(outPath, "_master." + globalIndexExtension);
+    Partitioner.generateMasterWKT(outFs, masterPath);
   }
 
 
@@ -342,7 +331,6 @@ public class Indexer {
 
       Partitioner.GlobalIndexerMetadata partitionerMetadata = partitionerClass.getAnnotation(Partitioner.GlobalIndexerMetadata.class);
       boolean disjointSupported = partitionerMetadata != null && partitionerMetadata.disjoint();
-      job.set(Partitioner.PartitionerExtension, partitionerMetadata.extension());
 
       if (job.getBoolean("disjoint", false) && !disjointSupported)
         throw new RuntimeException("Partitioner " + partitionerClass.getName() + " does not support disjoint partitioning");

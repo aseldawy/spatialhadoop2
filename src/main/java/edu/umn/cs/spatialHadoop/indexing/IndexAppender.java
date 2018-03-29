@@ -2,6 +2,8 @@ package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.IOUtils;
@@ -18,6 +20,8 @@ import java.util.Map;
 /**
  * Appends new data to an existing index
  */
+@OperationMetadata(shortName="append",
+description = "Appends a data file to an existing index")
 public class IndexAppender {
 
   public static void append(Path inPath, Path indexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
@@ -31,37 +35,45 @@ public class IndexAppender {
       do {
         tempPath = new Path(indexPath.getParent(), Integer.toString((int) (Math.random()*1000000)));
       } while (fs.exists(tempPath));
-      // Index the input in reference to the existing index
-      Indexer.repartition(inPath, tempPath, indexPath, params);
-      fs.deleteOnExit(tempPath);
-      // Concatenate corresponding files
-      Map<Integer, Partition> mergedIndex = new HashMap<Integer, Partition>();
-      for (Partition p : SpatialSite.getGlobalIndex(fs, indexPath)) {
-        mergedIndex.put(p.cellId, p);
-      }
-      for (Partition newP : SpatialSite.getGlobalIndex(fs, tempPath)) {
-        Partition existingP = mergedIndex.get(newP.cellId);
-        // Combine the partition information
-        existingP.expand(newP);
-        // Combine the file
-        Path pathOfExisting = new Path(indexPath, existingP.filename);
-        Path pathOfNew = new Path(tempPath, newP.filename);
-        concat(params, fs, pathOfExisting, pathOfNew);
-      }
-      // Write back the merge partitions as a new global index
-      Path masterFilePath = fs.listStatus(indexPath, new PathFilter() {
-        @Override
-        public boolean accept(Path path) {
-          return path.getName().startsWith("_master");
+      try {
+        // Index the input in reference to the existing index
+        Indexer.repartition(inPath, tempPath, indexPath, params);
+
+        // Concatenate corresponding files
+        Map<Integer, Partition> mergedIndex = new HashMap<Integer, Partition>();
+        for (Partition p : SpatialSite.getGlobalIndex(fs, indexPath)) {
+          mergedIndex.put(p.cellId, p);
         }
-      })[0].getPath();
-      FSDataOutputStream out = fs.create(masterFilePath, true);
-      Text line = new Text();
-      for (Partition p : mergedIndex.values()) {
-        p.toText(line);
-        out.write(line.getBytes(), 0, line.getLength());
+        for (Partition newP : SpatialSite.getGlobalIndex(fs, tempPath)) {
+          Partition existingP = mergedIndex.get(newP.cellId);
+          // Combine the partition information
+          existingP.expand(newP);
+          // Combine the file
+          Path pathOfExisting = new Path(indexPath, existingP.filename);
+          Path pathOfNew = new Path(tempPath, newP.filename);
+          concat(params, fs, pathOfExisting, pathOfNew);
+        }
+        // Write back the merge partitions as a new global index
+        Path masterFilePath = fs.listStatus(indexPath, new PathFilter() {
+          @Override
+          public boolean accept(Path path) {
+            return path.getName().startsWith("_master");
+          }
+        })[0].getPath();
+        FSDataOutputStream out = fs.create(masterFilePath, true);
+        Text line = new Text();
+        for (Partition p : mergedIndex.values()) {
+          line.clear();
+          p.toText(line);
+          TextSerializerHelper.appendNewLine(line);
+          out.write(line.getBytes(), 0, line.getLength());
+        }
+        out.close();
+
+        Partitioner.generateMasterWKT(fs, masterFilePath);
+      } finally {
+        fs.delete(tempPath, true);
       }
-      out.close();
     }
   }
 
@@ -127,7 +139,7 @@ public class IndexAppender {
   public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
 
-    if (!params.checkInputOutput(true)) {
+    if (!params.checkInput()) {
       printUsage();
       return;
     }

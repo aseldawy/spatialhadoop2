@@ -9,19 +9,23 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.lang.IllegalArgumentException;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import edu.umn.cs.spatialHadoop.io.Text2;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.util.LineReader;
 import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
@@ -37,9 +41,8 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  */
 public abstract class Partitioner implements Writable {
   /**Configuration line for partitioner class*/
-  private static final String PartitionerClass = "Partitioner.Class";
-  private static final String PartitionerValue = "Partitioner.Value";
-  public static final String PartitionerExtension = "Partitioner.Extension";
+  static final String PartitionerClass = "Partitioner.Class";
+  static final String PartitionerValue = "Partitioner.Value";
   public static final String PartitionerDisjoint = "Partitioner.Disjoint";
 
   @Target(ElementType.TYPE)
@@ -149,5 +152,29 @@ public abstract class Partitioner implements Writable {
       Log.warn("Error retrieving partitioner value", e);
       return null;
     }
+  }
+
+  /**
+   * Create a WKT file form an existing master file to use with GIS software.
+   * @param fs
+   * @param masterPath
+   */
+  public static void generateMasterWKT(FileSystem fs, Path masterPath) throws IOException {
+    // Write the WKT-formatted master file
+    String name = masterPath.getName();
+    int lastDot = name.lastIndexOf('.');
+    String globalIndexExtension = name.substring(lastDot + 1);
+    Path wktPath = new Path(masterPath.getParent(), "_"+globalIndexExtension+".wkt");
+    PrintStream wktOut = new PrintStream(fs.create(wktPath));
+    wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+    Text tempLine = new Text2();
+    Partition tempPartition = new Partition();
+    LineReader in = new LineReader(fs.open(masterPath));
+    while (in.readLine(tempLine) > 0) {
+      tempPartition.fromText(tempLine);
+      wktOut.println(tempPartition.toWKT());
+    }
+    in.close();
+    wktOut.close();
   }
 }

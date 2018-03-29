@@ -39,7 +39,9 @@ public final class TextSerializerHelper {
   
   /**64 bytes to append to a string if necessary*/
   final static byte[] ToAppend = new byte[64];
-  
+
+  final static byte[] NewLine;
+
   static {
     HexadecimalChars = new boolean[256];
     DecimalChars = new boolean[256];
@@ -55,6 +57,8 @@ public final class TextSerializerHelper {
     DecimalChars['-'] = true;
     
     Arrays.fill(ToAppend, (byte)' ');
+
+    NewLine = new byte[] {'\n'};
   }
   
   /**
@@ -634,5 +638,10 @@ public final class TextSerializerHelper {
       hex[2*i+1] = HexLookupTable[binary[i] & 0xF];
     }
     return new String(hex);
+  }
+
+
+  public static void appendNewLine(Text line) {
+    line.append(NewLine, 0, NewLine.length);
   }
 }
