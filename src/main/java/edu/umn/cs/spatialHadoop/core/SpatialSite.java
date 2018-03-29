@@ -167,23 +167,21 @@ public class SpatialSite {
         }
       }
       // Load global index
-      Map<String, String> gindexes = (Map<String, String>) conf.get("GlobalIndexes");
-      for (Map.Entry<String, String> gindex : gindexes.entrySet()) {
+      for (String gindex : (List<String>) conf.get("GlobalIndexes")) {
         try {
-          String shortName = gindex.getKey();
-          Class<? extends Partitioner> indexerClass = Class.forName(gindex.getValue()).asSubclass(Partitioner.class);
-          CommonGlobalIndexes.put(shortName, indexerClass);
+          Class<? extends Partitioner> indexerClass = Class.forName(gindex).asSubclass(Partitioner.class);
+          Partitioner.GlobalIndexerMetadata metadata = indexerClass.getAnnotation(Partitioner.GlobalIndexerMetadata.class);
+          CommonGlobalIndexes.put(metadata.extension(), indexerClass);
         } catch (ClassNotFoundException e) {
           e.printStackTrace();
         }
       }
       // Load local index
-      Map<String, String> lindexes = (Map<String, String>) conf.get("LocalIndexes");
-      for (Map.Entry<String, String> lindex : lindexes.entrySet()) {
+      for (String lindex : (List<String>) conf.get("LocalIndexes")) {
         try {
-          String shortName = lindex.getKey();
-          Class<? extends LocalIndex> indexerClass = Class.forName(lindex.getValue()).asSubclass(LocalIndex.class);
-          CommonLocalIndexes.put(shortName, indexerClass);
+          Class<? extends LocalIndex> indexerClass = Class.forName(lindex).asSubclass(LocalIndex.class);
+          LocalIndex.LocalIndexMetadata metadata = indexerClass.getAnnotation(LocalIndex.LocalIndexMetadata.class);
+          CommonLocalIndexes.put(metadata.extension(), indexerClass);
         } catch (ClassNotFoundException e) {
           e.printStackTrace();
         }
@@ -418,10 +416,6 @@ public class SpatialSite {
         }
         GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
         globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
-        String extension = masterFile.getPath().getName();
-        extension = extension.substring(extension.lastIndexOf('.') + 1);
-        globalIndex.setCompact(GridRecordWriter.PackedIndexes.contains(extension));
-        globalIndex.setReplicated(GridRecordWriter.ReplicatedIndexes.contains(extension));
         return globalIndex;
       } else if (nasaFiles > allFiles.length / 2) {
         // A folder that contains HDF files

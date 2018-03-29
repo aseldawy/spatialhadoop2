@@ -8,6 +8,10 @@ import org.apache.hadoop.fs.Path;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * A class that reads and processes files stored using a local index.
@@ -16,6 +20,13 @@ public interface LocalIndex<S extends Shape> extends Closeable {
 
   /**The name of the configuration line that stores the local index class name*/
   String LocalIndexClass = "LocalIndex.LocalIndexClass";
+
+  @Target(ElementType.TYPE)
+  @Retention(RetentionPolicy.RUNTIME)
+  @interface LocalIndexMetadata {
+    /**The extension used with the locally indexed files*/
+    String extension();
+  }
 
   /**
    * Initializes the local indexer with a configuration

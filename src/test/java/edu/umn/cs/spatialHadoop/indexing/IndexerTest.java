@@ -112,7 +112,7 @@ public class IndexerTest extends TestCase {
       params.setBoolean("local", true);
       params.setClass("shape", OSMPolygon.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
-      params.set("gindex", "rstree");
+      params.set("gindex", "rstar");
       Indexer.index(inPath, outPath, params);
     } catch (Exception e) {
       e.printStackTrace();
@@ -201,15 +201,18 @@ public class IndexerTest extends TestCase {
       outFS.delete(refPath, true);
 
       outFS.mkdirs(refPath);
-      FSDataOutputStream out = outFS.create(new Path(refPath, "_master.rtree"));
+      FSDataOutputStream out = outFS.create(new Path(refPath, "_master.rstar"));
       PrintStream ps = new PrintStream(out);
       Partition[] fakePartitions = {
           new Partition("data1", new CellInfo(1, 0, 0, 10, 10)),
           new Partition("data2", new CellInfo(2, 20, 5, 30, 50)),
       };
       for (Partition p : fakePartitions)
-        ps.println(p.toText(new Text()));
+        ps.println(p.toText(new Text("")));
       ps.close();
+      // Create a fake files
+      outFS.create(new Path(refPath, "data1")).close();
+      outFS.create(new Path(refPath, "data2")).close();
 
       Partitioner p = Indexer.initializeRepartition(refPath, conf);
 

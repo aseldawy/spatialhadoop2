@@ -16,17 +16,17 @@ Shapes:
 
 # Short names for common global indexes
 GlobalIndexes:
-  grid: edu.umn.cs.spatialHadoop.indexing.GridPartitioner
-  str: edu.umn.cs.spatialHadoop.indexing.STRPartitioner
-  rstree: edu.umn.cs.spatialHadoop.indexing.RStarTreePartitioner
-  kdtree: edu.umn.cs.spatialHadoop.indexing.KdTreePartitioner
-  zcurve: edu.umn.cs.spatialHadoop.indexing.ZCurvePartitioner
-  hilbert: edu.umn.cs.spatialHadoop.indexing.HilbertCurvePartitioner
-  quadtree: edu.umn.cs.spatialHadoop.indexing.QuadTreePartitioner
+  - edu.umn.cs.spatialHadoop.indexing.GridPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.STRPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.RStarTreePartitioner
+  - edu.umn.cs.spatialHadoop.indexing.KdTreePartitioner
+  - edu.umn.cs.spatialHadoop.indexing.ZCurvePartitioner
+  - edu.umn.cs.spatialHadoop.indexing.HilbertCurvePartitioner
+  - edu.umn.cs.spatialHadoop.indexing.QuadTreePartitioner
 
 # Short names for common local indexes
 LocalIndexes:
-  rrstree: edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex
+  - edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex
 
 # Short name for spatial indexes that combine global, local, and disjoint
 SpatialIndexes:
@@ -42,12 +42,12 @@ SpatialIndexes:
     disjoint: true
 
   - short-name: rtree
-    gindex: rstree
-    lindex: rrstree
+    gindex: rstar
+    lindex: rrstar
 
   - short-name: r+tree
-    gindex: rstree
-    lindex: rrstree
+    gindex: rstar
+    lindex: rrstar
     disjoint: true
 
   - short-name: quadtree

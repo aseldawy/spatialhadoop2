@@ -111,29 +111,21 @@ public class IndexOutputFormat<S extends Shape>
     public IndexRecordWriter(TaskAttemptContext task, String name, Path outPath,
         Progressable progress)
         throws IOException, InterruptedException {
-      conf = task.getConfiguration();
-      this.disjoint = conf.getBoolean(Partitioner.PartitionerDisjoint, false);
-      this.outFS = outPath.getFileSystem(conf);
-      this.outPath = outPath;
-      this.partitioner = Partitioner.getPartitioner(conf);
-      localIndexClass = conf.getClass(LocalIndex.LocalIndexClass, null, LocalIndex.class);
-      if (localIndexClass != null) {
-        try {
-          localIndexExtension = (String) localIndexClass.getField("Extension").get(null);
-        } catch (IllegalAccessException e) {
-          e.printStackTrace();
-        } catch (NoSuchFieldException e) {
-          e.printStackTrace();
-        }
-      }
-      String globalIndexExtension = conf.get(Partitioner.PartitionerExtension);
-      Path masterFilePath = name == null ?
-          new Path(outPath, String.format("_master.%s", globalIndexExtension)) :
-            new Path(outPath, String.format("_master_%s.%s", name, globalIndexExtension));
-      this.masterFile = outFS.create(masterFilePath);
+      this(Partitioner.getPartitioner(task.getConfiguration()), name, outPath, task.getConfiguration());
     }
 
-    public IndexRecordWriter(Partitioner partitioner, Path outPath, Configuration conf)
+    /**
+     * Create a record writer for index files
+     * @param partitioner
+     * @param name A unique name added to the global index file which is used
+     *             to prevent multiple reducers from writing separate files with
+     *             the same name.
+     * @param outPath
+     * @param conf
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    public IndexRecordWriter(Partitioner partitioner, String name, Path outPath, Configuration conf)
             throws IOException, InterruptedException {
       this.conf = conf;
       this.disjoint = conf.getBoolean(Partitioner.PartitionerDisjoint, false);
@@ -141,17 +133,12 @@ public class IndexOutputFormat<S extends Shape>
       this.outPath = outPath;
       this.partitioner = partitioner;
       localIndexClass = conf.getClass(LocalIndex.LocalIndexClass, null, LocalIndex.class);
-      if (localIndexClass != null) {
-        try {
-          localIndexExtension = (String) localIndexClass.getField("Extension").get(null);
-        } catch (IllegalAccessException e) {
-          e.printStackTrace();
-        } catch (NoSuchFieldException e) {
-          e.printStackTrace();
-        }
-      }
-      String globalIndexExtension = conf.get(Partitioner.PartitionerExtension);
-      Path masterFilePath =  new Path(outPath, "_master."+ globalIndexExtension);
+      if (localIndexClass != null)
+        localIndexExtension = localIndexClass.getAnnotation(LocalIndex.LocalIndexMetadata.class).extension();
+      String globalIndexExtension = partitioner.getClass().getAnnotation(Partitioner.GlobalIndexerMetadata.class).extension();
+      Path masterFilePath = name == null ?
+          new Path(outPath, String.format("_master.%s", globalIndexExtension)) :
+          new Path(outPath, String.format("_master_%s.%s", name, globalIndexExtension));
       this.masterFile = outFS.create(masterFilePath);
     }
     

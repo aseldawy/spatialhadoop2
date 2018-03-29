@@ -3,7 +3,9 @@ package edu.umn.cs.spatialHadoop.operations;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.TestHelper;
 import edu.umn.cs.spatialHadoop.core.*;
+import edu.umn.cs.spatialHadoop.indexing.LocalIndex;
 import edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex;
+import edu.umn.cs.spatialHadoop.indexing.RRStarTree;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -44,7 +46,8 @@ public class LocalSamplerTest extends TestCase {
   public void testSampleRTree() {
     // Build an R-tree on a random data and store in a file
     Path randomFile = new Path("temp.points");
-    Path rtreeFile = new Path("temp."+RRStarLocalIndex.Extension);
+    String rrstarExtension = RRStarLocalIndex.class.getAnnotation(LocalIndex.LocalIndexMetadata.class).extension();
+    Path rtreeFile = new Path("temp."+rrstarExtension);
     try {
       final Rectangle mbr = new Rectangle(0, 0, 1000, 1000);
       // Generate a random file of points

@@ -19,13 +19,11 @@ import java.util.Iterator;
  * {@link RTreeGuttman} for reading it.
  * @param <S>
  */
+@LocalIndex.LocalIndexMetadata(extension = "rrstar")
 public class RRStarLocalIndex<S extends Shape> implements LocalIndex<S> {
 
   /**The configuration of the underlying job*/
   private Configuration conf;
-
-  /**The extension to use when writing the files*/
-  public static final String Extension = "rrstree";
 
   /**
    * Number of nodes to fit in one disk page.

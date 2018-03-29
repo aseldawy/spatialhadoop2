@@ -44,7 +44,7 @@ public abstract class Partitioner implements Writable {
 
   @Target(ElementType.TYPE)
   @Retention(RetentionPolicy.RUNTIME)
-  @interface GlobalIndexerMetadata {
+  public @interface GlobalIndexerMetadata {
     /**Whether this global indexer supports disjoint partitions or not*/
     boolean disjoint();
 

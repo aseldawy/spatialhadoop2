@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.indexing.LocalIndex;
 import edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -88,8 +89,9 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
         // HDF File. Create HDFRecordReader
         return (RecordReader)new HDFRecordReader();
       }
-      if (extension.equals(RRStarLocalIndex.Extension)) {
-        return (RecordReader) new LocalIndexRecordReader<V>(RRStarLocalIndex.class);
+      Class<? extends LocalIndex> lindex = SpatialSite.getLocalIndex(extension);
+      if (lindex != null) {
+        return (RecordReader) new LocalIndexRecordReader<V>(lindex);
       }
       // Check if a custom record reader is configured with this extension
       Configuration conf = context != null? context.getConfiguration() : new Configuration();

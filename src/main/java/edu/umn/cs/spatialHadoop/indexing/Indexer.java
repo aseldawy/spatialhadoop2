@@ -170,7 +170,7 @@ public class Indexer {
     final Configuration conf = job.getConfiguration();
 
     final boolean disjoint = params.getBoolean(Partitioner.PartitionerDisjoint, false);
-    String globalIndexExtension = params.get(Partitioner.PartitionerExtension);
+    String globalIndexExtension = p.getClass().getAnnotation(Partitioner.GlobalIndexerMetadata.class).extension();
 
     // Start reading input file
     List<InputSplit> splits = new ArrayList<InputSplit>();
@@ -200,7 +200,7 @@ public class Indexer {
     }
 
     final IndexRecordWriter<Shape> recordWriter = new IndexRecordWriter<Shape>(
-        p, outPath, conf);
+        p, null, outPath, conf);
     for (FileSplit fsplit : fsplits) {
       RecordReader<Rectangle, Iterable<Shape>> reader = inputFormat.createRecordReader(fsplit, null);
       if (reader instanceof SpatialRecordReader3) {
