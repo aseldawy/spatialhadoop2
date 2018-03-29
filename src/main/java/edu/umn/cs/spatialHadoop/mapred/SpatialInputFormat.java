@@ -205,7 +205,7 @@ public abstract class SpatialInputFormat<K, V> extends FileInputFormat<K, V> {
       // ... and never split a file less than 150MB to perform better with many small files
       if (fs.getFileStatus(file).getLen() < 150 * 1024 * 1024)
         return false;
-      return !SpatialSite.isRTree(fs, file);
+      return true;
     } catch (IOException e) {
       return super.isSplitable(fs, file);
     }

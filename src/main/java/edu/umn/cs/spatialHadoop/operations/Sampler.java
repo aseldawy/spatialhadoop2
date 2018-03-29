@@ -53,6 +53,8 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "sample",
+description = "Reads a random sample from the input file")
 public class Sampler {
   private static final Log LOG = LogFactory.getLog(Sampler.class);
 

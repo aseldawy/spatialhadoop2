@@ -51,6 +51,8 @@ import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "rangequery",
+description = "Finds all objects that ovelap a rectangular query range")
 public class RangeQuery {
   /**Logger for RangeQuery*/
   static final Log LOG = LogFactory.getLog(RangeQuery.class);

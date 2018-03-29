@@ -52,6 +52,8 @@ import edu.umn.cs.spatialHadoop.nasa.NASAShape;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "aggregate",
+description = "Computes the spatio-temporal aggregate of HDF files")
 public class Aggregate {
   /**Logger*/
   @SuppressWarnings("unused")

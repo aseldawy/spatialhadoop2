@@ -30,6 +30,7 @@ import java.util.Vector;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -262,6 +263,8 @@ class StockQuadTree {
  * 
  * @author Ahmed Eldawy
  */
+@OperationMetadata(shortName = "shahedindexer",
+description = "Creates a multilevel spatio-temporal indexer for NASA data")
 public class AggregateQuadTree {
   private static final Log LOG = LogFactory.getLog(AggregateQuadTree.class);
   

@@ -68,6 +68,8 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "mbr",
+description = "Finds the minimal bounding rectangle of an input file")
 public class FileMBR {
   /**Logger for FileMBR*/
   private static final Log LOG = LogFactory.getLog(FileMBR.class);

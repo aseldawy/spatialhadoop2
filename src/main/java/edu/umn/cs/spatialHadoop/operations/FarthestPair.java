@@ -53,6 +53,8 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "farthestpair",
+description = "Computes the farthest pair of point of an input set of points")
 public class FarthestPair {
   
   private static final Log LOG = LogFactory.getLog(FarthestPair.class);

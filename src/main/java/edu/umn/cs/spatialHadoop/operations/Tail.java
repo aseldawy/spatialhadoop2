@@ -28,6 +28,8 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
  * @author eldawy
  *
  */
+@OperationMetadata(shortName = "tail",
+description = "Retrieves the last n lines of a text file")
 public class Tail {
   
   /**

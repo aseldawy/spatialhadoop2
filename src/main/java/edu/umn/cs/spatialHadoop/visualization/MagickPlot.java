@@ -23,6 +23,7 @@ import java.io.PrintWriter;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -42,6 +43,8 @@ import edu.umn.cs.spatialHadoop.osm.OSMEdge;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "mplot",
+description = "Plot using ImageMagick")
 public class MagickPlot {
 
   public static class MagickPlotter extends Plotter {

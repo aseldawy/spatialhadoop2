@@ -66,6 +66,8 @@ import edu.umn.cs.spatialHadoop.util.Progressable;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "union",
+description = "Computes the union of input shapes")
 public class Union {
   public static final GeometryFactory FACTORY = new GeometryFactory();
   

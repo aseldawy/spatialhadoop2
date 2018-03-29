@@ -18,6 +18,7 @@ import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -34,6 +35,8 @@ import edu.umn.cs.spatialHadoop.operations.FileMBR;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "gplot",
+description = "Plots a file to an image")
 public class GeometricPlot {
   
   public static class GeometricRasterizer extends Plotter {

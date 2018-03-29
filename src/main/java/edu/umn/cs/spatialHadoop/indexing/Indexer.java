@@ -15,6 +15,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
 import edu.umn.cs.spatialHadoop.core.*;
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -50,6 +51,9 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "index",
+    description = "Builds a spatial index for a file"
+)
 public class Indexer {
   private static final Log LOG = LogFactory.getLog(Indexer.class);
   

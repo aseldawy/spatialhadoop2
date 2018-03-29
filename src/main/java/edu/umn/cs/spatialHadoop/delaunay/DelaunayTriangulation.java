@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -56,6 +57,8 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  * @author Ahmed Eldawy
  * 
  */
+@OperationMetadata(shortName = "delaunay",
+description = "Computes the Delaunay triangulation for a set of points")
 public class DelaunayTriangulation {
 
   /**Logger to write log messages for this class*/

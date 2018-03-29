@@ -61,6 +61,8 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "skyline",
+description = "Computes the skyline of an input set of points")
 public class Skyline {
   
   private static final Log LOG = LogFactory.getLog(Skyline.class);

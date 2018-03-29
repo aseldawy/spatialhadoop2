@@ -1,0 +1,26 @@
+# List of operations accessible from the command line
+
+# Short names for common shapes
+- edu.umn.cs.spatialHadoop.indexing.Indexer
+- edu.umn.cs.spatialHadoop.operations.RangeQuery
+- edu.umn.cs.spatialHadoop.operations.KNN
+- edu.umn.cs.spatialHadoop.operations.SJMR
+- edu.umn.cs.spatialHadoop.operations.DistributedJoin
+- edu.umn.cs.spatialHadoop.operations.FileMBR
+- edu.umn.cs.spatialHadoop.operations.Sampler
+- edu.umn.cs.spatialHadoop.operations.RandomSpatialGenerator
+- edu.umn.cs.spatialHadoop.operations.Union
+- edu.umn.cs.spatialHadoop.operations.UltimateUnion
+- edu.umn.cs.spatialHadoop.operations.Skyline
+- edu.umn.cs.spatialHadoop.operations.ConvexHull
+- edu.umn.cs.spatialHadoop.operations.FarthestPair
+- edu.umn.cs.spatialHadoop.operations.ClosestPair
+- edu.umn.cs.spatialHadoop.operations.DistributedCopy
+- edu.umn.cs.spatialHadoop.ReadFile
+- edu.umn.cs.spatialHadoop.delaunay.DelaunayTriangulation
+- edu.umn.cs.spatialHadoop.nasa.MultiHDFPlot
+- edu.umn.cs.spatialHadoop.nasa.HDFPlot
+- edu.umn.cs.spatialHadoop.visualization.GeometricPlot
+- edu.umn.cs.spatialHadoop.visualization.HeatMapPlot
+- edu.umn.cs.spatialHadoop.nasa.ShahedServer
+- edu.umn.cs.spatialHadoop.visualization.HadoopvizServer

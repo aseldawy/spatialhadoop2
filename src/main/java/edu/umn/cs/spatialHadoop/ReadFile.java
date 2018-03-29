@@ -8,6 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileSystem;
@@ -23,6 +24,8 @@ import edu.umn.cs.spatialHadoop.indexing.Partition;
  * @author eldawy
  *
  */
+@OperationMetadata(shortName = "readfile",
+description = "Retrieve some information about the index of a file")
 public class ReadFile {
 
   private static void printUsage() {

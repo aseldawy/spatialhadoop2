@@ -55,6 +55,8 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "closestpair",
+description = "Computes the closest pair of point of an input set of points")
 public class ClosestPair {
   
   /**Logger to write log messages for this class*/

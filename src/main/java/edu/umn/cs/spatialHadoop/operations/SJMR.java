@@ -63,6 +63,9 @@ import edu.umn.cs.spatialHadoop.util.Progressable;
  * @author eldawy
  *
  */
+@OperationMetadata(shortName = "sjmr",
+description = "Computes the spatial join between two input files using the " +
+        "SJMR algorithm")
 public class SJMR {
   
   /**Class logger*/

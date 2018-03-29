@@ -62,6 +62,8 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "convexhull",
+description = "Computes the convex hull of an input set of points")
 public class ConvexHull {
   
   private static final Log LOG = LogFactory.getLog(ConvexHull.class);

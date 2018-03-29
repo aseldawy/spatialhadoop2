@@ -74,6 +74,9 @@ import edu.umn.cs.spatialHadoop.util.Progressable;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "dj",
+description = "Computes the spatial join between two input files using the " +
+		"distributed join algorithm")
 public class DistributedJoin {
 	private static final Log LOG = LogFactory.getLog(DistributedJoin.class);
 	public static RunningJob lastRunningJob;

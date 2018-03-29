@@ -12,6 +12,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -31,6 +32,8 @@ import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "lakesplot",
+description = "Plots lakes to SVG image")
 public class LakesPlot {
   
   public static class LakePlotter extends Plotter {

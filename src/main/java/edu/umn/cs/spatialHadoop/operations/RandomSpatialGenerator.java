@@ -46,6 +46,8 @@ import edu.umn.cs.spatialHadoop.mapreduce.RandomShapeGenerator.DistributionType;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "generate",
+description = "Generates a random file containing spatial data")
 public class RandomSpatialGenerator {
   
   private static Job generateMapReduce(Path outFile, OperationsParams params)

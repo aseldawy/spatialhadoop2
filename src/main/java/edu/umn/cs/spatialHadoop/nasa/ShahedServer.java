@@ -42,6 +42,7 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -62,6 +63,8 @@ import edu.umn.cs.spatialHadoop.nasa.AggregateQuadTree.Node;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "vizserver",
+description = "Starts a server that handles visualization requests")
 public class ShahedServer extends AbstractHandler {
 
   private static final Log LOG = LogFactory.getLog(ShahedServer.class);

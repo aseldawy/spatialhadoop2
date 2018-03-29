@@ -21,6 +21,7 @@ import java.util.Iterator;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -44,6 +45,8 @@ import edu.umn.cs.spatialHadoop.visualization.SingleLevelPlot;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "hdfplot",
+description = "Plots a heat map for a give NASA dataset")
 public class HDFPlot {
   static final Log LOG = LogFactory.getLog(HDFPlot.class);
 

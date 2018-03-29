@@ -68,6 +68,8 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "knn",
+description = "Finds the k nearest neighbors in a file to a point")
 public class KNN {
   /**Logger for KNN*/
   private static final Log LOG = LogFactory.getLog(KNN.class);
