@@ -126,7 +126,7 @@ public class Indexer {
       LOG.info("Done with partition #"+partitionID);
     }
   }
-    
+
   private static Job indexMapReduce(Path inPath, Path outPath, Partitioner partitioner,
       OperationsParams paramss) throws IOException, InterruptedException,
       ClassNotFoundException {
@@ -414,7 +414,17 @@ public class Indexer {
     Partitioner.setPartitioner(conf, p);
 
     // Initialize the local index
-    // TODO retrieve a data file from refPath and find the LocalIndexer based on the extension
+    // retrieve a data file from refPath and find the LocalIndexer based on the extension
+    // Infer the local index
+    FileSystem fs = refPath.getFileSystem(conf);
+    String datafileName = fs.listStatus(refPath, SpatialSite.NonHiddenFileFilter)[0].getPath().getName();
+    int dotIndex = datafileName.lastIndexOf('.');
+    if (dotIndex != -1) {
+      // There is an extension
+      String extension = datafileName.substring(dotIndex+1);
+      Class<? extends LocalIndex> lindex = SpatialSite.getLocalIndex(extension);
+      conf.setClass(LocalIndex.LocalIndexClass, lindex, LocalIndex.class);
+    }
 
     return p;
   }

@@ -6,6 +6,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.util.GenericOptionsParser;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -108,5 +109,36 @@ public class IndexAppender {
         fs.rename(tempPath, dest);
       }
     }
+  }
+
+  protected static void printUsage() {
+    System.out.println("Adds more data to an existing index");
+    System.out.println("Parameters (* marks required parameters):");
+    System.out.println("<input file> - (*) Path to input file that contains the new data");
+    System.out.println("<index path> - (*) Path to the index");
+    System.out.println("shape:<point|rectangle|polygon> - (*) Type of shapes stored in input file");
+    System.out.println("sindex:<index> - Type of spatial index (grid|str|str+|rtree|r+tree|quadtree|zcurve|hilbert|kdtree)");
+    System.out.println("gindex:<index> - Type of the global index (grid|str|rstree|kdtree|zcurve|hilbert|quadtree)");
+    System.out.println("lindex:<index> - Type of the local index (rrstree)");
+    GenericOptionsParser.printGenericCommandUsage(System.out);
+  }
+
+
+  public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
+    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
+
+    if (!params.checkInputOutput(true)) {
+      printUsage();
+      return;
+    }
+    Path inputPath = params.getInputPath();
+    Path outputPath = params.getOutputPath();
+
+    // The spatial index to use
+    long t1 = System.nanoTime();
+    append(inputPath, outputPath, params);
+    long t2 = System.nanoTime();
+    System.out.printf("Total append time %f seconds\n",(t2-t1)*1E-9);
+
   }
 }
