@@ -4,8 +4,9 @@ import edu.umn.cs.spatialHadoop.io.Text2;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.FileSplit;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
@@ -14,34 +15,56 @@ import java.util.Random;
 /**
  * Iterates over a sample of an input file
  */
-public class SampleIterable implements Iterable<Text>, Iterator<Text> {
+public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable {
   /**Input stream over the input*/
-  private final FSDataInputStream in;
+  private FSDataInputStream in;
 
+  /**The starting position of the file*/
+  private final long start;
   /**The end offset of the file*/
   private final long end;
+
+  /**The current position in the file to report the progress*/
+  private long pos;
 
   /**The sampling ratio*/
   private final float ratio;
 
   /**A mutable text value to iterate over the input*/
-  protected Text value;
+  protected Text currentValue;
+  /**A mutable text that is used to prefetch next object*/
+  protected Text nextValue;
 
   /**The random number generator associated with this iterable*/
   protected Random random;
 
   /**
    * Iterates over a sample of (roughly) the given ratio over a file split
+   * @param fs the file system that contains the file
    * @param fsplit
-   * @param ratio
+   * @param ratio the average fraction of records to sample [0, 1]
+   * @param seed the seed used to initialize the random number generator
    */
-  public SampleIterable(FileSystem fs, FileSplit fsplit, float ratio) throws IOException {
+  public SampleIterable(FileSystem fs, FileSplit fsplit, float ratio, long seed) throws IOException {
     this.in = fs.open(fsplit.getPath());
-    in.seek(fsplit.getStart());
+    in.seek(this.start = fsplit.getStart());
     this.end = fsplit.getStart() + fsplit.getLength();
-    this.value = new Text2();
-    this.random = new Random();
+    this.currentValue = new Text2();
+    this.nextValue = new Text2();
+    this.random = new Random(seed);
     this.ratio = ratio;
+    prefetchNext();
+  }
+
+  public SampleIterable(FSDataInputStream in, long dataStart, long dataEnd, float ratio, long seed) throws IOException {
+    this.in = in;
+    in.seek(this.start = dataStart);
+    this.end = dataEnd;
+    this.currentValue = new Text2();
+    this.nextValue = new Text2();
+    this.random = new Random(seed);
+    this.ratio = ratio;
+    prefetchNext();
   }
 
   @Override
@@ -49,27 +72,46 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text> {
     return this;
   }
 
-  @Override
-  public boolean hasNext() {
+  public void prefetchNext() {
     try {
-      while (in.getPos() < end) {
+      while ((pos = in.getPos()) < end) {
         if (random.nextFloat() < ratio) {
-          value.clear();
-          readUntilEOL(in, value);
-          return true;
+          do {
+            nextValue.clear();
+            pos += readUntilEOL(in, nextValue);
+          } while (nextValue.getLength() == 0 && pos < end);
+          if (nextValue.getLength() == 0)
+            nextValue = null;
+          return;
         } else {
           skipToEOL(in);
         }
       }
-      return false;
+      // Reached end of file
+      nextValue = null;
     } catch (IOException e){
-      return false;
+      nextValue = null;
     }
+  }
+
+
+  @Override
+  public boolean hasNext() {
+    return nextValue != null;
   }
 
   @Override
   public Text next() {
-    return value;
+    // Swap currentValue <-> nextValue
+    Text temp = nextValue;
+    nextValue = currentValue;
+    currentValue = temp;
+    prefetchNext();
+    return currentValue;
+  }
+
+  public float getProgress() {
+    return ((float) (pos - start)) / (end - start);
   }
 
   public void remove() {
@@ -135,5 +177,12 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text> {
       size++;
     } while (b != -1 && (b != '\n' && b != '\r'));
     return size;
+  }
+
+  @Override
+  public void close() throws IOException {
+    if (in != null)
+      in.close();
+    in = null;
   }
 }

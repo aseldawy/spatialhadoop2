@@ -224,7 +224,6 @@ public class LocalSampler {
   
   /**
    * Sample a specific number of lines from a given file
-   * @param fs
    * @param file
    * @param count
    * @param seed

@@ -216,9 +216,10 @@ public class IndexerTest extends TestCase {
   }
 
   public void testRepartitioner() {
+    Path refPath = new Path(outPath.getParent(), "refpath");
+    Configuration conf = new Configuration();
+
     try {
-      Path refPath = new Path(outPath.getParent(), "refpath");
-      Configuration conf = new Configuration();
       FileSystem outFS = refPath.getFileSystem(conf);
       outFS.delete(refPath, true);
 
@@ -250,6 +251,8 @@ public class IndexerTest extends TestCase {
     } catch (Exception e) {
       e.printStackTrace();
       fail("Error while running test!");
+    } finally {
+
     }
   }
 }

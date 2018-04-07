@@ -1,40 +1,54 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
+import edu.umn.cs.spatialHadoop.TestHelper;
 import edu.umn.cs.spatialHadoop.core.*;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery;
+import edu.umn.cs.spatialHadoop.util.MetadataUtil;
 import junit.framework.TestCase;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.Text;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.ArrayList;
 
 public class IndexAppenderTest extends TestCase {
 
-  protected Path indexPath = new Path("testindex");
+  /**A scratch area used to do all the tests which gets wiped at the end*/
+  protected Path scratchPath = new Path("testindex");
 
   @Override
   protected void tearDown() throws Exception {
     OperationsParams params = new OperationsParams();
-    FileSystem fs = indexPath.getFileSystem(params);
-    fs.delete(indexPath, true);
+    FileSystem fs = scratchPath.getFileSystem(params);
+    fs.delete(scratchPath, true);
+  }
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
+    OperationsParams params = new OperationsParams();
+    FileSystem fs = scratchPath.getFileSystem(params);
+    if (fs.exists(scratchPath))
+      fs.delete(scratchPath, true);
+    if (!fs.exists(scratchPath))
+      fs.mkdirs(scratchPath);
   }
 
   public void testAppendToAnEmptyIndex() throws IOException {
     try {
       Path inPath = new Path("src/test/resources/test.points");
       OperationsParams params = new OperationsParams();
-      FileSystem outFS = indexPath.getFileSystem(params);
-      outFS.delete(indexPath, true);
-      outFS.deleteOnExit(indexPath);
+      FileSystem outFS = scratchPath.getFileSystem(params);
+      outFS.delete(scratchPath, true);
+      outFS.deleteOnExit(scratchPath);
       params.setClass("shape", Point.class, Shape.class);
       params.set("sindex", "rtree");
-      IndexAppender.append(inPath, indexPath, params);
-      assertTrue(outFS.exists(indexPath));
-      assertTrue(outFS.exists(new Path(indexPath, "_master.rstar")));
+      IndexAppender.append(inPath, scratchPath, params);
+      assertTrue(outFS.exists(scratchPath));
+      assertTrue(outFS.exists(new Path(scratchPath, "_master.rstar")));
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -44,20 +58,20 @@ public class IndexAppenderTest extends TestCase {
     try {
       Path inPath = new Path("src/test/resources/test.points");
       OperationsParams params = new OperationsParams();
-      FileSystem outFS = indexPath.getFileSystem(params);
-      outFS.delete(indexPath, true);
+      FileSystem outFS = scratchPath.getFileSystem(params);
+      outFS.delete(scratchPath, true);
       params.setClass("shape", Point.class, Shape.class);
       params.set("sindex", "str");
       // Create the initial index
-      Indexer.index(inPath, indexPath, params);
+      Indexer.index(inPath, scratchPath, params);
 
       // Append a second file to it
       inPath = new Path("src/test/resources/test2.points");
-      IndexAppender.append(inPath, indexPath, params);
-      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, indexPath);
+      IndexAppender.append(inPath, scratchPath, params);
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, scratchPath);
       for (Partition p : gindex) {
         assertEquals(33, p.recordCount);
-        Path datafile = new Path(indexPath, p.filename);
+        Path datafile = new Path(scratchPath, p.filename);
         assertEquals(p.size, outFS.getFileStatus(datafile).getLen());
       }
     } catch (Exception e) {
@@ -113,23 +127,23 @@ public class IndexAppenderTest extends TestCase {
     try {
       Path inPath = new Path("src/test/resources/test.points");
       OperationsParams params = new OperationsParams();
-      FileSystem outFS = indexPath.getFileSystem(params);
-      outFS.delete(indexPath, true);
+      FileSystem outFS = scratchPath.getFileSystem(params);
+      outFS.delete(scratchPath, true);
       params.setClass("shape", Point.class, Shape.class);
       params.set("sindex", "rtree");
       // Create the initial index
-      Indexer.index(inPath, indexPath, params);
+      Indexer.index(inPath, scratchPath, params);
 
       // Append a second file to it
       inPath = new Path("src/test/resources/test2.points");
       params = new OperationsParams();
       params.setClass("shape", Point.class, Shape.class);
-      IndexAppender.append(inPath, indexPath, params);
+      IndexAppender.append(inPath, scratchPath, params);
 
-      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, indexPath);
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, scratchPath);
       for (Partition p : gindex) {
         assertEquals(33, p.recordCount);
-        Path datafile = new Path(indexPath, p.filename);
+        Path datafile = new Path(scratchPath, p.filename);
         long size = RangeQuery.rangeQueryLocal(datafile, new Rectangle(0, 0, 1000, 1000),
             new Point(), params, null);
         assertEquals(33L, size);
@@ -137,6 +151,52 @@ public class IndexAppenderTest extends TestCase {
     } catch (Exception e) {
       e.printStackTrace();
       fail("Error in test!");
+    }
+  }
+
+  public void testReorganize() {
+    Path dataPath = new Path(scratchPath, "data");
+    Path indexPath = new Path(scratchPath, "indexed");
+    OperationsParams params = new OperationsParams();
+    try {
+      FileSystem fs = dataPath.getFileSystem(params);
+      // 1- Generate a file and index it
+      TestHelper.generateFile(dataPath.toString(), Point.class,
+          new Rectangle(0,0,1,1), 2 * 1024 * 1024, params);
+      long fileSize1 = fs.getFileStatus(dataPath).getLen();
+      // Set the parameters to partition the file into at least two partitions
+      params.set("gindex", "rstar");
+      params.set("lindex", "rrstar");
+      params.setLong("fs.local.block.size", 1024 * 1024);
+      Indexer.index(dataPath, indexPath, params);
+
+      // 2- Generate another file and append it
+      // Set a budget that is enough to partition at least one partition but not all partitions
+      params.setLong("budget", 1024 * 1024);
+      TestHelper.generateFile(dataPath.toString(), Point.class,
+          new Rectangle(5,5,10,10), 2 * 1024 * 1024, params);
+      long fileSize2 = fs.getFileStatus(dataPath).getLen();
+      IndexAppender.addToIndex(dataPath, indexPath, params);
+      // Assert that the new path contain all the data
+      ArrayList<Partition> ps = MetadataUtil.getPartitions(indexPath, params);
+      Partition all = new Partition();
+      all.set(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      all.size = all.recordCount = 0;
+      for (Partition p : ps)
+        all.expand(p);
+      assertEquals(fileSize1 + fileSize2, all.size);
+      assertTrue("Partitions should be reorganized", ps.size() > 1);
+      FileStatus[] dataFiles = fs.listStatus(indexPath, SpatialSite.NonHiddenFileFilter);
+      assertEquals(ps.size(), dataFiles.length);
+
+      // Make sure that the resulting index is still searchable
+      long resultSize = RangeQuery.rangeQueryLocal(indexPath,
+          new Rectangle(0, 0, 10, 10), new Point(), params, null);
+      assertEquals(all.recordCount, resultSize);
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail("Error running test!");
     }
   }
 }

@@ -18,7 +18,7 @@ public class TestHelper {
     OperationsParams.setShape(params, "mbr", mbr);
     params.setBoolean("local", true);
     params.setBoolean("overwrite", true);
-    params.setLong("size", 1024 * 1024);
+    params.setLong("size", size);
     Path randomFile = new Path("TestHelper.RandomFile");
     RandomSpatialGenerator.generateFile(randomFile, params);
     File[] generatedFiles = new File(randomFile.getName()).listFiles(new FilenameFilter() {

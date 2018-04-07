@@ -73,6 +73,16 @@ public class SpatialSite {
     }
   };
 
+  /**
+   * A filter that select master files (Global index files)
+   */
+  public static final PathFilter MasterFileFilter = new PathFilter(){
+    public boolean accept(Path p){
+      String name = p.getName();
+      return name.startsWith("_master");
+    }
+  };
+
   /**Configuration line to store column boundaries on which intermediate data is split*/
   public static final String ColumnBoundaries = "SpatialSite.ReduceSpaceBoundaries";
 

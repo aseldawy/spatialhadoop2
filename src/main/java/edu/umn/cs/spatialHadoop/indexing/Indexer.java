@@ -131,7 +131,7 @@ public class Indexer {
     }
   }
 
-  static Job indexMapReduce(Path inPath, Path outPath, Partitioner partitioner,
+  static Job indexMapReduce(Path[] inPaths, Path outPath, Partitioner partitioner,
       OperationsParams paramss) throws IOException, InterruptedException,
       ClassNotFoundException {
     Job job = new Job(paramss, "Indexer");
@@ -146,7 +146,7 @@ public class Indexer {
     job.setReducerClass(PartitionerReduce.class);
     // Set input and output
     job.setInputFormatClass(SpatialInputFormat3.class);
-    SpatialInputFormat3.setInputPaths(job, inPath);
+    SpatialInputFormat3.setInputPaths(job, inPaths);
     job.setOutputFormatClass(IndexOutputFormat.class);
     IndexOutputFormat.setOutputPath(job, outPath);
     // Set number of reduce tasks according to cluster status
@@ -164,12 +164,14 @@ public class Indexer {
       job.submit();
     } else {
       job.waitForCompletion(conf.getBoolean("verbose", false));
+      if (!job.isSuccessful())
+        throw new RuntimeException("Error in the index job");
     }
     return job;
   }
 
-  private static void indexLocal(Path inPath, final Path outPath, Partitioner p,
-      OperationsParams params) throws IOException, InterruptedException {
+  private static void indexLocal(Path[] inPaths, final Path outPath, Partitioner p,
+                                 OperationsParams params) throws IOException, InterruptedException {
     Job job = Job.getInstance(params);
     final Configuration conf = job.getConfiguration();
 
@@ -179,27 +181,33 @@ public class Indexer {
     // Start reading input file
     List<InputSplit> splits = new ArrayList<InputSplit>();
     final SpatialInputFormat3<Rectangle, Shape> inputFormat = new SpatialInputFormat3<Rectangle, Shape>();
-    FileSystem inFs = inPath.getFileSystem(conf);
-    FileStatus inFStatus = inFs.getFileStatus(inPath);
-    if (inFStatus != null && !inFStatus.isDir()) {
-      // One file, retrieve it immediately.
-      // This is useful if the input is a hidden file which is automatically
-      // skipped by FileInputFormat. We need to plot a hidden file for the case
-      // of plotting partition boundaries of a spatial index
-      splits.add(new FileSplit(inPath, 0, inFStatus.getLen(), new String[0]));
-    } else {
-      SpatialInputFormat3.setInputPaths(job, inPath);
-      for (InputSplit s : inputFormat.getSplits(job))
-        splits.add(s);
+    for (Path inPath : inPaths) {
+      FileSystem inFs = inPath.getFileSystem(conf);
+      FileStatus inFStatus = inFs.getFileStatus(inPath);
+      if (inFStatus != null && !inFStatus.isDir()) {
+        // One file, retrieve it immediately.
+        // This is useful if the input is a hidden file which is automatically
+        // skipped by FileInputFormat. We need to plot a hidden file for the case
+        // of plotting partition boundaries of a spatial index
+        splits.add(new FileSplit(inPath, 0, inFStatus.getLen(), new String[0]));
+      } else {
+        SpatialInputFormat3.addInputPath(job, inPath);
+        for (InputSplit s : inputFormat.getSplits(job))
+          splits.add(s);
+      }
     }
-    
+
     // Copy splits to a final array to be used in parallel
     final FileSplit[] fsplits = splits.toArray(new FileSplit[splits.size()]);
 
     // Set input file MBR if not already set
     Rectangle inputMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
     if (inputMBR == null) {
-      inputMBR = FileMBR.fileMBR(inPath, new OperationsParams(conf));
+      inputMBR = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+          Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+      for (Path inPath : inPaths) {
+        inputMBR.expand(FileMBR.fileMBR(inPath, new OperationsParams(conf)));
+      }
       OperationsParams.setShape(conf, "mbr", inputMBR);
     }
 
@@ -267,14 +275,14 @@ public class Indexer {
   /**
    * Initialize the global and local indexers according to the input file,
    * the output file, and the user-specified parameters
-   * @param inPath
+   * @param inPaths
    * @param outPath
    * @param conf
    * @return the created {@link Partitioner}
    * @throws IOException
    * @throws InterruptedException
    */
-  private static Partitioner initializeIndexers(Path inPath, Path outPath, Configuration conf) throws IOException, InterruptedException {
+  private static Partitioner initializeIndexers(Path[] inPaths, Path outPath, Configuration conf) throws IOException, InterruptedException {
     // Set the correct partitioner according to index type
     String sindex = conf.get("sindex");
     SpatialSite.SpatialIndex spatialIndex;
@@ -292,7 +300,7 @@ public class Indexer {
       conf.setClass(LocalIndex.LocalIndexClass, spatialIndex.lindex, LocalIndex.class);
 
     long t1 = System.currentTimeMillis();
-    Partitioner partitioner = initializeGlobalIndex(inPath, outPath, conf, spatialIndex.gindex);
+    Partitioner partitioner = initializeGlobalIndex(inPaths, outPath, conf, spatialIndex.gindex);
     Partitioner.setPartitioner(conf, partitioner);
 
     long t2 = System.currentTimeMillis();
@@ -382,14 +390,17 @@ public class Indexer {
 
   public static Job index(Path inPath, Path outPath, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
-    Partitioner p = initializeIndexers(inPath, outPath, params);
-    if (OperationsParams.isLocal(new JobConf(params), inPath)) {
-      indexLocal(inPath, outPath, p, params);
+    return index(new Path[]{inPath}, outPath, params);
+  }
+
+  public static Job index(Path[] inPaths, Path outPath, OperationsParams params)
+      throws IOException, InterruptedException, ClassNotFoundException {
+    Partitioner p = initializeIndexers(inPaths, outPath, params);
+    if (OperationsParams.isLocal(new JobConf(params), inPaths)) {
+      indexLocal(inPaths, outPath, p, params);
       return null;
     } else {
-      Job job = indexMapReduce(inPath, outPath, p, params);
-      if (!job.isSuccessful())
-        throw new RuntimeException("Failed job "+job);
+      Job job = indexMapReduce(inPaths, outPath, p, params);
       return job;
     }
   }
@@ -421,9 +432,14 @@ public class Indexer {
     return p;
   }
 
+  public static Job repartition(Path inPath, Path outPath, Path refPath, OperationsParams params)
+      throws IOException, InterruptedException, ClassNotFoundException {
+    return repartition(new Path[]{inPath}, outPath, refPath, params);
+  }
+
   /**
    * Repartition an existing file to match the partitioning of another indexed file.
-   * @param inPath the file to be partitioned
+   * @param inPaths the file to be partitioned
    * @param outPath the path to store the input file after repartitioning
    * @param refPath the path to the file to use as a reference for partitioning.
    * @param params
@@ -432,14 +448,14 @@ public class Indexer {
    * @throws InterruptedException
    * @throws ClassNotFoundException
    */
-  public static Job repartition(Path inPath, Path outPath, Path refPath, OperationsParams params)
+  public static Job repartition(Path[] inPaths, Path outPath, Path refPath, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
     Partitioner p = initializeRepartition(refPath, params);
-    if (OperationsParams.isLocal(new JobConf(params), inPath)) {
-      indexLocal(inPath, outPath, p, params);
+    if (OperationsParams.isLocal(new JobConf(params), inPaths)) {
+      indexLocal(inPaths, outPath, p, params);
       return null;
     } else {
-      Job job = indexMapReduce(inPath, outPath, p, params);
+      Job job = indexMapReduce(inPaths, outPath, p, params);
       if (!job.isSuccessful())
         throw new RuntimeException("Failed job "+job);
       return job;

@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 
+import edu.umn.cs.spatialHadoop.mapreduce.SampleInputFormat2;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.Path;
@@ -35,7 +36,7 @@ public class Sampler2 {
     job.setJarByClass(Sampler2.class);
 
     // Set input and output
-    job.setInputFormatClass(SampleInputFormat.class);
+    job.setInputFormatClass(SampleInputFormat2.class);
     SampleInputFormat.setInputPaths(job, files);
     job.setOutputFormatClass(TextOutputFormat.class);
     TextOutputFormat.setOutputPath(job, output);

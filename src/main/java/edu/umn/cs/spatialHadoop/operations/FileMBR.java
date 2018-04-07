@@ -465,15 +465,15 @@ public class FileMBR {
       printUsage();
       return;
     }
-    long t1 = System.currentTimeMillis();
+    long t1 = System.nanoTime();
     Rectangle mbr = fileMBR(inputFiles, params);
-    long t2 = System.currentTimeMillis();
+    long t2 = System.nanoTime();
     if (mbr == null) {
       LOG.error("Error computing the MBR");
       System.exit(1);
     }
       
-    System.out.println("Total processing time: "+(t2-t1)+" millis");
+    System.out.printf("Total processing time %f seconds\n",(t2-t1)*1E-9);
     System.out.println("MBR of records in file '"+inputFiles+"' is "+mbr);
   }
 

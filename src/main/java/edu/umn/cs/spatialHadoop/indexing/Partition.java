@@ -126,4 +126,8 @@ public class Partition extends CellInfo {
   public String toWKT() {
     return super.toWKT()+"\t"+recordCount+"\t"+size+"\t"+filename;
   }
+
+  public int getNumberOfBlock(double blockSize) {
+    return (int) Math.ceil((double)this.size / blockSize);
+  }
 }

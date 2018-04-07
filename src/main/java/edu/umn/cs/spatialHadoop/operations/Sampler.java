@@ -71,7 +71,7 @@ public class Sampler {
     float sample_ratio = job.getFloat(SpatialSite.SAMPLE_RATIO, 0.01f);
     long sample_size = job.getLong(SpatialSite.SAMPLE_SIZE, 100 * 1024 * 1024);
 
-    LOG.info("Reading a sample of "+(int)Math.round(sample_ratio*100) + "%");
+    LOG.info("Reading a sample of "+Math.round(sample_ratio*100) + "%");
     ResultCollector<Point> resultCollector = new ResultCollector<Point>(){
       @Override
       public void collect(Point p) {

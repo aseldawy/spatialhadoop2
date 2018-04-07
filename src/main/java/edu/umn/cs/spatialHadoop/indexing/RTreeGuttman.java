@@ -1078,19 +1078,18 @@ public class RTreeGuttman implements Closeable {
       this.children.add(null);
 
     // Read the tree structure and keep it all in memory
-    // Store root MBR
-    x1s[root] = rootx1;
-    y1s[root] = rooty1;
-    x2s[root] = rootx2;
-    y2s[root] = rooty2;
-    // Read other nodes information
-
     // First, scan the nodes once to map node offsets to IDs
     // Map the offset of some nodes to their index in the node list
     Map<Integer, Integer> nodeOffsetToIndex = new HashMap<Integer, Integer>();
     in.seek(treeStartOffset + treeStructureOffset);
     int nodeID = numEntries;
     this.root = nodeID; // First node is always the root
+    // Store root MBR
+    x1s[root] = rootx1;
+    y1s[root] = rooty1;
+    x2s[root] = rootx2;
+    y2s[root] = rooty2;
+
     while (nodeID < this.numNodes + this.numEntries) {
       int nodeOffset = (int) (in.getPos() - treeStartOffset);
       nodeOffsetToIndex.put(nodeOffset, nodeID);
