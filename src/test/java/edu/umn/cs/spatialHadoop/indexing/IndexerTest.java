@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.*;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery;
@@ -21,9 +22,7 @@ import java.io.PrintStream;
 /**
  * Unit test for the index construction operation
  */
-public class IndexerTest extends TestCase {
-
-  Path outPath = new Path("src/test/resources/temp_out");
+public class IndexerTest extends BaseTest {
 
   /**
    * Create the test case
@@ -42,15 +41,8 @@ public class IndexerTest extends TestCase {
     return new TestSuite(IndexerTest.class);
   }
 
-  @Override
-  protected void tearDown() throws Exception {
-    super.tearDown();
-    // Clean up temporary file
-    FileSystem outFS = outPath.getFileSystem(new Configuration());
-    outFS.delete(outPath, true);
-  }
-
   public void testEmptyGeometries() {
+    Path outPath = new Path(scratchPath, "out");
     // Should not crash with an input file that contains empty geometries
     try {
       FileSystem outFS = outPath.getFileSystem(new Configuration());
@@ -82,6 +74,7 @@ public class IndexerTest extends TestCase {
   }
 
   public void testCommonIndexes() {
+    Path outPath = new Path(scratchPath, "out");
     String[] indexes = {"grid", "str", "str+", "rtree", "r+tree", "hilbert", "zcurve", "quadtree"};
     for (String index : indexes) {
       try {
@@ -103,6 +96,7 @@ public class IndexerTest extends TestCase {
   }
 
   public void testShouldWorkWithoutSIndexInMapReduceMode() {
+    Path outPath = new Path(scratchPath, "out");
     try {
       FileSystem outFS = outPath.getFileSystem(new Configuration());
       outFS.delete(outPath, true);
@@ -123,6 +117,7 @@ public class IndexerTest extends TestCase {
   }
 
   public void testShouldWorkWithoutSIndexInLocalMode() {
+    Path outPath = new Path(scratchPath, "out");
     try {
       FileSystem outFS = outPath.getFileSystem(new Configuration());
       outFS.delete(outPath, true);
@@ -168,6 +163,7 @@ public class IndexerTest extends TestCase {
   }
 
   public void testLocalIndexing() {
+    Path outPath = new Path(scratchPath, "out");
     try {
       Path inPath = new Path("src/test/resources/test.points");
 
@@ -190,6 +186,7 @@ public class IndexerTest extends TestCase {
   }
 
   public void testWorkWithSmallFiles() {
+    Path outPath = new Path(scratchPath, "out");
     assertEquals(1, GridPartitioner.class.getAnnotations().length);
     try {
       FileSystem outFS = outPath.getFileSystem(new Configuration());
@@ -216,6 +213,7 @@ public class IndexerTest extends TestCase {
   }
 
   public void testRepartitioner() {
+    Path outPath = new Path(scratchPath, "out");
     Path refPath = new Path(outPath.getParent(), "refpath");
     Configuration conf = new Configuration();
 

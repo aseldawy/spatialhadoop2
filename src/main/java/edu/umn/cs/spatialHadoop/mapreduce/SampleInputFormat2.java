@@ -4,6 +4,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.LocalIndex;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -35,10 +36,12 @@ public class SampleInputFormat2 extends FileInputFormat<NullWritable, Text> {
       try {
         String extension = fname.substring(lastDot + 1);
         Class<? extends LocalIndex> lindexClass = SpatialSite.getLocalIndex(extension);
-        LocalIndex lindex = lindexClass.newInstance();
-        SampleRecordReaderLocalIndexFile srr = new SampleRecordReaderLocalIndexFile(lindex);
-        srr.initialize(split, task);
-        return srr;
+        if (lindexClass != null) {
+          LocalIndex lindex = lindexClass.newInstance();
+          SampleRecordReaderLocalIndexFile srr = new SampleRecordReaderLocalIndexFile(lindex);
+          srr.initialize(split, task);
+          return srr;
+        }
       } catch (InstantiationException e) {
         e.printStackTrace();
       } catch (IllegalAccessException e) {
@@ -56,5 +59,20 @@ public class SampleInputFormat2 extends FileInputFormat<NullWritable, Text> {
     List<InputSplit> splits = super.getSplits(job);
     // TODO combine splits that reside on the same machine
     return splits;
+  }
+
+  @Override
+  protected boolean isSplitable(JobContext context, Path path) {
+    boolean superIsSplittable = super.isSplitable(context, path);
+    if (!superIsSplittable)
+      return false;
+    // If it has a local index, do not split it
+    String fname = path.getName();
+    int lastDot = fname.lastIndexOf('.');
+    if (lastDot == -1)
+      return true; // No local index
+    String extension = fname.substring(lastDot + 1);
+    Class<? extends LocalIndex> lindexClass = SpatialSite.getLocalIndex(extension);
+    return lindexClass == null; // Splittable only if no associated local index
   }
 }

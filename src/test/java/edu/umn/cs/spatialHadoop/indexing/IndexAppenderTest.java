@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.TestHelper;
 import edu.umn.cs.spatialHadoop.core.*;
@@ -14,28 +15,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 
-public class IndexAppenderTest extends TestCase {
-
-  /**A scratch area used to do all the tests which gets wiped at the end*/
-  protected Path scratchPath = new Path("testindex");
-
-  @Override
-  protected void tearDown() throws Exception {
-    OperationsParams params = new OperationsParams();
-    FileSystem fs = scratchPath.getFileSystem(params);
-    fs.delete(scratchPath, true);
-  }
-
-  @Override
-  protected void setUp() throws Exception {
-    super.setUp();
-    OperationsParams params = new OperationsParams();
-    FileSystem fs = scratchPath.getFileSystem(params);
-    if (fs.exists(scratchPath))
-      fs.delete(scratchPath, true);
-    if (!fs.exists(scratchPath))
-      fs.mkdirs(scratchPath);
-  }
+public class IndexAppenderTest extends BaseTest {
 
   public void testAppendToAnEmptyIndex() throws IOException {
     try {
@@ -168,6 +148,7 @@ public class IndexAppenderTest extends TestCase {
       params.set("gindex", "rstar");
       params.set("lindex", "rrstar");
       params.setLong("fs.local.block.size", 1024 * 1024);
+      params.setFloat("ratio", 1.0f);
       Indexer.index(dataPath, indexPath, params);
 
       // 2- Generate another file and append it

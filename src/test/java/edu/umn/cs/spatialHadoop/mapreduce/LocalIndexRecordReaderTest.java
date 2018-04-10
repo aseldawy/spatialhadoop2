@@ -88,6 +88,7 @@ public class LocalIndexRecordReaderTest extends TestCase {
           count++;
       }
       assertEquals(11+111, count);
+      assertEquals(1.0f, lindex.getProgress());
     } catch (Exception e) {
       e.printStackTrace();
       fail("Error in test!");

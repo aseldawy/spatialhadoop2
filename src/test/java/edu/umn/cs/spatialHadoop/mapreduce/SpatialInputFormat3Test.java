@@ -70,7 +70,7 @@ public class SpatialInputFormat3Test extends TestCase {
   public void testShouldNotSplitLocallyIndexedFiles() {
     // Build an R-tree on a random data and store in a file
     Path randomFile = new Path("temp.points");
-    Path rtreeFile = new Path("temp.rtree");
+    Path rtreeFile = new Path("temp.rrstar");
     try {
       final Rectangle mbr = new Rectangle(0, 0, 1000, 1000);
       // Generate a random file of points

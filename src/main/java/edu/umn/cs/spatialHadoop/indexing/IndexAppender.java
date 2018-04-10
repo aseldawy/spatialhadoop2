@@ -126,7 +126,10 @@ public class IndexAppender {
         // Generate a new ID and filename to ensure it does not override an existing file
         newPartition.cellId = ++maxId;
         String newName = String.format("part-%05d", newPartition.cellId);
-        // TODO Copy the extension of the existing file if it exists
+        // Copy the extension of the existing file if it exists
+        int lastDot = newPartition.filename.lastIndexOf('.');
+        if (lastDot != -1)
+          newName += newPartition.filename.substring(lastDot);
         fs.rename(new Path(tempPaths[iGroup], newPartition.filename), new Path(indexPath, newName));
         newPartition.filename = newName;
         mergedPartitions.add(newPartition);

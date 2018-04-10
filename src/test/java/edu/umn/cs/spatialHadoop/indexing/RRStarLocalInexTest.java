@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import edu.umn.cs.spatialHadoop.core.Point;
 import junit.framework.Test;
 import junit.framework.TestCase;
@@ -15,7 +16,7 @@ import java.io.IOException;
 /**
  * Unit test for the RTreeGuttman class
  */
-public class RRStarLocalInexTest extends TestCase {
+public class RRStarLocalInexTest extends BaseTest {
 
   /**
    * Create the test case
@@ -35,10 +36,10 @@ public class RRStarLocalInexTest extends TestCase {
   }
 
   public void testIndexWriteRead() {
+    Path indexFile = new Path(scratchPath, "tempout");
     try {
       RRStarLocalIndex<Point> lindex = new RRStarLocalIndex<Point>();
       File heapFile = new File("src/test/resources/test.points");
-      Path indexFile = new Path("tempout");
       Configuration conf = new Configuration();
       lindex.setup(conf);
       lindex.buildLocalIndex(heapFile, indexFile, new Point());

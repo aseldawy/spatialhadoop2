@@ -370,6 +370,7 @@ public class MultilevelPlot {
     // Set mapper, reducer and committer
     String partitionTechnique = params.get("partition", "flat");
     if (partitionTechnique.equalsIgnoreCase("flat")) {
+      job.setJobName("MultilevelFlatPlot");
       // Use flat partitioning
       job.setMapperClass(FlatPartitionMap.class);
       job.setMapOutputKeyClass(LongWritable.class);
@@ -377,6 +378,7 @@ public class MultilevelPlot {
       job.setReducerClass(FlatPartitionReduce.class);
     } else if (partitionTechnique.equalsIgnoreCase("pyramid")) {
       // Use pyramid partitioning
+      job.setJobName("MultilevelPyramidPlot");
       Shape shape = params.getShape("shape");
       job.setMapperClass(PyramidPartitionMap.class);
       job.setMapOutputKeyClass(LongWritable.class);

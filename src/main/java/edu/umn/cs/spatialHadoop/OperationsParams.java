@@ -599,7 +599,7 @@ public class OperationsParams extends Configuration {
 	 */
 	public boolean autoDetectShape() {
 		String autoDetectedShape = null;
-		final Vector<String> sampleLines = new Vector<String>();
+		String[] sampleLines = null;
 		if (this.get("shape") != null)
 			return true; // A shape is already configured
 		if (this.getInputPaths().length == 0)
@@ -608,19 +608,14 @@ public class OperationsParams extends Configuration {
 		// We read a sample instead of one line to make sure
 		// the auto detected shape is consistent in many lines
 		final int sampleCount = 10;
-		OperationsParams sampleParams = new OperationsParams(this);
 		try {
-			LocalSampler.sampleLocal(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
-				@Override
-				public void collect(Text line) {
-					sampleLines.add(line.toString());
-				}
-			}, sampleParams);
+			Path p = this.getInputPaths()[0];
+			sampleLines = Head.head(p.getFileSystem(this), p, sampleCount);
 		} catch (Exception e1) {
 			e1.printStackTrace();
 		}
 
-		if (sampleLines.isEmpty()) {
+		if (sampleLines.length == 0) {
 			LOG.warn("No input to detect in '" + this.getInputPath() + "-");
 			return false;
 		}
@@ -697,11 +692,11 @@ public class OperationsParams extends Configuration {
 				autoDetectedShape = CSVOGC.class.getName();
 		}
 		if (autoDetectedShape == null) {
-			LOG.warn("Cannot detect shape for input '" + sampleLines.get(0) + "'");
+			LOG.warn("Cannot detect shape for input '" + sampleLines[0] + "'");
 			return false;
 		} else {
 			LOG.info("Autodetected shape '" + autoDetectedShape
-					+ "' for input '" + sampleLines.get(0) + "'");
+					+ "' for input '" + sampleLines[0] + "'");
 			this.set("shape", autoDetectedShape);
 			return true;
 		}

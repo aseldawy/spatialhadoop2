@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import junit.framework.TestCase;
 import org.apache.hadoop.conf.Configuration;
@@ -10,11 +11,11 @@ import org.apache.hadoop.io.Text;
 import java.io.IOException;
 import java.io.PrintStream;
 
-public class PartitionerTest extends TestCase {
+public class PartitionerTest extends BaseTest {
 
   public void testGenerateMasterWKT() {
     try {
-      Path masterPath = new Path("_master.rstar");
+      Path masterPath = new Path(scratchPath, "_master.rstar");
       FileSystem fs = masterPath.getFileSystem(new Configuration());
       PrintStream ps = new PrintStream(fs.create(masterPath, true));
       Partition p = new Partition("data000", new CellInfo(1, 0,5,100,105));
@@ -22,7 +23,7 @@ public class PartitionerTest extends TestCase {
       ps.close();
 
       Partitioner.generateMasterWKT(fs, masterPath);
-      Path wktPath = new Path("_rstar.wkt");
+      Path wktPath = new Path(scratchPath, "_rstar.wkt");
       assertTrue("WKT file not found!", fs.exists(wktPath));
 
     } catch (IOException e) {

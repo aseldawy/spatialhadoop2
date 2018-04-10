@@ -213,7 +213,15 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       // an R-tree signature, we never split a file read over HTTP
       if (fs instanceof HTTPFileSystem)
         return false;
-      return !SpatialSite.isRTree(fs, file);
+
+      // If it has a local index, do not split it
+      String fname = file.getName();
+      int lastDot = fname.lastIndexOf('.');
+      if (lastDot == -1)
+        return true; // No local index
+      String extension = fname.substring(lastDot + 1);
+      Class<? extends LocalIndex> lindexClass = SpatialSite.getLocalIndex(extension);
+      return lindexClass == null; // Splittable only if no associated local index
     } catch (IOException e) {
       LOG.warn("Error while determining whether a file is splittable", e);
       return false; // Safer to not split it

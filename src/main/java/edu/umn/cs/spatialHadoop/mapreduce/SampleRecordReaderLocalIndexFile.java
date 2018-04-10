@@ -114,7 +114,7 @@ public class SampleRecordReaderLocalIndexFile extends RecordReader<NullWritable,
 
   @Override
   public float getProgress() {
-    return sampleIterable.getProgress();
+    return sampleIterable == null ? 1.0f : sampleIterable.getProgress();
   }
 
   @Override

@@ -277,7 +277,7 @@ public class LocalIndexRecordReader<V extends Shape> extends
       return 0.0f;
     } else {
       return Math.min(1.0f,
-        (getPos() - start) / (float)(end - start));
+        (end - indexEnd) / (float)(end - start));
     }
   }
 

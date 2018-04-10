@@ -9,7 +9,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
-import java.io.PrintStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -35,16 +34,14 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.util.GenericOptionsParser;
-import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.indexing.IndexOutputFormat.IndexRecordWriter;
-import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
-import edu.umn.cs.spatialHadoop.operations.Sampler;
+import edu.umn.cs.spatialHadoop.operations.Sampler2;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
@@ -353,24 +350,45 @@ public class Indexer {
         try {
           Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Point[].class, int.class);
           // Constructor needs a sample and capacity (no MBR)
-          final List<Point> sample = Sampler.readSample(ins, job);
-          Point[] sampleArray = sample.toArray(new Point[sample.size()]);
-          int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.size() * outBlockSize / estimatedOutSize));
-          return (Partitioner) c.newInstance(sampleArray, partitionCapacity);
+          OperationsParams sampleParams = new OperationsParams(job);
+          sampleParams.setClass("outshape", Point.class, Shape.class);
+          final String[] sample = Sampler2.takeSample(ins, sampleParams);
+          Point[] samplePoints = new Point[sample.length];
+          for (int i = 0; i < sample.length; i++) {
+            samplePoints[i] = new Point();
+            samplePoints[i].fromText(new Text(sample[i]));
+          }
+          int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.length * outBlockSize / estimatedOutSize));
+          return (Partitioner) c.newInstance(samplePoints, partitionCapacity);
         } catch (NoSuchMethodException e1) {
           try {
             Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Rectangle.class, Point[].class, int.class);
             final Rectangle inMBR = SpatialSite.getMBR(job, ins);
-            final List<Point> sample = Sampler.readSample(ins, job);
-            Point[] sampleArray = sample.toArray(new Point[sample.size()]);
-            int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.size() * outBlockSize / estimatedOutSize));
-            return (Partitioner) c.newInstance(inMBR, sampleArray, partitionCapacity);
+            OperationsParams sampleParams = new OperationsParams(job);
+            sampleParams.setClass("outshape", Point.class, Shape.class);
+            final String[] sample = Sampler2.takeSample(ins, sampleParams);
+            Point[] samplePoints = new Point[sample.length];
+            for (int i = 0; i < sample.length; i++) {
+              samplePoints[i] = new Point();
+              samplePoints[i].fromText(new Text(sample[i]));
+            }
+            int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.length * outBlockSize / estimatedOutSize));
+            return (Partitioner) c.newInstance(inMBR, samplePoints, partitionCapacity);
           } catch (NoSuchMethodException e2) {
             throw new RuntimeException("Could not find a suitable constructor for the partitioner "+partitionerClass.getName());
           } catch (InterruptedException e2) {
             e2.printStackTrace();
             return null;
+          } catch (ClassNotFoundException e2) {
+            e2.printStackTrace();
+            return null;
           }
+        } catch (InterruptedException e1) {
+          e1.printStackTrace();
+          return null;
+        } catch (ClassNotFoundException e1) {
+          e1.printStackTrace();
+          return null;
         }
       } catch (InterruptedException e) {
         e.printStackTrace();
