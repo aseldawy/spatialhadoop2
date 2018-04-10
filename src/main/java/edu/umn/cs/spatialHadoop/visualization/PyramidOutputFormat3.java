@@ -21,6 +21,8 @@ import javax.imageio.ImageIO;
 
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -45,6 +47,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  *
  */
 public class PyramidOutputFormat3 extends FileOutputFormat<LongWritable, Writable> {
+  private static final Log LOG = LogFactory.getLog(PyramidOutputFormat3.class);
 
   public static final String DataExt = ".txt";
 
@@ -93,26 +96,37 @@ public class PyramidOutputFormat3 extends FileOutputFormat<LongWritable, Writabl
 
     @Override
     public void write(LongWritable encodedTileID, Writable w) throws IOException {
-      tempTileIndex = TileIndex.decode(encodedTileID.get(), tempTileIndex);
-      if (w instanceof Canvas) {
-        Path imagePath = getTilePath(tempTileIndex.z, tempTileIndex.x, tempTileIndex.y, imgExt);
-    	  // Write this tile to an image
-    	  FSDataOutputStream outFile = outFS.create(imagePath);
-    	  plotter.writeImage((Canvas) w, outFile, this.vflip);
-    	  outFile.close();
-      } else if (w instanceof Shape) {
-        // Write the shape to a text file
-        Shape s = (Shape) w;
-        FSDataOutputStream outFile = dataFiles.get(encodedTileID.get());
-        if (outFile == null) {
-          Path filePath = getTilePath(tempTileIndex.z, tempTileIndex.x, tempTileIndex.y, DataExt);
-          outFile = outFS.create(filePath);
-          dataFiles.put(encodedTileID.get(), outFile);
+      if (encodedTileID.get() < 0) {
+        // This is not really an object that I want to write, but it's an indicator that I should close and finalize the tile
+        long tileIDToClose = -encodedTileID.get() - 1;
+        FSDataOutputStream outFile = dataFiles.get(tileIDToClose);
+        if (outFile != null) {
+          LOG.info("Early Closing tile #"+tileIDToClose);
+          outFile.close();
+          dataFiles.remove(tileIDToClose);
         }
-        tempLine.clear();
-        s.toText(tempLine);
-        tempLine.append(NewLineChars, 0, NewLineChars.length);
-        outFile.write(tempLine.getBytes(), 0, tempLine.getLength());
+      } else {
+        tempTileIndex = TileIndex.decode(encodedTileID.get(), tempTileIndex);
+        if (w instanceof Canvas) {
+          Path imagePath = getTilePath(tempTileIndex.z, tempTileIndex.x, tempTileIndex.y, imgExt);
+          // Write this tile to an image
+          FSDataOutputStream outFile = outFS.create(imagePath);
+          plotter.writeImage((Canvas) w, outFile, this.vflip);
+          outFile.close();
+        } else if (w instanceof Shape) {
+          // Write the shape to a text file
+          Shape s = (Shape) w;
+          FSDataOutputStream outFile = dataFiles.get(encodedTileID.get());
+          if (outFile == null) {
+            Path filePath = getTilePath(tempTileIndex.z, tempTileIndex.x, tempTileIndex.y, DataExt);
+            outFile = outFS.create(filePath);
+            dataFiles.put(encodedTileID.get(), outFile);
+          }
+          tempLine.clear();
+          s.toText(tempLine);
+          tempLine.append(NewLineChars, 0, NewLineChars.length);
+          outFile.write(tempLine.getBytes(), 0, tempLine.getLength());
+        }
       }
       task.progress();
     }
@@ -122,6 +136,7 @@ public class PyramidOutputFormat3 extends FileOutputFormat<LongWritable, Writabl
         InterruptedException {
       // Close all open data files
       for (Map.Entry<Long, FSDataOutputStream> entry : dataFiles.entrySet()) {
+        LOG.info("Closing tile #"+entry.getKey()+" at the end");
         entry.getValue().close();
       }
       dataFiles.clear();

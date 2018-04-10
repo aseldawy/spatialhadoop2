@@ -16,7 +16,9 @@ public class RTreeOptimizer {
 	
 	public enum OptimizerType {
 		MaximumReducedCost,
-		MaximumReducedArea
+		MaximumReducedArea,
+		LSMCompaction,
+		SizeOverflow
 	}
 	
 	// Incremental RTree optimizer

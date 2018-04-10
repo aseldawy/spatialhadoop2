@@ -387,7 +387,33 @@ public class AdaptiveMultilevelPlot {
       createTiles(shapes, subPyramid, tileWidth, tileHeight, plotter,
           histogram, threshold, canvasLayers, context);
 
+      // Close all the tiles to ensure that data tiles are flushed to disk and closed
       context.setStatus("Writing " + canvasLayers.size() + " tiles");
+      java.awt.Rectangle overlaps = new java.awt.Rectangle();
+      overlaps.x = subPyramid.c1;
+      overlaps.y = subPyramid.r1;
+      overlaps.width = subPyramid.c2 - subPyramid.c1;
+      overlaps.height = subPyramid.r2 - subPyramid.r1;
+      for (int z = subPyramid.maximumLevel; z >= subPyramid.minimumLevel; z--) {
+        for (int x = overlaps.x; x < overlaps.x + overlaps.width; x++) {
+          for (int y = overlaps.y; y < overlaps.y + overlaps.height; y++) {
+            // Now, we should close the tile at (z,x,y)
+            long tileIDToClose = TileIndex.encode(z, x, y);
+            tileID.set(-tileIDToClose - 1); // This is how we signal a close tile command
+            context.write(tileID, null);
+          }
+        }
+        // Update overlappingCells for the higher z
+        int updatedX1 = overlaps.x / 2;
+        int updatedY1 = overlaps.y / 2;
+        int updatedX2 = (overlaps.x + overlaps.width - 1) / 2;
+        int updatedY2 = (overlaps.y + overlaps.height - 1) / 2;
+        overlaps.x = updatedX1;
+        overlaps.y = updatedY1;
+        overlaps.width = updatedX2 - updatedX1 + 1;
+        overlaps.height = updatedY2 - updatedY1 + 1;
+      }
+
       // Write all created layers to the output as images
       LongWritable outKey = new LongWritable();
       for (Map.Entry<Long, Canvas> entry : canvasLayers.entrySet()) {
@@ -471,9 +497,9 @@ public class AdaptiveMultilevelPlot {
         for (int x = overlaps.x; x < overlaps.x + overlaps.width; x++) {
           for (int y = overlaps.y; y < overlaps.y + overlaps.height; y++) {
             // Process the tile according to its class
-            TileClass tileClass = h == null? null : classifyTile(h, threshold, z, x, y);
+            TileClass tileClass = h == null ? null : classifyTile(h, threshold, z, x, y);
             long tileID = TileIndex.encode(z, x, y);
-            if (plotter!= null && (tileClass == null || tileClass == TileClass.ImageTile)) {
+            if (plotter != null && (tileClass == null || tileClass == TileClass.ImageTile)) {
               // Plot the shape on the tile at (z,x,y)
               Canvas c = tiles.get(tileID);
               if (c == null) {
@@ -498,7 +524,6 @@ public class AdaptiveMultilevelPlot {
         overlaps.y = updatedY1;
         overlaps.width = updatedX2 - updatedX1 + 1;
         overlaps.height = updatedY2 - updatedY1 + 1;
-
       }
     }
   }

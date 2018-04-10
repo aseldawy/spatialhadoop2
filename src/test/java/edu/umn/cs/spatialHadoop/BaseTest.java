@@ -13,7 +13,7 @@ public abstract class BaseTest extends TestCase {
   public BaseTest() {}
 
   /**A scratch area used to do all the tests which gets wiped at the end*/
-  protected Path scratchPath = new Path("testfiles");
+  protected static final Path scratchPath = new Path("testfiles");
 
   @Override
   protected void tearDown() throws Exception {

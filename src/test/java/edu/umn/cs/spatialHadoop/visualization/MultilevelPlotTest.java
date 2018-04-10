@@ -6,7 +6,10 @@ import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.List;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -17,11 +20,10 @@ import junit.framework.TestSuite;
 /**
  * Unit test for simple App.
  */
-public class MultilevelPlotTest extends TestCase {
-  private static final String dirName = "src/test/temp";
-  private static final String inFileName = dirName+"/test.rect";
-  private static final String outFileName = dirName+"/test_pyramid";
-  
+public class MultilevelPlotTest extends BaseTest {
+  private static final Path inFileName = new Path(scratchPath, "test.rect");
+  private static final Path outFileName = new Path(scratchPath, "test_pyramid");
+
   /**
    * Create the test case
    *
@@ -42,19 +44,13 @@ public class MultilevelPlotTest extends TestCase {
   @Override
   protected void setUp() throws Exception {
     super.setUp();
-    FileUtils.forceMkdir(new File(dirName));
-    PrintWriter inTest = new PrintWriter(inFileName);
-    inTest.println("0,0,0.5,0.5");
-    inTest.close();
-
-    FileUtils.deleteDirectory(new File(outFileName));
-  }
-  
-  @Override
-  protected void tearDown() throws Exception {
-    super.tearDown();
-    new File(inFileName).delete();
-    FileUtils.deleteDirectory(new File(outFileName));
+    // Create an input file
+    Configuration conf = new Configuration();
+    FileSystem fs = scratchPath.getFileSystem(conf);
+    fs.mkdirs(scratchPath);
+    PrintWriter pw = new PrintWriter(fs.create(inFileName));
+    pw.println("0,0,0.5,0.5");
+    pw.close();
   }
 
   public void testOneLevelLocal() {
@@ -67,11 +63,11 @@ public class MultilevelPlotTest extends TestCase {
       params.setBoolean("overwrite", true);
       params.setBoolean("vflip", false);
       
-      MultilevelPlot.plot(new Path[] { new Path(inFileName) },
-          new Path(outFileName), GeometricPlot.GeometricRasterizer.class,
+      MultilevelPlot.plot(new Path[] { inFileName },
+          outFileName, GeometricPlot.GeometricRasterizer.class,
           params);
 
-      File outPath = new File(outFileName);
+      File outPath = new File(outFileName.toString());
       String[] list = outPath.list(new FilenameFilter() {
         @Override
         public boolean accept(File dir, String name) {
@@ -95,11 +91,11 @@ public class MultilevelPlotTest extends TestCase {
       params.setBoolean("overwrite", true);
       params.setBoolean("vflip", false);
       
-      MultilevelPlot.plot(new Path[] { new Path(inFileName) },
-          new Path(outFileName), GeometricPlot.GeometricRasterizer.class,
+      MultilevelPlot.plot(new Path[] { inFileName },
+          outFileName, GeometricPlot.GeometricRasterizer.class,
           params);
 
-      File outPath = new File(outFileName);
+      File outPath = new File(outFileName.toString());
       String[] list = outPath.list(new FilenameFilter() {
         @Override
         public boolean accept(File dir, String name) {
@@ -126,11 +122,11 @@ public class MultilevelPlotTest extends TestCase {
       // Enforce the use of pyramid partitioning only
       params.setInt(MultilevelPlot.FlatPartitioningLevelThreshold, -1);
       
-      MultilevelPlot.plot(new Path[] { new Path(inFileName) },
-          new Path(outFileName), GeometricPlot.GeometricRasterizer.class,
+      MultilevelPlot.plot(new Path[] { inFileName },
+          outFileName, GeometricPlot.GeometricRasterizer.class,
           params);
 
-      File outPath = new File(outFileName);
+      File outPath = new File(outFileName.toString());
       List<String> list = Arrays.asList(outPath.list(new FilenameFilter() {
         @Override
         public boolean accept(File dir, String name) {
@@ -159,11 +155,11 @@ public class MultilevelPlotTest extends TestCase {
       params.setBoolean("vflip", false);
       params.setInt(MultilevelPlot.FlatPartitioningLevelThreshold, 4);
       
-      MultilevelPlot.plot(new Path[] { new Path(inFileName) },
-          new Path(outFileName), GeometricPlot.GeometricRasterizer.class,
+      MultilevelPlot.plot(new Path[] { inFileName },
+          outFileName, GeometricPlot.GeometricRasterizer.class,
           params);
 
-      File outPath = new File(outFileName);
+      File outPath = new File(outFileName.toString());
       List<String> list = Arrays.asList(outPath.list(new FilenameFilter() {
         @Override
         public boolean accept(File dir, String name) {

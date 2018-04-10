@@ -41,7 +41,7 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
-import edu.umn.cs.spatialHadoop.operations.Sampler2;
+import edu.umn.cs.spatialHadoop.operations.Sampler;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
@@ -352,7 +352,8 @@ public class Indexer {
           // Constructor needs a sample and capacity (no MBR)
           OperationsParams sampleParams = new OperationsParams(job);
           sampleParams.setClass("outshape", Point.class, Shape.class);
-          final String[] sample = Sampler2.takeSample(ins, sampleParams);
+          sampleParams.set("ratio", sampleParams.get(SpatialSite.SAMPLE_RATIO));
+          final String[] sample = Sampler.takeSample(ins, sampleParams);
           Point[] samplePoints = new Point[sample.length];
           for (int i = 0; i < sample.length; i++) {
             samplePoints[i] = new Point();
@@ -366,7 +367,7 @@ public class Indexer {
             final Rectangle inMBR = SpatialSite.getMBR(job, ins);
             OperationsParams sampleParams = new OperationsParams(job);
             sampleParams.setClass("outshape", Point.class, Shape.class);
-            final String[] sample = Sampler2.takeSample(ins, sampleParams);
+            final String[] sample = Sampler.takeSample(ins, sampleParams);
             Point[] samplePoints = new Point[sample.length];
             for (int i = 0; i < sample.length; i++) {
               samplePoints[i] = new Point();

@@ -14,7 +14,6 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
-import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl;
 
 import java.io.File;
@@ -22,8 +21,8 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.List;
 
-public class SampleInputFormat2Test extends TestCase {
-  public SampleInputFormat2Test(String testName) {
+public class SampleInputFormatTest extends TestCase {
+  public SampleInputFormatTest(String testName) {
     super(testName);
   }
 
@@ -74,9 +73,9 @@ public class SampleInputFormat2Test extends TestCase {
       // Sample all records in the file
       params.setFloat("ratio", 1.0f);
       Path fileToSample = concatFile;
-      SampleInputFormat2 sinputFormat = new SampleInputFormat2();
+      SampleInputFormat sinputFormat = new SampleInputFormat();
       Job job = Job.getInstance(params);
-      SampleInputFormat2.addInputPath(job, fileToSample);
+      SampleInputFormat.addInputPath(job, fileToSample);
       List<InputSplit> splits = sinputFormat.getSplits(job);
       int count = 0;
       for (InputSplit split : splits) {

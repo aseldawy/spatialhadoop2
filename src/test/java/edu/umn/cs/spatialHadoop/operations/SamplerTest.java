@@ -8,9 +8,7 @@ import junit.framework.TestCase;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
-import java.io.IOException;
-
-public class Sampler2Test extends TestCase {
+public class SamplerTest extends TestCase {
 
   /**A scratch area used to do all the tests which gets wiped at the end*/
   protected Path scratchPath = new Path("testindex");
@@ -40,7 +38,7 @@ public class Sampler2Test extends TestCase {
     params.setClass("outshape", Point.class, Shape.class);
     params.setFloat("ratio", 1.0f); // Read all records
     try {
-      String[] lines = Sampler2.takeSample(new Path[]{input}, params);
+      String[] lines = Sampler.takeSample(new Path[]{input}, params);
       assertEquals(14, lines.length);
       // Make sure that they are points
       assertEquals(2, lines[0].split(",").length);
@@ -58,7 +56,7 @@ public class Sampler2Test extends TestCase {
     params.setClass("outshape", Point.class, Shape.class);
     params.setFloat("ratio", 1.0f); // Read all records
     try {
-      Sampler2.sampleMapReduce(new Path[]{input}, output, params);
+      Sampler.sampleMapReduce(new Path[]{input}, output, params);
       String[] lines = Head.head(output.getFileSystem(params), output, 20);
       assertNotNull(lines[13]);
       assertNull(lines[14]);
