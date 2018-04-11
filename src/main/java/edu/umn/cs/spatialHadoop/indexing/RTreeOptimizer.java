@@ -22,10 +22,8 @@ public class RTreeOptimizer {
 	}
 	
 	// Incremental RTree optimizer
-	public static ArrayList<Partition> getOverflowPartitions(Path path, OperationsParams params) throws IOException {
-		ArrayList<Partition> overflowPartitions = new ArrayList<Partition>();
-		
-		ArrayList<Partition> partitions = MetadataUtil.getPartitions(path, params);
+	public static List<List<Partition>> getOverflowPartitions(List<Partition> partitions, OperationsParams params) throws IOException {
+		List<List<Partition>> overflowPartitions = new ArrayList<List<Partition>>();
 		
 		Configuration conf = new Configuration();
 		int blockSize = Integer.parseInt(conf.get("dfs.blocksize"));
@@ -34,7 +32,9 @@ public class RTreeOptimizer {
 		
 		for(Partition p: partitions) {
 			if(p.size > overflowSize) {
-				overflowPartitions.add(p);
+				List<Partition> group = new ArrayList<Partition>();
+				group.add(p);
+				overflowPartitions.add(group);
 			}
 		}
 		
@@ -43,8 +43,7 @@ public class RTreeOptimizer {
 	
 	// Greedy algorithm that maximize the reduced range query cost
 	private static List<List<Partition>> getSplitGroupsWithMaximumReducedCost(
-			Path indexPath,
-			List<Partition> partitions, OperationsParams params) throws IOException {
+			Path indexPath, List<Partition> partitions, OperationsParams params) throws IOException {
 		List<List<Partition>> splitGroups;
 		
 		FileSystem fs = indexPath.getFileSystem(params);
@@ -203,15 +202,17 @@ public class RTreeOptimizer {
 		List<List<Partition>> splitGroups;
 		
 		List<Partition> partitions = MetadataUtil.getPartitions(indexPath, params);
-		
-		if(type == OptimizerType.MaximumReducedCost) {
-			splitGroups = getSplitGroupsWithMaximumReducedCost(indexPath, partitions, params);
-		} else if(type == OptimizerType.MaximumReducedArea) {
-			splitGroups = getSplitGroupsWithMaximumReducedArea(partitions, params);
-		} else {
-			throw new RuntimeException("Unknown optimizer type " + type);
-		}
-		
-		return splitGroups;
+
+		switch (type) {
+      case MaximumReducedCost:
+        return getSplitGroupsWithMaximumReducedCost(indexPath, partitions, params);
+      case MaximumReducedArea:
+        return getSplitGroupsWithMaximumReducedArea(partitions, params);
+      case SizeOverflow:
+        return getOverflowPartitions(partitions, params);
+      case LSMCompaction:
+      default:
+        throw new RuntimeException("Unknown optimizer type " + type);
+    }
 	}
 }

@@ -8,7 +8,6 @@ import edu.umn.cs.spatialHadoop.util.FileUtil;
 import edu.umn.cs.spatialHadoop.util.MetadataUtil;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import java.io.IOException;
@@ -88,20 +87,35 @@ public class IndexAppender {
     FileSystem fs = indexPath.getFileSystem(params);
     // A list of temporary paths where the reorganized partitions will be stored.
     Path[] tempPaths = new Path[splitGroups.size()];
-    Job[] indexJobs = new Job[splitGroups.size()];
+    Thread[] indexJobs = new Thread[splitGroups.size()];
     for (int iGroup = 0; iGroup < splitGroups.size(); iGroup++) {
       List<Partition> group = splitGroups.get(iGroup);
-      OperationsParams indexParams = new OperationsParams(params);
-      indexParams.setBoolean("background", true);
+      final OperationsParams indexParams = new OperationsParams(params);
       indexParams.setBoolean("local", false);
-      Path[] inPaths = new Path[group.size()];
+      final Path[] inPaths = new Path[group.size()];
       for (int iPartition = 0; iPartition < group.size(); iPartition++) {
         inPaths[iPartition] = new Path(indexPath, group.get(iPartition).filename);
       }
       do {
         tempPaths[iGroup] = new Path(indexPath.getParent(), Integer.toString((int) Math.random() * 1000000));
       } while (fs.exists(tempPaths[iGroup]));
-      indexJobs[iGroup] = Indexer.index(inPaths, tempPaths[iGroup], indexParams);
+      final Path tempPath = tempPaths[iGroup];
+      indexJobs[iGroup] = new Thread() {
+        @Override public void run() {
+          try {
+            Indexer.index(inPaths, tempPath, indexParams);
+          } catch (IOException e) {
+            e.printStackTrace();
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+          }
+        }
+      };
+      indexJobs[iGroup].setName("Index Group #"+iGroup);
+      indexJobs[iGroup].start();
+
     }
 
     // A list of all the new partitions (after reorganization)
@@ -111,10 +125,7 @@ public class IndexAppender {
       maxId = Math.max(maxId, p.cellId);
     // Wait until all index jobs are done
     for (int iGroup = 0; iGroup < indexJobs.length; iGroup++) {
-      Job job = indexJobs[iGroup];
-      job.waitForCompletion(false);
-      if (!job.isSuccessful())
-        throw new RuntimeException("Job " + job + " was unsuccessful");
+      indexJobs[iGroup].join();
       // Remove all partitions that were indexed by the job
       for (Partition oldP : splitGroups.get(iGroup)) {
         if (!mergedPartitions.remove(oldP))
