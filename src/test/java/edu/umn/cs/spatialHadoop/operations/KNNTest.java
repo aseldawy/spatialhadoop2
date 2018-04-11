@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.operations;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import junit.framework.Test;
@@ -13,7 +14,7 @@ import java.io.IOException;
 /**
  * Unit test for {@link LocalSampler} class.
  */
-public class KNNTest extends TestCase {
+public class KNNTest extends BaseTest {
 
   /**
    * Create the test case
@@ -35,7 +36,7 @@ public class KNNTest extends TestCase {
   public void testKNNWithLocalIndex() {
     try {
       Path inputFile = new Path("src/test/resources/test.points");
-      Path outPath = new Path("src/test/resources/tempout");
+      Path outPath = new Path(scratchPath, "tempout");
       OperationsParams params = new OperationsParams();
       params.set("shape", "point");
       params.set("sindex", "rtree");

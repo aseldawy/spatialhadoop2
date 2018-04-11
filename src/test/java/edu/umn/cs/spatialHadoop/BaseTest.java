@@ -4,6 +4,10 @@ import junit.framework.TestCase;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+
 public abstract class BaseTest extends TestCase {
 
   public BaseTest(String name) {
@@ -33,4 +37,27 @@ public abstract class BaseTest extends TestCase {
       fs.mkdirs(scratchPath);
   }
 
+  /**
+   * Reads a csv file that contains coordinates
+   * @param fileName
+   * @return
+   * @throws IOException
+   */
+  static double[][] readFile(String fileName) throws IOException {
+    FileReader testPointsIn = new FileReader(fileName);
+    char[] buffer = new char[(int) new File(fileName).length()];
+    testPointsIn.read(buffer);
+    testPointsIn.close();
+
+    String[] lines = new String(buffer).split("\\s");
+    int numDimensions = lines[0].split(",").length;
+    double[][] coords = new double[numDimensions][lines.length];
+
+    for (int iLine = 0; iLine < lines.length; iLine++) {
+      String[] parts = lines[iLine].split(",");
+      for (int iDim = 0; iDim < parts.length; iDim++)
+        coords[iDim][iLine] = Double.parseDouble(parts[iDim]);
+    }
+    return coords;
+  }
 }

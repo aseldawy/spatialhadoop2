@@ -36,6 +36,8 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "sample",
+    description = "Reads a random sample from a text file")
 public class Sampler {
   private static final Log LOG = LogFactory.getLog(Sampler.class);
 
