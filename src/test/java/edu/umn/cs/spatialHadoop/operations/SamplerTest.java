@@ -58,8 +58,7 @@ public class SamplerTest extends TestCase {
     try {
       Sampler.sampleMapReduce(new Path[]{input}, output, params);
       String[] lines = Head.head(output.getFileSystem(params), output, 20);
-      assertNotNull(lines[13]);
-      assertNull(lines[14]);
+      assertEquals(14, lines.length);
       // Make sure that they are points
       assertEquals(2, lines[0].split(",").length);
     } catch (Exception e) {

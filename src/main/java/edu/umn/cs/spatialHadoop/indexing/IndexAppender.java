@@ -170,14 +170,14 @@ public class IndexAppender {
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
+  public static void addToIndex(Path newDataPath, Path existingIndexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+    append(newDataPath, existingIndexPath, params);
+    reorganize(existingIndexPath, params);
+  }
 
   public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
 
-    if (!params.checkInput()) {
-      printUsage();
-      return;
-    }
     Path newDataPath = params.getInputPath();
     Path existingIndexPath = params.getOutputPath();
 
@@ -187,10 +187,5 @@ public class IndexAppender {
     long t2 = System.nanoTime();
     System.out.printf("Total append time %f seconds\n",(t2-t1)*1E-9);
 
-  }
-
-  public static void addToIndex(Path newDataPath, Path existingIndexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
-    append(newDataPath, existingIndexPath, params);
-    reorganize(existingIndexPath, params);
   }
 }
