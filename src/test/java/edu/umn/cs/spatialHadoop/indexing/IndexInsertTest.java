@@ -6,8 +6,6 @@ import edu.umn.cs.spatialHadoop.TestHelper;
 import edu.umn.cs.spatialHadoop.core.*;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery;
 import edu.umn.cs.spatialHadoop.util.MetadataUtil;
-import junit.framework.TestCase;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.Text;
 
@@ -15,7 +13,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 
-public class IndexAppenderTest extends BaseTest {
+public class IndexInsertTest extends BaseTest {
 
   public void testAppendToAnEmptyIndex() throws IOException {
     try {
@@ -26,11 +24,11 @@ public class IndexAppenderTest extends BaseTest {
       outFS.deleteOnExit(scratchPath);
       params.setClass("shape", Point.class, Shape.class);
       params.set("sindex", "rtree");
-      IndexAppender.append(inPath, scratchPath, params);
+      IndexInsert.append(inPath, scratchPath, params);
       assertTrue(outFS.exists(scratchPath));
       assertTrue(outFS.exists(new Path(scratchPath, "_master.rstar")));
     } catch (Exception e) {
-      e.printStackTrace();
+      throw new RuntimeException(e);
     }
   }
 
@@ -45,7 +43,7 @@ public class IndexAppenderTest extends BaseTest {
 
       // Append a second file to it
       inPath = new Path("src/test/resources/test2.points");
-      IndexAppender.append(inPath, scratchPath, params);
+      IndexInsert.append(inPath, scratchPath, params);
       FileSystem fs = scratchPath.getFileSystem(params);
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, scratchPath);
       for (Partition p : gindex) {
@@ -54,8 +52,7 @@ public class IndexAppenderTest extends BaseTest {
         assertEquals(p.size, fs.getFileStatus(datafile).getLen());
       }
     } catch (Exception e) {
-      e.printStackTrace();
-      fail("Error in test!");
+      throw new RuntimeException(e);
     }
   }
 
@@ -83,7 +80,7 @@ public class IndexAppenderTest extends BaseTest {
 
       // Append a second file to it
       params.setClass("shape", Point.class, Shape.class);
-      IndexAppender.append(inPath, indexPath, params);
+      IndexInsert.append(inPath, indexPath, params);
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, indexPath);
       int count = 0;
 
@@ -97,8 +94,7 @@ public class IndexAppenderTest extends BaseTest {
       }
       assertEquals(11, merged.recordCount);
     } catch (Exception e) {
-      e.printStackTrace();
-      fail("Error in test!");
+      throw new RuntimeException(e);
     }
   }
 
@@ -117,7 +113,7 @@ public class IndexAppenderTest extends BaseTest {
       inPath = new Path("src/test/resources/test2.points");
       params = new OperationsParams();
       params.setClass("shape", Point.class, Shape.class);
-      IndexAppender.append(inPath, scratchPath, params);
+      IndexInsert.append(inPath, scratchPath, params);
 
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, scratchPath);
       for (Partition p : gindex) {
@@ -128,8 +124,7 @@ public class IndexAppenderTest extends BaseTest {
         assertEquals(33L, size);
       }
     } catch (Exception e) {
-      e.printStackTrace();
-      fail("Error in test!");
+      throw new RuntimeException(e);
     }
   }
 
@@ -156,7 +151,7 @@ public class IndexAppenderTest extends BaseTest {
       TestHelper.generateFile(dataPath.toString(), Point.class,
           new Rectangle(5,5,10,10), 2 * 1024 * 1024, params);
       long fileSize2 = fs.getFileStatus(dataPath).getLen();
-      IndexAppender.addToIndex(dataPath, indexPath, params);
+      IndexInsert.addToIndex(dataPath, indexPath, params);
       // Assert that the new path contain all the data
       ArrayList<Partition> ps = MetadataUtil.getPartitions(indexPath, params);
       Partition all = new Partition();
@@ -175,8 +170,7 @@ public class IndexAppenderTest extends BaseTest {
           new Rectangle(0, 0, 10, 10), new Point(), params, null);
       assertEquals(all.recordCount, resultSize);
     } catch (Exception e) {
-      e.printStackTrace();
-      fail("Error running test!");
+      throw new RuntimeException(e);
     }
   }
 }

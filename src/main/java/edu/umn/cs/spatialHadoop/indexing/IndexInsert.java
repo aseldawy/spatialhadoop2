@@ -16,9 +16,9 @@ import java.util.*;
 /**
  * Appends new data to an existing index
  */
-@OperationMetadata(shortName="append",
-description = "Appends a data file to an existing index")
-public class IndexAppender {
+@OperationMetadata(shortName="insert",
+description = "Insert the data in a given path to an existing index")
+public class IndexInsert {
 
   public static void append(Path inPath, Path indexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
     append(new Path[] {inPath}, indexPath, params);
@@ -150,12 +150,16 @@ public class IndexAppender {
     Path masterPath = fs.listStatus(indexPath, SpatialSite.MasterFileFilter)[0].getPath();
     writeMasterFile(fs, masterPath, mergedPartitions);
 
-    // Delete partitions that have been reorganized and replaced
+    // Delete old partitions that have been reorganized and replaced
     for (List<Partition> group : splitGroups) {
       for (Partition partition : group) {
         fs.delete(new Path(indexPath, partition.filename), false);
       }
     }
+
+    // Delete all temporary paths that are supposed to be empty of data
+    for (Path tempPath : tempPaths)
+      fs.delete(tempPath, true);
   }
 
   protected static void printUsage() {
