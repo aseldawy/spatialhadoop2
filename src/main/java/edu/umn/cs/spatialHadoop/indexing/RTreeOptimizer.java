@@ -47,7 +47,10 @@ public class RTreeOptimizer {
 		List<List<Partition>> splitGroups;
 		
 		FileSystem fs = indexPath.getFileSystem(params);
-		((FilterFileSystem)fs).getRawFileSystem().setConf(params);
+		// This is to overcome a bug in FilterFileSystem
+		// See https://issues.apache.org/jira/projects/HDFS/issues/HDFS-13409
+		if (fs instanceof FilterFileSystem)
+			((FilterFileSystem)fs).getRawFileSystem().setConf(params);
 		long blockSize = fs.getDefaultBlockSize(indexPath);
 		double overflowRate = params.getDouble("overflow_rate", 1.1);
 		double overflowSize = blockSize * overflowRate;
