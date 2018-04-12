@@ -97,7 +97,7 @@ public class IndexAppender {
         inPaths[iPartition] = new Path(indexPath, group.get(iPartition).filename);
       }
       do {
-        tempPaths[iGroup] = new Path(indexPath.getParent(), Integer.toString((int) Math.random() * 1000000));
+        tempPaths[iGroup] = new Path(indexPath.getParent(), Integer.toString((int) (Math.random() * 1000000)));
       } while (fs.exists(tempPaths[iGroup]));
       final Path tempPath = tempPaths[iGroup];
       indexJobs[iGroup] = new Thread() {
@@ -174,10 +174,10 @@ public class IndexAppender {
     long t1 = System.nanoTime();
     append(newDataPath, existingIndexPath, params);
     long t2 = System.nanoTime();
+    System.out.printf("Append done in %f seconds\n", (t2-t1)*1E-9);
     reorganize(existingIndexPath, params);
     long t3 = System.nanoTime();
-    System.out.printf("Flush + Reorganization = %f + %f = %f seconds",
-        (t2-t1)*1E-9, (t3-t2)*1E-9, (t3-t1)*1E-9);
+    System.out.printf("Reorganization done in %f seconds\n", (t3-t2)*1E-9);
   }
 
   public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {

@@ -297,13 +297,27 @@ public final class FileUtil {
   }
 
   /**
-   * Concatenates a set of files (in the same file system) into one file
+   * Concatenates a set of files (in the same file system) into one file and
+   * deletes the source files afterwards.
    * @param dest
    * @param src
    */
   public static void concat(Configuration conf, FileSystem fs, Path dest, Path... src) throws IOException {
     try {
       // Try a possibly efficient implementation provided by the FileSystem
+			// First, move the source files to the same destination directory
+			for (int isrc = 0; isrc < src.length; isrc++) {
+				Path oldS = src[isrc];
+				if (!oldS.getParent().equals(dest.getParent())) {
+					Path newS;
+					do {
+            newS = new Path(dest.getParent(), String.format("data_%06d.tmp",
+                Math.round(Math.random()*1000000)));
+          } while (fs.exists(newS));
+					fs.rename(oldS, newS);
+					src[isrc] = newS;
+				}
+			}
       fs.concat(dest, src);
     } catch (UnsupportedOperationException e) {
       Path tempPath = null;
@@ -333,6 +347,8 @@ public final class FileUtil {
           org.apache.hadoop.io.IOUtils.copyBytes(in, out, conf, false);
           in.close();
         }
+        // Delete the concatenated (source) file
+        fs.delete(s, false);
       }
       out.close();
       if (tempPath != null) {

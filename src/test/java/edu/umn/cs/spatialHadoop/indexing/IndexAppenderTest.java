@@ -38,8 +38,6 @@ public class IndexAppenderTest extends BaseTest {
     try {
       Path inPath = new Path("src/test/resources/test.points");
       OperationsParams params = new OperationsParams();
-      FileSystem outFS = scratchPath.getFileSystem(params);
-      outFS.delete(scratchPath, true);
       params.setClass("shape", Point.class, Shape.class);
       params.set("sindex", "str");
       // Create the initial index
@@ -48,11 +46,12 @@ public class IndexAppenderTest extends BaseTest {
       // Append a second file to it
       inPath = new Path("src/test/resources/test2.points");
       IndexAppender.append(inPath, scratchPath, params);
-      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, scratchPath);
+      FileSystem fs = scratchPath.getFileSystem(params);
+      GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, scratchPath);
       for (Partition p : gindex) {
         assertEquals(33, p.recordCount);
         Path datafile = new Path(scratchPath, p.filename);
-        assertEquals(p.size, outFS.getFileStatus(datafile).getLen());
+        assertEquals(p.size, fs.getFileStatus(datafile).getLen());
       }
     } catch (Exception e) {
       e.printStackTrace();
@@ -63,7 +62,7 @@ public class IndexAppenderTest extends BaseTest {
   public void testAppendToAnExistingIndexWithSeveralPartitions() throws IOException {
     try {
       Path inPath = new Path("src/test/resources/test.points");
-      Path indexPath = new Path("testindex");
+      Path indexPath = new Path(scratchPath, "testindex");
       OperationsParams params = new OperationsParams();
       FileSystem outFS = indexPath.getFileSystem(params);
 
