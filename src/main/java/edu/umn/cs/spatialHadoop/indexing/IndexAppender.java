@@ -171,8 +171,13 @@ public class IndexAppender {
   }
 
   public static void addToIndex(Path newDataPath, Path existingIndexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+    long t1 = System.nanoTime();
     append(newDataPath, existingIndexPath, params);
+    long t2 = System.nanoTime();
     reorganize(existingIndexPath, params);
+    long t3 = System.nanoTime();
+    System.out.printf("Flush + Reorganization = %f + %f = %f seconds",
+        (t2-t1)*1E-9, (t3-t2)*1E-9, (t3-t1)*1E-9);
   }
 
   public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
