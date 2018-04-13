@@ -15,6 +15,7 @@ import java.util.*;
 
 import edu.umn.cs.spatialHadoop.core.*;
 import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
+import edu.umn.cs.spatialHadoop.util.MetadataUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -431,8 +432,8 @@ public class Indexer {
    */
   protected static Partitioner initializeRepartition(Path refPath, Configuration conf) throws IOException {
     // Initialize the global index
-    CellInfo[] cells = SpatialSite.cellsOf(refPath.getFileSystem(conf), refPath);
-    Partitioner p = new CellPartitioner(cells);
+    ArrayList<Partition> partitions = MetadataUtil.getPartitions(refPath, conf);
+    Partitioner p = new CellPartitioner(partitions.toArray(new CellInfo[partitions.size()]));
     Partitioner.setPartitioner(conf, p);
 
     // Initialize the local index

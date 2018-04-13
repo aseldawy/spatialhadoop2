@@ -24,6 +24,16 @@ public class IndexInsert {
     append(new Path[] {inPath}, indexPath, params);
   }
 
+  /**
+   * Takes all the data in input paths and inserts all of them into an existing index.
+   * If the indexPath points to a non-existing directory, an index is created.
+   * @param inPath
+   * @param indexPath
+   * @param params
+   * @throws IOException
+   * @throws ClassNotFoundException
+   * @throws InterruptedException
+   */
   public static void append(Path[] inPath, Path indexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
     FileSystem fs = indexPath.getFileSystem(params);
     if (!fs.exists(indexPath)) {
@@ -41,11 +51,15 @@ public class IndexInsert {
 
         // Concatenate corresponding files
         Map<Integer, Partition> mergedIndex = new HashMap<Integer, Partition>();
-        for (Partition p : SpatialSite.getGlobalIndex(fs, indexPath)) {
+        for (Partition p : MetadataUtil.getPartitions(indexPath, params))
           mergedIndex.put(p.cellId, p);
-        }
-        for (Partition newP : SpatialSite.getGlobalIndex(fs, tempPath)) {
+        for (Partition newP : MetadataUtil.getPartitions(tempPath, params)) {
           Partition existingP = mergedIndex.get(newP.cellId);
+          if (existingP == null) {
+            // Sanity check. This should never happen if things go smoothly
+            throw new RuntimeException(String.format("New partition %s did not have a corresponding existing partition",
+                newP.toString()));
+          }
           // Combine the partition information
           existingP.expand(newP);
           // Combine the file
@@ -69,6 +83,13 @@ public class IndexInsert {
     }
   }
 
+  /**
+   * Writes a _master file given a collection of partitions.
+   * @param fs
+   * @param masterFilePath
+   * @param partitions
+   * @throws IOException
+   */
   private static void writeMasterFile(FileSystem fs, Path masterFilePath,
                                       Collection<Partition> partitions) throws IOException {
     FSDataOutputStream out = fs.create(masterFilePath, true);
@@ -82,7 +103,17 @@ public class IndexInsert {
     out.close();
   }
 
-  public static void reorganize(Path indexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+  /**
+   * Runs the reorganize step on an existing index. This function inspects the
+   * current state of the index and improves it by identifying a set of partitions
+   * that are causing the quality of the index to be low and have a high opportunity
+   * of being optimized. These partitions are then deleted and reindexed.
+   * @param indexPath A path to an existing index
+   * @param params
+   * @throws IOException
+   * @throws InterruptedException
+   */
+  public static void reorganize(Path indexPath, OperationsParams params) throws IOException, InterruptedException {
     List<List<Partition>> splitGroups = RTreeOptimizer.getSplitGroups(indexPath, params, RTreeOptimizer.OptimizerType.MaximumReducedCost);
     FileSystem fs = indexPath.getFileSystem(params);
     // A list of temporary paths where the reorganized partitions will be stored.
@@ -174,7 +205,18 @@ public class IndexInsert {
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 
-  public static void addToIndex(Path newDataPath, Path existingIndexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+  /**
+   * Adds all the data in a path to an existing index and reorganize the index
+   * if needed.
+   * @param newDataPath
+   * @param existingIndexPath
+   * @param params
+   * @throws IOException
+   * @throws ClassNotFoundException
+   * @throws InterruptedException
+   */
+  public static void addToIndex(Path newDataPath, Path existingIndexPath, OperationsParams params)
+      throws IOException, ClassNotFoundException, InterruptedException {
     long t1 = System.nanoTime();
     append(newDataPath, existingIndexPath, params);
     long t2 = System.nanoTime();
@@ -194,7 +236,7 @@ public class IndexInsert {
     long t1 = System.nanoTime();
     addToIndex(newDataPath, existingIndexPath, params);
     long t2 = System.nanoTime();
-    System.out.printf("Total append time %f seconds\n",(t2-t1)*1E-9);
+    System.out.printf("Total insertion time %f seconds\n",(t2-t1)*1E-9);
 
   }
 }

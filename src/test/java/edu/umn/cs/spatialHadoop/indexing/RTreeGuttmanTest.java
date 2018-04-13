@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.io.MemoryInputStream;
 import edu.umn.cs.spatialHadoop.util.IntArray;
@@ -36,7 +37,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testBuild() {
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 11);
@@ -52,7 +53,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testBuildRectangles() {
     try {
       String fileName = "src/test/resources/test.rect";
-      double[][] rects = readFile(fileName);
+      double[][] rects = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromRects(rects[0], rects[1], rects[2], rects[3]);
       assertEquals(rtree.numOfDataEntries(), 14);
@@ -66,7 +67,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testSearch() {
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       double x1 = 0, y1 = 0, x2 = 5, y2 = 4;
@@ -91,7 +92,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testIterateOverEntries() {
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       double[] x1s = points[0];
       double[] y1s = points[1];
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
@@ -113,7 +114,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testBuild2() {
     try {
       String fileName = "src/test/resources/test2.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 22);
@@ -134,7 +135,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testSplit() {
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       // Create a tree with a very large threshold to avoid any splits
       RTreeGuttman rtree = new RTreeGuttman(50, 100);
       rtree.initializeFromPoints(points[0], points[1]);
@@ -155,7 +156,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testBuild3() {
     try {
       String fileName = "src/test/resources/test2.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(2, 4);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 22);
@@ -177,7 +178,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testRetrieveLeaves() {
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 11);
@@ -203,7 +204,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testExpansion() {
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(0.0, rtree.Node_volumeExpansion(rtree.root, 0));
@@ -217,7 +218,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testWrite() {
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 11);
@@ -254,7 +255,7 @@ public class RTreeGuttmanTest extends TestCase {
     byte[] treeBytes = null;
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 11);
@@ -289,7 +290,7 @@ public class RTreeGuttmanTest extends TestCase {
     byte[] treeBytes = null;
     try {
       String fileName = "src/test/resources/test111.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 111);
@@ -323,7 +324,7 @@ public class RTreeGuttmanTest extends TestCase {
   public void testHollowRTree() {
     try {
       String fileName = "src/test/resources/test.rect";
-      double[][] rects = readFile(fileName);
+      double[][] rects = BaseTest.readFile(fileName);
       RTreeGuttman rtree = new RTreeGuttman(4, 8);
       rtree.initializeHollowRTree(rects[0], rects[1], rects[2], rects[3]);
       int numLeaves = 0;
@@ -340,32 +341,4 @@ public class RTreeGuttmanTest extends TestCase {
       fail("Error working with the test file");
     }
   }
-
-  /**
-   * Read a CSV file that contains one point per line in the format "x,y".
-   * The points are returned as a 2D array where the first index indicates the
-   * coordinate (0 for x and 1 for y) and the second index indicates the point
-   * number.
-   * @param fileName
-   * @return
-   * @throws IOException
-   */
-  private double[][] readFile(String fileName) throws IOException {
-    FileReader testPointsIn = new FileReader(fileName);
-    char[] buffer = new char[(int) new File(fileName).length()];
-    testPointsIn.read(buffer);
-    testPointsIn.close();
-
-    String[] lines = new String(buffer).split("\\s");
-    int numDimensions = lines[0].split(",").length;
-    double[][] coords = new double[numDimensions][lines.length];
-
-    for (int iLine = 0; iLine < lines.length; iLine++) {
-      String[] parts = lines[iLine].split(",");
-      for (int iDim = 0; iDim < parts.length; iDim++)
-        coords[iDim][iLine] = Double.parseDouble(parts[iDim]);
-    }
-    return coords;
-  }
-
 }

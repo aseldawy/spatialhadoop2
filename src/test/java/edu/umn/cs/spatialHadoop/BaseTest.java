@@ -43,7 +43,7 @@ public abstract class BaseTest extends TestCase {
    * @return
    * @throws IOException
    */
-  static double[][] readFile(String fileName) throws IOException {
+  public static double[][] readFile(String fileName) throws IOException {
     FileReader testPointsIn = new FileReader(fileName);
     char[] buffer = new char[(int) new File(fileName).length()];
     testPointsIn.read(buffer);

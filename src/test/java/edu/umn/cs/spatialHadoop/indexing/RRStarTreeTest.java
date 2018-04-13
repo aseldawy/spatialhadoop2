@@ -1,11 +1,10 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import junit.framework.TestCase;
 
 import java.awt.geom.Rectangle2D;
-import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileReader;
 import java.io.IOException;
 
 public class RRStarTreeTest extends TestCase {
@@ -62,7 +61,7 @@ public class RRStarTreeTest extends TestCase {
   public void testInsertion() {
     try {
       String fileName = "src/test/resources/test.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       double[] xs = points[0], ys = points[1];
       // Case 1: COV is not empty, choose the node with zero volume
       RRStarTree rtree = new RRStarTree(4, 8);
@@ -89,7 +88,7 @@ public class RRStarTreeTest extends TestCase {
 
       // Case 3: COV is not empty, all have non-zero volume, choose the one with min volume
       rtree = new RRStarTree(4, 8);
-      points = readFile(fileName); // Reload the file
+      points = BaseTest.readFile(fileName); // Reload the file
       xs = points[0]; ys = points[1];
       rtree.initializeDataEntries(xs, ys);
       n1 = rtree.Node_createNodeWithChildren(true, 3, 9);
@@ -103,7 +102,7 @@ public class RRStarTreeTest extends TestCase {
       // Case 4: Some node has to be expanded. We add it to the node with smallest
       // deltaPerim if this would not increase the perimetric overlap
       rtree = new RRStarTree(4, 8);
-      points = readFile(fileName); // Reload the file
+      points = BaseTest.readFile(fileName); // Reload the file
       xs = points[0]; ys = points[1];
       rtree.initializeDataEntries(xs, ys);
       n1 = rtree.Node_createNodeWithChildren(true, 4, 6);
@@ -148,7 +147,7 @@ public class RRStarTreeTest extends TestCase {
   public void testBuild() {
     try {
       String fileName = "src/test/resources/test2.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RRStarTree rtree = new RRStarTree(4, 8);
       rtree.initializeFromPoints(points[0], points[1]);
       assertEquals(rtree.numOfDataEntries(), 22);
@@ -169,7 +168,7 @@ public class RRStarTreeTest extends TestCase {
   public void testBuild2() {
     try {
       String fileName = "src/test/resources/test2.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RRStarTree rtree = new RRStarTree(6, 12);
       rtree.initializeFromPoints(points[0], points[1]);
     } catch (FileNotFoundException e) {
@@ -182,7 +181,7 @@ public class RRStarTreeTest extends TestCase {
   public void testSplit() {
     try {
       String fileName = "src/test/resources/test3.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RRStarTree rtree = new RRStarTree(2, 9);
 
       rtree.initializeFromPoints(points[0], points[1]);
@@ -211,7 +210,7 @@ public class RRStarTreeTest extends TestCase {
   public void testSplitNonLeaf() {
     try {
       String fileName = "src/test/resources/test2.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RRStarTree rtree = new RRStarTree(2, 4);
 
       rtree.initializeFromPoints(points[0], points[1]);
@@ -226,7 +225,7 @@ public class RRStarTreeTest extends TestCase {
   public void testChooseSubtree() {
     try {
       String fileName = "src/test/resources/test4.points";
-      double[][] points = readFile(fileName);
+      double[][] points = BaseTest.readFile(fileName);
       RRStarTree rtree = new RRStarTree(2, 10);
 
       rtree.initializeFromPoints(points[0], points[1]);
@@ -262,31 +261,4 @@ public class RRStarTreeTest extends TestCase {
     rrStarTree.initializeDataEntries(x1s, y1s, x2s, y2s);
     return rrStarTree;
   }
-
-  /**
-   * Read a CSV file that contains one point per line in the format "x,y".
-   * The points are returned as a 2D array where the first index indicates the
-   * coordinate (0 for x and 1 for y) and the second index indicates the point
-   * number.
-   * @param fileName
-   * @return
-   * @throws IOException
-   */
-  private double[][] readFile(String fileName) throws IOException {
-    FileReader testPointsIn = new FileReader(fileName);
-    char[] buffer = new char[(int) new File(fileName).length()];
-    testPointsIn.read(buffer);
-    testPointsIn.close();
-
-    String[] lines = new String(buffer).split("\\s");
-    double[] xs = new double[lines.length];
-    double[] ys = new double[lines.length];
-    for (int iLine = 0; iLine < lines.length; iLine++) {
-      String[] parts = lines[iLine].split(",");
-      xs[iLine] = Double.parseDouble(parts[0]);
-      ys[iLine] = Double.parseDouble(parts[1]);
-    }
-    return new double[][]{xs, ys};
-  }
-
 }

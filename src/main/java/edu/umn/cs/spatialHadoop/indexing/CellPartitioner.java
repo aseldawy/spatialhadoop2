@@ -28,6 +28,9 @@ public class CellPartitioner extends Partitioner {
   /**The list of cells that this partitioner can choose from*/
   protected CellInfo[] cells;
 
+  /**The degree of the R-Tree index that we use to speed up node lookup.*/
+  protected static final int RTreeDegree = 64;
+
   /**
    * A default constructor to be able to dynamically instantiate it
    * and deserialize it
@@ -37,6 +40,11 @@ public class CellPartitioner extends Partitioner {
 
   public CellPartitioner(CellInfo[] cells) {
     this.cells = cells.clone();
+    this.cells = new CellInfo[cells.length];
+    // We have to explicitly create each object as CellInfo to ensure that
+    // write/readFields will work correctly
+    for (int i = 0; i < cells.length; i++)
+      this.cells[i] = new CellInfo(cells[i]);
     initialize(cells);
   }
 
@@ -57,7 +65,8 @@ public class CellPartitioner extends Partitioner {
       y2s[i] = cells[i].y2;
     }
 
-    partitions = new RRStarTree(4, 8);
+    // The RR*-tree paper recommends setting m = 0.2 M
+    partitions = new RRStarTree(RTreeDegree / 5, RTreeDegree);
     partitions.initializeHollowRTree(x1s, y1s, x2s, y2s);
   }
 
@@ -66,13 +75,13 @@ public class CellPartitioner extends Partitioner {
     out.writeInt(cells.length);
     for (CellInfo cell : cells)
       cell.write(out);
-    initialize(cells);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
     int numCells = in.readInt();
     if (cells == null || cells.length != numCells) {
+      // Initialize the array of cells only if needed
       cells = new CellInfo[numCells];
       for (int i = 0; i < numCells; i++)
         cells[i] = new CellInfo();

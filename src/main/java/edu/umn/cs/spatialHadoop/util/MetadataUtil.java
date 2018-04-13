@@ -41,8 +41,15 @@ public class MetadataUtil {
 		return partitions;
 	}
 
-	public static ArrayList<Partition> getPartitions(Path path, OperationsParams params) throws IOException {
-		FileSystem fs = path.getFileSystem(params);
+	/**
+	 * Reads the partitions metadata given an index path
+	 * @param path
+	 * @param conf
+	 * @return
+	 * @throws IOException
+	 */
+	public static ArrayList<Partition> getPartitions(Path path, Configuration conf) throws IOException {
+		FileSystem fs = path.getFileSystem(conf);
 		Path masterPath = fs.listStatus(path, SpatialSite.MasterFileFilter)[0].getPath();
 
 		return getPartitions(masterPath);

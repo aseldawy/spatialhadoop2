@@ -6,10 +6,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.io.IntWritable;
 import sun.security.krb5.internal.crypto.Des;
 
-import java.io.Closeable;
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 
 /**
@@ -855,6 +852,9 @@ public class RTreeGuttman implements Closeable {
    * A class that holds information about one node in the tree.
    */
   public static class Node {
+    /**The internal ID of the node*/
+    public int id;
+
     /**Whether this is a leaf node or not*/
     public boolean isLeaf;
 
@@ -864,27 +864,23 @@ public class RTreeGuttman implements Closeable {
     protected Node(){}
   }
 
-  protected class LeafNodeIterable implements Iterable<Node>, Iterator<Node> {
+  protected class NodeIterable implements Iterable<Node>, Iterator<Node> {
     /**The ID of the next node to be returned*/
     protected int iNextNode;
 
     /**Current node pointed by the iterator*/
     protected Node currentNode;
 
-    protected LeafNodeIterable() {
+    protected NodeIterable() {
       currentNode = new Node();
-      // This iterator only returns leaf nodes
-      currentNode.isLeaf = true;
       iNextNode = numEntries - 1;
       prefetchNext();
     }
 
     protected void prefetchNext() {
-      if (iNextNode >= x1s.length)
+      if (iNextNode >= numEntries + numNodes)
         return;
-      do {
-        iNextNode++;
-      } while (iNextNode < x1s.length && !isLeaf.get(iNextNode));
+      iNextNode++;
     }
 
     @Override
@@ -894,7 +890,7 @@ public class RTreeGuttman implements Closeable {
 
     @Override
     public boolean hasNext() {
-      return iNextNode < RTreeGuttman.this.x1s.length;
+      return iNextNode < numEntries + numNodes;
     }
 
     @Override
@@ -903,12 +899,24 @@ public class RTreeGuttman implements Closeable {
       currentNode.y1 = y1s[iNextNode];
       currentNode.x2 = x2s[iNextNode];
       currentNode.y2 = y2s[iNextNode];
+      currentNode.isLeaf = isLeaf.get(iNextNode);
+      currentNode.id = iNextNode;
       prefetchNext();
       return currentNode;
     }
 
     public void remove() {
       throw new RuntimeException("Not supported");
+    }
+  }
+
+  protected class LeafNodeIterable extends NodeIterable {
+    protected void prefetchNext() {
+      if (iNextNode >= numEntries + numNodes)
+        return;
+      do {
+        iNextNode++;
+      } while (iNextNode < numEntries + numNodes && !isLeaf.get(iNextNode));
     }
   }
 
@@ -1132,4 +1140,20 @@ public class RTreeGuttman implements Closeable {
       in.close();
   }
 
+  /**
+   * Writes all nodes of the tree in a WKT format to be visualized in QGIS.
+   * @param out
+   */
+  public void toWKT(PrintStream out) {
+    for (Node node : new NodeIterable()) {
+      out.printf("%d\tPOLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))\n",
+          node.id,
+          node.x1, node.y1,
+          node.x1, node.y2,
+          node.x2, node.y2,
+          node.x2, node.y1,
+          node.x1, node.y1
+      );
+    }
+  }
 }
