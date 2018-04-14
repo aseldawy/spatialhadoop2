@@ -9,6 +9,7 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import edu.umn.cs.spatialHadoop.core.*;
+import edu.umn.cs.spatialHadoop.util.IntArray;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -28,8 +29,11 @@ public class CellPartitioner extends Partitioner {
   /**The list of cells that this partitioner can choose from*/
   protected CellInfo[] cells;
 
+  /**A reusable array that holds the list of overlapping cells*/
+  protected IntArray overlappingCells = new IntArray();
+
   /**The degree of the R-Tree index that we use to speed up node lookup.*/
-  protected static final int RTreeDegree = 64;
+  protected static final int RTreeDegree = 32;
 
   /**
    * A default constructor to be able to dynamically instantiate it
@@ -106,8 +110,37 @@ public class CellPartitioner extends Partitioner {
   @Override
   public int overlapPartition(Shape shape) {
     Rectangle shapeMBR = shape.getMBR();
-    int i = partitions.noInsert(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2);
-    return cells[i].cellId;
+    partitions.search(shapeMBR.x1, shapeMBR.y2, shapeMBR.x2, shapeMBR.y2, overlappingCells);
+    int chosenCellIndex;
+    if (overlappingCells.size() == 1) {
+      // Only one overlapping node, return it
+      chosenCellIndex = overlappingCells.peek();
+    } else  if (overlappingCells.size() > 0) {
+      // More than one overlapping cells, choose the best between them
+      chosenCellIndex = -1;
+      double minVol = Double.POSITIVE_INFINITY;
+      double minPerim = Double.POSITIVE_INFINITY;
+      for (int overlappingCellIndex : overlappingCells) {
+        CellInfo overlappingCell = cells[overlappingCellIndex];
+        double vol = overlappingCell.area();
+        if (vol < minVol) {
+          minVol = vol;
+          minPerim = overlappingCell.getWidth() + overlappingCell.getHeight();
+          chosenCellIndex = overlappingCellIndex;
+        } else if (vol == minVol) {
+          // This also covers the case of vol == minVol == 0
+          double cellPerimeter = overlappingCell.getWidth() + overlappingCell.getHeight();
+          if (cellPerimeter < minPerim) {
+            minPerim = cellPerimeter;
+            chosenCellIndex = overlappingCellIndex;
+          }
+        }
+      }
+    } else {
+      // No overlapping cells, follow the (fake) insert choice
+      chosenCellIndex = partitions.noInsert(shapeMBR.x1, shapeMBR.y1, shapeMBR.x2, shapeMBR.y2);
+    }
+    return cells[chosenCellIndex].cellId;
   }
   
   @Override

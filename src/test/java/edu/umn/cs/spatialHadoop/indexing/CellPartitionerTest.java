@@ -28,6 +28,8 @@ public class CellPartitionerTest extends BaseTest {
       CellPartitioner p = new CellPartitioner(cells);
       int cellId = p.overlapPartition(new Point(-124.7306754,40.4658126));
       assertEquals(42, cellId);
+      cellId = p.overlapPartition(new Point(10,46));
+      assertEquals(10, cellId);
     } catch (IOException e) {
       throw new RuntimeException("Error in test!", e);
     }

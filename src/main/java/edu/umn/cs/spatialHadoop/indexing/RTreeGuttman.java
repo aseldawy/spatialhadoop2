@@ -628,18 +628,8 @@ public class RTreeGuttman implements Closeable {
    * @see #noInsert(double, double, double, double)
    */
   protected void initializeHollowRTree(double[] x1, double[] y1, double[] x2, double[] y2) {
-    // 1- Create a regular R-tree with the given rectangles as data entries.
+    // Create a regular R-tree with the given rectangles as data entries.
     initializeFromRects(x1, y1, x2, y2);
-
-    // 2- Convert all data entries to empty leaf nodes
-    for (int i = 0; i < numEntries; i++)
-      isLeaf.set(i, true);
-
-    for (int i = numEntries; i < numNodes + numEntries; i++)
-      isLeaf.set(i, false);
-
-    numNodes += numEntries;
-    numEntries = 0;
 
     // Make sure we have a room for an extra object which will be used in noInsert
     makeRoomForOneMoreObject();
@@ -661,9 +651,9 @@ public class RTreeGuttman implements Closeable {
     x2s[i] = x2;
     y2s[i] = y2;
 
-    // Descend fro the root until reaching a leaf node
+    // Descend fro the root until reaching a data entry (id < numOfDataEntries())
     int p = root;
-    while (!isLeaf.get(p))
+    while (p >= numOfDataEntries())
       p = chooseSubtree(i, p);
 
     // Return the index of the leaf node without really inserting the element

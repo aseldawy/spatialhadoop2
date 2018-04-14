@@ -330,8 +330,7 @@ public class RTreeGuttmanTest extends TestCase {
       int numLeaves = 0;
       for (Object leaf : rtree.getAllLeaves())
         numLeaves++;
-      assertEquals(14, numLeaves);
-      assertEquals(0, rtree.numOfDataEntries());
+      assertEquals(14, rtree.numOfDataEntries());
 
       int i = rtree.noInsert(999, 200, 999, 200);
       assertEquals(12, i);

@@ -108,6 +108,9 @@ public class RRStarTree extends RTreeGuttman {
         cov.add(child);
     }
 
+    if (cov.size() == 1)
+      return cov.peek();
+
     if (!cov.isEmpty()) {
       // There are some nodes that do not need to be expanded to accommodate the object
       // If there are some children with zero volume (area), return the one with the smallest perimeter

@@ -46,11 +46,16 @@ public class IndexInsertTest extends BaseTest {
       IndexInsert.append(inPath, scratchPath, params);
       FileSystem fs = scratchPath.getFileSystem(params);
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, scratchPath);
+      Partition merged = null;
       for (Partition p : gindex) {
-        assertEquals(33, p.recordCount);
+        if (merged == null)
+          merged = p.clone();
+        else
+          merged.expand(p);
         Path datafile = new Path(scratchPath, p.filename);
         assertEquals(p.size, fs.getFileStatus(datafile).getLen());
       }
+      assertEquals(33, merged.recordCount);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
