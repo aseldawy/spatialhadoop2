@@ -636,8 +636,8 @@ public class RTreeGuttman implements Closeable {
   }
 
   /**
-   * Simulates an insertion of a record and returns the ID of the leaf node
-   * it will end up in (without really inserting it).
+   * Simulates an insertion of a record and returns the ID of the object that either
+   * contains the given boundaries or will be its sibling.
    * @param x1
    * @param y1
    * @param x2
@@ -651,7 +651,9 @@ public class RTreeGuttman implements Closeable {
     x2s[i] = x2;
     y2s[i] = y2;
 
-    // Descend fro the root until reaching a data entry (id < numOfDataEntries())
+    // Descend from the root until reaching a data entry
+    // The range of IDs for data entries is [0, numEntries[
+    // All node IDs is in the rnage [numEntries, numEntries + numNodes[
     int p = root;
     while (p >= numOfDataEntries())
       p = chooseSubtree(i, p);
