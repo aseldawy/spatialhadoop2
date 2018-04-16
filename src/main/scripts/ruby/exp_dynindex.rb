@@ -10,9 +10,8 @@ batches = batches.sort_by {|f| f.split('_')[-1].to_i }
 for batch in batches
   batch_num = batch.split('_')[-1].to_i
   output = `hadoop jar spatialhadoop-2.4.3-SNAPSHOT-uber.jar insert shape:osmpoint gindex:rstar #{batch} #{index_path}`
-  timelines = output.each_line.grep 'time'
   puts "batch: #{batch}"
-  puts timelines.join("\n")
+  puts output
   `hdfs dfs -get dynindex/_rstar.wkt dynindex_#{batch_num}.wkt`
   `hdfs dfs -get dynindex/_master.rstar dynindex_#{batch_num}.rstar`
 end
