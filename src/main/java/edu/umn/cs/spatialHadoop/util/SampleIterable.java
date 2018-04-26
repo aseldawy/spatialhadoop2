@@ -17,12 +17,15 @@ import java.util.Random;
  */
 public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable {
   /**Input stream over the input*/
-  private FSDataInputStream in;
+  private InputStream in;
 
   /**The starting position of the file*/
-  private final long start;
+  private long start;
   /**The end offset of the file*/
-  private final long end;
+  private long end;
+
+  /**A flag that is raised when the end-of-file is reached*/
+  private boolean eosReached;
 
   /**The current position in the file to report the progress*/
   private long pos;
@@ -46,24 +49,51 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
    * @param seed the seed used to initialize the random number generator
    */
   public SampleIterable(FileSystem fs, FileSplit fsplit, float ratio, long seed) throws IOException {
-    this.in = fs.open(fsplit.getPath());
+    FSDataInputStream in = fs.open(fsplit.getPath());
     in.seek(this.start = fsplit.getStart());
+    this.in = in;
+    this.pos = fsplit.getStart();
     this.end = fsplit.getStart() + fsplit.getLength();
     this.currentValue = new Text2();
     this.nextValue = new Text2();
     this.random = new Random(seed);
     this.ratio = ratio;
+    this.eosReached = false;
     prefetchNext();
   }
 
   public SampleIterable(FSDataInputStream in, long dataStart, long dataEnd, float ratio, long seed) throws IOException {
     this.in = in;
     in.seek(this.start = dataStart);
+    this.pos = in.getPos();
     this.end = dataEnd;
     this.currentValue = new Text2();
     this.nextValue = new Text2();
     this.random = new Random(seed);
     this.ratio = ratio;
+    this.eosReached = false;
+    prefetchNext();
+  }
+
+  /**
+   * Initialize from a non-bound input stream. We will keep sampling from the
+   * stream until its EOF is reached.
+   * @param in
+   * @param ratio
+   * @param seed
+   * @throws IOException
+   */
+  public SampleIterable(InputStream in, float ratio, long seed) throws IOException {
+    this.in = in;
+    this.currentValue = new Text2();
+    this.nextValue = new Text2();
+    this.random = new Random(seed);
+    // Since the stream is unbounded, we set the end to the biggest number to
+    // ensure we read until the end of the stream
+    this.start = 0;
+    this.end = Long.MAX_VALUE;
+    this.ratio = ratio;
+    this.eosReached = false;
     prefetchNext();
   }
 
@@ -74,26 +104,26 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
 
   public void prefetchNext() {
     try {
-      while ((pos = in.getPos()) < end) {
+      while (pos < end && !eosReached) {
         if (random.nextFloat() < ratio) {
           do {
             nextValue.clear();
             pos += readUntilEOL(in, nextValue);
-          } while (nextValue.getLength() == 0 && pos < end);
-          if (nextValue.getLength() == 0)
+          } while (nextValue.getLength() == 0 && !eosReached);
+          if (eosReached && nextValue.getLength() == 0)
             nextValue = null;
           return;
         } else {
-          skipToEOL(in);
+          // Read and discard the lines
+          pos += skipToEOL(in);
         }
       }
-      // Reached end of file
+      // Reached end of stream
       nextValue = null;
-    } catch (IOException e){
+    } catch (IOException e) {
       nextValue = null;
     }
   }
-
 
   @Override
   public boolean hasNext() {
@@ -122,37 +152,56 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
    * Read from the given stream until end-of-line is reached.
    * @param in - the input stream from where to read the line
    * @param line - the line that has been read from file not including EOL
-   * @return - number of bytes read including EOL characters
+   * @return - number of bytes read from the stream including EOL characters
    * @throws IOException
    */
-  public static int readUntilEOL(InputStream in, Text line) throws IOException {
+  public int readUntilEOL(InputStream in, Text line) throws IOException {
+    // Note: We do not check for the end of the file split because by design we
+    // should go beyond the end of the split to read a line that spans two splits
+    int lastByteRead;
     final byte[] bufferBytes = new byte[1024];
-    int bufferLength = 0; // Length of the buffer
+    int bytesRead = 0;
+    int lineLength = 0; // Length of the buffer
     do {
-      if (bufferLength == bufferBytes.length) {
+      if (lineLength == bufferBytes.length) {
         // Buffer full. Copy to the output text
-        line.append(bufferBytes, 0, bufferLength);
-        bufferLength = 0;
+        line.append(bufferBytes, 0, lineLength);
+        lineLength = 0;
       }
-      if (bufferLength == 0) {
-        // Read and skip any initial EOL characters
+      if (lineLength == 0) {
+        // Nothing was read yet, read and skip any initial EOL characters
+        // These are EOL characters left from the previous line
         do {
-          bufferBytes[0] = (byte) in.read();
-        } while (bufferBytes[0] != -1 &&
-            (bufferBytes[0] == '\n' || bufferBytes[0] == '\r'));
-        if (bufferBytes[0] != -1)
-          bufferLength++;
+          lastByteRead = in.read();
+          if (lastByteRead != -1)
+            bytesRead++;
+          else
+            eosReached = true;
+        } while (!eosReached && (lastByteRead == '\n' || lastByteRead == '\r'));
+        // If the last byte read was not an EOF character, use it as the first
+        // character in the new line
+        if (!eosReached)
+          bufferBytes[lineLength++] = (byte) lastByteRead;
       } else {
-        bufferBytes[bufferLength++] = (byte) in.read();
+        // Some bytes were read, read one more byte
+        lastByteRead = in.read();
+        if (lastByteRead != -1) {
+          bytesRead++;
+          bufferBytes[lineLength++] = (byte) lastByteRead;
+        } else {
+          eosReached = true;
+        }
       }
-    } while (bufferLength > 0 &&
-        bufferBytes[bufferLength-1] != -1 &&
-        bufferBytes[bufferLength-1] != '\n' && bufferBytes[bufferLength-1] != '\r');
-    if (bufferLength > 0) {
-      bufferLength--;
-      line.append(bufferBytes, 0, bufferLength);
+    } while (!eosReached && lastByteRead != '\n' && lastByteRead != '\r');
+    if (lineLength > 0) {
+      // Write bufferBytes to the output without the terminating EOL character
+      if (lastByteRead == '\n' || lastByteRead == '\r')
+        lineLength--;
+      line.append(bufferBytes, 0, lineLength);
+    } else {
+      line.clear();
     }
-    return line.getLength();
+    return bytesRead;
   }
 
   /**
@@ -161,7 +210,7 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
    * @param in
    * @throws IOException
    */
-  public static int skipToEOL(InputStream in) throws IOException {
+  public int skipToEOL(InputStream in) throws IOException {
     int size = 0;
     // Read and skip any initial EOL characters (left from previous read)
     int b;
@@ -176,6 +225,8 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
       b = in.read();
       size++;
     } while (b != -1 && (b != '\n' && b != '\r'));
+    if (b == -1)
+      eosReached = true;
     return size;
   }
 

@@ -24,7 +24,7 @@ public class IndexInsertTest extends BaseTest {
       outFS.deleteOnExit(scratchPath);
       params.setClass("shape", Point.class, Shape.class);
       params.set("sindex", "rtree");
-      IndexInsert.append(inPath, scratchPath, params);
+      IndexInsert.flush(inPath, scratchPath, params);
       assertTrue(outFS.exists(scratchPath));
       assertTrue(outFS.exists(new Path(scratchPath, "_master.rstar")));
     } catch (Exception e) {
@@ -43,7 +43,7 @@ public class IndexInsertTest extends BaseTest {
 
       // Append a second file to it
       inPath = new Path("src/test/resources/test2.points");
-      IndexInsert.append(inPath, scratchPath, params);
+      IndexInsert.flush(inPath, scratchPath, params);
       FileSystem fs = scratchPath.getFileSystem(params);
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(fs, scratchPath);
       Partition merged = null;
@@ -85,7 +85,7 @@ public class IndexInsertTest extends BaseTest {
 
       // Append a second file to it
       params.setClass("shape", Point.class, Shape.class);
-      IndexInsert.append(inPath, indexPath, params);
+      IndexInsert.flush(inPath, indexPath, params);
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, indexPath);
       int count = 0;
 
@@ -118,7 +118,7 @@ public class IndexInsertTest extends BaseTest {
       inPath = new Path("src/test/resources/test2.points");
       params = new OperationsParams();
       params.setClass("shape", Point.class, Shape.class);
-      IndexInsert.append(inPath, scratchPath, params);
+      IndexInsert.flush(inPath, scratchPath, params);
 
       GlobalIndex<Partition> gindex = SpatialSite.getGlobalIndex(outFS, scratchPath);
       for (Partition p : gindex) {

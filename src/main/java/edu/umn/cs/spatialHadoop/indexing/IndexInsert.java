@@ -6,6 +6,8 @@ import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 import edu.umn.cs.spatialHadoop.util.MetadataUtil;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -19,9 +21,10 @@ import java.util.*;
 @OperationMetadata(shortName="insert",
 description = "Insert the data in a given path to an existing index")
 public class IndexInsert {
+  private static final Log LOG = LogFactory.getLog(IndexInsert.class);
 
-  public static void append(Path inPath, Path indexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
-    append(new Path[] {inPath}, indexPath, params);
+  public static void flush(Path inPath, Path indexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+    flush(new Path[] {inPath}, indexPath, params);
   }
 
   /**
@@ -34,7 +37,7 @@ public class IndexInsert {
    * @throws ClassNotFoundException
    * @throws InterruptedException
    */
-  public static void append(Path[] inPath, Path indexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
+  public static void flush(Path[] inPath, Path indexPath, OperationsParams params) throws IOException, ClassNotFoundException, InterruptedException {
     FileSystem fs = indexPath.getFileSystem(params);
     if (!fs.exists(indexPath)) {
       // A new index, create it
@@ -113,8 +116,8 @@ public class IndexInsert {
    * @throws IOException
    * @throws InterruptedException
    */
-  public static void reorganize(Path indexPath, OperationsParams params) throws IOException, InterruptedException {
-    List<List<Partition>> splitGroups = RTreeOptimizer.getSplitGroups(indexPath, params, RTreeOptimizer.OptimizerType.MaximumReducedCost);
+  public static void reorganize(Path indexPath, List<List<Partition>> splitGroups,
+                                OperationsParams params) throws IOException, InterruptedException {
     FileSystem fs = indexPath.getFileSystem(params);
     // A list of temporary paths where the reorganized partitions will be stored.
     Path[] tempPaths = new Path[splitGroups.size()];
@@ -209,21 +212,30 @@ public class IndexInsert {
    * Adds all the data in a path to an existing index and reorganize the index
    * if needed.
    * @param newDataPath
-   * @param existingIndexPath
+   * @param indexPath
    * @param params
    * @throws IOException
    * @throws ClassNotFoundException
    * @throws InterruptedException
    */
-  public static void addToIndex(Path newDataPath, Path existingIndexPath, OperationsParams params)
+  public static void addToIndex(Path newDataPath, Path indexPath, OperationsParams params)
       throws IOException, ClassNotFoundException, InterruptedException {
+    long t0 = System.nanoTime();
+
+    // Step 1: Flush the new batch to the index
+    flush(newDataPath, indexPath, params);
     long t1 = System.nanoTime();
-    append(newDataPath, existingIndexPath, params);
+    LOG.info(String.format("Append done in %f seconds\n", (t1-t0)*1E-9));
+
+    // Step 2: Select the partitions that need to be reorganized
+    List<List<Partition>> splitGroups = RTreeOptimizer.getSplitGroups(indexPath, params, RTreeOptimizer.OptimizerType.MaximumReducedCost);
     long t2 = System.nanoTime();
-    System.out.printf("Append done in %f seconds\n", (t2-t1)*1E-9);
-    reorganize(existingIndexPath, params);
+    LOG.info(String.format("Partition selection done in %f seconds\n", (t2-t1)*1E-9));
+
+    // Step 3: Reorganize the selected groups of partitions
+    reorganize(indexPath, splitGroups, params);
     long t3 = System.nanoTime();
-    System.out.printf("Reorganization done in %f seconds\n", (t3-t2)*1E-9);
+    LOG.info(String.format("Reorganization done in %f seconds\n", (t3-t2)*1E-9));
   }
 
   public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
@@ -237,6 +249,5 @@ public class IndexInsert {
     addToIndex(newDataPath, existingIndexPath, params);
     long t2 = System.nanoTime();
     System.out.printf("Total insertion time %f seconds\n",(t2-t1)*1E-9);
-
   }
 }

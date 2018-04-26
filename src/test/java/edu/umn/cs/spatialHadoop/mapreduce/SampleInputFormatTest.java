@@ -1,5 +1,6 @@
 package edu.umn.cs.spatialHadoop.mapreduce;
 
+import edu.umn.cs.spatialHadoop.BaseTest;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex;
@@ -16,35 +17,13 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStream;
+import java.io.*;
 import java.util.List;
+import java.util.zip.GZIPOutputStream;
 
-public class SampleInputFormatTest extends TestCase {
+public class SampleInputFormatTest extends BaseTest {
   public SampleInputFormatTest(String testName) {
     super(testName);
-  }
-
-  /**A scratch area used to do all the tests which gets wiped at the end*/
-  protected Path scratchPath = new Path("testindex");
-
-  @Override
-  protected void tearDown() throws Exception {
-    OperationsParams params = new OperationsParams();
-    FileSystem fs = scratchPath.getFileSystem(params);
-    fs.delete(scratchPath, true);
-  }
-
-  @Override
-  protected void setUp() throws Exception {
-    super.setUp();
-    OperationsParams params = new OperationsParams();
-    FileSystem fs = scratchPath.getFileSystem(params);
-    if (fs.exists(scratchPath))
-      fs.delete(scratchPath, true);
-    if (!fs.exists(scratchPath))
-      fs.mkdirs(scratchPath);
   }
 
   public void testSampleConcatenatedRTreeFile() {
@@ -81,8 +60,9 @@ public class SampleInputFormatTest extends TestCase {
       for (InputSplit split : splits) {
         RecordReader<NullWritable, Text> srr =
             sinputFormat.createRecordReader(split, new TaskAttemptContextImpl(params, new TaskAttemptID()));
-        while (srr.nextKeyValue())
+        while (srr.nextKeyValue()) {
           ++count;
+        }
         srr.close();
       }
       assertEquals(11+111, count);
@@ -91,5 +71,40 @@ public class SampleInputFormatTest extends TestCase {
       fail("Error in test");
     }
 
+  }
+
+  public void testSampleCompressedFile() {
+    Path inputFile = new Path(scratchPath, "sample.gz");
+    try {
+      OperationsParams params = new OperationsParams();
+      FileSystem fs = inputFile.getFileSystem(params);
+      PrintStream out = new PrintStream(new GZIPOutputStream(fs.create(inputFile, true)));
+      out.println("line1");
+      out.println("line2");
+      out.println("line3");
+      out.close();
+
+      // Sample all lines in the file
+      params.setFloat("ratio", 1.0f);
+      SampleInputFormat sinputFormat = new SampleInputFormat();
+      Job job = Job.getInstance(params);
+      SampleInputFormat.addInputPath(job, inputFile);
+      List<InputSplit> splits = sinputFormat.getSplits(job);
+      int count = 0;
+      for (InputSplit split : splits) {
+        RecordReader<NullWritable, Text> srr =
+            sinputFormat.createRecordReader(split, new TaskAttemptContextImpl(params, new TaskAttemptID()));
+        while (srr.nextKeyValue()) {
+          assertEquals(5, srr.getCurrentValue().getLength());
+          assertTrue("Incorrect line",  srr.getCurrentValue().toString().startsWith("line"));
+          ++count;
+        }
+        srr.close();
+      }
+      assertEquals(3, count);
+    } catch (Exception e) {
+      e.printStackTrace();
+      fail("Error in test");
+    }
   }
 }

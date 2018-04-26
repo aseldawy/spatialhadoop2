@@ -218,7 +218,6 @@ public class SpatialSite {
     try {
       return Class.forName(name).asSubclass(Partitioner.class);
     } catch (ClassNotFoundException e) {
-      LOG.warn("Could not find the global index "+name);
       return null;
     }
   }
@@ -229,7 +228,6 @@ public class SpatialSite {
     try {
       return Class.forName(name).asSubclass(LocalIndex.class);
     } catch (ClassNotFoundException e) {
-      LOG.warn("Could not find the local index "+name);
       return null;
     }
   }
@@ -240,7 +238,6 @@ public class SpatialSite {
     try {
       return Class.forName(name).asSubclass(Shape.class);
     } catch (ClassNotFoundException e) {
-      LOG.warn("Could not find the shape "+name);
       return null;
     }
   }

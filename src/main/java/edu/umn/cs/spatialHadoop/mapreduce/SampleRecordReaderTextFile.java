@@ -1,16 +1,26 @@
 package edu.umn.cs.spatialHadoop.mapreduce;
 
+import edu.umn.cs.spatialHadoop.io.InputSubstream;
 import edu.umn.cs.spatialHadoop.util.SampleIterable;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.CodecPool;
+import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.hadoop.io.compress.CompressionCodecFactory;
+import org.apache.hadoop.io.compress.Decompressor;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.input.LineRecordReader;
 
+import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Iterator;
 import java.util.Random;
 
 /**
@@ -38,6 +48,9 @@ public class SampleRecordReaderTextFile extends RecordReader<NullWritable, Text>
   /**Current value*/
   protected Text value;
 
+  /**Compression codec factory*/
+  private static CompressionCodecFactory ccFactory;
+
   public SampleRecordReaderTextFile() {
   }
   
@@ -50,8 +63,34 @@ public class SampleRecordReaderTextFile extends RecordReader<NullWritable, Text>
     this.conf = task.getConfiguration();
     this.seed = conf.getLong("seed", System.currentTimeMillis());
 
-    this.sampleIterable = new SampleIterable(fsplit.getPath().getFileSystem(conf),
-        fsplit, ratio, seed);
+    // Check if file is compressed
+    CompressionCodec codec = getCCFactory(conf).getCodec(fsplit.getPath());
+    if (codec == null) {
+      // The file is not compressed, open it as a regular text file
+      this.sampleIterable = new SampleIterable(fsplit.getPath().getFileSystem(conf),
+          fsplit, ratio, seed);
+    } else {
+      Decompressor decompressor;
+      synchronized (ccFactory) {
+        // CodecPool is not thread-safe
+        decompressor = CodecPool.getDecompressor(codec);
+      }
+      FileSystem fs = fsplit.getPath().getFileSystem(conf);
+      FSDataInputStream in = fs.open(fsplit.getPath());
+      in.seek(fsplit.getStart());
+      InputStream ins = codec.createInputStream(new InputSubstream(in, fsplit.getLength()), decompressor);
+      this.sampleIterable = new SampleIterable(ins, ratio, seed);
+    }
+  }
+
+  private static CompressionCodecFactory getCCFactory(Configuration conf) {
+    if (ccFactory != null)
+      return ccFactory;
+    synchronized (CompressionCodecFactory.class) {
+      if (ccFactory == null)
+        ccFactory = new CompressionCodecFactory(conf);
+      return ccFactory;
+    }
   }
 
   @Override
