@@ -7,13 +7,11 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.compress.CodecPool;
-import org.apache.hadoop.io.compress.CompressionCodec;
-import org.apache.hadoop.io.compress.CompressionCodecFactory;
-import org.apache.hadoop.io.compress.Decompressor;
+import org.apache.hadoop.io.compress.*;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.input.CompressedSplitLineReader;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.input.LineRecordReader;
 
@@ -70,16 +68,32 @@ public class SampleRecordReaderTextFile extends RecordReader<NullWritable, Text>
       this.sampleIterable = new SampleIterable(fsplit.getPath().getFileSystem(conf),
           fsplit, ratio, seed);
     } else {
+      // A compressed file
+      FileSystem fs = fsplit.getPath().getFileSystem(conf);
+      FSDataInputStream in = fs.open(fsplit.getPath());
+
       Decompressor decompressor;
       synchronized (ccFactory) {
         // CodecPool is not thread-safe
         decompressor = CodecPool.getDecompressor(codec);
       }
-      FileSystem fs = fsplit.getPath().getFileSystem(conf);
-      FSDataInputStream in = fs.open(fsplit.getPath());
-      in.seek(fsplit.getStart());
-      InputStream ins = codec.createInputStream(new InputSubstream(in, fsplit.getLength()), decompressor);
-      this.sampleIterable = new SampleIterable(ins, ratio, seed);
+
+      if (codec instanceof SplittableCompressionCodec) {
+        // A splittable codec that can read part of the input
+        final SplitCompressionInputStream cIn =
+            ((SplittableCompressionCodec)codec).createInputStream(
+                in, decompressor, fsplit.getStart(), fsplit.getStart() + fsplit.getLength(),
+                SplittableCompressionCodec.READ_MODE.BYBLOCK);
+        long start = cIn.getAdjustedStart();
+        long end = cIn.getAdjustedEnd();
+        this.sampleIterable = new SampleIterable(cIn, start, end, ratio, seed, start != 0);
+      } else {
+        // A non-splittable codec
+        in.seek(fsplit.getStart());
+        InputStream ins = codec.createInputStream(new InputSubstream(in, fsplit.getLength()), decompressor);
+        this.sampleIterable = new SampleIterable(ins, ratio, seed);
+      }
+
     }
   }
 

@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.util;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Seekable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
@@ -19,8 +20,10 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
   /**Input stream over the input*/
   private InputStream in;
 
-  /**The starting position of the file*/
+
+  /**The start offset of the input file*/
   private long start;
+
   /**The end offset of the file*/
   private long end;
 
@@ -50,9 +53,9 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
    */
   public SampleIterable(FileSystem fs, FileSplit fsplit, float ratio, long seed) throws IOException {
     FSDataInputStream in = fs.open(fsplit.getPath());
-    in.seek(this.start = fsplit.getStart());
+    in.seek(this.pos = fsplit.getStart());
     this.in = in;
-    this.pos = fsplit.getStart();
+    this.start = fsplit.getStart();
     this.end = fsplit.getStart() + fsplit.getLength();
     this.currentValue = new Text2();
     this.nextValue = new Text2();
@@ -62,16 +65,19 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
     prefetchNext();
   }
 
-  public SampleIterable(FSDataInputStream in, long dataStart, long dataEnd, float ratio, long seed) throws IOException {
+  public SampleIterable(InputStream in, long start, long end, float ratio, long seed, boolean skipFirstLine) throws IOException {
     this.in = in;
-    in.seek(this.start = dataStart);
-    this.pos = in.getPos();
-    this.end = dataEnd;
+    this.pos = in instanceof Seekable ? ((Seekable) in).getPos() : start;
+    this.start = start;
+    this.end = end;
     this.currentValue = new Text2();
     this.nextValue = new Text2();
     this.random = new Random(seed);
     this.ratio = ratio;
     this.eosReached = false;
+    if (skipFirstLine) {
+      pos += skipToEOL(in);
+    }
     prefetchNext();
   }
 
@@ -90,7 +96,7 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
     this.random = new Random(seed);
     // Since the stream is unbounded, we set the end to the biggest number to
     // ensure we read until the end of the stream
-    this.start = 0;
+    this.pos = this.start = 0;
     this.end = Long.MAX_VALUE;
     this.ratio = ratio;
     this.eosReached = false;
@@ -104,7 +110,7 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
 
   public void prefetchNext() {
     try {
-      while (pos < end && !eosReached) {
+      while (getPos() < end && !eosReached) {
         if (random.nextFloat() < ratio) {
           do {
             nextValue.clear();
@@ -140,8 +146,17 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
     return currentValue;
   }
 
+  public long getPos() {
+    if (in instanceof Seekable) {
+      try {
+        return ((Seekable) in).getPos();
+      } catch (IOException e) {}
+    }
+    return pos;
+  }
+
   public float getProgress() {
-    return ((float) (pos - start)) / (end - start);
+    return ((float) (getPos() - start)) / (end - start);
   }
 
   public void remove() {
