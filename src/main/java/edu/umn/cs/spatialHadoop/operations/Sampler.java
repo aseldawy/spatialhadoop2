@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.LocalJobRunner;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.TaskCounter;
@@ -147,7 +148,10 @@ public class Sampler {
     if (outShapeClass == Point.class) {
       job.getConfiguration().setClass(ConverterClass, PointConverter.class, TextConverter.class);
     }
-    
+
+    // Use multithreading in case the job is running locally
+    job.getConfiguration().setInt(LocalJobRunner.LOCAL_MAX_MAPS, Runtime.getRuntime().availableProcessors());
+
     // Start the job
     if (params.getBoolean("background", false)) {
       // Run in background
