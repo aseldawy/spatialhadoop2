@@ -11,15 +11,10 @@ import org.apache.hadoop.io.compress.*;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.lib.input.CompressedSplitLineReader;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
-import org.apache.hadoop.mapreduce.lib.input.LineRecordReader;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Iterator;
-import java.util.Random;
 
 /**
  * A record reader to read sample of a compressed file
@@ -60,16 +55,24 @@ public class SampleRecordReaderTextFile extends RecordReader<NullWritable, Text>
     this.ratio = task.getConfiguration().getFloat("ratio", 0.01f);
     this.conf = task.getConfiguration();
     this.seed = conf.getLong("seed", System.currentTimeMillis());
+    FileSystem fs = fsplit.getPath().getFileSystem(conf);
 
     // Check if file is compressed
     CompressionCodec codec = getCCFactory(conf).getCodec(fsplit.getPath());
     if (codec == null) {
       // The file is not compressed, open it as a regular text file
-      this.sampleIterable = new SampleIterable(fsplit.getPath().getFileSystem(conf),
-          fsplit, ratio, seed);
+      FSDataInputStream in = fs.open(fsplit.getPath());
+      in.seek(fsplit.getStart());
+      if (fsplit.getStart() != 0) {
+        // Reading from a middle of a block, skip the first line which should
+        // be read as part of the previous block
+        skipToEOL(in);
+      }
+
+      this.sampleIterable = new SampleIterable(in, fsplit.getStart(),
+          fsplit.getStart() + fsplit.getLength(), ratio, seed);
     } else {
       // A compressed file
-      FileSystem fs = fsplit.getPath().getFileSystem(conf);
       FSDataInputStream in = fs.open(fsplit.getPath());
 
       Decompressor decompressor;
@@ -86,15 +89,28 @@ public class SampleRecordReaderTextFile extends RecordReader<NullWritable, Text>
                 SplittableCompressionCodec.READ_MODE.BYBLOCK);
         long start = cIn.getAdjustedStart();
         long end = cIn.getAdjustedEnd();
-        this.sampleIterable = new SampleIterable(cIn, start, end, ratio, seed, start != 0);
+        if (fsplit.getStart() != 0) {
+          // Reading from a middle of a block, skip the first line which should
+          // be read as part of the previous block
+          skipToEOL(cIn);
+        }
+        this.sampleIterable = new SampleIterable(cIn, start, end, ratio, seed);
       } else {
         // A non-splittable codec
         in.seek(fsplit.getStart());
         InputStream ins = codec.createInputStream(new InputSubstream(in, fsplit.getLength()), decompressor);
+        // We cannot skip a line when reading a non-splittable compressed file
         this.sampleIterable = new SampleIterable(ins, ratio, seed);
       }
 
     }
+  }
+
+  private static void skipToEOL(InputStream cIn) throws IOException {
+    int b;
+    do {
+      b = cIn.read();
+    } while (b != -1 && b != '\n' && b != '\r');
   }
 
   private static CompressionCodecFactory getCCFactory(Configuration conf) {

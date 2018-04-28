@@ -43,7 +43,7 @@ public abstract class Partitioner implements Writable {
   /**Configuration line for partitioner class*/
   static final String PartitionerClass = "Partitioner.Class";
   static final String PartitionerValue = "Partitioner.Value";
-  public static final String PartitionerDisjoint = "Partitioner.Disjoint";
+  public static final String PartitionerDisjoint = "disjoint";
 
   @Target(ElementType.TYPE)
   @Retention(RetentionPolicy.RUNTIME)

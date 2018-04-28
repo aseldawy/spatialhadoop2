@@ -7,6 +7,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 
+import java.io.InputStream;
 import java.util.Iterator;
 
 
@@ -21,8 +22,8 @@ public class SampleIterableTest extends TestCase {
     OperationsParams params = new OperationsParams();
     try {
       FileSystem fs = fileToSample.getFileSystem(params);
-      FileSplit fsplit = new FileSplit(fileToSample, 0, fs.getFileStatus(fileToSample).getLen(), null);
-      SampleIterable siter = new SampleIterable(fs, fsplit, 1.0f, 0);
+      InputStream in = fs.open(fileToSample);
+      SampleIterable siter = new SampleIterable(in, 0, fs.getFileStatus(fileToSample).getLen(), 1.0f, 0);
       int count = 0;
       for (Text t : siter)
         ++count;
@@ -39,8 +40,8 @@ public class SampleIterableTest extends TestCase {
     OperationsParams params = new OperationsParams();
     try {
       FileSystem fs = fileToSample.getFileSystem(params);
-      FileSplit fsplit = new FileSplit(fileToSample, 0, fs.getFileStatus(fileToSample).getLen(), null);
-      SampleIterable siter = new SampleIterable(fs, fsplit, 1.0f, 0);
+      InputStream in = fs.open(fileToSample);
+      SampleIterable siter = new SampleIterable(in, 0, fs.getFileStatus(fileToSample).getLen(), 1.0f, 0);
       Iterator<Text> i = siter.iterator();
       i.hasNext();
       i.hasNext();

@@ -65,18 +65,19 @@ public class Indexer {
 
     /**The partitioner used to partitioner the data across reducers*/
     private Partitioner partitioner;
+
     /**
-     * Whether to replicate a record to all overlapping partitions or to assign
-     * it to only one partition
+     * When set to true, the partitioner replicates each record to all overlapping
+     * partitions to keep them disjoint
      */
-    private boolean replicate;
+    private boolean disjoint;
     
     @Override
     protected void setup(Context context)
         throws IOException, InterruptedException {
       super.setup(context);
       this.partitioner = Partitioner.getPartitioner(context.getConfiguration());
-      this.replicate = context.getConfiguration().getBoolean("replicate", false);
+      this.disjoint = context.getConfiguration().getBoolean("disjoint", false);
     }
     
     @Override
@@ -88,7 +89,7 @@ public class Indexer {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
           continue;
-        if (replicate) {
+        if (disjoint) {
           partitioner.overlapPartitions(shape, new ResultCollector<Integer>() {
             @Override
             public void collect(Integer r) {

@@ -47,11 +47,16 @@ public class OSMPolygon extends OGCJTSShape implements WritableComparable<OSMPol
   
   @Override
   public void fromText(Text text) {
-    id = TextSerializerHelper.consumeLong(text, SEPARATOR);
-    this.geom = TextSerializerHelper.consumeGeometryJTS(text, SEPARATOR);
-    // Read the tags
-    tags.clear();
-    TextSerializerHelper.consumeMap(text, tags);
+    String s= text.toString();
+    try {
+      id = TextSerializerHelper.consumeLong(text, SEPARATOR);
+      this.geom = TextSerializerHelper.consumeGeometryJTS(text, SEPARATOR);
+      // Read the tags
+      tags.clear();
+      TextSerializerHelper.consumeMap(text, tags);
+    } catch (Exception e) {
+      throw new RuntimeException("Error parsing '" + s + "'", e);
+    }
   }
   
   @Override

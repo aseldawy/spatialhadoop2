@@ -44,28 +44,7 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
   /**The random number generator associated with this iterable*/
   protected Random random;
 
-  /**
-   * Iterates over a sample of (roughly) the given ratio over a file split
-   * @param fs the file system that contains the file
-   * @param fsplit
-   * @param ratio the average fraction of records to sample [0, 1]
-   * @param seed the seed used to initialize the random number generator
-   */
-  public SampleIterable(FileSystem fs, FileSplit fsplit, float ratio, long seed) throws IOException {
-    FSDataInputStream in = fs.open(fsplit.getPath());
-    in.seek(this.pos = fsplit.getStart());
-    this.in = in;
-    this.start = fsplit.getStart();
-    this.end = fsplit.getStart() + fsplit.getLength();
-    this.currentValue = new Text2();
-    this.nextValue = new Text2();
-    this.random = new Random(seed);
-    this.ratio = ratio;
-    this.eosReached = false;
-    prefetchNext();
-  }
-
-  public SampleIterable(InputStream in, long start, long end, float ratio, long seed, boolean skipFirstLine) throws IOException {
+  public SampleIterable(InputStream in, long start, long end, float ratio, long seed) throws IOException {
     this.in = in;
     this.pos = in instanceof Seekable ? ((Seekable) in).getPos() : start;
     this.start = start;
@@ -75,9 +54,6 @@ public class SampleIterable implements Iterable<Text>, Iterator<Text>, Closeable
     this.random = new Random(seed);
     this.ratio = ratio;
     this.eosReached = false;
-    if (skipFirstLine) {
-      pos += skipToEOL(in);
-    }
     prefetchNext();
   }
 

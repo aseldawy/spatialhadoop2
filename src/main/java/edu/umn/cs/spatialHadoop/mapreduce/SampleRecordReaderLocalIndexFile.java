@@ -81,7 +81,7 @@ public class SampleRecordReaderLocalIndexFile extends RecordReader<NullWritable,
     long dataStart = lindex.getDataStart();
     long dataEnd = lindex.getDataEnd();
     in.seek(dataStart);
-    this.sampleIterable = new SampleIterable(in, dataStart, dataEnd, ratio, seed, false);
+    this.sampleIterable = new SampleIterable(in, dataStart, dataEnd, ratio, seed);
   }
 
   @Override
