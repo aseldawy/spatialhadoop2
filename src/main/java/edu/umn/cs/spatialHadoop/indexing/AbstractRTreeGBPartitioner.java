@@ -8,24 +8,35 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.indexing;
 
-import edu.umn.cs.spatialHadoop.core.*;
-import edu.umn.cs.spatialHadoop.util.IntArray;
-
-import java.awt.geom.Rectangle2D;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
+import edu.umn.cs.spatialHadoop.util.IntArray;
+
 /**
- * A partitioner that supports an R*-tree-based partitioning using the R*-tree
- * index published in (1990)
- * @see RStarTree
- * @see RStarTree#partitionPoints(double[], double[], int, int, boolean, RStarTree.AuxiliarySearchStructure)
+ * An abstract class that creates a partitioner based on R-tree using
+ * a gray-box implementation. Gray-box R-tree paritioners do not build
+ * an actual R-tree, rather, they call an improved version of the split
+ * method that recursively partitions a given set of points to create
+ * partitions where each partition contains between [m, M] records.
+ * In an original R-tree (and all its variants), m <= M/2, which will
+ * lead to a huge variance in the generated partitions. However, they
+ * gray box implementation allows m to go beyond M/2. For example,
+ * you can set m to be 0.95 M which gives a tighter bound on the number
+ * of created partitions.
+ * This function has two implementations, {@link RStarTreeGBPartitioner}
+ * and {@link RRStarTreeGBPartitioner} which are built on the original
+ * R*-tree paper, and the improved RR*-tree paper, respectively. 
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstar")
-public class RStarTreePartitioner extends Partitioner {
+public abstract class AbstractRTreeGBPartitioner extends Partitioner {
 
   /**MBR of the points used to partition the space*/
   protected Rectangle mbrPoints;
@@ -37,7 +48,7 @@ public class RStarTreePartitioner extends Partitioner {
   private IntArray overlappingPartitions = new IntArray();
 
   /**An auxiliary search structure to find matching partitions quickly*/
-  private RStarTree.AuxiliarySearchStructure aux;
+  private AuxiliarySearchStructure aux;
 
   /**
    * Computes the expansion that will happen on an a partition when it is
@@ -94,10 +105,10 @@ public class RStarTreePartitioner extends Partitioner {
    * A default constructor to be able to dynamically instantiate it
    * and deserialize it
    */
-  public RStarTreePartitioner() {
+  public AbstractRTreeGBPartitioner() {
   }
 
-  public RStarTreePartitioner(Point[] points, int capacity) {
+  public AbstractRTreeGBPartitioner(Point[] points, int capacity) {
     double[] xs = new double[points.length];
     double[] ys = new double[points.length];
     mbrPoints = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
@@ -107,8 +118,8 @@ public class RStarTreePartitioner extends Partitioner {
       ys[i] = points[i].y;
       mbrPoints.expand(points[i]);
     }
-    aux = new RStarTree.AuxiliarySearchStructure();
-    Rectangle[] partitions = RStarTree.partitionPoints(xs, ys, capacity * 8 / 10, capacity, true, aux);
+    aux = new AuxiliarySearchStructure();
+    Rectangle[] partitions = partitionPoints(xs, ys, capacity, aux);
     x1s = new double[partitions.length];
     y1s = new double[partitions.length];
     x2s = new double[partitions.length];
@@ -120,6 +131,57 @@ public class RStarTreePartitioner extends Partitioner {
       y2s[i] = partitions[i].y2;
     }
   }
+
+  /**
+   * An abstract function to split the points using an improved R-tree packing algorithm.
+   * @param xs the list of x-coordinates for the points
+   * @param ys the list of y-coordinates for the points
+   * @param capacity the maximum number of points per partition
+   * @param aux an optional auxiliary search structure that will be populated in the function
+   * to speed up the search through the returned set of MBRs. If set to {@code null},
+   * it will be ignored.
+   * @return The list of MBRs of the created partitions
+   */
+  abstract Rectangle[] partitionPoints(double[] xs, double[] ys, int capacity, AuxiliarySearchStructure aux);
+  
+  /**
+   * A concrete class that creates a partitioner that uses the improved R*-tree
+   * partitioning function.
+   * @author Ahmed Eldawy
+   */
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstar")
+  public static class RStarTreeGBPartitioner extends AbstractRTreeGBPartitioner {
+    public RStarTreeGBPartitioner() {}
+    
+    public RStarTreeGBPartitioner(Point[] points, int capacity) {
+      super(points, capacity);
+    }
+    
+    @Override
+    Rectangle[] partitionPoints(double[] xs, double[] ys, int capacity, AuxiliarySearchStructure aux) {
+      return RStarTree.partitionPoints(xs, ys, capacity * 8 / 10, capacity, true, aux);
+    }
+  }
+  
+  /**
+   * A concrete class that creates a partitioner that uses the improved RR*-tree
+   * partitioning function.
+   * @author Ahmed Eldawy
+   */
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rrstar")
+  public static class RRStarTreeGBPartitioner extends AbstractRTreeGBPartitioner {
+    public RRStarTreeGBPartitioner() {}
+    
+    public RRStarTreeGBPartitioner(Point[] points, int capacity) {
+      super(points, capacity);
+    }
+    
+    @Override
+    Rectangle[] partitionPoints(double[] xs, double[] ys, int capacity, AuxiliarySearchStructure aux) {
+      return RRStarTree.partitionPoints(xs, ys, capacity * 8 / 10, capacity, true, aux);
+    }
+  }
+
 
   @Override
   public void write(DataOutput out) throws IOException {
@@ -152,7 +214,7 @@ public class RStarTreePartitioner extends Partitioner {
       y2s[i] = in.readDouble();
     }
     if (aux == null)
-      aux = new RStarTree.AuxiliarySearchStructure();
+      aux = new AuxiliarySearchStructure();
     aux.readFields(in);
   }
   

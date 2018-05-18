@@ -3,6 +3,7 @@ package edu.umn.cs.spatialHadoop.indexing;
 import edu.umn.cs.spatialHadoop.BaseTest;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.*;
+import edu.umn.cs.spatialHadoop.indexing.AbstractRTreeGBPartitioner.RStarTreeGBPartitioner;
 import edu.umn.cs.spatialHadoop.operations.RangeQuery;
 import edu.umn.cs.spatialHadoop.osm.OSMPolygon;
 import junit.framework.Test;
@@ -148,8 +149,8 @@ public class IndexerTest extends BaseTest {
       params.setClass("shape", OSMPolygon.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
 
-      Partitioner p = Indexer.initializeGlobalIndex(inPath, outPath, params, RStarTreePartitioner.class);
-      assertTrue(p instanceof RStarTreePartitioner);
+      Partitioner p = Indexer.initializeGlobalIndex(inPath, outPath, params, RStarTreeGBPartitioner.class);
+      assertTrue(p instanceof RStarTreeGBPartitioner);
 
       OperationsParams.setShape(params, "mbr", new Rectangle(0,0,10,10));
       p = Indexer.initializeGlobalIndex(inPath, outPath, params, GridPartitioner.class);
@@ -171,7 +172,7 @@ public class IndexerTest extends BaseTest {
       params.setBoolean("local", false);
       params.setClass("shape", Point.class, Shape.class);
       params.setFloat(SpatialSite.SAMPLE_RATIO, 1.0f);
-      params.setClass("gindex", RStarTreePartitioner.class, Partitioner.class);
+      params.setClass("gindex", RStarTreeGBPartitioner.class, Partitioner.class);
       params.setClass("lindex", RRStarLocalIndex.class, LocalIndex.class);
       Indexer.index(inPath, outPath, params);
 
@@ -180,8 +181,7 @@ public class IndexerTest extends BaseTest {
           new Rectangle(0, 0, 5, 5), new Point(), params, null);
       assertEquals(2, resultSize);
     } catch (Exception e) {
-      e.printStackTrace();
-      fail("Error while building the index");
+      throw new RuntimeException("Error while building the index", e);
     }
   }
 

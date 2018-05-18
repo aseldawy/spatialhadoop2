@@ -1,13 +1,22 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
+import java.io.Closeable;
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.hadoop.fs.FSDataInputStream;
+
 import edu.umn.cs.spatialHadoop.util.BitArray;
 import edu.umn.cs.spatialHadoop.util.IntArray;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.io.IntWritable;
-import sun.security.krb5.internal.crypto.Des;
-
-import java.io.*;
-import java.util.*;
 
 /**
  * A partial implementation for the original Antonin Guttman R-tree as described

@@ -1,14 +1,22 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
-import edu.umn.cs.spatialHadoop.core.Rectangle;
-import edu.umn.cs.spatialHadoop.util.IntArray;
-import org.apache.hadoop.io.DoubleWritable;
-import org.apache.hadoop.util.QuickSort;
-
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Stack;
+
+import org.apache.hadoop.util.IndexedSortable;
+import org.apache.hadoop.util.QuickSort;
+
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.indexing.RStarTree.MinimizationFunction;
+import edu.umn.cs.spatialHadoop.util.BitArray;
+import edu.umn.cs.spatialHadoop.util.IntArray;
 
 /**
  * An implementation of the RR*-tree as described in the paper below.
@@ -627,7 +635,7 @@ public class RRStarTree extends RTreeGuttman {
     int iNewNode = Node_split(node, separator);
     return iNewNode;
   }
-
+ 
   /**
    * Compute the sum margin of the given node assuming that the children have
    * been already sorted along one of the dimensions.
@@ -675,6 +683,24 @@ public class RRStarTree extends RTreeGuttman {
       sumMargin += mbr1.getWidth() + mbr1.getHeight() + mbr2.getWidth() + mbr2.getHeight();
     }
     return sumMargin;
+  }
+  
+  /**
+   * Partitions the given set of points using the improved RR*-tree split algorithm.
+   * Calls the function {@link #partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure, MinimizationFunction)}
+   * with the last parameter as {@code MinimizationFunction.PERIMETER}
+   * @param xs
+   * @param ys
+   * @param minPartitionSize
+   * @param maxPartitionSize
+   * @param expandToInf
+   * @param aux
+   * @return
+   */
+  static Rectangle[] partitionPoints(final double[] xs, final double[] ys, final int minPartitionSize,
+      final int maxPartitionSize, final boolean expandToInf, final AuxiliarySearchStructure aux) {
+    return RStarTree.partitionPoints(xs, ys, minPartitionSize, maxPartitionSize,
+        expandToInf, aux, MinimizationFunction.PERIMETER);
   }
 
   enum RTreeType {Guttman, RStar, RRStar, RStarBulk};

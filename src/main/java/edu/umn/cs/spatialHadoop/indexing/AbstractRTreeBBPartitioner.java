@@ -8,12 +8,15 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.indexing;
 
-import edu.umn.cs.spatialHadoop.core.*;
-import edu.umn.cs.spatialHadoop.util.IntArray;
-
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+
+import edu.umn.cs.spatialHadoop.core.CellInfo;
+import edu.umn.cs.spatialHadoop.core.Point;
+import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.core.ResultCollector;
+import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * A partitioner that uses an existing RTree as a black-box.
@@ -22,54 +25,19 @@ import java.io.IOException;
  * @author Ahmed Eldawy
  *
  */
-public abstract class RTreeBBPartitioner extends Partitioner {
+public abstract class AbstractRTreeBBPartitioner extends Partitioner {
   
   /**Arrays holding the coordinates*/
   private double[] x1s, y1s, x2s, y2s;
   
-  /**Create the RTree that will be used to index the sample points*/
-  public abstract RTreeGuttman createRTree(int m, int M);
-  
-  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rtreebb")
-  public static class RTreeGuttmanBBPartitioner extends RTreeBBPartitioner {
-    public RTreeGuttman createRTree(int m, int M) {
-      return new RTreeGuttman(m, M);
-    }
-    
-    public RTreeGuttmanBBPartitioner(Point[] points, int capacity) {
-      super(points, capacity);
-    }
-  }
-
-  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstreebb")
-  public static class RStarTreeBBPartitioner extends RTreeBBPartitioner {
-    public RTreeGuttman createRTree(int m, int M) {
-      return new RStarTree(m, M);
-    }
-    
-    public RStarTreeBBPartitioner(Point[] points, int capacity) {
-      super(points, capacity);
-    }
-  }
-  
-  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rrstreebb")
-  public static class RRStarTreeBBPartitioner extends RTreeBBPartitioner {
-    public RTreeGuttman createRTree(int m, int M) {
-      return new RRStarTree(m, M);
-    }
-    
-    public RRStarTreeBBPartitioner(Point[] points, int capacity) {
-      super(points, capacity);
-    }
-  }
   /**
    * A default constructor to be able to dynamically instantiate it
    * and deserialize it
    */
-  public RTreeBBPartitioner() {
+  public AbstractRTreeBBPartitioner() {
   }
 
-  public RTreeBBPartitioner(Point[] points, int capacity) {
+  public AbstractRTreeBBPartitioner(Point[] points, int capacity) {
     double[] xs = new double[points.length];
     double[] ys = new double[points.length];
     for (int i = 0; i < points.length; i++) {
@@ -89,6 +57,43 @@ public abstract class RTreeBBPartitioner extends Partitioner {
       x2s[iLeaf] = node.y1;
       y1s[iLeaf] = node.x2;
       y2s[iLeaf] = node.y2;
+    }
+  }
+  
+  /**Create the RTree that will be used to index the sample points*/
+  public abstract RTreeGuttman createRTree(int m, int M);
+  
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rtreebb")
+  public static class RTreeGuttmanBBPartitioner extends AbstractRTreeBBPartitioner {
+    public RTreeGuttman createRTree(int m, int M) {
+      return new RTreeGuttman(m, M);
+    }
+    public RTreeGuttmanBBPartitioner() {}
+    public RTreeGuttmanBBPartitioner(Point[] points, int capacity) {
+      super(points, capacity);
+    }
+  }
+
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstreebb")
+  public static class RStarTreeBBPartitioner extends AbstractRTreeBBPartitioner {
+    public RTreeGuttman createRTree(int m, int M) {
+      return new RStarTree(m, M);
+    }
+    public RStarTreeBBPartitioner() {}
+    
+    public RStarTreeBBPartitioner(Point[] points, int capacity) {
+      super(points, capacity);
+    }
+  }
+  
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rrstreebb")
+  public static class RRStarTreeBBPartitioner extends AbstractRTreeBBPartitioner {
+    public RTreeGuttman createRTree(int m, int M) {
+      return new RRStarTree(m, M);
+    }
+    
+    public RRStarTreeBBPartitioner(Point[] points, int capacity) {
+      super(points, capacity);
     }
   }
   

@@ -187,7 +187,7 @@ public class RStarTreeTest extends TestCase {
       double[][] points = readFile(fileName);
       // Create a tree without splits
       int capacity = 4;
-      RStarTree.AuxiliarySearchStructure aux = new RStarTree.AuxiliarySearchStructure();
+      AuxiliarySearchStructure aux = new AuxiliarySearchStructure();
       Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, aux);
       assertEquals(3, aux.partitionGreaterThanOrEqual.length);
       assertEquals(9.0, aux.splitCoords[aux.rootSplit]);
@@ -222,7 +222,7 @@ public class RStarTreeTest extends TestCase {
       double[][] points = readFile(fileName);
       // Create a tree without splits
       int capacity = 3;
-      RStarTree.AuxiliarySearchStructure aux = new RStarTree.AuxiliarySearchStructure();
+      AuxiliarySearchStructure aux = new AuxiliarySearchStructure();
       Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, aux);
       IntArray ps = new IntArray();
       // Make a search that should match with all paritions
@@ -242,7 +242,7 @@ public class RStarTreeTest extends TestCase {
       double[][] points = readFile(fileName);
       // Create a tree without splits
       int capacity = 100;
-      RStarTree.AuxiliarySearchStructure aux = new RStarTree.AuxiliarySearchStructure();
+      AuxiliarySearchStructure aux = new AuxiliarySearchStructure();
       Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, aux);
       int p = aux.search(0, 0);
       assertEquals(0, p);
