@@ -141,6 +141,12 @@ public class SpatialSite {
       new HashMap<String, Class<? extends Partitioner>>();
   public static final Map<String, Class<? extends LocalIndex>> CommonLocalIndexes =
       new HashMap<String, Class<? extends LocalIndex>>();
+
+  public static Collection<String> getGlobalIndexes() {
+    return CommonGlobalIndexes.keySet();
+
+  }
+
   public static class SpatialIndex {
     public Class<? extends Partitioner> gindex;
     public Class<? extends LocalIndex> lindex;

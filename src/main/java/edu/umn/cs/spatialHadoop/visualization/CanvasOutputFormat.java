@@ -196,14 +196,14 @@ public class CanvasOutputFormat extends FileOutputFormat<Object, Canvas> {
       try {
         mergeImages(conf, outPath);
       } catch (InterruptedException e) {
-        e.printStackTrace();
+        throw new RuntimeException("Error merging partial images", e);
       }
     }
   }
   
   /**
    * An alternative output committer that uses the old MapReduce API. I found
-   * that I need this one when working with LocalJopRunner in 1.2.1 as it
+   * that I need this one when working with LocalJobRunner in 1.2.1 as it
    * still calls this output committer
    * @author Ahmed Eldawy
    *

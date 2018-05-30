@@ -176,19 +176,23 @@ public final class TextSerializerHelper {
    * @return
    */
   public static double consumeDouble(Text text, char separator) {
-    int i = 0;
-    byte[] bytes = text.getBytes();
-    // Skip until the separator or end of text
-    while (i < text.getLength()
-        && ((bytes[i] >= '0' && bytes[i] <= '9') || bytes[i] == 'e'
-            || bytes[i] == 'E' || bytes[i] == '-' || bytes[i] == '+' || bytes[i] == '.'))
-      i++;
-    double d = Double.parseDouble(new String(bytes, 0, i));
-    if (i < text.getLength() && bytes[i] == separator)
-      i++;
-    System.arraycopy(bytes, i, bytes, 0, text.getLength() - i);
-    text.set(bytes, 0, text.getLength() - i);
-    return d;
+    try {
+      int i = 0;
+      byte[] bytes = text.getBytes();
+      // Skip until the separator or end of text
+      while (i < text.getLength()
+          && ((bytes[i] >= '0' && bytes[i] <= '9') || bytes[i] == 'e'
+          || bytes[i] == 'E' || bytes[i] == '-' || bytes[i] == '+' || bytes[i] == '.'))
+        i++;
+      double d = Double.parseDouble(new String(bytes, 0, i));
+      if (i < text.getLength() && bytes[i] == separator)
+        i++;
+      System.arraycopy(bytes, i, bytes, 0, text.getLength() - i);
+      text.set(bytes, 0, text.getLength() - i);
+      return d;
+    } catch (NumberFormatException e) {
+      throw new RuntimeException("Error parsing '" + text +"'", e);
+    }
   }
   
   /**

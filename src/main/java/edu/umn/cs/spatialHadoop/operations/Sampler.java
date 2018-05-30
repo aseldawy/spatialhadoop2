@@ -90,12 +90,12 @@ public class Sampler {
         pt.set((rect.x1+rect.x2)/2, (rect.y1+rect.y2)/2);
       } else {
         Rectangle mbr = shape.getMBR();
-        inout.clear();
         // If no MBR, skip this record
         if (mbr == null)
           return false;
         pt.set((mbr.x1 + mbr.x2) / 2, (mbr.y1 + mbr.y2) / 2);
       }
+      inout.clear();
       pt.toText(inout);
       return true;
     }

@@ -403,6 +403,7 @@ public class SingleLevelPlot {
     if (conf.getBoolean("output", true)) {
       if (merge) {
         job.setOutputFormatClass(CanvasOutputFormat.class);
+        // For Hadoop 1.2.1 and older
         conf.setClass("mapred.output.committer.class",
             CanvasOutputFormat.ImageWriterOld.class,
             org.apache.hadoop.mapred.OutputCommitter.class);

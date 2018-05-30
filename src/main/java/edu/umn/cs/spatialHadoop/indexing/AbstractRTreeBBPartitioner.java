@@ -20,7 +20,7 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 
 /**
  * A partitioner that uses an existing RTree as a black-box.
- * @see RTree
+ * @see RTreeGuttman
  * @see RTreeGuttman#initializeFromPoints(double[], double[])
  * @author Ahmed Eldawy
  *

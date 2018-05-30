@@ -298,12 +298,12 @@ public class Indexer {
     if (spatialIndex.lindex != null)
       conf.setClass(LocalIndex.LocalIndexClass, spatialIndex.lindex, LocalIndex.class);
 
-    long t1 = System.currentTimeMillis();
+    long t1 = System.nanoTime();
     Partitioner partitioner = initializeGlobalIndex(inPaths, outPath, conf, spatialIndex.gindex);
     Partitioner.setPartitioner(conf, partitioner);
 
-    long t2 = System.currentTimeMillis();
-    System.out.println("Total time for space subdivision in millis: "+(t2-t1));
+    long t2 = System.nanoTime();
+    System.out.printf("Time for sketching + subdivision is %f seconds\n", (t2-t1)*1E-9);
     return partitioner;
   }
 
@@ -333,8 +333,9 @@ public class Indexer {
     FileSystem outFS = out.getFileSystem(job);
     long outBlockSize = outFS.getDefaultBlockSize(out);
 
+    long t1;
+    Partitioner partitioner;
     try {
-      Partitioner partitioner;
 
       Partitioner.GlobalIndexerMetadata partitionerMetadata = partitionerClass.getAnnotation(Partitioner.GlobalIndexerMetadata.class);
       boolean disjointSupported = partitionerMetadata != null && partitionerMetadata.disjoint();
@@ -347,7 +348,8 @@ public class Indexer {
         // Constructor needs an MBR and number of partitions
         final Rectangle inMBR = SpatialSite.getMBR(job, ins);
         int numOfPartitions = (int) Math.ceil((double)estimatedOutSize / outBlockSize);
-        return (Partitioner) c.newInstance(inMBR, numOfPartitions);
+        t1 = System.nanoTime();
+        partitioner = (Partitioner) c.newInstance(inMBR, numOfPartitions);
       } catch (NoSuchMethodException e) {
         try {
           Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Point[].class, int.class);
@@ -362,7 +364,9 @@ public class Indexer {
             samplePoints[i].fromText(new Text(sample[i]));
           }
           int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.length * outBlockSize / estimatedOutSize));
-          return (Partitioner) c.newInstance(samplePoints, partitionCapacity);
+          LOG.info(String.format("Partitioning %d points into partitions with capacity %d", sample.length, partitionCapacity));
+          t1 = System.nanoTime();
+          partitioner = (Partitioner) c.newInstance(samplePoints, partitionCapacity);
         } catch (NoSuchMethodException e1) {
           try {
             Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Rectangle.class, Point[].class, int.class);
@@ -376,7 +380,9 @@ public class Indexer {
               samplePoints[i].fromText(new Text(sample[i]));
             }
             int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.length * outBlockSize / estimatedOutSize));
-            return (Partitioner) c.newInstance(inMBR, samplePoints, partitionCapacity);
+            LOG.info(String.format("Partitioning %d points into partitions with capacity %d", sample.length, partitionCapacity));
+            t1 = System.nanoTime();
+            partitioner = (Partitioner) c.newInstance(inMBR, samplePoints, partitionCapacity);
           } catch (NoSuchMethodException e2) {
             throw new RuntimeException("Could not find a suitable constructor for the partitioner "+partitionerClass.getName());
           } catch (InterruptedException e2) {
@@ -407,6 +413,9 @@ public class Indexer {
       e.printStackTrace();
       return null;
     }
+    long t2 = System.nanoTime();
+    System.out.printf("Total subdivision time %f seconds\n",(t2-t1)*1E-9);
+    return partitioner;
   }
 
   public static Job index(Path inPath, Path outPath, OperationsParams params)
@@ -493,6 +502,7 @@ public class Indexer {
     System.out.println("gindex:<index> - Type of the global index (grid|str|rstree|kdtree|zcurve|hilbert|quadtree)");
     System.out.println("lindex:<index> - Type of the local index (rrstree)");
     System.out.println("-overwrite - Overwrite output file without notice");
+    System.out.println("Available global indexes: " + SpatialSite.getGlobalIndexes());
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }
 

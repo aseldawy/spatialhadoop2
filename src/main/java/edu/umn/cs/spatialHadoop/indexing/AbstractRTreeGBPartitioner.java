@@ -25,7 +25,7 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  * an actual R-tree, rather, they call an improved version of the split
  * method that recursively partitions a given set of points to create
  * partitions where each partition contains between [m, M] records.
- * In an original R-tree (and all its variants), m <= M/2, which will
+ * In an original R-tree (and all its variants), m &#x2264; M/2, which will
  * lead to a huge variance in the generated partitions. However, they
  * gray box implementation allows m to go beyond M/2. For example,
  * you can set m to be 0.95 M which gives a tighter bound on the number
