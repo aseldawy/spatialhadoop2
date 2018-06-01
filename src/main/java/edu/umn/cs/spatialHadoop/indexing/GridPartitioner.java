@@ -30,7 +30,8 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "grid")
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "grid",
+requireMBR = true)
 public class GridPartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(GridPartitioner.class);
 
@@ -53,6 +54,18 @@ public class GridPartitioner extends Partitioner {
   public GridPartitioner() {
   }
 
+  @Override
+  public void construct(Rectangle mbr, Point[] dummy, int numPartitions) {
+    x = mbr.x1;
+    y = mbr.y1;
+    numTiles = numPartitions;
+    // Create square tiles
+    double areaPerTile = mbr.getWidth() * mbr.getHeight() / numPartitions;
+    this.tileWidth = this.tileHeight = Math.sqrt(areaPerTile);
+    this.numColumns = (int) Math.round(mbr.getWidth() / tileWidth);
+    this.numRows = (int) Math.round(mbr.getHeight() / tileHeight);
+  }
+
   public GridPartitioner(Rectangle mbr, int columns, int rows) {
     this.x = mbr.x1;
     this.y = mbr.y1;
@@ -64,14 +77,7 @@ public class GridPartitioner extends Partitioner {
   }
 
   public GridPartitioner(Rectangle mbr, int numPartitions) {
-    x = mbr.x1;
-    y = mbr.y1;
-    numTiles = numPartitions;
-    // Create square tiles
-    double areaPerTile = mbr.getWidth() * mbr.getHeight() / numPartitions;
-    this.tileWidth = this.tileHeight = Math.sqrt(areaPerTile);
-    this.numColumns = (int) Math.round(mbr.getWidth() / tileWidth);
-    this.numRows = (int) Math.round(mbr.getHeight() / tileHeight);
+    construct(mbr, null, numPartitions);
   }
 
   @Override

@@ -36,7 +36,8 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "kdtree")
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "kdtree",
+requireSample = true, requireMBR = true)
 public class KdTreePartitioner extends Partitioner {
   /**MBR of the input file*/
   private final Rectangle mbr = new Rectangle();
@@ -53,8 +54,9 @@ public class KdTreePartitioner extends Partitioner {
    */
   public KdTreePartitioner() {
   }
-  
-  public KdTreePartitioner(Rectangle mbr, Point[] points, int capacity) {
+
+  @Override
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
     // Enumerate all partition IDs to be able to count leaf nodes in any split
     // TODO do the same functionality without enumerating all IDs
     int numSplits = (int) Math.ceil((double)points.length / capacity);

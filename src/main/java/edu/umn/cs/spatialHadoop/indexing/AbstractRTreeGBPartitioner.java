@@ -18,6 +18,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.util.IntArray;
+import org.apache.hadoop.conf.Configuration;
 
 /**
  * An abstract class that creates a partitioner based on R-tree using
@@ -44,11 +45,20 @@ public abstract class AbstractRTreeGBPartitioner extends Partitioner {
   /**The coordinates of the partitions*/
   protected double[] x1s, y1s, x2s, y2s;
 
+  /**The ratio m/M for partitioning the poings*/
+  protected float mMRatio;
+
   /**A temporary array used to compute intersections*/
   private IntArray overlappingPartitions = new IntArray();
 
   /**An auxiliary search structure to find matching partitions quickly*/
   private AuxiliarySearchStructure aux;
+
+  @Override
+  public void setup(Configuration conf) {
+    super.setup(conf);
+    float mMRatio = conf.getFloat("mMRatio", 0.95f);
+  }
 
   /**
    * Computes the expansion that will happen on an a partition when it is
@@ -101,14 +111,8 @@ public abstract class AbstractRTreeGBPartitioner extends Partitioner {
     return (px2 - px1) * (py2 - py1);
   }
 
-  /**
-   * A default constructor to be able to dynamically instantiate it
-   * and deserialize it
-   */
-  public AbstractRTreeGBPartitioner() {
-  }
-
-  public AbstractRTreeGBPartitioner(Point[] points, int capacity) {
+  @Override
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
     double[] xs = new double[points.length];
     double[] ys = new double[points.length];
     mbrPoints = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
@@ -149,14 +153,9 @@ public abstract class AbstractRTreeGBPartitioner extends Partitioner {
    * partitioning function.
    * @author Ahmed Eldawy
    */
-  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstar")
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstar",
+      requireSample = true)
   public static class RStarTreeGBPartitioner extends AbstractRTreeGBPartitioner {
-    public RStarTreeGBPartitioner() {}
-    
-    public RStarTreeGBPartitioner(Point[] points, int capacity) {
-      super(points, capacity);
-    }
-    
     @Override
     Rectangle[] partitionPoints(double[] xs, double[] ys, int capacity, AuxiliarySearchStructure aux) {
       return RStarTree.partitionPoints(xs, ys, capacity * 8 / 10, capacity, true, aux);
@@ -168,14 +167,9 @@ public abstract class AbstractRTreeGBPartitioner extends Partitioner {
    * partitioning function.
    * @author Ahmed Eldawy
    */
-  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rrstar")
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rrstar",
+      requireSample = true)
   public static class RRStarTreeGBPartitioner extends AbstractRTreeGBPartitioner {
-    public RRStarTreeGBPartitioner() {}
-    
-    public RRStarTreeGBPartitioner(Point[] points, int capacity) {
-      super(points, capacity);
-    }
-    
     @Override
     Rectangle[] partitionPoints(double[] xs, double[] ys, int capacity, AuxiliarySearchStructure aux) {
       return RRStarTree.partitionPoints(xs, ys, capacity * 8 / 10, capacity, true, aux);

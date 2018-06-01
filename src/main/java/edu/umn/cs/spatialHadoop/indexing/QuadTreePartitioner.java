@@ -36,7 +36,8 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "quadtree")
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "quadtree",
+requireMBR = true, requireSample = true)
 public class QuadTreePartitioner extends Partitioner {
   /**The minimal bounding rectangle of the underlying file*/
   protected final Rectangle mbr = new Rectangle();
@@ -51,21 +52,15 @@ public class QuadTreePartitioner extends Partitioner {
   /**IDs of all partitions sorted in an ascending order*/
   protected int[] leafNodeIDs;
 
-  /**
-   * A default constructor to be able to dynamically instantiate it
-   * and deserialize it
-   */
-  public QuadTreePartitioner() {
-  }
-  
-  public QuadTreePartitioner(Rectangle mbr, Point[] points, int capacity) {
+  @Override
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
     this.mbr.set(mbr);
     long[] zValues = new long[points.length];
     for (int i = 0; i < points.length; i++)
       zValues[i] = ZCurvePartitioner.computeZ(mbr, points[i].x, points[i].y);
     createFromZValues(zValues, capacity);
   }
-  
+
   /**
    * Create a ZCurvePartitioner from a list of points
    * @param zValues

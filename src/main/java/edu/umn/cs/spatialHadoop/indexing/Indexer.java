@@ -333,9 +333,8 @@ public class Indexer {
     FileSystem outFS = out.getFileSystem(job);
     long outBlockSize = outFS.getDefaultBlockSize(out);
 
-    long t1;
-    Partitioner partitioner;
     try {
+      Partitioner partitioner = partitionerClass.newInstance();
 
       Partitioner.GlobalIndexerMetadata partitionerMetadata = partitionerClass.getAnnotation(Partitioner.GlobalIndexerMetadata.class);
       boolean disjointSupported = partitionerMetadata != null && partitionerMetadata.disjoint();
@@ -343,79 +342,48 @@ public class Indexer {
       if (job.getBoolean("disjoint", false) && !disjointSupported)
         throw new RuntimeException("Partitioner " + partitionerClass.getName() + " does not support disjoint partitioning");
 
-      try {
-        Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Rectangle.class, int.class);
-        // Constructor needs an MBR and number of partitions
-        final Rectangle inMBR = SpatialSite.getMBR(job, ins);
-        int numOfPartitions = (int) Math.ceil((double)estimatedOutSize / outBlockSize);
-        t1 = System.nanoTime();
-        partitioner = (Partitioner) c.newInstance(inMBR, numOfPartitions);
-      } catch (NoSuchMethodException e) {
-        try {
-          Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Point[].class, int.class);
-          // Constructor needs a sample and capacity (no MBR)
-          OperationsParams sampleParams = new OperationsParams(job);
-          sampleParams.setClass("outshape", Point.class, Shape.class);
-          sampleParams.set("ratio", sampleParams.get(SpatialSite.SAMPLE_RATIO));
-          final String[] sample = Sampler.takeSample(ins, sampleParams);
-          Point[] samplePoints = new Point[sample.length];
-          for (int i = 0; i < sample.length; i++) {
-            samplePoints[i] = new Point();
-            samplePoints[i].fromText(new Text(sample[i]));
-          }
-          int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.length * outBlockSize / estimatedOutSize));
-          LOG.info(String.format("Partitioning %d points into partitions with capacity %d", sample.length, partitionCapacity));
-          t1 = System.nanoTime();
-          partitioner = (Partitioner) c.newInstance(samplePoints, partitionCapacity);
-        } catch (NoSuchMethodException e1) {
-          try {
-            Constructor<? extends Partitioner> c = partitionerClass.getConstructor(Rectangle.class, Point[].class, int.class);
-            final Rectangle inMBR = SpatialSite.getMBR(job, ins);
-            OperationsParams sampleParams = new OperationsParams(job);
-            sampleParams.setClass("outshape", Point.class, Shape.class);
-            final String[] sample = Sampler.takeSample(ins, sampleParams);
-            Point[] samplePoints = new Point[sample.length];
-            for (int i = 0; i < sample.length; i++) {
-              samplePoints[i] = new Point();
-              samplePoints[i].fromText(new Text(sample[i]));
-            }
-            int partitionCapacity = (int) Math.max(1, Math.floor((double)sample.length * outBlockSize / estimatedOutSize));
-            LOG.info(String.format("Partitioning %d points into partitions with capacity %d", sample.length, partitionCapacity));
-            t1 = System.nanoTime();
-            partitioner = (Partitioner) c.newInstance(inMBR, samplePoints, partitionCapacity);
-          } catch (NoSuchMethodException e2) {
-            throw new RuntimeException("Could not find a suitable constructor for the partitioner "+partitionerClass.getName());
-          } catch (InterruptedException e2) {
-            e2.printStackTrace();
-            return null;
-          } catch (ClassNotFoundException e2) {
-            e2.printStackTrace();
-            return null;
-          }
-        } catch (InterruptedException e1) {
-          e1.printStackTrace();
-          return null;
-        } catch (ClassNotFoundException e1) {
-          e1.printStackTrace();
-          return null;
+      int capacity;
+
+      Rectangle mbr = null;
+      if (partitionerMetadata.requireMBR())
+        mbr = SpatialSite.getMBR(job, ins);
+
+      Point[] sample = null;
+      if (partitionerMetadata.requireSample()) {
+        OperationsParams sampleParams = new OperationsParams(job);
+        sampleParams.setClass("outshape", Point.class, Shape.class);
+        sampleParams.set("ratio", sampleParams.get(SpatialSite.SAMPLE_RATIO));
+        final String[] sampleStr = Sampler.takeSample(ins, sampleParams);
+        sample = new Point[sampleStr.length];
+        for (int i = 0; i < sample.length; i++) {
+          sample[i] = new Point();
+          sample[i].fromText(new Text(sampleStr[i]));
         }
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-        return null;
+        capacity = (int) Math.max(1, Math.floor((double)sample.length * outBlockSize / estimatedOutSize));
+      } else {
+        // We call it capacity but it's really number of partitions
+        capacity = (int) Math.ceil((double)estimatedOutSize / outBlockSize);
       }
-    } catch (InstantiationException e) {
+
+      long t1 = System.nanoTime();
+      partitioner.construct(mbr, sample, capacity);
+      long t2 = System.nanoTime();
+      System.out.printf("Total subdivision time %f seconds\n",(t2-t1)*1E-9);
+      return partitioner;
+
+    } catch (InterruptedException e) {
       e.printStackTrace();
       return null;
     } catch (IllegalAccessException e) {
       e.printStackTrace();
       return null;
-    } catch (InvocationTargetException e) {
+    } catch (InstantiationException e) {
+      e.printStackTrace();
+      return null;
+    } catch (ClassNotFoundException e) {
       e.printStackTrace();
       return null;
     }
-    long t2 = System.nanoTime();
-    System.out.printf("Total subdivision time %f seconds\n",(t2-t1)*1E-9);
-    return partitioner;
   }
 
   public static Job index(Path inPath, Path outPath, OperationsParams params)

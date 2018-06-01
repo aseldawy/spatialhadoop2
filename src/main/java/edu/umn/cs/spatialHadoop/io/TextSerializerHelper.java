@@ -399,7 +399,6 @@ public final class TextSerializerHelper {
         if (first) {
           first = false;
         } else {
-          first = true;
           text.append(Separators, FieldSeparator, 1);
         }
         byte[] k = entry.getKey().getBytes();

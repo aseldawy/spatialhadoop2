@@ -35,7 +35,8 @@ public class STRPartitionerTest extends TestCase {
   }
 
   public void testSmallFiles() {
-    STRPartitioner str = new STRPartitioner(new Point[] {new Point(1, 1), new Point(2, 2)}, 10);
+    STRPartitioner str = new STRPartitioner();
+    str.construct(null, new Point[] {new Point(1, 1), new Point(2, 2)}, 10);
     assertEquals(1, str.getPartitionCount());
     int i = str.overlapPartition(new Rectangle(0, 0, 3, 3));
     assertEquals(0, i);

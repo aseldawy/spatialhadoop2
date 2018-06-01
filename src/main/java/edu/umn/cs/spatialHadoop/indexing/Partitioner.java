@@ -53,7 +53,27 @@ public abstract class Partitioner implements Writable {
 
     /**The extension used with the global index*/
     String extension();
+
+    /**Whether the MBR is required or not*/
+    boolean requireMBR() default false;
+
+    /**Whether a sample is required or not*/
+    boolean requireSample() default false;
   }
+
+  /**Initializes the partitioners from the cluster configuration*/
+  public void setup(Configuration conf) {}
+
+  /**
+   * Construct the partitioner from the input MBR and/or sample. Notice that
+   * one or both of these could be {@code null} if they're not needed. The
+   * requirement of one or both of the mbr and sample parameters can be configured
+   * through the {@link GlobalIndexerMetadata}
+   * @param mbr the minimum bounding rectangle of the input
+   * @param points a sample of points from the input
+   * @param capacity the maximum number of records per partition
+   */
+  public abstract void construct(Rectangle mbr, Point[] points, int capacity);
 
   /**
    * Overlap a shape with partitions and calls a matcher for each overlapping

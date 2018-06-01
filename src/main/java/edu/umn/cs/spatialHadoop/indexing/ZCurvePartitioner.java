@@ -28,7 +28,8 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = false, extension = "zcurve")
+@Partitioner.GlobalIndexerMetadata(disjoint = false, extension = "zcurve",
+requireSample = true, requireMBR = true)
 public class ZCurvePartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(ZCurvePartitioner.class);
 
@@ -38,15 +39,10 @@ public class ZCurvePartitioner extends Partitioner {
   protected long[] zSplits;
 
   protected static final int Resolution = Integer.MAX_VALUE;
-  
-  /**
-   * A default constructor to be able to dynamically instantiate it
-   * and deserialize it
-   */
-  public ZCurvePartitioner() {
-  }
 
-  public ZCurvePartitioner(Rectangle mbr, Point[] points, int capacity) {
+
+  @Override
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
     this.mbr.set(mbr);
     long[] zValues = new long[points.length];
     for (int i = 0; i < points.length; i++)

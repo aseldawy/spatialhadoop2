@@ -52,6 +52,11 @@ public class CellPartitioner extends Partitioner {
     initialize(cells);
   }
 
+  @Override
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
+    throw new RuntimeException("You can only use the constructor CellPartition(CellInfo[])");
+  }
+
   /**
    * Initialize the R-tree from the list of cells.
    * @param cells

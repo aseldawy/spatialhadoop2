@@ -32,7 +32,8 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = false, extension = "hilbert")
+@Partitioner.GlobalIndexerMetadata(disjoint = false, extension = "hilbert",
+  requireSample = true, requireMBR = true)
 public class HilbertCurvePartitioner extends Partitioner {
   /**Splits along the Hilbert curve*/
   protected int[] splits;
@@ -41,18 +42,16 @@ public class HilbertCurvePartitioner extends Partitioner {
   protected final Rectangle mbr = new Rectangle();
 
   protected static final int Resolution = Short.MAX_VALUE;
-  
-  public HilbertCurvePartitioner() {
-  }
 
-  public HilbertCurvePartitioner(Rectangle mbr, Point[] points, int capacity) {
+  @Override
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
     this.mbr.set(mbr);
     int[] hValues = new int[points.length];
     for (int i = 0; i < points.length; i++)
       hValues[i] = computeHValue(mbr, points[i].x, points[i].y);
     createFromHValues(hValues, capacity);
   }
-  
+
   /**
    * Create a HilbertCurvePartitioner from a list of points
    * @param hValues

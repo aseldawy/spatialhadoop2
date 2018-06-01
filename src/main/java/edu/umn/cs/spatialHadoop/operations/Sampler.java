@@ -166,7 +166,7 @@ public class Sampler {
     FileSystem fs = files[0].getFileSystem(params);
     Path tempPath;
     do {
-      tempPath = new Path(String.format("temp_%06d", (int)(Math.random()*1000000)));
+      tempPath = new Path(String.format("temp_sample_%06d", (int)(Math.random()*1000000)));
     } while (fs.exists(tempPath));
     Job job = sampleMapReduce(files, tempPath, params);
     job.waitForCompletion(false);

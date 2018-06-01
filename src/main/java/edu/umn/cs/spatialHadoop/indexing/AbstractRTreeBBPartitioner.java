@@ -17,6 +17,7 @@ import edu.umn.cs.spatialHadoop.core.Point;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
+import org.apache.hadoop.conf.Configuration;
 
 /**
  * A partitioner that uses an existing RTree as a black-box.
@@ -29,22 +30,27 @@ public abstract class AbstractRTreeBBPartitioner extends Partitioner {
   
   /**Arrays holding the coordinates*/
   private double[] x1s, y1s, x2s, y2s;
-  
-  /**
-   * A default constructor to be able to dynamically instantiate it
-   * and deserialize it
-   */
-  public AbstractRTreeBBPartitioner() {
+
+  /**The ratio m/M used to construct the R-tree*/
+  private float mMRatio;
+
+  @Override
+  public void setup(Configuration conf) {
+    super.setup(conf);
+    mMRatio = conf.getFloat("mMRatio", 0.3f);
   }
 
-  public AbstractRTreeBBPartitioner(Point[] points, int capacity) {
+  @Override
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
     double[] xs = new double[points.length];
     double[] ys = new double[points.length];
     for (int i = 0; i < points.length; i++) {
       xs[i] = points[i].x;
       ys[i] = points[i].y;
     }
-    RTreeGuttman rtree = new RTreeGuttman(capacity*4/10, capacity);
+    int M = capacity;
+    int m = (int) Math.ceil(M * mMRatio);
+    RTreeGuttman rtree = createRTree(m, M);
     rtree.initializeFromPoints(xs, ys);
     int numLeaves = rtree.getNumLeaves();
     x1s = new double[numLeaves];
@@ -59,41 +65,31 @@ public abstract class AbstractRTreeBBPartitioner extends Partitioner {
       y2s[iLeaf] = node.y2;
     }
   }
-  
+
   /**Create the RTree that will be used to index the sample points*/
   public abstract RTreeGuttman createRTree(int m, int M);
   
-  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rtreebb")
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rtreebb",
+      requireSample = true)
   public static class RTreeGuttmanBBPartitioner extends AbstractRTreeBBPartitioner {
     public RTreeGuttman createRTree(int m, int M) {
       return new RTreeGuttman(m, M);
     }
-    public RTreeGuttmanBBPartitioner() {}
-    public RTreeGuttmanBBPartitioner(Point[] points, int capacity) {
-      super(points, capacity);
-    }
   }
 
-  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstreebb")
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rstreebb",
+      requireSample = true)
   public static class RStarTreeBBPartitioner extends AbstractRTreeBBPartitioner {
     public RTreeGuttman createRTree(int m, int M) {
       return new RStarTree(m, M);
     }
-    public RStarTreeBBPartitioner() {}
-    
-    public RStarTreeBBPartitioner(Point[] points, int capacity) {
-      super(points, capacity);
-    }
   }
   
-  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rrstreebb")
+  @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rrstreebb",
+      requireSample = true)
   public static class RRStarTreeBBPartitioner extends AbstractRTreeBBPartitioner {
     public RTreeGuttman createRTree(int m, int M) {
       return new RRStarTree(m, M);
-    }
-    
-    public RRStarTreeBBPartitioner(Point[] points, int capacity) {
-      super(points, capacity);
     }
   }
   

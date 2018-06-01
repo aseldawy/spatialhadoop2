@@ -27,7 +27,8 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
-@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "str")
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "str",
+requireSample = true)
 public class STRPartitioner extends Partitioner {
   /**Number of rows and columns*/
   private int columns, rows;
@@ -35,15 +36,9 @@ public class STRPartitioner extends Partitioner {
   private double[] xSplits;
   /**Locations of horizontal strips for each vertical strip*/
   private double[] ySplits;
-  
-  /**
-   * A default constructor to be able to dynamically instantiate it
-   * and deserialize it
-   */
-  public STRPartitioner() {
-  }
 
-  public STRPartitioner(Point[] points, int capacity) {
+  @Override
+  public void construct(Rectangle dummy, Point[] points, int capacity) {
     // Apply the STR algorithm in two rounds
     // 1- First round, sort points by X and split into the given columns
     Arrays.sort(points, new Comparator<Point>() {
