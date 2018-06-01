@@ -8,9 +8,9 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.indexing;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
+import java.util.HashMap;
+import java.util.Map;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -18,6 +18,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.IntWritable;
 
 /**
  * A partitioner that uses an existing RTree as a black-box.
@@ -29,10 +30,10 @@ import org.apache.hadoop.conf.Configuration;
 public abstract class AbstractRTreeBBPartitioner extends Partitioner {
   
   /**Arrays holding the coordinates*/
-  private double[] x1s, y1s, x2s, y2s;
+  protected double[] x1s, y1s, x2s, y2s;
 
   /**The ratio m/M used to construct the R-tree*/
-  private float mMRatio;
+  protected float mMRatio;
 
   @Override
   public void setup(Configuration conf) {
@@ -60,9 +61,10 @@ public abstract class AbstractRTreeBBPartitioner extends Partitioner {
     int iLeaf = 0;
     for (RTreeGuttman.Node node : rtree.getAllLeaves()) {
       x1s[iLeaf] = node.x1;
-      x2s[iLeaf] = node.y1;
-      y1s[iLeaf] = node.x2;
+      y1s[iLeaf] = node.y1;
+      x2s[iLeaf] = node.x2;
       y2s[iLeaf] = node.y2;
+      iLeaf++;
     }
   }
 

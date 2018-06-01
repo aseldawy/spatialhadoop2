@@ -51,12 +51,10 @@ public class STRPartitioner extends Partitioner {
     for (Point p : points) {
       mbr.expand(p);
     }
-    // Calculate number of columns and rows based on a grid
+    // Calculate number of columns and rows
     int numSplits = (int) Math.ceil((double)points.length / capacity);
-    GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-    gridInfo.calculateCellDimensions(numSplits);
-    this.columns = gridInfo.columns;
-    this.rows = gridInfo.rows;
+    this.columns = this.rows = (int) Math.ceil(Math.sqrt(numSplits));
+
     this.xSplits = new double[columns];
     this.ySplits = new double[rows * columns];
     int prev_quantile = 0;

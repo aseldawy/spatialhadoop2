@@ -329,7 +329,7 @@ public class Indexer {
     for (Path in : ins)
       inSize += FileUtil.getPathSize(in.getFileSystem(job), in);
 
-    long estimatedOutSize = (long) (inSize * (1.0 + job.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.1f)));
+    long estimatedOutSize = (long) (inSize * (1.0 + job.getFloat(SpatialSite.INDEXING_OVERHEAD, 0.05f)));
     FileSystem outFS = out.getFileSystem(job);
     long outBlockSize = outFS.getDefaultBlockSize(out);
 

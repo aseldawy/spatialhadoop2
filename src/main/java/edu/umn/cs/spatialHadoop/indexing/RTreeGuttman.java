@@ -867,6 +867,11 @@ public class RTreeGuttman implements Closeable {
     public double x1, y1, x2, y2;
 
     protected Node(){}
+
+    public String toWKT() {
+      return String.format("POLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))",
+          x1, y1, x1, y2, x2, y2, x2, y1, x1, y1);
+    }
   }
 
   protected class NodeIterable implements Iterable<Node>, Iterator<Node> {
