@@ -126,7 +126,7 @@ public class RRStarLocalIndex<S extends Shape> implements LocalIndex<S> {
   @Override
   public void read(FSDataInputStream in, long start, long end, final S mutableShape) throws IOException {
     if (underlyingRTree == null)
-      underlyingRTree = new RTreeGuttman(0, 0);
+      underlyingRTree = new RTreeGuttman(1, 2);
     underlyingRTree.readFields(in, end - start - 4, new RTreeGuttman.Deserializer<S>() {
       private Text line = new Text2();
       @Override

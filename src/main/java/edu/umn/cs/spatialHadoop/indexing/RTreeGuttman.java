@@ -257,6 +257,10 @@ public class RTreeGuttman implements Closeable {
    * @param maxCapcity - Maximum capacity of a node
    */
   public RTreeGuttman(int minCapacity, int maxCapcity) {
+    if (minCapacity > maxCapcity / 2)
+      throw new RuntimeException(String.format("Invalid minCapacity=%d and maxCapacity=%d. minCapacity should be at most maxCapacity/2", minCapacity, maxCapcity));
+    if (minCapacity == 0)
+      throw new RuntimeException("minCapacity cannot be equal to zero");
     this.minCapacity = minCapacity;
     this.maxCapcity = maxCapcity;
   }

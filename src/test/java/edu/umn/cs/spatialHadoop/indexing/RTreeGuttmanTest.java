@@ -34,6 +34,26 @@ public class RTreeGuttmanTest extends TestCase {
     return new TestSuite(RTreeGuttmanTest.class);
   }
 
+  public void testShouldTestTreeCapacity() {
+    int[] m = {3, 4, 5, 0};
+    int[] M = {8, 8, 8, 2};
+    boolean[] valid = {true, true, false, false};
+    for (int i = 0; i < valid.length; i++) {
+      boolean exceptionThrown = false;
+      try {
+        new RTreeGuttman(m[i], M[i]);
+      } catch (Exception e) {
+        exceptionThrown = true;
+      }
+
+      if (exceptionThrown && valid[i])
+        fail(String.format("RTree should not fail with m=%d and M=%d", m[i], M[i]));
+      else if (!exceptionThrown && !valid[i])
+        fail(String.format("RTree should fail with m=%d and M=%d", m[i], M[i]));
+
+    }
+  }
+
   public void testBuild() {
     try {
       String fileName = "src/test/resources/test.points";

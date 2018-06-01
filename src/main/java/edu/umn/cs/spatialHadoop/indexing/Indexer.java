@@ -335,6 +335,7 @@ public class Indexer {
 
     try {
       Partitioner partitioner = partitionerClass.newInstance();
+      partitioner.setup(job);
 
       Partitioner.GlobalIndexerMetadata partitionerMetadata = partitionerClass.getAnnotation(Partitioner.GlobalIndexerMetadata.class);
       boolean disjointSupported = partitionerMetadata != null && partitionerMetadata.disjoint();
@@ -360,6 +361,7 @@ public class Indexer {
           sample[i].fromText(new Text(sampleStr[i]));
         }
         capacity = (int) Math.max(1, Math.floor((double)sample.length * outBlockSize / estimatedOutSize));
+        LOG.info(String.format("Partitioning %d sample points with capacity = %d", sample.length, capacity));
       } else {
         // We call it capacity but it's really number of partitions
         capacity = (int) Math.ceil((double)estimatedOutSize / outBlockSize);
