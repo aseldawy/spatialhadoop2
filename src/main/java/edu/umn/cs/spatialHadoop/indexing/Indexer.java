@@ -488,12 +488,12 @@ public class Indexer {
       printUsage();
       return;
     }
-    Path inputPath = params.getInputPath();
+    Path[] inputPaths = params.getInputPaths();
     Path outputPath = params.getOutputPath();
 
     // The spatial index to use
     long t1 = System.currentTimeMillis();
-    index(inputPath, outputPath, params);
+    index(inputPaths, outputPath, params);
     long t2 = System.currentTimeMillis();
     System.out.println("Total indexing time in millis "+(t2-t1));
   }
