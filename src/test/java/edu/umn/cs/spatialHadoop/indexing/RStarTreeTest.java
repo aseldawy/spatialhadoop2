@@ -139,7 +139,7 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 8;
       Rectangle[] partitions =
-          RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, false, null);
+          RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, false, 0, null);
       // Minimum number of partitions = Ceil(# points / capacity)
       int minNumPartitions = (points[0].length + capacity - 1) / capacity;
       int maxNumPartitions = (points[0].length + capacity / 2 - 1) / (capacity / 2);
@@ -168,7 +168,7 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 8;
       Rectangle[] partitions =
-          RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, false, null);
+          RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, false, 0, null);
 
       assertEquals(2, partitions.length);
       Arrays.sort(partitions);
@@ -188,7 +188,7 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 4;
       AuxiliarySearchStructure aux = new AuxiliarySearchStructure();
-      Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, aux);
+      Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, 0, aux);
       assertEquals(3, aux.partitionGreaterThanOrEqual.length);
       assertEquals(9.0, aux.splitCoords[aux.rootSplit]);
       assertTrue(aux.partitionGreaterThanOrEqual[aux.rootSplit] < 0);
@@ -223,7 +223,7 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 3;
       AuxiliarySearchStructure aux = new AuxiliarySearchStructure();
-      Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, aux);
+      Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, 0, aux);
       IntArray ps = new IntArray();
       // Make a search that should match with all paritions
       aux.search(0,0,100,100, ps);
@@ -243,7 +243,7 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 100;
       AuxiliarySearchStructure aux = new AuxiliarySearchStructure();
-      Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, aux);
+      Rectangle[] partitions = RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, 0, aux);
       int p = aux.search(0, 0);
       assertEquals(0, p);
       IntArray ps = new IntArray();
@@ -264,7 +264,7 @@ public class RStarTreeTest extends TestCase {
       // Create a tree without splits
       int capacity = 4;
       Rectangle[] partitions =
-          RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, null);
+          RStarTree.partitionPoints(points[0], points[1], capacity/2, capacity, true, 0, null);
 
       assertEquals(4, partitions.length);
 

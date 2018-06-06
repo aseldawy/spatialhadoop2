@@ -54,10 +54,14 @@ public abstract class AbstractRTreeGBPartitioner extends Partitioner {
   /**An auxiliary search structure to find matching partitions quickly*/
   private AuxiliarySearchStructure aux;
 
+  /**The minimum fraction of a split considered by teh R*-tree and RR*-tree partitioners */
+  protected float fractionMinSplitSize;
+
   @Override
   public void setup(Configuration conf) {
     super.setup(conf);
-    float mMRatio = conf.getFloat("mMRatio", 0.95f);
+    mMRatio = conf.getFloat("mMRatio", 0.95f);
+    this.fractionMinSplitSize = conf.getFloat("fractionMinSplitSize", 0.0f);
   }
 
   /**
@@ -158,7 +162,8 @@ public abstract class AbstractRTreeGBPartitioner extends Partitioner {
   public static class RStarTreeGBPartitioner extends AbstractRTreeGBPartitioner {
     @Override
     Rectangle[] partitionPoints(double[] xs, double[] ys, int capacity, AuxiliarySearchStructure aux) {
-      return RStarTree.partitionPoints(xs, ys, capacity * 8 / 10, capacity, true, aux);
+      int m = (int) Math.ceil(mMRatio * capacity);
+      return RStarTree.partitionPoints(xs, ys, m, capacity, true, fractionMinSplitSize, aux);
     }
   }
   
@@ -172,7 +177,8 @@ public abstract class AbstractRTreeGBPartitioner extends Partitioner {
   public static class RRStarTreeGBPartitioner extends AbstractRTreeGBPartitioner {
     @Override
     Rectangle[] partitionPoints(double[] xs, double[] ys, int capacity, AuxiliarySearchStructure aux) {
-      return RRStarTree.partitionPoints(xs, ys, capacity * 8 / 10, capacity, true, aux);
+      int m = (int) Math.ceil(mMRatio * capacity);
+      return RRStarTree.partitionPoints(xs, ys, m, capacity, true, 0.0f, aux);
     }
   }
 

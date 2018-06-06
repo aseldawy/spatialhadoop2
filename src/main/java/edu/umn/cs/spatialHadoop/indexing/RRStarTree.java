@@ -687,7 +687,8 @@ public class RRStarTree extends RTreeGuttman {
   
   /**
    * Partitions the given set of points using the improved RR*-tree split algorithm.
-   * Calls the function {@link #partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure, MinimizationFunction)}
+   * Calls the function{@link RStarTree#partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure,
+   * float, MinimizationFunction)}
    * with the last parameter as {@code MinimizationFunction.PERIMETER}
    * @param xs
    * @param ys
@@ -697,10 +698,10 @@ public class RRStarTree extends RTreeGuttman {
    * @param aux
    * @return
    */
-  static Rectangle[] partitionPoints(final double[] xs, final double[] ys, final int minPartitionSize,
-      final int maxPartitionSize, final boolean expandToInf, final AuxiliarySearchStructure aux) {
+  static Rectangle[] partitionPoints(double[] xs, double[] ys, int minPartitionSize, int maxPartitionSize,
+                                     boolean expandToInf, float fractionMinSplitSize, AuxiliarySearchStructure aux) {
     return RStarTree.partitionPoints(xs, ys, minPartitionSize, maxPartitionSize,
-        expandToInf, aux, MinimizationFunction.PERIMETER);
+        expandToInf, aux, fractionMinSplitSize, MinimizationFunction.PERIMETER);
   }
 
   enum RTreeType {Guttman, RStar, RRStar, RStarBulk};
@@ -714,7 +715,7 @@ public class RRStarTree extends RTreeGuttman {
     int m = 400;
     RTreeType type = RTreeType.Guttman;
     if (type == RTreeType.RStarBulk) {
-      Rectangle[] partitions = RStarTree.partitionPoints(tweets[2], tweets[1], m, M, false, null);
+      Rectangle[] partitions = RStarTree.partitionPoints(tweets[2], tweets[1], m, M, false, 0.0f, null);
       for (Rectangle partition : partitions) {
         System.out.println(partition.toWKT());
       }

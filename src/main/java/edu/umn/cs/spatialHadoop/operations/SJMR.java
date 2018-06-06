@@ -15,6 +15,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.core.*;
+import edu.umn.cs.spatialHadoop.indexing.GridPartitioner;
+import edu.umn.cs.spatialHadoop.indexing.Indexer;
+import edu.umn.cs.spatialHadoop.indexing.Partitioner;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
@@ -42,7 +46,6 @@ import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.CellInfo;
-import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector2;
 import edu.umn.cs.spatialHadoop.core.Shape;
@@ -79,10 +82,7 @@ public class SJMR {
   public static boolean isSpatialJoinOutputRequired = true;
   public static boolean isFilterOnly = false;
   public static int joiningThresholdPerOnce = 50000;
-  
-  
 
-  
   public static class IndexedText implements Writable {
     public byte index;
     public Text text;
@@ -114,23 +114,31 @@ public class SJMR {
    *
    */
   public static class SelfSJMRMap extends MapReduceBase
-  implements
-  Mapper<Rectangle, Shape, IntWritable, Shape> {
-    private GridInfo gridInfo;
+  implements Mapper<Rectangle, Shape, IntWritable, Shape> {
+    private Partitioner partitioner;
     private IntWritable cellId = new IntWritable();
-    
+
     @Override
-    public void map(Rectangle key, Shape shape,
-        OutputCollector<IntWritable, Shape> output, Reporter reporter)
+    public void configure(JobConf job) {
+      super.configure(job);
+      partitioner = Partitioner.getPartitioner(job);
+    }
+
+    @Override
+    public void map(Rectangle key, final Shape shape,
+        final OutputCollector<IntWritable, Shape> output, Reporter reporter)
         throws IOException {
-      java.awt.Rectangle cells = gridInfo.getOverlappingCells(shape.getMBR());
-      
-      for (int col = cells.x; col < cells.x + cells.width; col++) {
-        for (int row = cells.y; row < cells.y + cells.height; row++) {
-          cellId.set(row * gridInfo.columns + col + 1);
-          output.collect(cellId, shape);
+      partitioner.overlapPartitions(shape.getMBR(), new ResultCollector<Integer>() {
+        @Override
+        public void collect(Integer cellID) {
+          cellId.set(cellID);
+          try {
+            output.collect(cellId, shape);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
         }
-      }
+      });
     }
   }
   
@@ -144,7 +152,7 @@ public class SJMR {
   Mapper<Rectangle, Text, IntWritable, IndexedText> {
     private Shape shape;
     private IndexedText outputValue = new IndexedText();
-    private GridInfo gridInfo;
+    private Partitioner partitioner;
     private IntWritable cellId = new IntWritable();
     private Path[] inputFiles;
     private InputSplit currentSplit;
@@ -152,8 +160,9 @@ public class SJMR {
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      // Retrieve grid to use for partitioning
-      gridInfo = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
+      // Retrieve the partitioner
+      partitioner = Partitioner.getPartitioner(job);
+      //gridInfo = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
       // Create a stock shape for deserializing lines
       shape = SpatialSite.createStockShape(job);
       // Get input paths to determine file index for every record
@@ -162,7 +171,7 @@ public class SJMR {
 
     @Override
     public void map(Rectangle cellMbr, Text value,
-        OutputCollector<IntWritable, IndexedText> output,
+        final OutputCollector<IntWritable, IndexedText> output,
         Reporter reporter) throws IOException {
       if (reporter.getInputSplit() != currentSplit) {
       	FileSplit fsplit = (FileSplit) reporter.getInputSplit();
@@ -185,33 +194,36 @@ public class SJMR {
         if (shapeMBR == null)
           return;
 
-        java.awt.Rectangle cells = gridInfo.getOverlappingCells(shapeMBR);
-        for (int col = cells.x; col < cells.x + cells.width; col++) {
-          for (int row = cells.y; row < cells.y + cells.height; row++) {
-            cellId.set(row * gridInfo.columns + col + 1);
-            output.collect(cellId, outputValue);
+        partitioner.overlapPartitions(shapeMBR, new ResultCollector<Integer>() {
+          @Override
+          public void collect(Integer cellID) {
+            cellId.set(cellID);
+            try {
+              output.collect(cellId, outputValue);
+            } catch (IOException e) {
+              throw new RuntimeException(e);
+            }
           }
-        }
+        });
       }
     }
   }
   
   public static class SelfSJMRReduce<S extends Shape> extends MapReduceBase implements
   Reducer<IntWritable, S, S, S> {
-    /**List of cells used by the reducer*/
-    private GridInfo grid;
+    Partitioner partitioner;
 
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      grid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
+      partitioner = Partitioner.getPartitioner(job);
     }
 
     @Override
     public void reduce(IntWritable cellId, Iterator<S> values,
         final OutputCollector<S, S> output, Reporter reporter) throws IOException {
       // Extract CellInfo (MBR) for duplicate avoidance checking
-      final CellInfo cellInfo = grid.getCell(cellId.get());
+      final CellInfo cellInfo = partitioner.getPartition(cellId.get());
       
       Vector<S> shapes = new Vector<S>();
       
@@ -245,19 +257,18 @@ public class SJMR {
 	  
     /**Number of files in the input*/
     private int inputFileCount;
-    
-    /**List of cells used by the reducer*/
-    private GridInfo grid;
+
+    private Partitioner partitioner;
     private boolean inactiveMode;
-	private boolean isFilterOnly;
-	private int shapesThresholdPerOnce;
+    private boolean isFilterOnly;
+    private int shapesThresholdPerOnce;
 	
     private S shape;
     
     @Override
     public void configure(JobConf job) {
       super.configure(job);
-      grid = (GridInfo) OperationsParams.getShape(job, PartitionGrid);
+      partitioner = Partitioner.getPartitioner(job);
       shape = (S) SpatialSite.createStockShape(job);
       inputFileCount = FileInputFormat.getInputPaths(job).length;
       inactiveMode = OperationsParams.getInactiveModeFlag(job, InactiveMode);
@@ -275,7 +286,7 @@ public class SJMR {
         long t1 = System.currentTimeMillis();	
 
         // Extract CellInfo (MBR) for duplicate avoidance checking
-        final CellInfo cellInfo = grid.getCell(cellId.get());
+        final CellInfo cellInfo = partitioner.getPartition(cellId.get());
 
         // Partition retrieved shapes (values) into lists for each file
         List<S>[] shapeLists = new List[inputFileCount];
@@ -351,7 +362,6 @@ public class SJMR {
       Path userOutputPath, OperationsParams params) throws IOException, InterruptedException {
     JobConf job = new JobConf(params, SJMR.class);
     
-    LOG.info("SJMR journey starts ....");
     FileSystem inFs = inFiles[0].getFileSystem(job);
     Path outputPath = userOutputPath;
     if (outputPath == null) {
@@ -373,7 +383,6 @@ public class SJMR {
         Math.max(inFs.getFileStatus(inFiles[0]).getBlockSize(),
             inFs.getFileStatus(inFiles[1]).getBlockSize()));
 
-
     job.setReducerClass(SJMRReduce.class);
     job.setNumReduceTasks(Math.max(1, clusterStatus.getMaxReduceTasks()));
 
@@ -394,21 +403,27 @@ public class SJMR {
       mbr.expand(file_mbr);
       total_size += FileUtil.getPathSize(fs, file);
     }
-    // If the largest file is globally indexed, use its partitions
-    total_size += total_size * job.getFloat(SpatialSite.INDEXING_OVERHEAD,0.2f);
-    int sjmrPartitioningGridFactor = params.getInt(PartitioiningFactor, 20);
-    int num_cells = (int) Math.max(1, total_size * sjmrPartitioningGridFactor /
-        outFs.getDefaultBlockSize(outputPath));
-    LOG.info("Number of cells is configured to be " + num_cells);
+
+    Partitioner p;
+    if (params.get("partitioner") == null) {
+      // Use a grid partitioner by default
+      int sjmrPartitioningGridFactor = params.getInt(PartitioiningFactor, 20);
+      int num_cells = (int) Math.max(1, total_size * sjmrPartitioningGridFactor /
+          outFs.getDefaultBlockSize(outputPath));
+
+      p = new GridPartitioner();
+      p.construct(mbr, null, num_cells);
+
+    } else {
+      Class<? extends Partitioner> partitionerClass = params.getClass("partitioner", GridPartitioner.class, Partitioner.class);
+      p = Indexer.initializeGlobalIndex(inFiles, outputPath, params, partitionerClass);
+    }
+    Partitioner.setPartitioner(job, p);
 
     OperationsParams.setInactiveModeFlag(job, InactiveMode, isReduceInactive);
     OperationsParams.setJoiningThresholdPerOnce(job, JoiningThresholdPerOnce, joiningThresholdPerOnce);
-	OperationsParams.setFilterOnlyModeFlag(job, isFilterOnlyMode, isFilterOnly);
-	
-    GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-    gridInfo.calculateCellDimensions(num_cells);
-    OperationsParams.setShape(job, PartitionGrid, gridInfo);
-    
+    OperationsParams.setFilterOnlyModeFlag(job, isFilterOnlyMode, isFilterOnly);
+
     TextOutputFormat.setOutputPath(job, outputPath);
     
     if (OperationsParams.isLocal(job, inFiles)) {

@@ -40,6 +40,8 @@ public class STRPartitionerTest extends TestCase {
     assertEquals(1, str.getPartitionCount());
     int i = str.overlapPartition(new Rectangle(0, 0, 3, 3));
     assertEquals(0, i);
+    assertNotNull(str.getPartition(0));
+    assertNotNull(str.getPartitionAt(0));
   }
 
 }

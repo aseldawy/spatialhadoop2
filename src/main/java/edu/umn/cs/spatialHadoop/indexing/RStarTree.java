@@ -530,6 +530,9 @@ public class RStarTree extends RTreeGuttman {
    * @param expandToInf when set to true, the returned partitions are expanded
    *                    to cover the entire space from, Negative Infinity to
    *                    Positive Infinity, in all dimensions.
+   * @param fractionMinSplitSize the minimum fraction of a split [0,1]. If set to zero, all possible splits are considered
+   *                             which might result in a bad performance. Setting this parameter to a larger fraction,
+   *                             e.g., 0.3,improves the running time but might result in a sub-optimal partitioning.
    * @param aux If not set to <code>null</code>, this will be filled with some
    *            auxiliary information to help efficiently search through the
    *            partitions.
@@ -541,6 +544,7 @@ public class RStarTree extends RTreeGuttman {
                                      final int maxPartitionSize,
                                      final boolean expandToInf,
                                      final AuxiliarySearchStructure aux,
+                                     final float fractionMinSplitSize,
                                      final MinimizationFunction f) {
     class SplitTask {
       /**The range of points to partition*/
@@ -610,8 +614,6 @@ public class RStarTree extends RTreeGuttman {
     // Temporary arrays for pre-caching min and max coordinates
     double[] group2Min = new double[xs.length];
     double[] group2Max = new double[xs.length];
-    double fractionMinSplitSize = Math.min(minPartitionSize, maxPartitionSize-minPartitionSize) / (double)maxPartitionSize;
-    fractionMinSplitSize = 0;
     while (!rangesToSplit.isEmpty()) {
       SplitTask range = rangesToSplit.pop();
 
@@ -909,7 +911,7 @@ public class RStarTree extends RTreeGuttman {
   
   /**
    * Partitions the given set of points using the improved R*-tree split algorithm.
-   * Calls the function {@link #partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure, MinimizationFunction)}
+   * Calls the function {@link #partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure, float, MinimizationFunction)}
    * with the last parameter as {@code MinimizationFunction.AREA}
    * @param xs
    * @param ys
@@ -919,9 +921,10 @@ public class RStarTree extends RTreeGuttman {
    * @param aux
    * @return
    */
-  static Rectangle[] partitionPoints(final double[] xs, final double[] ys, final int minPartitionSize,
-      final int maxPartitionSize, final boolean expandToInf, final AuxiliarySearchStructure aux) {
+  static Rectangle[] partitionPoints(double[] xs, double[] ys, int minPartitionSize,
+      int maxPartitionSize, boolean expandToInf, float fractionMinSplitSize,
+                                     AuxiliarySearchStructure aux) {
     return partitionPoints(xs, ys, minPartitionSize, maxPartitionSize,
-        expandToInf, aux, MinimizationFunction.AREA);
+        expandToInf, aux, fractionMinSplitSize, MinimizationFunction.AREA);
   }
 }
