@@ -189,7 +189,7 @@ public class SJMR {
       shape.fromText(tempText);
       Rectangle shape_mbr = shape.getMBR();
       // Do a reference point technique to avoid processing the same record twice
-      if (!cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
+      if (cellMbr == null || !cellMbr.isValid() || cellMbr.contains(shape_mbr.x1, shape_mbr.y1)) {
         Rectangle shapeMBR = shape.getMBR();
         if (shapeMBR == null)
           return;

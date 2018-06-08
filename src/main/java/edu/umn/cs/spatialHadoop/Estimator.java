@@ -62,6 +62,11 @@ public class Estimator<Y> {
       this.limit1 = limit1;
       this.limit2 = limit2;
     }
+
+    @Override
+    public String toString() {
+      return String.format("[%s,%s]", limit1.toString(), limit2.toString());
+    }
   }
   
   /**

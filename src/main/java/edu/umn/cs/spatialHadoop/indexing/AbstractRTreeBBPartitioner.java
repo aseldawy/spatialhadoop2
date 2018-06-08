@@ -9,8 +9,6 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.*;
-import java.util.HashMap;
-import java.util.Map;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
 import edu.umn.cs.spatialHadoop.core.Point;
@@ -18,7 +16,6 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.io.IntWritable;
 
 /**
  * A partitioner that uses an existing RTree as a black-box.
@@ -74,8 +71,26 @@ public abstract class AbstractRTreeBBPartitioner extends Partitioner {
   @Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "rtreebb",
       requireSample = true)
   public static class RTreeGuttmanBBPartitioner extends AbstractRTreeBBPartitioner {
+    enum SplitMethod {LinearSplit, QuadraticSplit};
+    SplitMethod splitMethod;
+
+    @Override
+    public void setup(Configuration conf) {
+      super.setup(conf);
+      if (conf.get("split", "linear").equalsIgnoreCase("linear")) {
+        this.splitMethod = SplitMethod.LinearSplit;
+      } else {
+        this.splitMethod = SplitMethod.QuadraticSplit;
+      }
+    }
+
     public RTreeGuttman createRTree(int m, int M) {
-      return new RTreeGuttman(m, M);
+      switch (splitMethod) {
+        case LinearSplit: return new RTreeGuttman(m, M);
+        case QuadraticSplit: return new RTreeGuttmanQuadraticSplit(m, M);
+        default: return new RTreeGuttman(m, M);
+      }
+
     }
   }
 

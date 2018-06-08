@@ -12,9 +12,9 @@ import edu.umn.cs.spatialHadoop.util.IntArray;
 /**
  * A class that stores an auxiliary data structure used to search through
  * the partitions created using the functions
- * {@link RStarTree#partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure)}
+ * {@link RStarTree#partitionPoints(double[], double[], int, int, boolean, float, AuxiliarySearchStructure)}
  * and
- * {@link RRStarTree#partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure)}
+ * {@link RRStarTree#partitionPoints(double[], double[], int, int, boolean, float, AuxiliarySearchStructure)}
  */
 public class AuxiliarySearchStructure implements Writable {
   /**The first split to consider*/
