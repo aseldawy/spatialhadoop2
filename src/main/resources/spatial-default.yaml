@@ -18,6 +18,7 @@ Shapes:
 GlobalIndexes:
   - edu.umn.cs.spatialHadoop.indexing.GridPartitioner
   - edu.umn.cs.spatialHadoop.indexing.STRPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.RTreeGBPartitioner
   - edu.umn.cs.spatialHadoop.indexing.AbstractRTreeGBPartitioner$RStarTreeGBPartitioner
   - edu.umn.cs.spatialHadoop.indexing.AbstractRTreeGBPartitioner$RRStarTreeGBPartitioner
   - edu.umn.cs.spatialHadoop.indexing.AbstractRTreeBBPartitioner$RTreeGuttmanBBPartitioner

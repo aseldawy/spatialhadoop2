@@ -763,17 +763,13 @@ public class RStarTree extends RTreeGuttman {
           
           // Skip if k is invalid (either side induce an invalid size)
           int size1 = separator - range.start;
-          int minCount1 = (int) Math.ceil(size1/(double) maxPartitionSize);
-          int maxCount1 = (int) Math.floor(size1 / (double) minPartitionSize);
-          if (maxCount1 < minCount1)
+          if (!isValid(size1, minPartitionSize, maxPartitionSize))
             continue;
           
           int size2 = range.end - separator;
-          int minCount2 = (int) Math.ceil(size2 / (double)maxPartitionSize);
-          int maxCount2 = (int) Math.floor(size2 / (double) minPartitionSize);
-          if (maxCount2 < minCount2)
+          if (!isValid(size2, minPartitionSize, maxPartitionSize))
             continue;
-          
+
           // Retrieve MBR of group 2
           double group2MinX = xs[separator];
           double group2MaxX = xs[range.end - 1];
@@ -908,7 +904,20 @@ public class RStarTree extends RTreeGuttman {
 
     return finalizedSplits.toArray(new Rectangle[finalizedSplits.size()]);
   }
-  
+
+  /**
+   * Checks if a given partition size is valid according to the min and max partition sizes.
+   * @param size
+   * @param minPartitionSize
+   * @param maxPartitionSize
+   * @return
+   */
+  protected static boolean isValid(int size, int minPartitionSize, int maxPartitionSize) {
+    int minCount = (int) Math.ceil((float) size/ maxPartitionSize);
+    int maxCount = (int) Math.floor((float) size / minPartitionSize);
+    return minCount <= maxCount;
+  }
+
   /**
    * Partitions the given set of points using the improved R*-tree split algorithm.
    * Calls the function {@link #partitionPoints(double[], double[], int, int, boolean, AuxiliarySearchStructure, float, MinimizationFunction)}

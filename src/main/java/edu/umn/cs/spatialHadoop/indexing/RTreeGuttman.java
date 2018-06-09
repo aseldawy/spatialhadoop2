@@ -5,14 +5,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
+import edu.umn.cs.spatialHadoop.core.Rectangle;
 import org.apache.hadoop.fs.FSDataInputStream;
 
 import edu.umn.cs.spatialHadoop.util.BitArray;
@@ -1145,5 +1140,176 @@ public class RTreeGuttman implements Closeable {
           node.x1, node.y1
       );
     }
+  }
+
+  /**
+   * Assigns an entry to a group based on the R-tree paper (Page 52, Step QS3)
+   * @param mbr1
+   * @param size1
+   * @param mbr2
+   * @param size2
+   * @param x
+   * @param y
+   * @return
+   */
+  static int chooseGroup(Rectangle mbr1, int size1, Rectangle mbr2, int size2, double x, double y) {
+    double w1 = mbr1.getWidth();
+    double h1 = mbr1.getHeight();
+    if (x < mbr1.x1) w1 += mbr1.x1 - x;
+    if (x > mbr1.x2) w1 += x - mbr1.x2;
+    if (y < mbr1.y1) h1 += mbr1.y1 - y;
+    if (y > mbr1.y2) h1 += y - mbr1.y2;
+
+    double w2 = mbr2.getWidth();
+    double h2 = mbr2.getHeight();
+    if (x < mbr2.x1) w2 += mbr2.x1 - x;
+    if (x > mbr2.x2) w2 += x - mbr2.x2;
+    if (y < mbr2.y1) h2 += mbr2.y1 - y;
+    if (y > mbr2.y2) h2 += y - mbr2.y2;
+
+    double d1 = w1*h1 - mbr1.area(); // Volume expansion
+    double d2 = w2*h2 - mbr2.area(); // Volume expansion
+    if (d1 == d2) {
+      // Resolve ties by adding the entry to theh gorup with samller area
+      d1 = mbr1.area();
+      d2 = mbr2.area();
+      if (d1 == d2) {
+        // then to the one wih fewer entries
+        d1 = size1;
+        d2 = size2;
+        if (d1 == d2) {
+          // ... then to either
+          d1 = 0.5;
+          d2 = Math.random();
+        }
+      }
+    }
+    return d1 < d2 ? 0 : 1;
+  }
+
+  /**
+   * Partitions the given set of points using the linear split algorithm to produce a set of partitions where each one
+   * has between minPartitionSize and maxPartitionSize points, inclusively. The parameter fractionMinSplitSize can be
+   * set to any number
+   * @param xs
+   * @param ys
+   * @param minPartitionSize
+   * @param maxPartitionSize
+   * @param fractionMinSplitSize
+   * @return
+   */
+  static Rectangle[] partitionPoints(double[] xs, double[] ys, int minPartitionSize,
+                                     int maxPartitionSize, float fractionMinSplitSize) {
+    class Range {
+      /**The range of points to partition [start, end)*/
+      int start, end;
+
+      Range(int s, int e) {
+        this.start = s;
+        this.end = e;
+      }
+    }
+
+    // The ranges that might need to be split
+    Stack<Range> rangesToSplit = new Stack<Range>();
+    rangesToSplit.push(new Range(0, xs.length));
+
+    // The output list of partitions
+    List<Rectangle> partitions = new ArrayList<Rectangle>();
+
+    // Compute the MBR of all points to be able to normalize the separation
+    Rectangle mbr = null;
+
+    while (!rangesToSplit.empty()) {
+      Range r = rangesToSplit.pop();
+      if (r.end - r.start <= maxPartitionSize) {
+        // No need to further split this range. Report it to the answer.
+        Rectangle partition = new Rectangle(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY,
+            Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY);
+        for (int i = r.start; i < r.end; i++)
+          partition.expand(xs[i], ys[i]);
+        partitions.add(partition);
+        System.out.println("Generated a partition of size " + (r.end - r.start));
+      } else {
+        // Apply the linear-time R-tree splitting algorithm
+        // First, pick the two seeds the have the largest separation
+        int minX = r.start;
+        int maxX = r.start;
+        int minY = r.start;
+        int maxY = r.start;
+        for (int iPoint = r.start+1; iPoint < r.end; iPoint++) {
+          if (xs[iPoint] < xs[minX])
+            minX = iPoint;
+          if (xs[iPoint] > xs[maxX])
+            maxX = iPoint;
+          if (ys[iPoint] < ys[minY])
+            minY = iPoint;
+          if (ys[iPoint] > ys[maxY])
+            maxY = iPoint;
+        }
+        // Compute the MBR for the very first group to normalize separations
+        if (mbr == null)
+          mbr = new Rectangle(xs[minX], ys[minY], xs[maxX], ys[maxY]);
+        int seed1, seed2;
+        if ((xs[maxX] - xs[minX])/mbr.getWidth() > (ys[maxY] - ys[minY])/mbr.getHeight()) {
+          seed1 = minX;
+          seed2 = maxX;
+        } else {
+          seed1 = minY;
+          seed2 = maxY;
+        }
+        // Swap seed1 with range.start and seed2 with range.end-1
+        double temp;
+        temp = xs[r.start]; xs[r.start] = xs[seed1]; xs[seed1] = temp;
+        temp = ys[r.start]; ys[r.start] = ys[seed1]; ys[seed1] = temp;
+        temp = xs[r.end-1]; xs[r.end-1] = xs[seed2]; xs[seed2] = temp;
+        temp = ys[r.end-1]; ys[r.end-1] = ys[seed2]; ys[seed2] = temp;
+
+        Rectangle mbr1 = new Rectangle(xs[r.start], ys[r.start], xs[r.start], ys[r.start]);
+        Rectangle mbr2 = new Rectangle(xs[r.end-1], ys[r.end-1], xs[r.end-1], ys[r.end-1]);
+        // Split the range [r.start, r.end) so that the first group is [r.start, i] and the second group is
+        // [j, r.end)
+        int i = r.start;
+        int j = r.end - 1;
+        while (i < j) {
+          int group;
+          // Advance i as long as the element at i belongs to the first group
+          while (i < j && chooseGroup(mbr1, i - r.start, mbr2, r.end - j, xs[i], ys[i]) ==  0) {
+            mbr1.expand(xs[i], ys[i]);
+            i++;
+          }
+          // Decrease j as long as the element at j belongs to the second group
+          while (i < j && chooseGroup(mbr1, i - r.start, mbr2, r.end - j, xs[j], ys[j]) ==  1) {
+            mbr2.expand(xs[j], ys[j]);
+            j--;
+          }
+          // Swap the elements at i and j and continue
+          if (i < j) {
+            temp = xs[i]; xs[i] = xs[j]; xs[j] = temp;
+            temp = ys[i]; ys[i] = ys[j]; ys[j] = temp;
+          }
+          // Check if all the remaining items need to be assigned to one group to  meet the minimum size constraint
+          if (r.end - i <= minPartitionSize)
+            j=i;
+          else if (j - r.start <= minPartitionSize)
+            i = j;
+        }
+        // Now split around i and j (notice that i == j at this point)
+        // Ensure that the two partitions are valid
+        int separator = i;
+        int diff = r.end - separator > separator - r.start?+1 : -1;
+        while (!RStarTree.isValid(separator - r.start, minPartitionSize, maxPartitionSize) ||
+            !RStarTree.isValid(r.end - separator, minPartitionSize, maxPartitionSize)) {
+          separator += diff;
+        }
+
+        Range newRange = new Range(separator, r.end);
+        r.end = separator;
+        rangesToSplit.push(r);
+        rangesToSplit.push(newRange);
+      }
+    }
+
+    return partitions.toArray(new Rectangle[partitions.size()]);
   }
 }
