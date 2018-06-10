@@ -7,15 +7,17 @@
 #
 ###########################################################################
 
+
 require 'fileutils'
 
 FilePattern = /<a href="([^"]+)">(.+)<\/a>\s*(\d+-\w+-\d+)\s+(\d+:\d+)\s+([\d\.]+[KMG]|-)/
 $ParallelSize = 16
 
 def printUsage
-  $stderr.puts "#{File.basename(__FILE__)} <base URL> [download path] [rect:west,south,east,north] [time:yyyy.mm.dd..yyyy.mm.dd]"
+  $stderr.puts "#{File.basename(__FILE__)} <base URL> [download path] [rect:west,south,east,north] [time:yyyy.mm.dd..yyyy.mm.dd] [user:credentials]"
   $stderr.puts "If download path is not specified, data is downloaded to current folder"
   $stderr.puts "rect parameter is used to limit downloaded files to those overlapping this area"
+  $stderr.puts "credentials: username:password"
 end
 
 def rangeOverlap(r1, r2)
@@ -27,12 +29,13 @@ def rectOverlap(rect1, rect2)
     rangeOverlap(rect1[1]...rect1[3], rect2[1]...rect2[3])
 end
 
-def downloadFiles(files_to_download, downloadPath, error_files)
+def downloadFiles(files_to_download, downloadPath, error_files, username_password)
   puts "Downloading #{files_to_download.size} files to '#{downloadPath}'"
   partitions = []
   $ParallelSize.times {|i| partitions << (files_to_download.size * i / $ParallelSize)}
   partitions << files_to_download.size
   download_threads = []
+  credentials = username_password ? "--user #{username_password}" : "-n "
   $ParallelSize.times do |thread_id|
     first, last = partitions[thread_id, 2]
     download_threads << Thread.new(first, last) { |_first, _last|
@@ -42,8 +45,7 @@ def downloadFiles(files_to_download, downloadPath, error_files)
         snapshot_date = File.basename(File.dirname(url_to_download))
         output_dir = File.join(downloadPath, snapshot_date)
         temp_download_file = File.join($TempDownloadPath, File.basename(url_to_download))
-
-        system("curl -sf -n -L -c #{cookiefile} -b #{cookiefile} '#{url_to_download}' -o '#{temp_download_file}'")
+        system("curl #{credentials} -sf -L -c #{cookiefile} -b #{cookiefile} '#{url_to_download}' -o '#{temp_download_file}'")
         if $?.success?
           Dir.mkdir(output_dir) unless File.exists?(output_dir)
           if system("mv #{temp_download_file} #{output_dir}")
@@ -89,6 +91,20 @@ if time
     exit(1)
   end
 end
+
+username_password = ARGV.find { |x| x.start_with?("user:") }
+if username_password
+  ARGV.delete(username_password)
+  username_password = username_password.sub("user:", "")
+end
+
+# An alternative way to set username and password is through the .netrc file
+#-n/--netrc         Must read .netrc for user name and password
+# This option requires the user to create a file named .netrc which is a hidden file located in their home directory.
+# The .netrc file has the following format:
+# machine urs.earthdata.nasa.gov
+#         login username
+#         password userpassword
 
 if ARGV.empty?
   $stderr.puts "Input base URL not specified"
@@ -155,18 +171,18 @@ for snapshot_dir in all_files
   end
   
   if files_to_download.size >= $ParallelSize
-    downloadFiles(files_to_download, downloadPath, error_files)
+    downloadFiles(files_to_download, downloadPath, error_files, username_password)
     files_to_download.clear
   end
 end
 
 # Download any remaining files
-downloadFiles(files_to_download, downloadPath, error_files) unless files_to_download.empty?
+downloadFiles(files_to_download, downloadPath, error_files, username_password) unless files_to_download.empty?
 
 # Give one last chance to error files
 files_to_download = error_files
 error_files = []
-downloadFiles(files_to_download, downloadPath, error_files) unless files_to_download.empty?
+downloadFiles(files_to_download, downloadPath, error_files, username_password) unless files_to_download.empty?
 
 $stderr.puts "Error downloading #{error_files.length} files" unless error_files.empty?
 
