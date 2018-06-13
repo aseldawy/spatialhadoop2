@@ -178,10 +178,9 @@ public abstract class AbstractRTreeGBPartitioner extends Partitioner {
     @Override
     Rectangle[] partitionPoints(double[] xs, double[] ys, int capacity, AuxiliarySearchStructure aux) {
       int m = (int) Math.ceil(mMRatio * capacity);
-      return RRStarTree.partitionPoints(xs, ys, m, capacity, true, 0.0f, aux);
+      return RRStarTree.partitionPoints(xs, ys, m, capacity, true, fractionMinSplitSize, aux);
     }
   }
-
 
   @Override
   public void write(DataOutput out) throws IOException {

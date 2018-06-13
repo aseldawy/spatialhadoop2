@@ -913,9 +913,9 @@ public class RStarTree extends RTreeGuttman {
    * @return
    */
   protected static boolean isValid(int size, int minPartitionSize, int maxPartitionSize) {
-    int minCount = (int) Math.ceil((float) size/ maxPartitionSize);
-    int maxCount = (int) Math.floor((float) size / minPartitionSize);
-    return minCount <= maxCount;
+    int lowerBound = (int) Math.ceil((float) size/ maxPartitionSize);
+    int upperBound = (int) Math.floor((float) size / minPartitionSize);
+    return lowerBound <= upperBound;
   }
 
   /**
