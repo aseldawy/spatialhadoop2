@@ -10,19 +10,17 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.apache.hadoop.mapreduce.lib.input.LineRecordReader;
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl;
 
-import edu.umn.cs.spatialHadoop.indexing.RTree;
 
 /**
  * Reads the first n lines of a text file
@@ -39,31 +37,42 @@ public class Head {
    * @return
    * @throws IOException
    */
-  public static String[] head(FileSystem fs, Path p,
-      int n) throws IOException {
+  public static String[] head(FileSystem fs, Path p, int n) throws IOException {
     String[] lines = new String[n];
     FileStatus fstatus = fs.getFileStatus(p);
     
     TaskAttemptContext context = createDummyContext();
     LineRecordReader lineReader = new LineRecordReader();
-    FileSplit split;
-    if (p.getName().endsWith(".rtree")) {
-      // R-tree indexed file
-      FSDataInputStream in = fs.open(p);
-      in.skip(8); // Skip R-tree signature
-      int treeHeaderSize = RTree.skipHeader(in);
-      in.close();
-      split = new FileSplit(p, treeHeaderSize + 8, fstatus.getLen() - treeHeaderSize - 8, new String[0]);
+    FileSplit[] splits;
+    if (fstatus.isFile()) {
+      splits = new FileSplit[] {
+          new FileSplit(p, 0, fstatus.getLen(), new String[0])
+      };
     } else {
-      split = new FileSplit(p, 0, fstatus.getLen(), new String[0]);
+      FileStatus[] files = fs.listStatus(p, SpatialSite.NonHiddenFileFilter);
+      splits = new FileSplit[files.length];
+      for (int i = 0; i < files.length; i++)
+        splits[i] = new FileSplit(files[i].getPath(), 0, files[i].getLen(), new String[0]);
     }
-    lineReader.initialize(split, context);
-    int numOfLines = 0;
-    for (numOfLines = 0; numOfLines < lines.length && lineReader.nextKeyValue(); numOfLines++) {
-      lines[numOfLines] = lineReader.getCurrentValue().toString();
+    int iLine = 0;
+    int iSplit = 0;
+    while (iLine < lines.length && iSplit < splits.length) {
+      lineReader.initialize(splits[iSplit], context);
+      while (iLine < lines.length && lineReader.nextKeyValue()) {
+        lines[iLine++] = lineReader.getCurrentValue().toString();
+      }
+      lineReader.close();
+      iSplit++;
     }
-    lineReader.close();
-    
+
+    if (iLine < lines.length) {
+      // The input path contained less than the maximum required size
+      // Srhink the result array to eliminate any nulls at the end.
+      String[] resizedArray = new String[iLine];
+      System.arraycopy(lines, 0, resizedArray, 0, iLine);
+      lines = resizedArray;
+    }
+
     return lines;
   }
 

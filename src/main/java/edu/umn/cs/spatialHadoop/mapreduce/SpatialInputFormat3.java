@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.indexing.LocalIndex;
+import edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -46,6 +48,7 @@ import edu.umn.cs.spatialHadoop.operations.RangeFilter;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
 
 /**
+ * An input format that reads globally and locally indexed datasets.
  * @author Ahmed Eldawy
  *
  */
@@ -78,7 +81,7 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
         CombineFileSplit csplit = (CombineFileSplit) split;
         extension = FileUtil.getExtensionWithoutCompression(path = csplit.getPath(0));
       } else {
-        throw new RuntimeException("Cannot process plits of type "+split.getClass());
+        throw new RuntimeException("Cannot process splits of type "+split.getClass());
       }
       // If this extension is for a compression, skip it and take the previous
       // extension
@@ -86,17 +89,12 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
         // HDF File. Create HDFRecordReader
         return (RecordReader)new HDFRecordReader();
       }
-      if (extension.equals("rtree")) {
-        // File is locally indexed as RTree
-        return (RecordReader)new RTreeRecordReader3<V>();
-      }
-      // For backward compatibility, check if the file is RTree indexed from
-      // its signature
-      Configuration conf = context != null? context.getConfiguration() : new Configuration();
-      if (SpatialSite.isRTree(path.getFileSystem(conf), path)) {
-        return (RecordReader)new RTreeRecordReader3<V>();
+      Class<? extends LocalIndex> lindex = SpatialSite.getLocalIndex(extension);
+      if (lindex != null) {
+        return (RecordReader) new LocalIndexRecordReader<V>(lindex);
       }
       // Check if a custom record reader is configured with this extension
+      Configuration conf = context != null? context.getConfiguration() : new Configuration();
       Class<?> recordReaderClass = conf.getClass("SpatialInputFormat."
           + extension + ".recordreader", SpatialRecordReader3.class);
       try {
@@ -215,10 +213,15 @@ public class SpatialInputFormat3<K extends Rectangle, V extends Shape>
       // an R-tree signature, we never split a file read over HTTP
       if (fs instanceof HTTPFileSystem)
         return false;
-      // ... and never split a file less than 150MB to perform better with many small files
-      if (fs.getFileStatus(file).getLen() < 150 * 1024 * 1024)
-        return false;
-      return !SpatialSite.isRTree(fs, file);
+
+      // If it has a local index, do not split it
+      String fname = file.getName();
+      int lastDot = fname.lastIndexOf('.');
+      if (lastDot == -1)
+        return true; // No local index
+      String extension = fname.substring(lastDot + 1);
+      Class<? extends LocalIndex> lindexClass = SpatialSite.getLocalIndex(extension);
+      return lindexClass == null; // Splittable only if no associated local index
     } catch (IOException e) {
       LOG.warn("Error while determining whether a file is splittable", e);
       return false; // Safer to not split it

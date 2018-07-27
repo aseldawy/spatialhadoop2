@@ -23,6 +23,7 @@ import java.util.Vector;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -49,6 +50,8 @@ import edu.umn.cs.spatialHadoop.nasa.HDFPlot.HDFRasterizer;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "multihdfplot",
+description = "Plots NASA datasets in the spatiotemporal range provided by user")
 public class MultiHDFPlot {
   /**Logger*/
   private static final Log LOG = LogFactory.getLog(MultiHDFPlot.class);

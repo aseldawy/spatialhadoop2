@@ -10,6 +10,7 @@ package edu.umn.cs.spatialHadoop.nasa;
 
 import java.io.IOException;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,6 +34,8 @@ import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "hdfx",
+description = "Extracts data from a set of HDF files to text files")
 public class HDFToText {
   public static class HDFToTextMap extends
       Mapper<NASADataset, Iterable<? extends NASAShape>, NullWritable, NASAShape> {

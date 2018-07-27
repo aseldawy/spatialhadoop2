@@ -8,12 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.util;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
+import java.io.*;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
@@ -301,4 +296,65 @@ public final class FileUtil {
     return compressionCodecs.getCodec(file);
   }
 
+  /**
+   * Concatenates a set of files (in the same file system) into one file and
+   * deletes the source files afterwards.
+   * @param dest
+   * @param src
+   */
+  public static void concat(Configuration conf, FileSystem fs, Path dest, Path... src) throws IOException {
+    try {
+      // Try a possibly efficient implementation provided by the FileSystem
+			// First, move the source files to the same destination directory
+			for (int isrc = 0; isrc < src.length; isrc++) {
+				Path oldS = src[isrc];
+				if (!oldS.getParent().equals(dest.getParent())) {
+					Path newS;
+					do {
+            newS = new Path(dest.getParent(), String.format("data_%06d.tmp",
+                Math.round(Math.random()*1000000)));
+          } while (fs.exists(newS));
+					fs.rename(oldS, newS);
+					src[isrc] = newS;
+				}
+			}
+      fs.concat(dest, src);
+    } catch (UnsupportedOperationException e) {
+      Path tempPath = null;
+      // Unsupported by the file system, provide a less efficient naive implementation
+      OutputStream out;
+      if (!fs.exists(dest)) {
+        // Destination file does not exist. Create it
+        out = fs.create(dest);
+      } else {
+        // Destination file exists, try appending to it
+        try {
+          out = fs.append(dest);
+        } catch (IOException ee) {
+          // Append not supported, create a new file and write the existing destFile first
+          do {
+            tempPath = new Path(dest.getParent(), Integer.toString((int) (Math.random() * 1000000)));
+          } while (fs.exists(tempPath));
+          out = fs.create(tempPath);
+          InputStream in = fs.open(dest);
+          org.apache.hadoop.io.IOUtils.copyBytes(in, out, conf, false);
+          in.close();
+        }
+      }
+      for (Path s : src) {
+        if (!s.equals(dest)) {
+          InputStream in = fs.open(s);
+          org.apache.hadoop.io.IOUtils.copyBytes(in, out, conf, false);
+          in.close();
+        }
+        // Delete the concatenated (source) file
+        fs.delete(s, false);
+      }
+      out.close();
+      if (tempPath != null) {
+        fs.delete(dest, true);
+        fs.rename(tempPath, dest);
+      }
+    }
+  }
 }

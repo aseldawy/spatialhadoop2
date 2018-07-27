@@ -75,5 +75,4 @@
   <value>1</value>
   <description>Factor to be multiplied by adaptive sample ratio to increase quality</description>
 </property>
-
 </configuration>

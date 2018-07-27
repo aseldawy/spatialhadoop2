@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.mapreduce.LocalIndexRecordReader;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -38,7 +39,6 @@ import edu.umn.cs.spatialHadoop.core.ResultCollector;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -51,6 +51,8 @@ import edu.umn.cs.spatialHadoop.util.ResultCollectorSynchronizer;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "rangequery",
+description = "Finds all objects that ovelap a rectangular query range")
 public class RangeQuery {
   /**Logger for RangeQuery*/
   static final Log LOG = LogFactory.getLog(RangeQuery.class);
@@ -144,10 +146,10 @@ public class RangeQuery {
                 inputFormat.createRecordReader(fsplit, null);
             if (reader instanceof SpatialRecordReader3) {
               ((SpatialRecordReader3)reader).initialize(fsplit, params);
-            } else if (reader instanceof RTreeRecordReader3) {
-              ((RTreeRecordReader3)reader).initialize(fsplit, params);
             } else if (reader instanceof HDFRecordReader) {
-              ((HDFRecordReader)reader).initialize(fsplit, params);
+              ((HDFRecordReader) reader).initialize(fsplit, params);
+            } else if (reader instanceof LocalIndexRecordReader) {
+              ((LocalIndexRecordReader) reader).initialize(fsplit, params);
             } else {
               throw new RuntimeException("Unknown record reader");
             }

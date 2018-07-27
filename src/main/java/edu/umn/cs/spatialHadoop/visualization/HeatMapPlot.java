@@ -17,6 +17,7 @@ import java.io.IOException;
 
 import javax.imageio.ImageIO;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.Job;
@@ -32,6 +33,8 @@ import edu.umn.cs.spatialHadoop.visualization.FrequencyMap.GradientType;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "aggregate",
+description = "Plots a heat map to an image")
 public class HeatMapPlot {
 
   public static class HeatMapRasterizer extends Plotter {

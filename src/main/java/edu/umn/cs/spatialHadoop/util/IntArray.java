@@ -13,6 +13,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Iterator;
 
 import org.apache.hadoop.io.Writable;
@@ -35,7 +36,19 @@ public class IntArray implements Writable, Iterable<Integer> {
   public void add(int x) {
     append(x);
   }
-  
+
+  /**
+   * Inserts a value at a given position in the array.
+   * @param position the index in which the new value will be inserted
+   * @param value the value to insert into the array
+   */
+  public void insert(int position, int value) {
+    expand(1);
+    System.arraycopy(array, position, array, position+1, size() - position);
+    array[position] = value;
+    size++;
+  }
+
   public void append(int x) {
     expand(1);
     array[size++] = x;
@@ -60,7 +73,11 @@ public class IntArray implements Writable, Iterable<Integer> {
   public void append(IntArray another) {
     append(another.array, 0, another.size);
   }
-  
+
+  public void append(IntArray another, int offset, int count) {
+    append(another.array, offset, count);
+  }
+
   public void append(IntArray another, int delta) {
     append(another.array, 0, another.size, delta);
   }
@@ -184,12 +201,36 @@ public class IntArray implements Writable, Iterable<Integer> {
     Arrays.sort(array, 0, size);
   }
 
+  public void insertionSort(Comparator<Integer> c) {
+    for (int sortSize = 2; sortSize <= size; sortSize++) {
+      int pivot = array[sortSize-1];
+      int j = sortSize - 2;
+      while (j >= 0 && c.compare(array[j], pivot) > 0) {
+        array[j + 1] = array[j];
+        j--;
+      }
+      array[j+1] = pivot;
+    }
+  }
+
   public int get(int index) {
     return array[index];
   }
-  
+
+  /**
+   * Removes and returns the last element in the array
+   * @return
+   */
   public int pop() {
     return array[--size];
+  }
+
+  /**
+   * Returns the last element in the array without removing it.
+   * @return
+   */
+  public int peek() {
+    return array[size-1];
   }
 
   public boolean remove(int value) {
@@ -203,6 +244,13 @@ public class IntArray implements Writable, Iterable<Integer> {
     return false;
   }
 
+  public IntArray clone() {
+    IntArray newIntArray = new IntArray();
+    newIntArray.size = this.size;
+    newIntArray.array = this.array.clone();
+    return newIntArray;
+  }
+
   /**
    * Remove all elements in the array.
    */
@@ -213,6 +261,19 @@ public class IntArray implements Writable, Iterable<Integer> {
   @Override
   public Iterator<Integer> iterator() {
     return new IntIterator();
+  }
+
+  /**Shrinks the array to contain the given number of elements only*/
+  public void resize(int newSize) {
+    if (newSize > this.size)
+      throw new IllegalArgumentException("The new size cannot be greater than the current size");
+    this.size = newSize;
+  }
+
+  public void set(int index, int value) {
+    if (index >= size)
+      throw new ArrayIndexOutOfBoundsException(index);
+    array[index] = value;
   }
 
   class IntIterator implements Iterator<Integer> {

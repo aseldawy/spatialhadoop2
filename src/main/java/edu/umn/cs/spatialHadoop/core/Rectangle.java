@@ -79,6 +79,14 @@ public class Rectangle implements Shape, WritableComparable<Rectangle> {
     this.x2 = in.readDouble();
     this.y2 = in.readDouble();
   }
+
+  /**
+   * Computes the area of the rectangle
+   * @return
+   */
+  public double area() {
+    return (x2 - x1) * (y2 - y1);
+  }
   
   /**
    * Comparison is done by lexicographic ordering of attributes

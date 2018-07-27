@@ -41,7 +41,6 @@ import com.vividsolutions.jts.geom.GeometryCollection;
 import com.vividsolutions.jts.geom.GeometryFactory;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -75,6 +74,7 @@ class RectangleNN implements Comparable<RectangleNN>   {
 	}
 
 }
+
 class TOPK {
 	public TreeSet<RectangleNN> heap;
 	public int k;
@@ -171,7 +171,7 @@ public class SpatialAlgorithms {
               && ((s = S.get(jj)).getMBR().x1 <= r.getMBR().x2)) {
             // Check if r and s are overlapping but not the same object
             // for self join
-            if (r.isIntersected(s) && !r.equals(s)) {
+            if (r.isIntersected(s) && r != s) { // r != s condition is for self join
               if (output != null)
                 output.collect(r, s);
               count++;
@@ -187,7 +187,7 @@ public class SpatialAlgorithms {
 
           while ((ii < R.size())
               && ((r = R.get(ii)).getMBR().x1 <= s.getMBR().x2)) {
-            if (r.isIntersected(s) && !r.equals(s)) {
+            if (r.isIntersected(s) && r != s) { // r != s condition is for self join
               if (output != null)
                 output.collect(r, s);
               count++;
@@ -973,8 +973,6 @@ public class SpatialAlgorithms {
                       inputFormat.createRecordReader(fsplit, null);
               if (reader instanceof SpatialRecordReader3) {
                   ((SpatialRecordReader3)reader).initialize(fsplit, params);
-              } else if (reader instanceof RTreeRecordReader3) {
-                  ((RTreeRecordReader3)reader).initialize(fsplit, params);
               } else if (reader instanceof HDFRecordReader) {
                   ((HDFRecordReader)reader).initialize(fsplit, params);
               } else {

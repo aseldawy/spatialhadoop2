@@ -39,7 +39,9 @@ public final class TextSerializerHelper {
   
   /**64 bytes to append to a string if necessary*/
   final static byte[] ToAppend = new byte[64];
-  
+
+  final static byte[] NewLine;
+
   static {
     HexadecimalChars = new boolean[256];
     DecimalChars = new boolean[256];
@@ -55,6 +57,8 @@ public final class TextSerializerHelper {
     DecimalChars['-'] = true;
     
     Arrays.fill(ToAppend, (byte)' ');
+
+    NewLine = new byte[] {'\n'};
   }
   
   /**
@@ -172,19 +176,23 @@ public final class TextSerializerHelper {
    * @return
    */
   public static double consumeDouble(Text text, char separator) {
-    int i = 0;
-    byte[] bytes = text.getBytes();
-    // Skip until the separator or end of text
-    while (i < text.getLength()
-        && ((bytes[i] >= '0' && bytes[i] <= '9') || bytes[i] == 'e'
-            || bytes[i] == 'E' || bytes[i] == '-' || bytes[i] == '+' || bytes[i] == '.'))
-      i++;
-    double d = Double.parseDouble(new String(bytes, 0, i));
-    if (i < text.getLength() && bytes[i] == separator)
-      i++;
-    System.arraycopy(bytes, i, bytes, 0, text.getLength() - i);
-    text.set(bytes, 0, text.getLength() - i);
-    return d;
+    try {
+      int i = 0;
+      byte[] bytes = text.getBytes();
+      // Skip until the separator or end of text
+      while (i < text.getLength()
+          && ((bytes[i] >= '0' && bytes[i] <= '9') || bytes[i] == 'e'
+          || bytes[i] == 'E' || bytes[i] == '-' || bytes[i] == '+' || bytes[i] == '.'))
+        i++;
+      double d = Double.parseDouble(new String(bytes, 0, i));
+      if (i < text.getLength() && bytes[i] == separator)
+        i++;
+      System.arraycopy(bytes, i, bytes, 0, text.getLength() - i);
+      text.set(bytes, 0, text.getLength() - i);
+      return d;
+    } catch (NumberFormatException e) {
+      throw new RuntimeException("Error parsing '" + text +"'", e);
+    }
   }
   
   /**
@@ -391,7 +399,6 @@ public final class TextSerializerHelper {
         if (first) {
           first = false;
         } else {
-          first = true;
           text.append(Separators, FieldSeparator, 1);
         }
         byte[] k = entry.getKey().getBytes();
@@ -634,5 +641,10 @@ public final class TextSerializerHelper {
       hex[2*i+1] = HexLookupTable[binary[i] & 0xF];
     }
     return new String(hex);
+  }
+
+
+  public static void appendNewLine(Text line) {
+    line.append(NewLine, 0, NewLine.length);
   }
 }

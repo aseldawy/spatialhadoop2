@@ -94,18 +94,12 @@ public class GridInfo extends Rectangle {
   }
   
   public void calculateCellDimensions(int numCells) {
-    int gridCols = 1;
-    int gridRows = 1;
-    while (gridRows * gridCols < numCells) {
-      // (  cellWidth          >    cellHeight        )
-      if ((x2 - x1) / gridCols > (y2 - y1) / gridRows) {
-        gridCols++;
-      } else {
-        gridRows++;
-      }
-    }
-    columns = gridCols;
-    rows = gridRows;
+    // Try to create equi-sized square tiles
+    double areaPerTile = this.getWidth() * this.getHeight() / numCells;
+    double tileWidth, tileHeight;
+    tileWidth = tileHeight = Math.sqrt(areaPerTile);
+    columns = (int) Math.ceil(this.getWidth() / tileWidth);
+    rows = (int) Math.ceil(this.getHeight() / tileHeight);
   }
 
   @Override

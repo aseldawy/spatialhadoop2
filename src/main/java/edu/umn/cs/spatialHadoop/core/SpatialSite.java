@@ -14,15 +14,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import edu.umn.cs.spatialHadoop.indexing.*;
+import edu.umn.cs.spatialHadoop.operations.FileMBR;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -44,13 +41,11 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Job;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
-import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
-import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.indexing.RTree;
-import edu.umn.cs.spatialHadoop.mapred.RandomShapeGenerator.DistributionType;
+import edu.umn.cs.spatialHadoop.mapreduce.RandomShapeGenerator.DistributionType;
 import edu.umn.cs.spatialHadoop.mapred.ShapeIterRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
 import edu.umn.cs.spatialHadoop.util.FileUtil;
+import org.yaml.snakeyaml.Yaml;
 
 /**
  * Combines all the configuration needed for SpatialHadoop.
@@ -70,6 +65,16 @@ public class SpatialSite {
     public boolean accept(Path p){
       String name = p.getName(); 
       return !name.startsWith("_") && !name.startsWith("."); 
+    }
+  };
+
+  /**
+   * A filter that select master files (Global index files)
+   */
+  public static final PathFilter MasterFileFilter = new PathFilter(){
+    public boolean accept(Path p){
+      String name = p.getName();
+      return name.startsWith("_master");
     }
   };
 
@@ -124,12 +129,78 @@ public class SpatialSite {
       "spatialHadoop.mapred.MaxBytesPerRead";
 
   public static byte[] RTreeFileMarkerB;
-  
+
+  public static final Map<String, Class<? extends Shape>> CommonShapes =
+      new HashMap<String, Class<? extends Shape>>();
+  public static final Map<String, Class<? extends Partitioner>> CommonGlobalIndexes =
+      new HashMap<String, Class<? extends Partitioner>>();
+  public static final Map<String, Class<? extends LocalIndex>> CommonLocalIndexes =
+      new HashMap<String, Class<? extends LocalIndex>>();
+
+  public static Collection<String> getGlobalIndexes() {
+    return CommonGlobalIndexes.keySet();
+
+  }
+
+  public static class SpatialIndex {
+    public Class<? extends Partitioner> gindex;
+    public Class<? extends LocalIndex> lindex;
+    public boolean disjoint;
+  }
+  public static final Map<String, SpatialIndex> CommonSpatialIndex =
+      new HashMap<String, SpatialIndex>();
+
   static {
     // Load configuration from files
     Configuration.addDefaultResource("spatial-default.xml");
     Configuration.addDefaultResource("spatial-site.xml");
-    
+
+    // Load YAML file
+    Yaml yaml = new Yaml();
+    Map<String, Object> conf = yaml.load(SpatialSite.class.getResourceAsStream("/spatial-default.yaml"));
+    // Load common shapes
+    Map<String, String> shapes = (Map<String, String>) conf.get("Shapes");
+    for (Map.Entry<String, String> shape : shapes.entrySet()) {
+      try {
+        String shortName = shape.getKey();
+        Class<? extends Shape> shapeClass = Class.forName(shape.getValue()).asSubclass(Shape.class);
+        CommonShapes.put(shortName, shapeClass);
+      } catch (ClassNotFoundException e) {
+        e.printStackTrace();
+      }
+    }
+    // Load global index
+    for (String gindex : (List<String>) conf.get("GlobalIndexes")) {
+      try {
+        Class<? extends Partitioner> indexerClass = Class.forName(gindex).asSubclass(Partitioner.class);
+        Partitioner.GlobalIndexerMetadata metadata = indexerClass.getAnnotation(Partitioner.GlobalIndexerMetadata.class);
+        CommonGlobalIndexes.put(metadata.extension(), indexerClass);
+      } catch (ClassNotFoundException e) {
+        e.printStackTrace();
+      }
+    }
+    // Load local index
+    for (String lindex : (List<String>) conf.get("LocalIndexes")) {
+      try {
+        Class<? extends LocalIndex> indexerClass = Class.forName(lindex).asSubclass(LocalIndex.class);
+        LocalIndex.LocalIndexMetadata metadata = indexerClass.getAnnotation(LocalIndex.LocalIndexMetadata.class);
+        CommonLocalIndexes.put(metadata.extension(), indexerClass);
+      } catch (ClassNotFoundException e) {
+        e.printStackTrace();
+      }
+    }
+    // Load spatial indexes
+    List<Map<String, Object>> sindexes = (List<Map<String, Object>>) conf.get("SpatialIndexes");
+    for (Map<String, Object> sindex : sindexes) {
+      SpatialIndex index = new SpatialIndex();
+      if (sindex.containsKey("gindex"))
+        index.gindex = getGlobalIndex((String) sindex.get("gindex"));
+      if (sindex.containsKey("lindex"))
+        index.lindex = getLocalIndex((String) sindex.get("lindex"));
+      if (sindex.containsKey("disjoint"))
+        index.disjoint = (Boolean) sindex.get("disjoint");
+      CommonSpatialIndex.put((String) sindex.get("short-name"), index);
+    }
     ByteArrayOutputStream bout = new ByteArrayOutputStream();
     DataOutputStream dout = new DataOutputStream(bout);
     try {
@@ -141,7 +212,50 @@ public class SpatialSite {
       e.printStackTrace();
     }
   }
-  
+
+  public static Class<? extends Partitioner> getGlobalIndex(String name) {
+    if (CommonGlobalIndexes.containsKey(name))
+      return CommonGlobalIndexes.get(name);
+    try {
+      return Class.forName(name).asSubclass(Partitioner.class);
+    } catch (ClassNotFoundException e) {
+      return null;
+    }
+  }
+
+  public static Class<? extends LocalIndex> getLocalIndex(String name) {
+    if (CommonLocalIndexes.containsKey(name))
+      return CommonLocalIndexes.get(name);
+    try {
+      return Class.forName(name).asSubclass(LocalIndex.class);
+    } catch (ClassNotFoundException e) {
+      return null;
+    }
+  }
+
+  public static Class<? extends Shape> getShape(String name) {
+    if (CommonShapes.containsKey(name))
+      return CommonShapes.get(name);
+    try {
+      return Class.forName(name).asSubclass(Shape.class);
+    } catch (ClassNotFoundException e) {
+      return null;
+    }
+  }
+
+  /**
+   * Retrieve the local index for a given file given its extension
+   * @param path
+   * @return
+   */
+  public static Class<? extends LocalIndex> getLocalIndex(Path path) {
+    String name = path.getName();
+    int lastDot = name.lastIndexOf('.');
+    if (lastDot == -1)
+      return null;
+    String extension = name.substring(lastDot+1);
+    return getLocalIndex(extension);
+  }
 
   /**
    * It sets the given class in the configuration and, in addition, it sets
@@ -309,10 +423,6 @@ public class SpatialSite {
         }
         GlobalIndex<Partition> globalIndex = new GlobalIndex<Partition>();
         globalIndex.bulkLoad(partitions.toArray(new Partition[partitions.size()]));
-        String extension = masterFile.getPath().getName();
-        extension = extension.substring(extension.lastIndexOf('.') + 1);
-        globalIndex.setCompact(GridRecordWriter.PackedIndexes.contains(extension));
-        globalIndex.setReplicated(GridRecordWriter.ReplicatedIndexes.contains(extension));
         return globalIndex;
       } else if (nasaFiles > allFiles.length / 2) {
         // A folder that contains HDF files
@@ -548,6 +658,32 @@ public class SpatialSite {
   }
 
   /**
+   * Retrieves or computes the MBR of the given path or paths. This function works in
+   * the following order.
+   * <ol>
+   *   <li>If the configuration contains a key "mbr", it is retrieved and returned.</li>
+   *   <li>If the given path is globally indexed, the MBR is retrieved from the global index.</li>
+   *   <li>A {@link FileMBR} job runs to compute the MBR.</li>
+   * </ol>
+   * In the cases of 2 and 3, the computed MBR is also set in the configuration
+   * using the key "mbr" for future use.
+   * @param conf
+   * @param paths
+   * @return
+   */
+  public static Rectangle getMBR(Configuration conf, Path ... paths) throws IOException, InterruptedException {
+    // Set input file MBR if not already set
+    Rectangle fileMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
+    if (fileMBR == null) {
+      fileMBR = new Partition();
+      for (Path path : paths)
+        fileMBR.expand(FileMBR.fileMBR(path, new OperationsParams(conf)));
+      OperationsParams.setShape(conf, "mbr", fileMBR);
+    }
+    return fileMBR;
+  }
+
+  /**
    * Finds the partitioning info used in the given global index. If each cell
    * is represented as one partition, the MBRs of these partitions are returned.
    * If one cell is stored in multiple partitions (i.e., multiple files),
@@ -571,15 +707,6 @@ public class SpatialSite {
       }
     }
     return cells.values().toArray(new CellInfo[cells.size()]);
-  }
-
-  public static <S extends Shape> RTree<S> loadRTree(FileSystem fs, Path file, S shape) throws IOException {
-    RTree<S> rtree = new RTree<S>();
-    rtree.setStockObject(shape);
-    FSDataInputStream input = fs.open(file);
-    input.skip(8); // Skip the 8 bytes that contains the signature
-    rtree.readFields(input);
-    return rtree;
   }
 
 	public static CellInfo getCellInfo(GlobalIndex<Partition> gIndex, int cellID) {

@@ -26,7 +26,7 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
+import edu.umn.cs.spatialHadoop.mapreduce.LocalIndexRecordReader;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -134,13 +134,13 @@ public class SingleLevelPlot {
             RecordReader<Rectangle, Iterable<Shape>> reader =
                 inputFormat.createRecordReader(fsplits[i], null);
             if (reader instanceof SpatialRecordReader3) {
-              ((SpatialRecordReader3)reader).initialize(fsplits[i], params);
-            } else if (reader instanceof RTreeRecordReader3) {
-              ((RTreeRecordReader3)reader).initialize(fsplits[i], params);
+            	((SpatialRecordReader3)reader).initialize(fsplits[i], params);
+            } else if (reader instanceof LocalIndexRecordReader) {
+            	((LocalIndexRecordReader)reader).initialize(fsplits[i], params);
             } else if (reader instanceof HDFRecordReader) {
-              ((HDFRecordReader)reader).initialize(fsplits[i], params);
+            	((HDFRecordReader)reader).initialize(fsplits[i], params);
             } else {
-              throw new RuntimeException("Unknown record reader");
+            	throw new RuntimeException("Unknown record reader");
             }
 
             while (reader.nextKeyValue()) {

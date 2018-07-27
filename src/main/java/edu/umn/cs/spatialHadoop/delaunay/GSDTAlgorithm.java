@@ -1191,13 +1191,11 @@ public class GSDTAlgorithm {
   }
 
   /**
-   * @deprecated use inCircle(int, int, int, int) instead
    * @param s1
    * @param s2
    * @param s3
    * @return
    */
-  @Deprecated
   Point calculateCircumCircleCenter(int s1, int s2, int s3) {
     // Calculate the perpendicular bisector of the first two points
     double x1 = (xs[s1] + xs[s2]) / 2;

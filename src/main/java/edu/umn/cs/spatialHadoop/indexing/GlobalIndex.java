@@ -96,7 +96,7 @@ public class GlobalIndex<S extends Shape> implements Writable, Iterable<S> {
           final ResultCollector2<S1, S2> output) {
     return SpatialAlgorithms.SpatialJoin_planeSweep(s1.shapes, s2.shapes, output, null);
   }
-  
+
   /**
    * A simple iterator over all shapes in this index
    * @author eldawy

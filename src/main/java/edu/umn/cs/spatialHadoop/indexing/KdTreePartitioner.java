@@ -36,6 +36,8 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  * @author Ahmed Eldawy
  *
  */
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "kdtree",
+requireSample = true, requireMBR = true)
 public class KdTreePartitioner extends Partitioner {
   /**MBR of the input file*/
   private final Rectangle mbr = new Rectangle();
@@ -52,10 +54,9 @@ public class KdTreePartitioner extends Partitioner {
    */
   public KdTreePartitioner() {
   }
-  
-  @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
 
+  @Override
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
     // Enumerate all partition IDs to be able to count leaf nodes in any split
     // TODO do the same functionality without enumerating all IDs
     int numSplits = (int) Math.ceil((double)points.length / capacity);
@@ -323,35 +324,5 @@ public class KdTreePartitioner extends Partitioner {
       //id >>>= 1; // id will always be zero
     }
     return numOfSignificantBits;
-  }
-  
-  public static void main(String[] args) throws IOException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    
-    Path inPath = params.getInputPath();
-    long length = inPath.getFileSystem(params).getFileStatus(inPath).getLen();
-    ShapeIterRecordReader reader = new ShapeIterRecordReader(params,
-        new FileSplit(inPath, 0, length, new String[0]));
-    Rectangle key = reader.createKey();
-    ShapeIterator shapes = reader.createValue();
-    final Vector<Point> points = new Vector<Point>();
-    while (reader.next(key, shapes)) {
-      for (Shape s : shapes) {
-        points.add(s.getMBR().getCenterPoint());
-      }
-    }
-    Rectangle inMBR = (Rectangle)OperationsParams.getShape(params, "mbr");
-    
-    KdTreePartitioner kdp = new KdTreePartitioner();
-    kdp.createFromPoints(inMBR, points.toArray(new Point[points.size()]), 7);
-    System.out.println("x,y,partition");
-    int[] sizes = new int[kdp.getPartitionCount()*2];
-    for (Point p : points) {
-      int partition = kdp.overlapPartition(p);
-      //System.out.println(p.x+","+p.y+","+partition);
-      sizes[partition]++;
-    }
-    for (int i = 0; i < sizes.length; i++)
-      System.out.print(sizes[i]+",");
   }
 }

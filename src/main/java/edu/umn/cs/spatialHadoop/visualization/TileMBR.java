@@ -16,7 +16,6 @@ import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -87,15 +86,13 @@ public class TileMBR {
 	    for (InputSplit split : splits) {
 	        FileSplit fsplit = (FileSplit) split;
 	        RecordReader<Rectangle, Iterable<Shape>> reader = inputFormat.createRecordReader(fsplit, null);
-	        if (reader instanceof SpatialRecordReader3) {
-	          ((SpatialRecordReader3) reader).initialize(fsplit, params);
-	        } else if (reader instanceof RTreeRecordReader3) {
-	          ((RTreeRecordReader3) reader).initialize(fsplit, params);
-	        } else if (reader instanceof HDFRecordReader) {
-	          ((HDFRecordReader) reader).initialize(fsplit, params);
-	        } else {
-	          throw new RuntimeException("Unknown record reader");
-	        }
+            if (reader instanceof SpatialRecordReader3) {
+                ((SpatialRecordReader3)reader).initialize(fsplit, params);
+              } else if (reader instanceof HDFRecordReader) {
+                ((HDFRecordReader)reader).initialize(fsplit, params);
+              } else {
+                throw new RuntimeException("Unknown record reader");
+              }
 	        while (reader.nextKeyValue()) {
 	            Rectangle partition = reader.getCurrentKey();
 	            if (!partition.isValid())

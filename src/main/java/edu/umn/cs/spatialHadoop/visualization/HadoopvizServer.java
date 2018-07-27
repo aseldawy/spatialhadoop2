@@ -24,6 +24,7 @@ import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import edu.umn.cs.spatialHadoop.operations.OperationMetadata;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -46,6 +47,8 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
  * @author Chrisopher Jonathan, Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "hadoopviz",
+description = "Run Hadoopviz Server")
 public class HadoopvizServer extends AbstractHandler {
 
   private static final Log LOG = LogFactory.getLog(HadoopvizServer.class);

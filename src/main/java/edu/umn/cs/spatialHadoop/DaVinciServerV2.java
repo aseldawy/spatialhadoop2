@@ -119,10 +119,7 @@ public class DaVinciServerV2 extends AbstractHandler {
 						// TODO read the data file and create the image correctly
 						
 						double startTime = System.nanoTime();
-					//	String infilename =datafile.getName();
-					//	Rectange mbr=
-						//String datafile = "_master.rstar";
-						
+					
 						
 						imagePlot = new ImagePlot();
 						DataOutputStream output = new DataOutputStream(response.getOutputStream());
@@ -134,7 +131,7 @@ public class DaVinciServerV2 extends AbstractHandler {
 						response.setStatus(HttpServletResponse.SC_OK);
 						
 						double finishTime = System.nanoTime();
-						LOG.info("****DATFILE : "+filename+" image generation and load time is: "+(finishTime-startTime));
+						LOG.info(String.format("****DATFILE : %s image generation and load time is %f seconds", filename, (finishTime-startTime)*1E-9));
 						return;
 					} else {
 						LOG.info("master.rstar not found");

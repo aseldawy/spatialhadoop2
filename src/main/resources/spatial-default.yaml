@@ -1,0 +1,70 @@
+# Default configuration for SpatialHadoop
+
+# Short names for common shapes
+Shapes:
+  point: edu.umn.cs.spatialHadoop.core.Point
+  rect: edu.umn.cs.spatialHadoop.core.Rectangle
+  wkt: edu.umn.cs.spatialHadoop.core.OGCJTSShape
+  tiger: edu.umn.cs.spatialHadoop.TigerShape
+  osm: edu.umn.cs.spatialHadoop.osm.OSMPolygon
+  osmpoly: edu.umn.cs.spatialHadoop.osm.OSMPolygon
+  osmpoint: edu.umn.cs.spatialHadoop.osm.OSMPoint
+  ogc: edu.umn.cs.spatialHadoop.core.OGCJTSShape
+  nasapoint: edu.umn.cs.spatialHadoop.nasa.NASAPoint
+  nasarect: edu.umn.cs.spatialHadoop.nasa.NASARectangle
+  csv: edu.umn.cs.spatialHadoop.core.CSVOGC
+
+# Short names for common global indexes
+GlobalIndexes:
+  - edu.umn.cs.spatialHadoop.indexing.GridPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.STRPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.RTreeGBPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.AbstractRTreeGBPartitioner$RStarTreeGBPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.AbstractRTreeGBPartitioner$RRStarTreeGBPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.AbstractRTreeBBPartitioner$RTreeGuttmanBBPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.AbstractRTreeBBPartitioner$RStarTreeBBPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.AbstractRTreeBBPartitioner$RRStarTreeBBPartitioner
+  - edu.umn.cs.spatialHadoop.indexing.KdTreePartitioner
+  - edu.umn.cs.spatialHadoop.indexing.ZCurvePartitioner
+  - edu.umn.cs.spatialHadoop.indexing.HilbertCurvePartitioner
+  - edu.umn.cs.spatialHadoop.indexing.QuadTreePartitioner
+
+# Short names for common local indexes
+LocalIndexes:
+  - edu.umn.cs.spatialHadoop.indexing.RRStarLocalIndex
+
+# Short name for spatial indexes that combine global, local, and disjoint
+SpatialIndexes:
+  - short-name: grid
+    gindex: grid
+    disjoint: true
+
+  - short-name: str
+    gindex: str
+
+  - short-name: str+
+    gindex: str
+    disjoint: true
+
+  - short-name: rtree
+    gindex: rstar
+    lindex: rrstar
+
+  - short-name: r+tree
+    gindex: rstar
+    lindex: rrstar
+    disjoint: true
+
+  - short-name: quadtree
+    gindex: quadtree
+    disjoint: true
+
+  - short-name: kdtree
+    gindex: kdtree
+    disjoint: true
+
+  - short-name: zcurve
+    gindex: zcurve
+
+  - short-name: hilbert
+    gindex: hilbert

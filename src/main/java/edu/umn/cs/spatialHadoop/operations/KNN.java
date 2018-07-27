@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import edu.umn.cs.spatialHadoop.mapreduce.LocalIndexRecordReader;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -54,12 +55,10 @@ import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GlobalIndex;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
-import edu.umn.cs.spatialHadoop.indexing.RTree;
 import edu.umn.cs.spatialHadoop.io.TextSerializable;
 import edu.umn.cs.spatialHadoop.io.TextSerializerHelper;
 import edu.umn.cs.spatialHadoop.mapred.BlockFilter;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat3;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -69,6 +68,8 @@ import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "knn",
+description = "Finds the k nearest neighbors in a file to a point")
 public class KNN {
   /**Logger for KNN*/
   private static final Log LOG = LogFactory.getLog(KNN.class);
@@ -242,29 +243,11 @@ public class KNN {
     protected void map(Rectangle key, Iterable<Shape> shapes, final Context context)
         throws IOException, InterruptedException {
       final NullWritable dummy = NullWritable.get();
-      if (shapes instanceof RTree) {
-        ((RTree<S>)shapes).knn(queryPoint.x, queryPoint.y, k, new ResultCollector2<S, Double>() {
-          @Override
-          public void collect(S shape, Double distance) {
-            try {
-              outputValue.distance = distance;
-              outputValue.text.clear();
-              shape.toText(outputValue.text);
-              context.write(dummy, outputValue);
-            } catch (IOException e) {
-              e.printStackTrace();
-            } catch (InterruptedException e) {
-              e.printStackTrace();
-            }
-          }
-        });
-      } else {
-        for (Shape shape : shapes) {
-          outputValue.distance = shape.distanceTo(queryPoint.x, queryPoint.y);
-          outputValue.text.clear();
-          shape.toText(outputValue.text);
-          context.write(dummy, outputValue);
-        }
+      for (Shape shape : shapes) {
+        outputValue.distance = shape.distanceTo(queryPoint.x, queryPoint.y);
+        outputValue.text.clear();
+        shape.toText(outputValue.text);
+        context.write(dummy, outputValue);
       }
     }
   }
@@ -315,11 +298,9 @@ public class KNN {
   
   /**
    * A MapReduce version of KNN query.
-   * @param fs
    * @param inputPath
-   * @param queryPoint
-   * @param shape
-   * @param output
+   * @param userOutputPath
+   * @param params
    * @return
    * @throws IOException
    * @throws InterruptedException 
@@ -515,8 +496,8 @@ public class KNN {
             inputFormat.createRecordReader(fsplit, null);
         if (reader instanceof SpatialRecordReader3) {
           ((SpatialRecordReader3)reader).initialize(fsplit, params);
-        } else if (reader instanceof RTreeRecordReader3) {
-          ((RTreeRecordReader3)reader).initialize(fsplit, params);
+        } else if (reader instanceof LocalIndexRecordReader) {
+          ((LocalIndexRecordReader)reader).initialize(fsplit, params);
         } else if (reader instanceof HDFRecordReader) {
           ((HDFRecordReader)reader).initialize(fsplit, params);
         } else {
@@ -548,8 +529,6 @@ public class KNN {
             inputFormat.createRecordReader(split, null);
         if (reader instanceof SpatialRecordReader3) {
           ((SpatialRecordReader3)reader).initialize(split, params);
-        } else if (reader instanceof RTreeRecordReader3) {
-          ((RTreeRecordReader3)reader).initialize(split, params);
         } else if (reader instanceof HDFRecordReader) {
           ((HDFRecordReader)reader).initialize(split, params);
         } else {

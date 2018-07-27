@@ -32,6 +32,8 @@ import edu.umn.cs.spatialHadoop.mapred.SpatialRecordReader.ShapeIterator;
  * @author Ahmed Eldawy
  *
  */
+@Partitioner.GlobalIndexerMetadata(disjoint = false, extension = "hilbert",
+  requireSample = true, requireMBR = true)
 public class HilbertCurvePartitioner extends Partitioner {
   /**Splits along the Hilbert curve*/
   protected int[] splits;
@@ -40,12 +42,9 @@ public class HilbertCurvePartitioner extends Partitioner {
   protected final Rectangle mbr = new Rectangle();
 
   protected static final int Resolution = Short.MAX_VALUE;
-  
-  public HilbertCurvePartitioner() {
-  }
-  
+
   @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) {
+  public void construct(Rectangle mbr, Point[] points, int capacity) {
     this.mbr.set(mbr);
     int[] hValues = new int[points.length];
     for (int i = 0; i < points.length; i++)
@@ -158,31 +157,5 @@ public class HilbertCurvePartitioner extends Partitioner {
   @Override
   public int getPartitionCount() {
     return splits.length;
-  }
-
-  public static void main(String[] args) throws IOException {
-    OperationsParams params = new OperationsParams(new GenericOptionsParser(args));
-    
-    Path inPath = params.getInputPath();
-    long length = inPath.getFileSystem(params).getFileStatus(inPath).getLen();
-    ShapeIterRecordReader reader = new ShapeIterRecordReader(params,
-        new FileSplit(inPath, 0, length, new String[0]));
-    Rectangle key = reader.createKey();
-    ShapeIterator shapes = reader.createValue();
-    final Vector<Point> points = new Vector<Point>();
-    while (reader.next(key, shapes)) {
-      for (Shape s : shapes) {
-        points.add(s.getMBR().getCenterPoint());
-      }
-    }
-    Rectangle inMBR = (Rectangle)OperationsParams.getShape(params, "mbr");
-    HilbertCurvePartitioner hcp = new HilbertCurvePartitioner();
-    hcp.createFromPoints(inMBR, points.toArray(new Point[points.size()]), 10);
-    
-    System.out.println("x,y,partition");
-    for (Point p : points) {
-      int partition = hcp.overlapPartition(p);
-      System.out.println(p.x+","+p.y+","+partition);
-    }
   }
 }

@@ -57,7 +57,6 @@ import edu.umn.cs.spatialHadoop.mapred.ShapeLineInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.ShapeRecordReader;
 import edu.umn.cs.spatialHadoop.mapred.SpatialInputFormat;
 import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -69,6 +68,8 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "mbr",
+description = "Finds the minimal bounding rectangle of an input file")
 public class FileMBR {
   /**Logger for FileMBR*/
   private static final Log LOG = LogFactory.getLog(FileMBR.class);
@@ -230,8 +231,6 @@ public class FileMBR {
                 inputFormat.createRecordReader(fsplit, null);
             if (reader instanceof SpatialRecordReader3) {
               ((SpatialRecordReader3)reader).initialize(fsplit, params);
-            } else if (reader instanceof RTreeRecordReader3) {
-              ((RTreeRecordReader3)reader).initialize(fsplit, params);
             } else if (reader instanceof HDFRecordReader) {
               ((HDFRecordReader)reader).initialize(fsplit, params);
             } else {
@@ -319,7 +318,7 @@ public class FileMBR {
   /**
    * Computes the MBR of the input file using an aggregate MapReduce job.
    * 
-   * @param inFile - Path to input file
+   * @param inFiles - An array of paths to input files
    * @param params - Additional operation parameters
    * @return
    * @throws IOException
@@ -398,7 +397,7 @@ public class FileMBR {
 
   /**
    * Returns the MBR of a file given that it is globally indexed.
-   * @param file
+   * @param files
    * @return
    * @throws IOException 
    */
@@ -466,15 +465,15 @@ public class FileMBR {
       printUsage();
       return;
     }
-    long t1 = System.currentTimeMillis();
+    long t1 = System.nanoTime();
     Rectangle mbr = fileMBR(inputFiles, params);
-    long t2 = System.currentTimeMillis();
+    long t2 = System.nanoTime();
     if (mbr == null) {
       LOG.error("Error computing the MBR");
       System.exit(1);
     }
       
-    System.out.println("Total processing time: "+(t2-t1)+" millis");
+    System.out.printf("Total processing time %f seconds\n",(t2-t1)*1E-9);
     System.out.println("MBR of records in file '"+inputFiles+"' is "+mbr);
   }
 

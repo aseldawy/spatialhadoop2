@@ -67,6 +67,24 @@ public class BitArray implements Writable {
       entries[entry] &= ~(1L << offset);
     }
   }
+
+  /**
+   * Resize the array to have at least the given new size without losing the
+   * current data
+   * @param newSize
+   */
+  public void resize(long newSize) {
+    if (newSize > size) {
+      // Resize needed
+      int newArraySize = (int) ((newSize + BitsPerEntry - 1) / BitsPerEntry);
+      if (newArraySize > entries.length) {
+        long[] newEntries = new long[newArraySize];
+        System.arraycopy(entries, 0, newEntries, 0, entries.length);
+        entries = newEntries;
+      }
+      size = newSize;
+    }
+  }
   
   /**
    * Returns the boolean at position <code>i</code>
@@ -79,29 +97,50 @@ public class BitArray implements Writable {
     return (entries[entry] & (1L << offset)) != 0;
   }
 
+  /**
+   * Count number of set bits in the bit array.
+   * Code adapted from
+   * https://codingforspeed.com/a-faster-approach-to-count-set-bits-in-a-32-bit-integer/
+   * @return
+   */
+  public long countOnes() {
+    long totalCount = 0;
+    for (long i : entries) {
+      i = i - ((i >>> 1) & 0x5555555555555555L);
+      i = (i & 0x3333333333333333L) + ((i >>> 2) & 0x3333333333333333L);
+      i = (i + (i >>> 4)) & 0x0f0f0f0f0f0f0f0fL;
+      i = i + (i >>> 8);
+      i = i + (i >>> 16);
+      i = i + (i >>> 32);
+      totalCount += i & 0x7f;
+    }
+    return totalCount;
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
-    out.writeInt(entries.length);
-    ByteBuffer bbuffer = ByteBuffer.allocate(entries.length * BitsPerEntry / 8);
-    for (long entry : entries)
-      bbuffer.putLong(entry);
-    if (bbuffer.remaining() > 0)
-      throw new RuntimeException("Error calculating the size of the buffer");
+    out.writeLong(size);
+    int numEntriesToWrite = (int) ((size + BitsPerEntry - 1) / BitsPerEntry);
+    ByteBuffer bbuffer = ByteBuffer.allocate(numEntriesToWrite * 8);
+    for (int i = 0; i < numEntriesToWrite; i++)
+      bbuffer.putLong(entries[i]);
+    // We should fill up the bbuffer
+    assert bbuffer.remaining() == 0;
     out.write(bbuffer.array(), bbuffer.arrayOffset(), bbuffer.position() - bbuffer.arrayOffset());
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    int count = in.readInt();
-    if (entries == null || entries.length != count)
-      entries = new long[count];
-    byte[] buffer = new byte[entries.length * BitsPerEntry / 8];
+    size = in.readLong();
+    int numEntriesToRead = (int) ((size + BitsPerEntry - 1) / BitsPerEntry);
+    if (entries == null || entries.length < numEntriesToRead)
+      entries = new long[numEntriesToRead];
+    byte[] buffer = new byte[numEntriesToRead * 8];
     in.readFully(buffer);
     ByteBuffer bbuffer = ByteBuffer.wrap(buffer);
-    for (int i = 0; i < entries.length; i++)
+    for (int i = 0; i < numEntriesToRead; i++)
       entries[i] = bbuffer.getLong();
-    if (bbuffer.hasRemaining())
-      throw new RuntimeException("Did not consume all entries");
+    assert !bbuffer.hasRemaining();
   }
 
   public long size() {

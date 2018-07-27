@@ -38,6 +38,8 @@ import edu.umn.cs.spatialHadoop.mapred.TextOutputFormat;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "shuffle",
+description = "Randomly shuffles an input file using MapReduce")
 public class Shuffle {
 
   private static final String NumOfPartitions =

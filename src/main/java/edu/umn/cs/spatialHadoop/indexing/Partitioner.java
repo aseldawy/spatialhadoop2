@@ -9,15 +9,23 @@
 package edu.umn.cs.spatialHadoop.indexing;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.lang.IllegalArgumentException;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
+import edu.umn.cs.spatialHadoop.io.Text2;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.util.LineReader;
 import org.mortbay.log.Log;
 
 import edu.umn.cs.spatialHadoop.core.CellInfo;
@@ -33,19 +41,40 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  */
 public abstract class Partitioner implements Writable {
   /**Configuration line for partitioner class*/
-  private static final String PartitionerClass = "Partitioner.Class";
-  private static final String PartitionerValue = "Partitioner.Value";
+  static final String PartitionerClass = "Partitioner.Class";
+  static final String PartitionerValue = "Partitioner.Value";
+  public static final String PartitionerDisjoint = "disjoint";
+
+  @Target(ElementType.TYPE)
+  @Retention(RetentionPolicy.RUNTIME)
+  public @interface GlobalIndexerMetadata {
+    /**Whether this global indexer supports disjoint partitions or not*/
+    boolean disjoint();
+
+    /**The extension used with the global index*/
+    String extension();
+
+    /**Whether the MBR is required or not*/
+    boolean requireMBR() default false;
+
+    /**Whether a sample is required or not*/
+    boolean requireSample() default false;
+  }
+
+  /**Initializes the partitioners from the cluster configuration*/
+  public void setup(Configuration conf) {}
 
   /**
-   * Populate this partitioner for a set of points and number of partitions
-   * @param mbr - the minimal bounding rectangle of the input space
-   * @param points - the points to be partitioned
-   * @param capacity - maximum number of points per partition
-   * @throws IllegalArgumentException if points are empty 
+   * Construct the partitioner from the input MBR and/or sample. Notice that
+   * one or both of these could be {@code null} if they're not needed. The
+   * requirement of one or both of the mbr and sample parameters can be configured
+   * through the {@link GlobalIndexerMetadata}
+   * @param mbr the minimum bounding rectangle of the input
+   * @param points a sample of points from the input
+   * @param capacity the maximum number of records per partition
    */
-  public abstract void createFromPoints(Rectangle mbr, Point[] points,
-      int capacity) throws IllegalArgumentException;
-  
+  public abstract void construct(Rectangle mbr, Point[] points, int capacity);
+
   /**
    * Overlap a shape with partitions and calls a matcher for each overlapping
    * partition.
@@ -143,5 +172,29 @@ public abstract class Partitioner implements Writable {
       Log.warn("Error retrieving partitioner value", e);
       return null;
     }
+  }
+
+  /**
+   * Create a WKT file form an existing master file to use with GIS software.
+   * @param fs
+   * @param masterPath
+   */
+  public static void generateMasterWKT(FileSystem fs, Path masterPath) throws IOException {
+    // Write the WKT-formatted master file
+    String name = masterPath.getName();
+    int lastDot = name.lastIndexOf('.');
+    String globalIndexExtension = name.substring(lastDot + 1);
+    Path wktPath = new Path(masterPath.getParent(), "_"+globalIndexExtension+".wkt");
+    PrintStream wktOut = new PrintStream(fs.create(wktPath));
+    wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
+    Text tempLine = new Text2();
+    Partition tempPartition = new Partition();
+    LineReader in = new LineReader(fs.open(masterPath));
+    while (in.readLine(tempLine) > 0) {
+      tempPartition.fromText(tempLine);
+      wktOut.println(tempPartition.toWKT());
+    }
+    in.close();
+    wktOut.close();
   }
 }

@@ -2,7 +2,6 @@
 package edu.umn.cs.spatialHadoop;
 
 import java.io.BufferedReader;
-import edu.umn.cs.spatialHadoop.visualization.*;
 import java.io.DataOutputStream;
 import java.io.FileReader;
 import java.io.IOException;

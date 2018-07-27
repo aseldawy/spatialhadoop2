@@ -56,6 +56,8 @@ import edu.umn.cs.spatialHadoop.util.WritableByteArray;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "distcp",
+description = "Copies a directory or file using a MapReduce job")
 public class DistributedCopy {
   /**Logger for DistributedCopy*/
   private static final Log LOG = LogFactory.getLog(DistributedCopy.class);

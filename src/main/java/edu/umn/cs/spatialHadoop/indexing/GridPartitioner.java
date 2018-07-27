@@ -30,26 +30,40 @@ import edu.umn.cs.spatialHadoop.core.Shape;
  * @author Ahmed Eldawy
  *
  */
+@Partitioner.GlobalIndexerMetadata(disjoint = true, extension = "grid",
+requireMBR = true)
 public class GridPartitioner extends Partitioner {
   private static final Log LOG = LogFactory.getLog(GridPartitioner.class);
-  
+
   /**Origin of the grid*/
   protected double x, y;
   
   /**Number of tiles*/
   protected int numTiles;
-  
-  /**Total number of columns and rows within the input range*/
-  protected int numColumns, numRows;
-  
-  /**With and height of a single tile*/
+
+  /**Width and height of a single tile*/
   protected double tileWidth, tileHeight;
-  
+
+  /**Total number of columns and rows within the input range*/
+  transient protected int numColumns, numRows;
+
   /**
    * A default constructor to be able to dynamically instantiate it
    * and deserialize it
    */
   public GridPartitioner() {
+  }
+
+  @Override
+  public void construct(Rectangle mbr, Point[] dummy, int numPartitions) {
+    x = mbr.x1;
+    y = mbr.y1;
+    numTiles = numPartitions;
+    // Create square tiles
+    double areaPerTile = mbr.getWidth() * mbr.getHeight() / numPartitions;
+    this.tileWidth = this.tileHeight = Math.sqrt(areaPerTile);
+    this.numColumns = (int) Math.round(mbr.getWidth() / tileWidth);
+    this.numRows = (int) Math.round(mbr.getHeight() / tileHeight);
   }
 
   public GridPartitioner(Rectangle mbr, int columns, int rows) {
@@ -61,44 +75,9 @@ public class GridPartitioner extends Partitioner {
     this.tileWidth = mbr.getWidth() / columns;
     this.tileHeight = mbr.getHeight() / rows;
   }
-  
-  @Override
-  public void createFromPoints(Rectangle mbr, Point[] points, int capacity) throws IllegalArgumentException {
-    if(points.length == 0)
-	throw new IllegalArgumentException("Amount of points must be > 0");
 
-    x = mbr.x1;
-    y = mbr.y1;
-    
-    // Start with a rough estimate for number of cells assuming uniformity
-    numTiles = (int) Math.ceil(points.length / capacity);
-    GridInfo gridInfo = new GridInfo(mbr.x1, mbr.y1, mbr.x2, mbr.y2);
-
-    int maxCellSize;
-    int maxIterations = 1000;
-    
-    do {
-      int cols = (int)Math.round(Math.sqrt(numTiles));    
-
-      this.numColumns = gridInfo.columns = Math.max(1, cols);
-      this.numRows = gridInfo.rows = (int) Math.ceil(numTiles / gridInfo.columns);
-      
-      maxCellSize = 0;
-      // TODO uncomment the following part to further breakdown big tiles
-//      int[] histogram = new int[gridInfo.columns * gridInfo.rows];
-//      for (Point point : points) {
-//        int cell = gridInfo.getOverlappingCell(point.x, point.y);
-//        if (++histogram[cell] > maxCellSize)
-//          maxCellSize = histogram[cell];
-//      }
-//      if (maxCellSize > capacity) {
-//        // Further break the largest grid cell
-//        numTiles = (int) (numTiles * Math.ceil((double)maxCellSize / capacity));
-//      }
-    } while (maxCellSize > capacity && maxIterations-- > 0);
-    LOG.info("Partitioning the space into a "+gridInfo.columns+"x"+gridInfo.rows+" grid");
-    tileWidth = mbr.getWidth() / gridInfo.columns;
-    tileHeight = mbr.getHeight() / gridInfo.rows;
+  public GridPartitioner(Rectangle mbr, int numPartitions) {
+    construct(mbr, null, numPartitions);
   }
 
   @Override

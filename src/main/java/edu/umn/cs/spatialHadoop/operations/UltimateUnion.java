@@ -42,6 +42,8 @@ import edu.umn.cs.spatialHadoop.util.Progressable;
  * @author Ahmed Eldawy
  *
  */
+@OperationMetadata(shortName = "uunion",
+description = "Computes the union of input shapes using the UltimateUnion algorithm")
 public class UltimateUnion {
   public static final GeometryFactory FACTORY = new GeometryFactory();
   

@@ -10,12 +10,12 @@ package edu.umn.cs.spatialHadoop.operations;
 
 import java.io.IOException;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.GenericOptionsParser;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
@@ -28,6 +28,8 @@ import edu.umn.cs.spatialHadoop.io.TextSerializable;
  * @author eldawy
  *
  */
+@OperationMetadata(shortName = "tail",
+description = "Retrieves the last n lines of a text file")
 public class Tail {
   
   /**
@@ -158,7 +160,7 @@ public class Tail {
   
   public static void main(String[] args) throws IOException {
     OperationsParams cla = new OperationsParams(new GenericOptionsParser(args));
-    JobConf conf = new JobConf(Sampler.class);
+    Configuration conf = new Configuration();
     Path inputFile = cla.getPath();
     FileSystem fs = inputFile.getFileSystem(conf);
     if (!fs.exists(inputFile)) {

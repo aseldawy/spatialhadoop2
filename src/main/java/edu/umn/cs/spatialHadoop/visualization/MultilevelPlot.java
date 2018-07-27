@@ -48,7 +48,6 @@ import edu.umn.cs.spatialHadoop.core.GridInfo;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.core.SpatialSite;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -371,6 +370,7 @@ public class MultilevelPlot {
     // Set mapper, reducer and committer
     String partitionTechnique = params.get("partition", "flat");
     if (partitionTechnique.equalsIgnoreCase("flat")) {
+      job.setJobName("MultilevelFlatPlot");
       // Use flat partitioning
       job.setMapperClass(FlatPartitionMap.class);
       job.setMapOutputKeyClass(LongWritable.class);
@@ -378,6 +378,7 @@ public class MultilevelPlot {
       job.setReducerClass(FlatPartitionReduce.class);
     } else if (partitionTechnique.equalsIgnoreCase("pyramid")) {
       // Use pyramid partitioning
+      job.setJobName("MultilevelPyramidPlot");
       Shape shape = params.getShape("shape");
       job.setMapperClass(PyramidPartitionMap.class);
       job.setMapOutputKeyClass(LongWritable.class);
@@ -483,8 +484,6 @@ public class MultilevelPlot {
         RecordReader<Rectangle, Iterable<Shape>> reader = inputFormat.createRecordReader(fsplit, null);
         if (reader instanceof SpatialRecordReader3) {
           ((SpatialRecordReader3) reader).initialize(fsplit, params);
-        } else if (reader instanceof RTreeRecordReader3) {
-          ((RTreeRecordReader3) reader).initialize(fsplit, params);
         } else if (reader instanceof HDFRecordReader) {
           ((HDFRecordReader) reader).initialize(fsplit, params);
         } else {

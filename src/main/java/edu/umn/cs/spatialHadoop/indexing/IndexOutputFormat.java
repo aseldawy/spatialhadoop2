@@ -53,8 +53,7 @@ public class IndexOutputFormat<S extends Shape>
   
   /**Maximum number of active closing threads*/
   private static final int MaxClosingThreads = Runtime.getRuntime().availableProcessors() * 2;
-  
-  
+
   /**New line marker to separate records*/
   protected static byte[] NEW_LINE;
   
@@ -69,6 +68,8 @@ public class IndexOutputFormat<S extends Shape>
   
   public static class IndexRecordWriter<S extends Shape> extends RecordWriter<IntWritable, S> {
 
+    /**Job configuration*/
+    private Configuration conf;
     /**The partitioner used by the current job*/
     private Partitioner partitioner;
     /**The output file system*/
@@ -93,12 +94,15 @@ public class IndexOutputFormat<S extends Shape>
     private OutputStream masterFile;
     /**List of errors that happened by a background thread*/
     private Vector<Throwable> listOfErrors = new Vector<Throwable>();
-    /**Whether records are replicated in the index or distributed*/
-    private boolean replicated;
+    /**Whether records are replicated in the index to keep the partitions disjoint*/
+    private boolean disjoint;
     /**Type of shapes written to the output. Needed to build local indexes*/
     private S shape;
-    /**Local indexer used to index each partition (optional)*/
-    private LocalIndexer localIndexer;
+    /**The class of the local indexer*/
+    private Class<? extends LocalIndex> localIndexClass;
+
+    /**The extension of written files*/
+    private String localIndexExtension;
 
     public IndexRecordWriter(TaskAttemptContext task, Path outPath) throws IOException, InterruptedException {
       this(task, Integer.toString(task.getTaskAttemptID().getTaskID().getId()), outPath, null);
@@ -107,49 +111,34 @@ public class IndexOutputFormat<S extends Shape>
     public IndexRecordWriter(TaskAttemptContext task, String name, Path outPath,
         Progressable progress)
         throws IOException, InterruptedException {
-      Configuration conf = task.getConfiguration();
-      String sindex = conf.get("sindex");
-      this.replicated = conf.getBoolean("replicate", false);
-      this.outFS = outPath.getFileSystem(conf);
-      this.outPath = outPath;
-      this.partitioner = Partitioner.getPartitioner(conf);
-      Class<? extends LocalIndexer> localIndexerClass = conf.getClass(LocalIndexer.LocalIndexerClass, null, LocalIndexer.class);
-      if (localIndexerClass != null) {
-        try {
-          this.localIndexer = localIndexerClass.newInstance();
-          localIndexer.setup(conf);
-        } catch (InstantiationException e) {
-          e.printStackTrace();
-        } catch (IllegalAccessException e) {
-          e.printStackTrace();
-        }
-      }
-      Path masterFilePath = name == null ?
-          new Path(outPath, String.format("_master.%s", sindex)) :
-            new Path(outPath, String.format("_master_%s.%s", name, sindex));
-      this.masterFile = outFS.create(masterFilePath);
+      this(Partitioner.getPartitioner(task.getConfiguration()), name, outPath, task.getConfiguration());
     }
 
-    public IndexRecordWriter(Partitioner partitioner, boolean replicate,
-        String sindex, Path outPath, Configuration conf)
+    /**
+     * Create a record writer for index files
+     * @param partitioner
+     * @param name A unique name added to the global index file which is used
+     *             to prevent multiple reducers from writing separate files with
+     *             the same name.
+     * @param outPath
+     * @param conf
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    public IndexRecordWriter(Partitioner partitioner, String name, Path outPath, Configuration conf)
             throws IOException, InterruptedException {
-      this.replicated = replicate;
+      this.conf = conf;
+      this.disjoint = conf.getBoolean(Partitioner.PartitionerDisjoint, false);
       this.outFS = outPath.getFileSystem(conf);
       this.outPath = outPath;
       this.partitioner = partitioner;
-      Class<? extends LocalIndexer> localIndexerClass = conf.getClass(
-          LocalIndexer.LocalIndexerClass, null, LocalIndexer.class);
-      if (localIndexerClass != null) {
-        try {
-          this.localIndexer = localIndexerClass.newInstance();
-          localIndexer.setup(conf);
-        } catch (InstantiationException e) {
-          e.printStackTrace();
-        } catch (IllegalAccessException e) {
-          e.printStackTrace();
-        }
-      }
-      Path masterFilePath =  new Path(outPath, "_master."+ sindex);
+      localIndexClass = conf.getClass(LocalIndex.LocalIndexClass, null, LocalIndex.class);
+      if (localIndexClass != null)
+        localIndexExtension = localIndexClass.getAnnotation(LocalIndex.LocalIndexMetadata.class).extension();
+      String globalIndexExtension = partitioner.getClass().getAnnotation(Partitioner.GlobalIndexerMetadata.class).extension();
+      Path masterFilePath = name == null ?
+          new Path(outPath, String.format("_master.%s", globalIndexExtension)) :
+          new Path(outPath, String.format("_master_%s.%s", name, globalIndexExtension));
       this.masterFile = outFS.create(masterFilePath);
     }
     
@@ -180,9 +169,8 @@ public class IndexOutputFormat<S extends Shape>
     /**
      * Close a file that is currently open for a specific partition. Returns a
      * background thread that will continue all close-related logic.
-     * @param progress 
-     * 
-     * @param partitionToClose
+     * @param id the partition ID to close
+     *
      */
     private void closePartition(final int id) {
       final Partition partitionInfo = partitionsInfo.get(id);
@@ -194,20 +182,29 @@ public class IndexOutputFormat<S extends Shape>
           try {
             outStream.close();
             
-            if (localIndexer != null) {
+            if (localIndexClass != null) {
               // Build a local index for that file
               try {
+                LocalIndex<S> localIndex = localIndexClass.newInstance();
+                localIndex.setup(conf);
+
                 Path indexedFilePath = getPartitionFile(id);
                 partitionInfo.filename = indexedFilePath.getName();
-                localIndexer.buildLocalIndex(tempFile, indexedFilePath, shape);
+                localIndex.buildLocalIndex(tempFile, indexedFilePath, shape);
                 // Temporary file no longer needed
                 tempFile.delete();
+              } catch (InstantiationException e) {
+                e.printStackTrace();
+              } catch (IllegalAccessException e) {
+                e.printStackTrace();
               } catch (InterruptedException e) {
+                e.printStackTrace();
+
                 throw new RuntimeException("Error building local index", e);
               }
             }
             
-            if (replicated) {
+            if (disjoint) {
               // If data is replicated, we need to shrink down the size of the
               // partition to keep partitions disjoint
               partitionInfo.set(partitionInfo.getIntersection(partitioner.getPartition(id)));
@@ -218,6 +215,10 @@ public class IndexOutputFormat<S extends Shape>
               masterFile.write(partitionText.getBytes(), 0, partitionText.getLength());
               masterFile.write(NEW_LINE);
             }
+          } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Error closing partition: "+partitionInfo, e);
+          } finally {
             if (!closingThreads.remove(Thread.currentThread())) {
               throw new RuntimeException("Could not remove closing thread");
             }
@@ -229,28 +230,25 @@ public class IndexOutputFormat<S extends Shape>
                 Thread thread = closingThreads.elementAt(i_thread);
                 synchronized(thread) {
                   switch (thread.getState()) {
-                  case NEW:
-                    // Start the thread and fall through to increment the counter
-                    thread.start();
-                  case RUNNABLE:
-                  case BLOCKED:
-                  case WAITING:
-                  case TIMED_WAITING:
-                    // No need to start. Just increment number of threads
-                    numRunningThreads++;
-                    break;
-                  case TERMINATED: // Do nothing.
-                    // Should never happen as each thread removes itself from
-                    // the list before completion 
+                    case NEW:
+                      // Start the thread and fall through to increment the counter
+                      thread.start();
+                    case RUNNABLE:
+                    case BLOCKED:
+                    case WAITING:
+                    case TIMED_WAITING:
+                      // No need to start. Just increment number of threads
+                      numRunningThreads++;
+                      break;
+                    case TERMINATED: // Do nothing.
+                      // Should never happen as each thread removes itself from
+                      // the list before completion
                   }
                 }
               }
             } catch (ArrayIndexOutOfBoundsException e) {
               // No problem. The array of threads might have gone empty
             }
-          } catch (IOException e) {
-            e.printStackTrace();
-            throw new RuntimeException("Error closing partition: "+partitionInfo, e);
           }
         }
       };
@@ -298,7 +296,7 @@ public class IndexOutputFormat<S extends Shape>
         // First time to write in this partition. Store its information
         Partition partition = new Partition();
 
-        if (localIndexer == null) {
+        if (localIndexClass == null) {
           // No local index needed. Write to the final file directly
           Path path = getPartitionFile(id);
           out = outFS.create(path);
@@ -329,13 +327,13 @@ public class IndexOutputFormat<S extends Shape>
      */
     private Path getPartitionFile(int id) throws IOException {
       String format = "part-%05d";
-      if (localIndexer != null)
-        format += "."+localIndexer.getExtension();
+      if (localIndexClass != null)
+        format += "."+localIndexExtension;
       Path partitionPath = new Path(outPath, String.format(format, id));
       if (outFS.exists(partitionPath)) {
         format = "part-%05d-%03d";
-        if (localIndexer != null)
-          format += "."+localIndexer.getExtension();
+        if (localIndexClass != null)
+          format += "."+localIndexExtension;
         int i = 0;
         do {
           partitionPath = new Path(outPath, String.format(format, id, ++i));
@@ -371,7 +369,7 @@ public class IndexOutputFormat<S extends Shape>
             if (task != null)
               task.setStatus("Closing! "+closingThreads.size()+" remaining");
           }
-        } catch (ArrayIndexOutOfBoundsException e) {
+        } catch (ArrayIndexOutOfBoundsException NoSuchElementException) {
           // The array of threads has gone empty. Nothing to do
         }
         if (task != null)
@@ -425,10 +423,12 @@ public class IndexOutputFormat<S extends Shape>
       if (resultFiles.length == 0) {
         LOG.warn("No _master files were written by reducers");
       } else {
-        String sindex = conf.get("sindex");
-        Path masterPath = new Path(outPath, "_master." + sindex);
+        String sampleName = resultFiles[0].getPath().getName();
+        int lastDot = sampleName.lastIndexOf('.');
+        String extension = sampleName.substring(lastDot+1);
+        Path masterPath = new Path(outPath, "_master." + extension);
         OutputStream destOut = outFs.create(masterPath);
-        Path wktPath = new Path(outPath, "_"+sindex+".wkt");
+        Path wktPath = new Path(outPath, "_"+extension+".wkt");
         PrintStream wktOut = new PrintStream(outFs.create(wktPath));
         wktOut.println("ID\tBoundaries\tRecord Count\tSize\tFile name");
         Text tempLine = new Text2();

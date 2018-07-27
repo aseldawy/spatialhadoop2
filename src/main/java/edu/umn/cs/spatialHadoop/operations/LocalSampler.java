@@ -15,6 +15,9 @@ import java.util.List;
 import java.util.Random;
 import java.util.Vector;
 
+import edu.umn.cs.spatialHadoop.core.SpatialSite;
+import edu.umn.cs.spatialHadoop.indexing.LocalIndex;
+import edu.umn.cs.spatialHadoop.mapreduce.LocalIndexRecordReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -53,13 +56,22 @@ public class LocalSampler {
    * @throws InterruptedException
    */
   public static long sampleLocal(Path[] files, float ratioOrCount,
-      ResultCollector<Text> output, Configuration conf) throws IOException, InterruptedException {
+      ResultCollector<Text> output, Configuration conf)
+      throws IOException, InterruptedException, InstantiationException, IllegalAccessException {
     Vector<FileSplit> splits = new Vector<FileSplit>();
     for (Path file : files) {
       FileSystem fs = file.getFileSystem(conf);
       if (fs.isFile(file)) {
         // A single file. Include it
-        splits.add(new FileSplit(file, 0, fs.getFileStatus(file).getLen(), new String[0]));
+        // If the file is locally indexed, add the data part of it
+        Class<? extends LocalIndex> lindex = SpatialSite.getLocalIndex(file);
+        if (lindex != null) {
+          // File is locally indexed, add a split for each internal index
+          splits.addAll(LocalIndexRecordReader.createDataSplits(fs, file, lindex));
+        } else {
+          // File is not locally indexed, add it as a whole
+          splits.add(new FileSplit(file, 0, fs.getFileStatus(file).getLen(), new String[0]));
+        }
       } else {
         // A directory. Include all contents
         FileStatus[] contents = fs.listStatus(file);
@@ -141,7 +153,6 @@ public class LocalSampler {
    * and each record is selected with the a probability equal to the given
    * sampling ratio.
    * @param in
-   * @param streamLength
    * @param ratio
    * @param seed
    * @param output
@@ -213,7 +224,6 @@ public class LocalSampler {
   
   /**
    * Sample a specific number of lines from a given file
-   * @param fs
    * @param file
    * @param count
    * @param seed
@@ -293,7 +303,6 @@ public class LocalSampler {
   
   /**
    * Sample text lines from the given split with the given sampling ratio
-   * @param fs
    * @param file
    * @param ratio
    * @param seed
@@ -458,7 +467,7 @@ public class LocalSampler {
    * @throws IOException 
    * @throws InterruptedException 
    */
-  public static void main(String[] args) throws IOException, InterruptedException {
+  public static void main(String[] args) throws IOException, InterruptedException, IllegalAccessException, InstantiationException {
     OperationsParams params = new OperationsParams(new GenericOptionsParser(args), false);
     Path[] inputFiles = params.getPaths();
     

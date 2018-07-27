@@ -380,42 +380,35 @@ public class OperationsParams extends Configuration {
 		} catch (Exception e) {
 		  // shapeClass is not an explicit class name
 		  String shapeTypeI = shapeType.toLowerCase();
-		  if (shapeTypeI.startsWith("rect")) {
-		    shape = new Rectangle();
-		  } else if (shapeTypeI.startsWith("point")) {
-		    shape = new Point();
-		  } else if (shapeTypeI.startsWith("tiger")) {
-		    shape = new TigerShape();
-		  } else if (shapeTypeI.startsWith("osm")) {
-		    shape = new OSMPolygon();
-		  } else if (shapeTypeI.startsWith("poly")) {
-		    shape = new Polygon();
-		  } else if (shapeTypeI.startsWith("ogc")) {
-		    shape = new OGCESRIShape();
-		  } else if (shapeTypeI.startsWith("wkt")) {
-		    shape = new OGCJTSShape();
-		  } else if (shapeTypeI.startsWith("nasapoint")) {
-		    shape = new NASAPoint();
-		  } else if (shapeTypeI.startsWith("nasarect")) {
-		    shape = new NASARectangle();
-		  } else if (shapeTypeI.startsWith("text")) {
-		    shape = new Text2();
-		  } else {
-		    // Couldn't detect shape from short name or full class name
-		    // May be it's an actual value that we can parse
-		    if (shapeType.split(",").length == 2) {
-		      // A point
-		      shape = new Point();
-		      shape.fromText(new Text((String) conf.get(key)));
-		    } else if (shapeType.split(",").length == 4) {
-		      // A rectangle
-		      shape = new Rectangle();
-		      shape.fromText(new Text((String) conf.get(key)));
-		    } else {
-		      LOG.warn("unknown shape type: '" + conf.get(key) + "'");
-		      return null;
-		    }
-		  }
+		  Class<? extends Shape> shapeClass = SpatialSite.getShape(shapeTypeI);
+		  if (shapeClass != null) {
+				try {
+					shape = shapeClass.newInstance();
+				} catch (InstantiationException e1) {
+					e1.printStackTrace();
+					return null;
+				} catch (IllegalAccessException e1) {
+					e1.printStackTrace();
+					return null;
+				}
+			} else if (shapeTypeI.equalsIgnoreCase("text")) {
+		  	shape = new Text2();
+			} else {
+				// Couldn't detect shape from short name or full class name
+				// May be it's an actual value that we can parse
+				if (shapeType.split(",").length == 2) {
+					// A point
+					shape = new Point();
+					shape.fromText(new Text((String) conf.get(key)));
+				} else if (shapeType.split(",").length == 4) {
+					// A rectangle
+					shape = new Rectangle();
+					shape.fromText(new Text((String) conf.get(key)));
+				} else {
+					LOG.warn("unknown shape type: '" + conf.get(key) + "'");
+					return null;
+				}
+			}
 		}
 
 		if (shapeValue != null)
@@ -606,112 +599,104 @@ public class OperationsParams extends Configuration {
 	 */
 	public boolean autoDetectShape() {
 		String autoDetectedShape = null;
-		final Vector<String> sampleLines = new Vector<String>();
+		String[] sampleLines = null;
 		if (this.get("shape") != null)
 			return true; // A shape is already configured
 		if (this.getInputPaths().length == 0)
 			return false; // No shape is configured and no input to detected
+		// Read a random sample from the input
+		// We read a sample instead of one line to make sure
+		// the auto detected shape is consistent in many lines
+		final int sampleCount = 10;
 		try {
-			// Read a random sample from the input
-			// We read a sample instead of one line to make sure
-			// the auto detected shape is consistent in many lines
-			final int sampleCount = 10;
-			OperationsParams sampleParams = new OperationsParams(this);
-			try {
-        LocalSampler.sampleLocal(this.getInputPaths(), sampleCount, new ResultCollector<Text>() {
-          @Override
-          public void collect(Text line) {
-            sampleLines.add(line.toString());
-          }
-        }, sampleParams);
-      } catch (InterruptedException e1) {
-        e1.printStackTrace();
-      }
+			Path p = this.getInputPaths()[0];
+			sampleLines = Head.head(p.getFileSystem(this), p, sampleCount);
+		} catch (Exception e1) {
+			e1.printStackTrace();
+		}
 
-			if (sampleLines.isEmpty()) {
-				LOG.warn("No input to detect in '" + this.getInputPath() + "-");
-				return false;
-			}
+		if (sampleLines.length == 0) {
+			LOG.warn("No input to detect in '" + this.getInputPath() + "-");
+			return false;
+		}
 
-			// Collect some stats about the sample to help detecting shape type
-			final String Separators[] = { ",", "\t" };
-			int[] numOfSplits = { 0, 0 }; // Number of splits with each separator
-			boolean allNumericAllLines = true; // Whether or not all values are numbers
-			int ogcIndex = -1; // The index of the column with OGC data
+		// Collect some stats about the sample to help detecting shape type
+		final String Separators[] = { ",", "\t" };
+		int[] numOfSplits = { 0, 0 }; // Number of splits with each separator
+		boolean allNumericAllLines = true; // Whether or not all values are numbers
+		int ogcIndex = -1; // The index of the column with OGC data
 
-			for (String sampleLine : sampleLines) {
-				// This flag is raised if all splits are numbers with one separator
-				boolean allNumericCurrentLine = false;
-				// Try to parse with commas and tabs
-				for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
-					String separator = Separators[iSeparator];
-					String[] parts = sampleLine.split(separator);
+		for (String sampleLine : sampleLines) {
+			// This flag is raised if all splits are numbers with one separator
+			boolean allNumericCurrentLine = false;
+			// Try to parse with commas and tabs
+			for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
+				String separator = Separators[iSeparator];
+				String[] parts = sampleLine.split(separator);
 
-					if (numOfSplits[iSeparator] == 0)
-						numOfSplits[iSeparator] = parts.length;
-					else if (numOfSplits[iSeparator] != parts.length)
-						numOfSplits[iSeparator] = -1;
-					boolean allNumericCurrentLineCurrentSeparator = true;
-					for (int i = 0; i < parts.length; i++) {
-						String part = parts[i];
-						if (allNumericCurrentLineCurrentSeparator) {
-						  try {
-						    Double.parseDouble(part);
-						  } catch (NumberFormatException e) {
-						    allNumericCurrentLineCurrentSeparator = false;
-						  }
-						}
+				if (numOfSplits[iSeparator] == 0)
+					numOfSplits[iSeparator] = parts.length;
+				else if (numOfSplits[iSeparator] != parts.length)
+					numOfSplits[iSeparator] = -1;
+				boolean allNumericCurrentLineCurrentSeparator = true;
+				for (int i = 0; i < parts.length; i++) {
+					String part = parts[i];
+					if (allNumericCurrentLineCurrentSeparator) {
 						try {
-							TextSerializerHelper.consumeGeometryJTS(new Text(part), '\0');
-							// Reaching this point means the geometry was parsed successfully
-							if (ogcIndex == -1)
-								ogcIndex = i;
-							else if (ogcIndex != i)
-								ogcIndex = -2;
-						} catch (Exception e) {
-							// Couldn't parse OGC for this column
+							Double.parseDouble(part);
+						} catch (NumberFormatException e) {
+							allNumericCurrentLineCurrentSeparator = false;
 						}
 					}
-					if (allNumericCurrentLineCurrentSeparator)
-						allNumericCurrentLine = true;
-				}
-				// One line does not have all numeric fields
-				if (!allNumericCurrentLine)
-					allNumericAllLines = false;
-			}
-
-			if (numOfSplits[0] != -1 && allNumericAllLines) {
-				// Each line is comma separated and all values are numbers
-				if (numOfSplits[0] == 2) {
-					// Point
-					autoDetectedShape = "point";
-				} else if (numOfSplits[0] == 4) {
-					// Rectangle
-					autoDetectedShape = "rect";
-				}
-			} else if (ogcIndex >= 0) {
-				// There is a column with geometry stored in it
-				this.setInt("column", ogcIndex);
-				int numOfColumns = 0;
-				for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
-					if (numOfSplits[iSeparator] != -1) {
-						this.set("separator", Separators[iSeparator]);
-						numOfColumns = numOfSplits[iSeparator];
+					try {
+						TextSerializerHelper.consumeGeometryJTS(new Text(part), '\0');
+						// Reaching this point means the geometry was parsed successfully
+						if (ogcIndex == -1)
+							ogcIndex = i;
+						else if (ogcIndex != i)
+							ogcIndex = -2;
+					} catch (Exception e) {
+						// Couldn't parse OGC for this column
 					}
 				}
-				if (numOfColumns == 1 && ogcIndex == 0)
-					autoDetectedShape = OGCJTSShape.class.getName();
-				else
-					autoDetectedShape = CSVOGC.class.getName();
+				if (allNumericCurrentLineCurrentSeparator)
+					allNumericCurrentLine = true;
 			}
-		} catch (IOException e) {
+			// One line does not have all numeric fields
+			if (!allNumericCurrentLine)
+				allNumericAllLines = false;
+		}
+
+		if (numOfSplits[0] != -1 && allNumericAllLines) {
+			// Each line is comma separated and all values are numbers
+			if (numOfSplits[0] == 2) {
+				// Point
+				autoDetectedShape = "point";
+			} else if (numOfSplits[0] == 4) {
+				// Rectangle
+				autoDetectedShape = "rect";
+			}
+		} else if (ogcIndex >= 0) {
+			// There is a column with geometry stored in it
+			this.setInt("column", ogcIndex);
+			int numOfColumns = 0;
+			for (int iSeparator = 0; iSeparator < Separators.length; iSeparator++) {
+				if (numOfSplits[iSeparator] != -1) {
+					this.set("separator", Separators[iSeparator]);
+					numOfColumns = numOfSplits[iSeparator];
+				}
+			}
+			if (numOfColumns == 1 && ogcIndex == 0)
+				autoDetectedShape = OGCJTSShape.class.getName();
+			else
+				autoDetectedShape = CSVOGC.class.getName();
 		}
 		if (autoDetectedShape == null) {
-			LOG.warn("Cannot detect shape for input '" + sampleLines.get(0) + "'");
+			LOG.warn("Cannot detect shape for input '" + sampleLines[0] + "'");
 			return false;
 		} else {
 			LOG.info("Autodetected shape '" + autoDetectedShape
-					+ "' for input '" + sampleLines.get(0) + "'");
+					+ "' for input '" + sampleLines[0] + "'");
 			this.set("shape", autoDetectedShape);
 			return true;
 		}

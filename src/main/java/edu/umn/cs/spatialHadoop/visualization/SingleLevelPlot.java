@@ -43,7 +43,6 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GridPartitioner;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.indexing.Partitioner;
-import edu.umn.cs.spatialHadoop.mapreduce.RTreeRecordReader3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -404,6 +403,7 @@ public class SingleLevelPlot {
     if (conf.getBoolean("output", true)) {
       if (merge) {
         job.setOutputFormatClass(CanvasOutputFormat.class);
+        // For Hadoop 1.2.1 and older
         conf.setClass("mapred.output.committer.class",
             CanvasOutputFormat.ImageWriterOld.class,
             org.apache.hadoop.mapred.OutputCommitter.class);
@@ -453,7 +453,7 @@ public class SingleLevelPlot {
         partitioner = new GridPartitioner(inputMBR, gridSize, gridSize);
       } else {
         // Use a standard partitioner as created by the indexer
-        partitioner = Indexer.createPartitioner(inFiles, outFile, conf, partition);
+        partitioner = Indexer.initializeGlobalIndex(inFiles, outFile, conf, SpatialSite.getGlobalIndex(partition));
       }
       Shape shape = params.getShape("shape");
       job.setMapperClass(RepartitionPlotMap.class);
@@ -555,8 +555,6 @@ public class SingleLevelPlot {
                 inputFormat.createRecordReader(fsplits[i], null);
             if (reader instanceof SpatialRecordReader3) {
               ((SpatialRecordReader3)reader).initialize(fsplits[i], params);
-            } else if (reader instanceof RTreeRecordReader3) {
-              ((RTreeRecordReader3)reader).initialize(fsplits[i], params);
             } else if (reader instanceof HDFRecordReader) {
               ((HDFRecordReader)reader).initialize(fsplits[i], params);
             } else {
