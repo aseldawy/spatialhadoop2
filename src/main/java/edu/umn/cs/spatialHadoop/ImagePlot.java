@@ -11,16 +11,15 @@ import java.util.ArrayList;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-
-import org.apache.hadoop.util.LineReader;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.util.LineReader;
 
-import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
+import edu.umn.cs.spatialHadoop.indexing.Partition;
+import edu.umn.cs.spatialHadoop.io.Text2;
+import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.visualization.GeometricPlot;
 import edu.umn.cs.spatialHadoop.visualization.TileIndex;
-import edu.umn.cs.spatialHadoop.indexing.*;
-import edu.umn.cs.spatialHadoop.io.Text2;
 
 public class ImagePlot {
 	double y1 = 0;
@@ -75,7 +74,7 @@ public class ImagePlot {
 		
 		Path infile=new Path(dirName+"/"+inFileName);
 		System.out.println("Infile:"+infile);
-		ArrayList <Partition> MasterPartition=getPartitions(infile);
+		//ArrayList <Partition> MasterPartition=getPartitions(infile);
 		BufferedReader br = null;
 		FileReader fr = null;
 
@@ -120,7 +119,6 @@ public class ImagePlot {
 		//inFileName = dirName+"//"+inFileName;
 		Rectangle inputMBR=new Rectangle(x1,y1,x2,y2);
 		long tileID = TileIndex.encode(zoom_level, column, row);
-		Rectangle tileMBR=TileIndex.getMBR(inputMBR, zoom_level, column, row);
 		 
 		 
 		 tileIndex = TileIndex.decode(tileID, tileIndex);
@@ -141,8 +139,9 @@ public class ImagePlot {
 //				/ gridSize;
 //		tileMBR.y2 = (inputMBR.y1 * (gridSize - (tileIndex.y + 1))
 //				+ inputMBR.y2 * (tileIndex.y + 1)) / gridSize;
-		Text fileName=null;
-		System.out.println("TileMBR:"+tileMBR);
+		//Text fileName=null;
+		Rectangle tileMBR=TileIndex.getMBR(inputMBR, tileIndex.z, tileIndex.x, tileIndex.y);
+/*		System.out.println("TileMBR:"+tileMBR);
 		System.out.println("Size: "+MasterPartition.size()); 
 		String file=null;
 		for (int i=0;i<MasterPartition.size();i++)
@@ -155,12 +154,13 @@ public class ImagePlot {
 		     
 			}
 		
-		}
+		}*/
 		//String file=fileName.toString();
-		System.out.println("Filex:"+file);
+		//System.out.println("Filex:"+file);
 		  OperationsParams params = new OperationsParams();
 	      params.setBoolean("local", true);
 	      OperationsParams.setShape(params, "mbr", tileMBR);
+	      OperationsParams.setShape(params, SpatialInputFormat3.InputQueryRange, tileMBR);
 	      params.set("shape", Shape);
 	      params.setBoolean("overwrite", true);
 	      params.setBoolean("vflip", vflip);
@@ -170,7 +170,7 @@ public class ImagePlot {
 	      
 		 //Canvas canvasImage = null; 
 	    try {
-			 SingleLevelPlot.plot(new Path[] { new Path("AREALM_AI.png/"+file) },
+			 SingleLevelPlot.plot(new Path[] { new Path("AREALM_AI2.png") },
 			        output, GeometricPlot.GeometricRasterizer.class, params);
 		} 
 	    catch (ClassNotFoundException e) {
