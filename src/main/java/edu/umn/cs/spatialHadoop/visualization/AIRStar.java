@@ -43,7 +43,7 @@ import org.apache.hadoop.util.LineReader;
  *
  * @author Ahmed Eldawy
  */
-public class AdaptiveMultilevelPlot {
+public class AIRStar {
   private static final Log LOG = LogFactory.getLog(AdaptiveMultilevelPlot.class);
   /** Configuration entry for input MBR */
   private static final String InputMBR = "mbr";
@@ -519,12 +519,12 @@ public class AdaptiveMultilevelPlot {
                 tiles.put(tileID, c);
               }
               plotter.plot(c, shape);
-            } else if (context != null && tileClass == TileClass.DataTile) {
+            }// else if (context != null && tileClass == TileClass.DataTile) {
 //              if(z==6&&x==6&&y==36)	
 //            	  System.out.println("TileID="+tileID);
-              key.set(tileID);
-              context.write(key, shape);
-            }
+              //key.set(tileID);
+              //context.write(key, shape);
+            //}
           }
         }
         // Update overlappingCells for the higher z
@@ -568,6 +568,7 @@ public class AdaptiveMultilevelPlot {
   public static Job[] plot(Path[] inPaths, Path outPath, Class<? extends Plotter> plotterClass, OperationsParams params)
       throws IOException, InterruptedException, ClassNotFoundException {
 	  //public enum TileClass {ImageTile, DataTile, ShallowTile, EmptyTile};
+	  System.out.println("AIRStar");
     // Extract the range of levels to generate
     String[] strLevels = params.get("levels", "7").split("\\.\\.");
     int minLevel, maxLevel;

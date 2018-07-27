@@ -77,9 +77,11 @@ public class TileIndex {
     double tileWidth = spaceMBR.getWidth() / fraction;
     double tileHeight = spaceMBR.getHeight() / fraction;
     double x1 = spaceMBR.x1 + tileWidth * x;
-    double y1 = spaceMBR.y1 + tileWidth * y;
+    double y1 = spaceMBR.y1 + tileHeight * y;
     // TODO reuse a rectangle object to avoid creating too many objects
     return new Rectangle(x1, y1, x1 + tileWidth, y1 + tileHeight);
+    
+    
   }
 
   public static Rectangle getMBR(Rectangle spaceMBR, long encodedTileID) {

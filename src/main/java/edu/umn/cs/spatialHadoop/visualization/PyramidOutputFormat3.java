@@ -35,7 +35,9 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.LineReader;
-
+import org.apache.pig.builtin.LOG;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 
@@ -45,7 +47,7 @@ import edu.umn.cs.spatialHadoop.core.Rectangle;
  *
  */
 public class PyramidOutputFormat3 extends FileOutputFormat<LongWritable, Writable> {
-
+  private static final Log LOG = LogFactory.getLog(AdaptiveMultilevelPlot.class);
   public static final String DataExt = ".txt";
 
   static class ImageRecordWriter extends RecordWriter<LongWritable, Writable> {
@@ -93,6 +95,14 @@ public class PyramidOutputFormat3 extends FileOutputFormat<LongWritable, Writabl
 
     @Override
     public void write(LongWritable encodedTileID, Writable w) throws IOException {
+      if (encodedTileID.get() < 0) {	
+    	  long tileIDToClose = -encodedTileID.get() - 1;
+    	    FSDataOutputStream outFile = dataFiles.get(tileIDToClose);
+    	    if (outFile != null) {
+    	      outFile.close();
+    	      dataFiles.remove(tileIDToClose);
+    	    }
+      }else{
       tempTileIndex = TileIndex.decode(encodedTileID.get(), tempTileIndex);
       if (w instanceof Canvas) {
         Path imagePath = getTilePath(tempTileIndex.z, tempTileIndex.x, tempTileIndex.y, imgExt);
@@ -114,6 +124,7 @@ public class PyramidOutputFormat3 extends FileOutputFormat<LongWritable, Writabl
         tempLine.append(NewLineChars, 0, NewLineChars.length);
         outFile.write(tempLine.getBytes(), 0, tempLine.getLength());
       }
+      }
       task.progress();
     }
 
@@ -122,6 +133,7 @@ public class PyramidOutputFormat3 extends FileOutputFormat<LongWritable, Writabl
         InterruptedException {
       // Close all open data files
       for (Map.Entry<Long, FSDataOutputStream> entry : dataFiles.entrySet()) {
+    	LOG.info("Closing tile #"+entry.getKey()+" at the end");
         entry.getValue().close();
       }
       dataFiles.clear();

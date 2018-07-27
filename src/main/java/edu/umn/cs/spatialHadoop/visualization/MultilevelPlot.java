@@ -556,14 +556,20 @@ public class MultilevelPlot {
               Map.Entry<Long, Canvas> entry = entries[i];
               Long tileID = entry.getKey();
               tempTileIndex = TileIndex.decode(tileID, tempTileIndex);
+              System.out.println("Before="+tempTileIndex);
               if (vflip)
                 tempTileIndex.y = ((1 << tempTileIndex.z) - 1) - tempTileIndex.y;
+              
+              
               Path imagePath = new Path(outPath, "tile-"+tempTileIndex.z +"-"+tempTileIndex.x+"-"+tempTileIndex.y+".png");
-
+              Rectangle printMBR=tempTileIndex.getMBR(inputMBR,tileID);
+              System.out.println("Path+"+"tile-"+tempTileIndex.z+"-"+tempTileIndex.x+"-"+tempTileIndex.y);
+              System.out.println("after"+ tempTileIndex+"{north:"+ printMBR.y2+",south:"+ printMBR.y1+", east:"+ printMBR.x2+", west:"+ printMBR.x1+"}" );
               // Write this tile to an image
               DataOutputStream outFile = output ? outFS.create(imagePath)
                   : new DataOutputStream(new NullOutputStream());
               plotter.writeImage(entry.getValue(), outFile, vflip);
+              
               outFile.close();
 
               // Remove entry to allows GC to collect it
@@ -621,6 +627,8 @@ public class MultilevelPlot {
             if (c == null) {
               // First time to encounter this tile, create the corresponding canvas
               Rectangle tileMBR = TileIndex.getMBR(inputMBR, z, x, y);
+             // if(z==0&&x==0 && y==0)
+            	  System.out.println("tile="+z+"-"+x+"-"+y+"\t"+"tileMBR="+tileMBR);
               c = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
               tiles.put(tileID, c);
             }
@@ -702,7 +710,7 @@ public class MultilevelPlot {
         runningJob = plotMapReduce(inPaths, new Path(outPath, "pyramid"), plotterClass, pyramidPartitioning);
       }
       // Move all output files to one directory
-      FSUtil.flattenDirectory(outFS, outPath);
+       FSUtil.flattenDirectory(outFS, outPath);
 
       // Write a new HTML file that displays both parts of the pyramid
       // Add an HTML file that visualizes the result using Google Maps

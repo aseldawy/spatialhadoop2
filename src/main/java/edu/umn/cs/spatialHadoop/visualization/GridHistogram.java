@@ -55,6 +55,7 @@ public class GridHistogram implements Writable {
 	}
 	
 	public void set(int x, int y, int size) {
+		//System.out.println("x="+x+"y="+y+"Size="+size);
 		values[y * width + x] += size;
 	}
 	
@@ -108,6 +109,7 @@ public class GridHistogram implements Writable {
 
 	public static GridHistogram readFromFile(FileSystem fs, Path path) throws FileNotFoundException, IOException {
 		FileStatus[] listStatus = fs.listStatus(path, SpatialSite.NonHiddenFileFilter);
+		System.out.println(listStatus[0].getPath());
 		FSDataInputStream inputStream = fs.open(listStatus[0].getPath());
 		GridHistogram hist = new GridHistogram();
 		hist.readFields(inputStream);

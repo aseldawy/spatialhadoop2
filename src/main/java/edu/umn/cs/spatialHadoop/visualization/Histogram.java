@@ -53,6 +53,7 @@ public class Histogram {
 			gridHistogram = new GridHistogram(width, height);
 			text = new Text();
 			fileMBR = (Rectangle) OperationsParams.getShape(conf, "mbr");
+			System.out.println("MBR in the mapHistogram="+fileMBR);
 		}
 
 		@Override
@@ -60,6 +61,7 @@ public class Histogram {
 				throws IOException, InterruptedException {
 			for (Shape shape : shapes) {
 				Rectangle mbr = shape.getMBR();
+				//System.out.println("MBR in the mapHistogram="+mbr);
 				text.clear();
 				shape.toText(text);
 				int size = text.getLength();
@@ -68,7 +70,17 @@ public class Histogram {
 				double centery = (mbr.y1 + mbr.y2) / 2;
 				int gridColumn = (int) ((centerx - fileMBR.x1) * gridHistogram.getWidth() / fileMBR.getWidth());
 				int gridRow = (int) ((centery - fileMBR.y1) * gridHistogram.getHeight() / fileMBR.getHeight());
-				gridHistogram.set(gridColumn, gridRow, size);
+//				if(gridColumn*1024+gridRow>=1048576)
+//					System.out.println("error"+(gridColumn*1024+gridRow)+"column="+gridColumn+"Row="+gridRow+"centers="+centerx+","+centery+"width="+fileMBR.getWidth()+"fileMBR="+fileMBR.x1+"gridwidth="+gridHistogram.getWidth());
+				if(gridColumn>gridHistogram.getWidth()-1)
+					gridColumn=gridHistogram.getWidth()-1;
+				if(gridRow>gridHistogram.getHeight()-1)
+					gridRow=gridHistogram.getHeight()-1;
+				//System.out.println(gridColumn+"\t"+gridRow);
+				//if(gridColumn<1024 &&gridRow<1024)
+					gridHistogram.set(gridColumn, gridRow, size);
+				
+				
 			}
 			context.write(NullWritable.get(), gridHistogram);
 		}
@@ -103,7 +115,9 @@ public class Histogram {
 	}
 
 	public static void histogram(Path[] inputFiles, Path outputFile, OperationsParams params) throws IOException, InterruptedException, ClassNotFoundException {
+		//System.out.println("Params="+par);
 		histogramMapReduce(inputFiles, outputFile, params);
+		
 	}
 
 
@@ -117,11 +131,12 @@ public class Histogram {
 	    job.setReducerClass(HistogramReducer.class);
 
 	    Rectangle inputMBR = (Rectangle) params.getShape("mbr");
+	    System.out.println("InputMBR in histogramMapReduce="+ inputMBR);
 	    if (inputMBR == null) {
 	    	inputMBR = FileMBR.fileMBR(inputFiles, params);
 	    	OperationsParams.setShape(job.getConfiguration(), "mbr", inputMBR);
 	    }
-	    
+	    System.out.println("InputMBR in histogramMapReduce after setting it up on being null="+ inputMBR);
 	    job.setInputFormatClass(SpatialInputFormat3.class);
 	    SpatialInputFormat3.setInputPaths(job, inputFiles);
 	    job.setOutputFormatClass(BinaryOutputFormat.class);
