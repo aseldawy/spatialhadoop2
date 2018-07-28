@@ -761,6 +761,8 @@ public class RTreeGuttman implements Closeable {
             if (Object_overlaps(children.get(iNodeToSearch).get(iNextEntry), x1, y1, x2, y2))
               return;
           }
+          // No results found in that leaf node, remove it
+          nodesToSearch.pop();
         } else {
           // Found a matching non-leaf node, visit its children
           nodesToSearch.pop(); // No longer needed
@@ -1131,13 +1133,14 @@ public class RTreeGuttman implements Closeable {
    */
   public void toWKT(PrintStream out) {
     for (Node node : new NodeIterable()) {
-      out.printf("%d\tPOLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))\n",
+      out.printf("%d\tPOLYGON((%f %f, %f %f, %f %f, %f %f, %f %f))\t%s\n",
           node.id,
           node.x1, node.y1,
           node.x1, node.y2,
           node.x2, node.y2,
           node.x2, node.y1,
-          node.x1, node.y1
+          node.x1, node.y1,
+          Boolean.toString(node.isLeaf)
       );
     }
   }
