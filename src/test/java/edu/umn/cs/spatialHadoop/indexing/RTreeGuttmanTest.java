@@ -303,6 +303,12 @@ public class RTreeGuttmanTest extends TestCase {
 
       Iterable<RTreeGuttman.Entry> iResults = rtree.search(10, 6, 11, 7);
       assertFalse(iResults.iterator().hasNext());
+
+      iResults = rtree.search(5.5, 5, 10, 7);
+      int resultCount = 0;
+      for (Object o : iResults)
+        resultCount++;
+      assertEquals(1, resultCount);
     } catch (IOException e) {
       e.printStackTrace();
       fail("Error opening the tree");

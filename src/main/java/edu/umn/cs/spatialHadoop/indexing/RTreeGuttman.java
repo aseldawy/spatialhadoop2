@@ -791,6 +791,8 @@ public class RTreeGuttman implements Closeable {
             if (Object_overlaps(children.get(iNodeToSearch).get(iNextEntry), x1, y1, x2, y2))
               return;
           }
+          // No results found in that leaf node, remove it
+          nodesToSearch.pop();
         } else {
           // Found a matching non-leaf node, visit its children
           nodesToSearch.pop(); // No longer needed
