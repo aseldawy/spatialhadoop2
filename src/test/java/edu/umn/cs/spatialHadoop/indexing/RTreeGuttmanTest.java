@@ -300,6 +300,15 @@ public class RTreeGuttmanTest extends TestCase {
       IntArray results = new IntArray();
       rtree.search(0, 0, 4.5, 10, results);
       assertEquals(3, results.size());
+
+      Iterable<RTreeGuttman.Entry> iResults = rtree.search(10, 6, 11, 7);
+      assertFalse(iResults.iterator().hasNext());
+
+      iResults = rtree.search(5.5, 5, 10, 7);
+      int resultCount = 0;
+      for (Object o : iResults)
+        resultCount++;
+      assertEquals(1, resultCount);
     } catch (IOException e) {
       e.printStackTrace();
       fail("Error opening the tree");
@@ -331,9 +340,8 @@ public class RTreeGuttmanTest extends TestCase {
       FSDataInputStream fsdis = new FSDataInputStream(new MemoryInputStream(treeBytes));
       rtree.readFields(fsdis, treeBytes.length, null);
       int resultSize = 0;
-      for (Object o : rtree.entrySet()) {
+      for (Object o : rtree.entrySet())
         resultSize++;
-      }
       assertEquals(111, resultSize);
     } catch (IOException e) {
       e.printStackTrace();
