@@ -1,5 +1,5 @@
 
-package edu.umn.cs.spatialHadoop;
+package edu.umn.cs.spatialHadoop.visualization;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
@@ -13,12 +13,11 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.LineReader;
 
+import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.indexing.Partition;
 import edu.umn.cs.spatialHadoop.io.Text2;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
-import edu.umn.cs.spatialHadoop.visualization.GeometricPlot;
-import edu.umn.cs.spatialHadoop.visualization.TileIndex;
 
 public class ImagePlot {
 	double y1 = 0;
@@ -40,9 +39,9 @@ public class ImagePlot {
 			Text tempLine = new Text2();
 			@SuppressWarnings("resource")
 			LineReader in = new LineReader(fs.open(masterPath));
-			System.out.println("Printing  the partitions");
+		//	System.out.println("Printing  the partitions");
 			while (in.readLine(tempLine) > 0) {
-				System.out.println("In: "+tempLine);
+				//System.out.println("In: "+tempLine);
 				Partition tempPartition = new Partition();
 				tempPartition.fromText(tempLine);
 				partitions.add(tempPartition);
@@ -53,26 +52,10 @@ public class ImagePlot {
 		 
 	
 	public void createImage(String dirName, String inFileName, DataOutputStream output, Boolean upLevel, String newFileName,int zoom_level,int column,int row) throws IOException{
-	//	String[] splits = inFileName.split("[\\-\\.]");
-//		int zoom_level;
-//		int column;
-//		int row;
-//		if(upLevel==true){
-//			String[] points = newFileName.split("[\\-\\.]");
-//			zoom_level = Integer.parseInt(points[1]);
-//			column = Integer.parseInt(points[2]);
-//			row = Integer.parseInt(points[3]);
-//			
-//			
-//		}
-//		else{
-//			zoom_level = Integer.parseInt(splits[1]);
-//			column = Integer.parseInt(splits[2]);
-//			row = Integer.parseInt(splits[3]);
-//		}
+	
 		
 		Path infile=new Path(dirName+"/"+inFileName);
-		System.out.println("Infile:"+infile);
+		//System.out.println("Infile:"+infile);
 		//ArrayList <Partition> MasterPartition=getPartitions(infile);
 		BufferedReader br = null;
 		FileReader fr = null;
@@ -169,12 +152,8 @@ public class ImagePlot {
 	      
 		 //Canvas canvasImage = null; 
 	    try {
-			 SingleLevelPlot.plot(new Path[] { new Path("AREALM_AI2.png") },
+			 SingleLevelPlot.plotLocal(new Path[] { new Path("all_nodes_index") },
 			        output, GeometricPlot.GeometricRasterizer.class, params);
-		} 
-	    catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
 		} catch (IllegalArgumentException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

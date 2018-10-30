@@ -8,6 +8,7 @@
 *************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -43,6 +44,7 @@ import edu.umn.cs.spatialHadoop.core.SpatialSite;
 import edu.umn.cs.spatialHadoop.indexing.GridPartitioner;
 import edu.umn.cs.spatialHadoop.indexing.Indexer;
 import edu.umn.cs.spatialHadoop.indexing.Partitioner;
+import edu.umn.cs.spatialHadoop.mapreduce.LocalIndexRecordReader;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialRecordReader3;
 import edu.umn.cs.spatialHadoop.nasa.HDFRecordReader;
@@ -479,6 +481,15 @@ public class SingleLevelPlot {
   }
 
   public static void plotLocal(Path[] inFiles, Path outFile,
+	      final Class<? extends Plotter> plotterClass,
+	      final OperationsParams params) throws IOException, InterruptedException {
+	  FileSystem fs = outFile.getFileSystem(params);
+	  FSDataOutputStream out = fs.create(outFile);
+	  plotLocal(inFiles, out, plotterClass, params);
+	  out.close();
+  }
+  
+  public static void plotLocal(Path[] inFiles, DataOutputStream output,
       final Class<? extends Plotter> plotterClass,
       final OperationsParams params) throws IOException, InterruptedException {
     OperationsParams mbrParams = new OperationsParams(params);
@@ -555,6 +566,8 @@ public class SingleLevelPlot {
                 inputFormat.createRecordReader(fsplits[i], null);
             if (reader instanceof SpatialRecordReader3) {
               ((SpatialRecordReader3)reader).initialize(fsplits[i], params);
+            } else if (reader instanceof LocalIndexRecordReader) {
+            	((LocalIndexRecordReader)reader).initialize(fsplits[i], params);
             } else if (reader instanceof HDFRecordReader) {
               ((HDFRecordReader)reader).initialize(fsplits[i], params);
             } else {
@@ -581,7 +594,6 @@ public class SingleLevelPlot {
         return partialCanvas;
       }
     }, parallelism);
-    boolean merge = params.getBoolean("merge", true);
     Plotter plotter;
     try {
       plotter = plotterClass.newInstance();
@@ -594,32 +606,15 @@ public class SingleLevelPlot {
     
     // Whether we should vertically flip the final image or not
     boolean vflip = params.getBoolean("vflip", true);
-    if (merge) {
-      LOG.info("Merging "+partialCanvases.size()+" partial canvases");
-      // Create the final canvas that will contain the final image
-      Canvas finalCanvas = plotter.createCanvas(fwidth, fheight, inputMBR);
-      for (Canvas partialCanvas : partialCanvases)
-        plotter.merge(finalCanvas, partialCanvas);
-      
-      // Finally, write the resulting image to the given output path
-      LOG.info("Writing final image");
-      FileSystem outFs = outFile.getFileSystem(params);
-      FSDataOutputStream outputFile = outFs.create(outFile);
-      
-      plotter.writeImage(finalCanvas, outputFile, vflip);
-      outputFile.close();
-    } else {
-      // No merge
-      LOG.info("Writing partial images");
-      FileSystem outFs = outFile.getFileSystem(params);
-      for (int i = 0; i < partialCanvases.size(); i++) {
-        Path filename = new Path(outFile, String.format("part-%05d.png", i));
-        FSDataOutputStream outputFile = outFs.create(filename);
-        
-        plotter.writeImage(partialCanvases.get(i), outputFile, vflip);
-        outputFile.close();
-      }
-    }
+    LOG.info("Merging "+partialCanvases.size()+" partial canvases");
+    // Create the final canvas that will contain the final image
+    Canvas finalCanvas = plotter.createCanvas(fwidth, fheight, inputMBR);
+    for (Canvas partialCanvas : partialCanvases)
+    	plotter.merge(finalCanvas, partialCanvas);
+
+    // Finally, write the resulting image to the given output path
+    LOG.info("Writing final image");
+    plotter.writeImage(finalCanvas, output, vflip);
   }
   
   /**

@@ -27,6 +27,8 @@ import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
 
+import edu.umn.cs.spatialHadoop.visualization.ImagePlot;
+
 
 /**
  * @author sjais001

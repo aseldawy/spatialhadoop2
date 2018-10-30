@@ -8,14 +8,14 @@
  *************************************************************************/
 package edu.umn.cs.spatialHadoop.visualization;
 
+import static java.lang.Math.pow;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.Map;
-import static java.lang.Math.pow;
 
-import edu.umn.cs.spatialHadoop.util.FSUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -27,15 +27,19 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.LocalJobRunner;
-import org.apache.hadoop.mapreduce.*;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.TaskInputOutputContext;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
+import org.apache.hadoop.util.LineReader;
 
 import edu.umn.cs.spatialHadoop.OperationsParams;
 import edu.umn.cs.spatialHadoop.core.Rectangle;
 import edu.umn.cs.spatialHadoop.core.Shape;
 import edu.umn.cs.spatialHadoop.mapreduce.SpatialInputFormat3;
 import edu.umn.cs.spatialHadoop.operations.FileMBR;
-import org.apache.hadoop.util.LineReader;
+import edu.umn.cs.spatialHadoop.util.FSUtil;
 
 /**
  * Generates a multilevel image based on the adaptive index that combines data
@@ -59,6 +63,9 @@ public class AdaptiveMultilevelPlot {
   public static final String DataTileThreshold = "threshold";
 
   public static final String TilesToProcess = "AdaptiveMultilevelPlot.TilesToProcess";
+  
+  private static final String SkipDataTilesFlag = "skipDataTiles";
+
 
   /** The classes of tiles according to our design */
   public enum TileClass {ImageTile, DataTile, ShallowTile, EmptyTile};
@@ -198,6 +205,8 @@ public class AdaptiveMultilevelPlot {
 
     /** The threshold on the data size that defines data and image tiles */
     private long threshold;
+    
+    private boolean skipDataTiles;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -221,6 +230,7 @@ public class AdaptiveMultilevelPlot {
       histogram = GridHistogram.readFromFile(histogramFile.getFileSystem(conf), histogramFile);
       histogram.computePrefixSums();
       this.threshold = conf.getLong(DataTileThreshold, 1024*1024);
+      this.skipDataTiles = conf.getBoolean(SkipDataTilesFlag, false);
     }
 
     @Override
@@ -229,7 +239,7 @@ public class AdaptiveMultilevelPlot {
       // Use the create tiles function
       // Setting the plotter to null ensures that image tiles are skipped
       createTiles(shapes, subPyramid, 0, 0, null,
-          histogram, threshold, null, context);
+          histogram, threshold, null, skipDataTiles? null : context);
     }
   }
 
@@ -314,7 +324,7 @@ public class AdaptiveMultilevelPlot {
    */
   public static class FinalTileCreator extends Reducer<LongWritable, Shape, LongWritable, Writable> {
 
-    /**The range of levels to consider*/
+	/**The range of levels to consider*/
     private int minLevel, maxLevel;
     /**The MBR of the input dataset*/
     private Rectangle inputMBR;
@@ -338,6 +348,9 @@ public class AdaptiveMultilevelPlot {
 
     /**A temporary tile index to decode the tileID*/
     private TileIndex tileIndex;
+    
+    /**A flag that is set when the data tiles should not be written to the output*/
+    private boolean skipDataTiles;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -362,6 +375,7 @@ public class AdaptiveMultilevelPlot {
       histogram = GridHistogram.readFromFile(histogramFile.getFileSystem(conf), histogramFile);
       histogram.computePrefixSums();
       this.threshold = conf.getLong(DataTileThreshold, 1024*1024);
+      this.skipDataTiles = conf.getBoolean(SkipDataTilesFlag, false);
     }
 
     @Override
@@ -388,7 +402,7 @@ public class AdaptiveMultilevelPlot {
       int i = 0;
 
       createTiles(shapes, subPyramid, tileWidth, tileHeight, plotter,
-          histogram, threshold, canvasLayers, context);
+          histogram, threshold, canvasLayers, skipDataTiles? null : context);
       
       
       java.awt.Rectangle overlaps = new java.awt.Rectangle();
@@ -504,8 +518,6 @@ public class AdaptiveMultilevelPlot {
           for (int y = overlaps.y; y < overlaps.y + overlaps.height; y++) {
             // Process the tile according to its class
             TileClass tileClass = h == null? null : classifyTile(h, threshold, z, x, y);
-//            if(z==6&&x==6&&y==36)
-//            	System.out.println("tile-6-10-34="+tileClass);
             long tileID = TileIndex.encode(z, x, y);
             
             if (plotter!= null && (tileClass == null || tileClass == TileClass.ImageTile)) {
@@ -514,14 +526,11 @@ public class AdaptiveMultilevelPlot {
               if (c == null) {
                 // First time to encounter this tile, create the corresponding canvas
                 Rectangle tileMBR = TileIndex.getMBR(inputMBR, z, x, y);
-             //   System.out.println("tile-"+z+"-"+x+"-"+y+tileMBR);
                 c = plotter.createCanvas(tileWidth, tileHeight, tileMBR);
                 tiles.put(tileID, c);
               }
               plotter.plot(c, shape);
             } else if (context != null && tileClass == TileClass.DataTile) {
-//              if(z==6&&x==6&&y==36)	
-//            	  System.out.println("TileID="+tileID);
               key.set(tileID);
               context.write(key, shape);
             }
@@ -621,6 +630,8 @@ public class AdaptiveMultilevelPlot {
     int dataCount=0;
     int emptyCount=0;
     
+    long dataTileThreshold = params.getLong(DataTileThreshold, 1024*1024);
+    
   //  Path histogramFile = new Path(params.get(HistogramFileName));
    GridHistogram h = GridHistogram.readFromFile(histogramFile.getFileSystem(params), histogramFile);
     h.computePrefixSums();
@@ -641,7 +652,7 @@ public class AdaptiveMultilevelPlot {
     			
 //    			writer.println("State:"+null+",");
 //    			writer.println("Unloader:"+null+",");
-    			TileClass tileClass = h == null? null : classifyTile(h, 1024, level, x, y);
+    			TileClass tileClass = h == null? null : classifyTile(h, dataTileThreshold, level, x, y);
     			if(tileClass == TileClass.ImageTile){
     				//imageCount++;
     				writer.println("{");

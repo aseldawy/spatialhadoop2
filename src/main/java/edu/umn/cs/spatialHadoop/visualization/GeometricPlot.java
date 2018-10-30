@@ -118,10 +118,6 @@ public class GeometricPlot {
     if (params.getBoolean("pyramid", false)) {
     	if (params.getBoolean("adaptive", false)) {
     		return AdaptiveMultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params)[0];
-    	}else if(params.getBoolean("Air", true)){
-    		System.out.println("Air");
-    		return AIRStar.plot(inFiles, outFile, GeometricRasterizer.class, params)[0];
-
     	}else { 
     		return MultilevelPlot.plot(inFiles, outFile, GeometricRasterizer.class, params);
     	}

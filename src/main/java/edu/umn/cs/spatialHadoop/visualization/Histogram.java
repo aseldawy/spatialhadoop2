@@ -63,6 +63,7 @@ public class Histogram {
 				Rectangle mbr = shape.getMBR();
 				//System.out.println("MBR in the mapHistogram="+mbr);
 				text.clear();
+				if(mbr!=null){
 				shape.toText(text);
 				int size = text.getLength();
 				
@@ -80,7 +81,7 @@ public class Histogram {
 				//if(gridColumn<1024 &&gridRow<1024)
 					gridHistogram.set(gridColumn, gridRow, size);
 				
-				
+				}
 			}
 			context.write(NullWritable.get(), gridHistogram);
 		}
