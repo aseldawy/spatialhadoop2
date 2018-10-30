@@ -1,7 +1,7 @@
 /**
  * 
  */
-package edu.umn.cs.spatialHadoop;
+package edu.umn.cs.spatialHadoop.visualization;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -26,8 +26,6 @@ import org.apache.commons.logging.LogFactory;
 import org.mortbay.jetty.Request;
 import org.mortbay.jetty.Server;
 import org.mortbay.jetty.handler.AbstractHandler;
-
-import edu.umn.cs.spatialHadoop.visualization.ImagePlot;
 
 
 /**
