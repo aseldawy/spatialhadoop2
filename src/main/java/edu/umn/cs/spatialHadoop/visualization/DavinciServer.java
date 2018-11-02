@@ -39,9 +39,6 @@ public class DavinciServer extends AbstractHandler {
 
 	/**
 	 * A constructor that starts the Jetty server
-	 * @param dataPath
-	 * @param indexPath
-	 * @param params
 	 */
 	public DavinciServer() {
 	}
