@@ -204,8 +204,7 @@ public class DaVinciServerV2 extends AbstractHandler {
 	}
 
 	private void reportError(HttpServletResponse response, String msg,
-			Exception e)
-					throws IOException {
+			Exception e) throws IOException {
 		if (e != null)
 			e.printStackTrace();
 		LOG.error(msg);
