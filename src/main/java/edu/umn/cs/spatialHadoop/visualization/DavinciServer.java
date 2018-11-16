@@ -49,7 +49,7 @@ public class DavinciServer extends AbstractHandler {
 	 * @throws Exception 
 	 */
 	private static void startServer() throws Exception {
-		int port = 8889;
+		int port = 8890;
 
 		Server server = new Server(port);
 		server.setHandler(new DavinciServer());
@@ -116,7 +116,7 @@ public class DavinciServer extends AbstractHandler {
 						
 						imagePlot = new ImagePlot();
 						DataOutputStream output = new DataOutputStream(response.getOutputStream());
-						imagePlot.createImage(datafile.getParent(),infilename, output, upLevel, filename,zoom_level, column,row);
+						imagePlot.createImageFromDataTiles(datafile.getParent(),infilename, output, upLevel, filename);
 						upLevel = false;
 						
 						output.close();
