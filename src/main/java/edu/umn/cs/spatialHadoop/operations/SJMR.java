@@ -246,7 +246,7 @@ public class SJMR {
             }
           }
         }
-      }, new Progressable.ReporterProgressable(reporter));
+      }, reporter);
     }
   }
   
@@ -436,6 +436,10 @@ public class SJMR {
     Counters counters = runningJob.getCounters();
     Counter outputRecordCounter = counters.findCounter(Task.Counter.REDUCE_OUTPUT_RECORDS);
     final long resultCount = outputRecordCounter.getValue();
+    Counter numOfMBRTestsCounter = counters.findCounter(
+        SpatialAlgorithms.SpatialJoinCounter.MBR_OVERLAP_COUNT);
+    System.out.printf("Total number of MBR tests %d\n",
+        numOfMBRTestsCounter.getValue());
 
     return resultCount;
   }
@@ -446,7 +450,7 @@ public class SJMR {
     System.out.println("<input file 1> - (*) Path to the first input file");
     System.out.println("<input file 2> - (*) Path to the second input file");
     System.out.println("<output file> - Path to output file");
-    System.out.println("partition-grid-factor:<value> - Patitioning grid factor (its default value is 20)");
+    System.out.println("partition-grid-factor:<value> - Partitioning grid factor (its default value is 20)");
     System.out.println("-overwrite - Overwrite output file without notice");
     GenericOptionsParser.printGenericCommandUsage(System.out);
   }

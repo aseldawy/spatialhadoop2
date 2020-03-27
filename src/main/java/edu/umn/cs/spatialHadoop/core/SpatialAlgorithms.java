@@ -95,6 +95,8 @@ class TOPK {
 }
 
 public class SpatialAlgorithms {
+  public enum SpatialJoinCounter {MBR_OVERLAP_COUNT};
+
   public static final Log LOG = LogFactory.getLog(SpatialAlgorithms.class);
   
   public static<S1 extends Shape, S2 extends Shape> int SpatialJoin_planeSweepFilterOnly(
@@ -158,6 +160,7 @@ public class SpatialAlgorithms {
     Collections.sort(S, comparator);
 
 		int i = 0, j = 0;
+		long numOfRectangleOverlap = 0;
 
     try {
       while (i < R.size() && j < S.size()) {
@@ -171,6 +174,7 @@ public class SpatialAlgorithms {
               && ((s = S.get(jj)).getMBR().x1 <= r.getMBR().x2)) {
             // Check if r and s are overlapping but not the same object
             // for self join
+            numOfRectangleOverlap++;
             if (r.isIntersected(s) && r != s) { // r != s condition is for self join
               if (output != null)
                 output.collect(r, s);
@@ -187,6 +191,7 @@ public class SpatialAlgorithms {
 
           while ((ii < R.size())
               && ((r = R.get(ii)).getMBR().x1 <= s.getMBR().x2)) {
+            numOfRectangleOverlap++;
             if (r.isIntersected(s) && r != s) { // r != s condition is for self join
               if (output != null)
                 output.collect(r, s);
@@ -205,6 +210,10 @@ public class SpatialAlgorithms {
       e.printStackTrace();
     }
     long t2 = System.currentTimeMillis();
+    LOG.info(String.format("Finished planesweep of %d x %d records and did %d MBR overlap tests and finished in %f seconds",
+        R.size(), S.size(), numOfRectangleOverlap, (t2-t1)*1E-9));
+    if (reporter != null)
+      reporter.incrCounter(SpatialJoinCounter.MBR_OVERLAP_COUNT, numOfRectangleOverlap);
     return count;
 	}
 
@@ -228,6 +237,7 @@ public class SpatialAlgorithms {
 
 	    int i = 0, j = 0;
 
+      long numOfRectangleOverlap = 0;
 	    try {
 	      while (i < R.length && j < S.length) {
 	        S1 r;
@@ -238,6 +248,7 @@ public class SpatialAlgorithms {
 
 	          while ((jj < S.length)
 	              && ((s = S[jj]).getMBR().x1 <= r.getMBR().x2)) {
+              numOfRectangleOverlap++;
 	            if (r.getMBR().isIntersected(s.getMBR())) {
 	              if (output != null)
 	                output.collect(r, s);
@@ -255,6 +266,7 @@ public class SpatialAlgorithms {
 
 	          while ((ii < R.length)
 	              && ((r = R[ii]).getMBR().x1 <= s.getMBR().x2)) {
+              numOfRectangleOverlap++;
 	            if (r.getMBR().isIntersected(s.getMBR())) {
 	              if (output != null)
 	                output.collect(r, s);
@@ -273,6 +285,10 @@ public class SpatialAlgorithms {
 	      e.printStackTrace();
 	    }
 	    long t2 = System.currentTimeMillis();
+      LOG.info(String.format("Finished planesweep of %d x %d records and did %d MBR overlap tests and finished in %f seconds",
+          R.length, S.length, numOfRectangleOverlap, (t2-t1)*1E-9));
+      if (reporter != null)
+        reporter.incrCounter(SpatialJoinCounter.MBR_OVERLAP_COUNT, numOfRectangleOverlap);
 	    return count;
 	  }
 
@@ -295,7 +311,7 @@ public class SpatialAlgorithms {
     Arrays.sort(S, comparator);
 
     int i = 0, j = 0;
-
+    long numOfRectangleOverlap = 0;
     try {
       while (i < R.length && j < S.length) {
         S1 r;
@@ -306,6 +322,7 @@ public class SpatialAlgorithms {
 
           while ((jj < S.length)
               && ((s = S[jj]).getMBR().x1 <= r.getMBR().x2)) {
+            numOfRectangleOverlap++;
             if (r.isIntersected(s)) {
               if (output != null)
                 output.collect(r, s);
@@ -322,6 +339,7 @@ public class SpatialAlgorithms {
 
           while ((ii < R.length)
               && ((r = R[ii]).getMBR().x1 <= s.getMBR().x2)) {
+            numOfRectangleOverlap++;
             if (r.isIntersected(s)) {
               if (output != null)
                 output.collect(r, s);
@@ -340,6 +358,10 @@ public class SpatialAlgorithms {
       e.printStackTrace();
     }
     long t2 = System.currentTimeMillis();
+    LOG.info(String.format("Finished planesweep of %d x %d records and did %d MBR overlap tests and finished in %f seconds",
+        R.length, S.length, numOfRectangleOverlap, (t2-t1)*1E-9));
+    if (reporter != null)
+      reporter.incrCounter(SpatialJoinCounter.MBR_OVERLAP_COUNT, numOfRectangleOverlap);
     return count;
   }
 
@@ -369,7 +391,7 @@ public class SpatialAlgorithms {
     Arrays.sort(S, comparator);
     
     int i = 0, j = 0;
-
+    long numOfRectangleOverlap = 0;
     try {
     	 while (i < R.length && j < S.length) {
     	        S1 r;
@@ -380,6 +402,7 @@ public class SpatialAlgorithms {
 
     	          while ((jj < S.length)
     	              && ((s = S[jj]).getMBR().x1 <= r.getMBR().x2)) {
+                  numOfRectangleOverlap++;
     	            if (r.isIntersected(s)) {
     	              if (output != null)
     	                output.collect(r, s);
@@ -396,6 +419,7 @@ public class SpatialAlgorithms {
 
     	          while ((ii < R.length)
     	              && ((r = R[ii]).getMBR().x1 <= s.getMBR().x2)) {
+                  numOfRectangleOverlap++;
     	            if (r.isIntersected(s)) {
     	              if (output != null)
     	                output.collect(r, s);
@@ -415,6 +439,10 @@ public class SpatialAlgorithms {
       e.printStackTrace();
     }
     long t2 = System.currentTimeMillis();
+    LOG.info(String.format("Finished planesweep of %d x %d records and did %d MBR overlap tests and finished in %f seconds",
+        R.length, S.length, numOfRectangleOverlap, (t2-t1)*1E-9));
+    if (reporter != null)
+      reporter.incrCounter(SpatialJoinCounter.MBR_OVERLAP_COUNT, numOfRectangleOverlap);
 
     return count;
   }
@@ -429,7 +457,7 @@ public class SpatialAlgorithms {
    * @throws IOException
    */
   public static <S extends Rectangle> int SelfJoin_rectangles(final S[] rs,
-      OutputCollector<S, S> output, Progressable reporter) throws IOException {
+      OutputCollector<S, S> output, Reporter reporter) throws IOException {
     int count = 0;
 
     final Comparator<Rectangle> comparator = new Comparator<Rectangle>() {
@@ -445,6 +473,7 @@ public class SpatialAlgorithms {
     Arrays.sort(rs, comparator);
 
     int i = 0, j = 0;
+    long numOfRectangleOverlap = 0;
 
     try {
       while (i < rs.length && j < rs.length) {
@@ -456,6 +485,7 @@ public class SpatialAlgorithms {
 
           while ((jj < rs.length)
               && ((s = rs[jj]).x1 <= r.x2)) {
+            numOfRectangleOverlap++;
             if (r != s && r.isIntersected(s)) {
               if (output != null) {
                 output.collect(r, s);
@@ -473,6 +503,7 @@ public class SpatialAlgorithms {
 
           while ((ii < rs.length)
               && ((r = rs[ii]).x1 <= s.x2)) {
+            numOfRectangleOverlap++;
             if (r != s && r.isIntersected(s)) {
               if (output != null) {
                 output.collect(r, s);
@@ -492,6 +523,10 @@ public class SpatialAlgorithms {
       e.printStackTrace();
     }
     long t2 = System.currentTimeMillis();
+    LOG.info(String.format("Finished self-planesweep of %d records and did %d MBR overlap tests and finished in %f seconds",
+        rs.length, numOfRectangleOverlap, (t2-t1)*1E-9));
+    if (reporter != null)
+      reporter.incrCounter(SpatialJoinCounter.MBR_OVERLAP_COUNT, numOfRectangleOverlap);
 
     return count;
   }
@@ -528,7 +563,7 @@ public class SpatialAlgorithms {
    * @throws IOException
    */
   public static <S extends Shape> int SelfJoin_planeSweep(final S[] R,
-      boolean refine, final OutputCollector<S, S> output, Progressable reporter) throws IOException {
+      boolean refine, final OutputCollector<S, S> output, Reporter reporter) throws IOException {
     // Use a two-phase filter and refine approach
     // 1- Use MBRs as a first filter
     // 2- Use ConvexHull as a second filter
@@ -711,7 +746,7 @@ public class SpatialAlgorithms {
         }
         if (rid != sid)
           parent[rid] = sid;
-      }}, prog);
+      }}, null);
     mbrs = null;
     // Put all records in one cluster as a list
     Map<Integer, List<Geometry>> groups = new HashMap<Integer, List<Geometry>>();
@@ -906,7 +941,7 @@ public class SpatialAlgorithms {
       if (currentTime - reportTime > 60*1000) { // Report every one minute
         if (prog != null) {
           float p = i / (float)geoms.length;
-          prog.progress(p);
+          prog.progress();
         }
         reportTime =  currentTime;
       }

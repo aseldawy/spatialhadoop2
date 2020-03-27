@@ -179,7 +179,7 @@ public class DistributedJoin {
 				throws IOException {
 			Shape[] objects = (Shape[]) value.get();
 			SpatialAlgorithms.SelfJoin_planeSweep(objects, true, output,
-			    new Progressable.ReporterProgressable(reporter));
+			    reporter);
 		}
 	}
 
@@ -616,6 +616,10 @@ public class DistributedJoin {
 					.findCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
 			System.out.println("Number of map tasks "
 					+ mapTaskCountCounter.getValue());
+			Counter numOfMBRTestsCounter = counters.findCounter(
+					SpatialAlgorithms.SpatialJoinCounter.MBR_OVERLAP_COUNT);
+			System.out.printf("Total number of MBR tests %d\n",
+					numOfMBRTestsCounter.getValue());
 
 			// Delete output directory if not explicitly set by user
 			if (userOutputPath == null)
@@ -855,6 +859,10 @@ public class DistributedJoin {
 				.findCounter(JobInProgress.Counter.TOTAL_LAUNCHED_MAPS);
 		System.out.println("Number of map tasks "
 				+ mapTaskCountCounter.getValue());
+		Counter numOfMBRTestsCounter = counters.findCounter(
+				SpatialAlgorithms.SpatialJoinCounter.MBR_OVERLAP_COUNT);
+		System.out.printf("Total number of MBR tests %d\n",
+				numOfMBRTestsCounter.getValue());
 
 		// Delete output directory if not explicitly set by user
 		if (outputFile == null)
