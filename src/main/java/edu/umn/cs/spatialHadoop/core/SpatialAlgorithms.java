@@ -211,7 +211,7 @@ public class SpatialAlgorithms {
     }
     long t2 = System.currentTimeMillis();
     LOG.info(String.format("Finished planesweep of %d x %d records and did %d MBR overlap tests and finished in %f seconds",
-        R.size(), S.size(), numOfRectangleOverlap, (t2-t1)*1E-9));
+        R.size(), S.size(), numOfRectangleOverlap, (t2-t1)*1E-3));
     if (reporter != null)
       reporter.incrCounter(SpatialJoinCounter.MBR_OVERLAP_COUNT, numOfRectangleOverlap);
     return count;
@@ -286,7 +286,7 @@ public class SpatialAlgorithms {
 	    }
 	    long t2 = System.currentTimeMillis();
       LOG.info(String.format("Finished planesweep of %d x %d records and did %d MBR overlap tests and finished in %f seconds",
-          R.length, S.length, numOfRectangleOverlap, (t2-t1)*1E-9));
+          R.length, S.length, numOfRectangleOverlap, (t2-t1)*1E-3));
       if (reporter != null)
         reporter.incrCounter(SpatialJoinCounter.MBR_OVERLAP_COUNT, numOfRectangleOverlap);
 	    return count;
@@ -359,7 +359,7 @@ public class SpatialAlgorithms {
     }
     long t2 = System.currentTimeMillis();
     LOG.info(String.format("Finished planesweep of %d x %d records and did %d MBR overlap tests and finished in %f seconds",
-        R.length, S.length, numOfRectangleOverlap, (t2-t1)*1E-9));
+        R.length, S.length, numOfRectangleOverlap, (t2-t1)*1E-3));
     if (reporter != null)
       reporter.incrCounter(SpatialJoinCounter.MBR_OVERLAP_COUNT, numOfRectangleOverlap);
     return count;
