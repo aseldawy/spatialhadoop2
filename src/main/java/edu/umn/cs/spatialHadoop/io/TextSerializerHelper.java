@@ -578,7 +578,7 @@ public final class TextSerializerHelper {
         // Check if the type is hex-encoded WKB
         i1 = 0;
         i2 = 0;
-        while (i2 < length && IsHex[bytes[i2]])
+        while (i2 < length && IsHex[0xff & bytes[i2]])
           i2++;
         isHex = i2 > 1;
         i_next = i2;
