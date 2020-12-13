@@ -2,7 +2,7 @@ IMPORTANT NOTICE
 ================
 SpatialHadoop is no longer maintained. We recommend that you use our most recent system [Beast](https://bitbucket.org/eldawy/beast/src/master/) which is built for Spark and provides the following improvements over SpatialHadoop.
 - **More file formats**: Beast supports many standard formats including Esri Shapefile, CSV, GeoJSON, and GPX.
-- **Multidimensional data**: Beast inherently supports multidmensional data so it can index and process 3D or higher dimensions.
+- **Multidimensional data**: Beast inherently supports multidimensional data so it can index and process 3D or higher dimensions.
 - **Better indexes**: Beast adopts new indexes including R*-Grove, the most advanced index for big spatial data.
 - **Higher performance**: Thanks to the advanced features in Spark.
 - **Easier to user**: You can run Beast without any installation on-top of your existing Spark installation.
