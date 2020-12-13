@@ -6,7 +6,7 @@ SpatialHadoop is no longer maintained. We recommend that you use our most recent
 - **Better indexes**: Beast adopts new indexes including R*-Grove, the most advanced index for big spatial data.
 - **Higher performance**: Thanks to the advanced features in Spark.
 - **Easier to use**: You can run Beast without any installation on-top of your existing Spark installation.
-- **Scalable visualization**: Visualize terabytes of data on an interactive map. Beast power [UCR-Star](https://star.cs.ucr.edu) the home of terabytes of public data.
+- **Scalable visualization**: Visualize terabytes of data on an interactive map. Beast powers [UCR-Star](https://star.cs.ucr.edu) the home of terabytes of public geospatial data.
 - **Raptor = Raster + Vector**: Beast hosts a novel component for processing raster and vector data concurrently. It is orders of magnitude faster than competetive systems.
 - **Active**: Beast is still active in development and new features are regularly added to it.
 
