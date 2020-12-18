@@ -53,6 +53,9 @@ public class DistributedAggregateSpatioTemporalIndexer {
 
 	private static Path hdfsIndexPath = null;
 
+	private DistributedAggregateSpatioTemporalIndexer() {
+	}
+
 	public static class AggregateQuadTreeMaper extends MapReduceBase implements
 			Mapper<LongWritable, Text, Text, Text> {
 

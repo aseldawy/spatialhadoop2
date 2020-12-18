@@ -30,7 +30,10 @@ import org.apache.hadoop.fs.PathFilter;
  *
  */
 public class ImageCompare {
-  
+
+  private ImageCompare() {
+  }
+
   /**
    * Returns a similarity measure between two images on the scale from 0 to 1.
    * 0 indicates no similarity at all while 1 indicates exact similarity
