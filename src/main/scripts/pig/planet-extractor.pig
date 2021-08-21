@@ -6,10 +6,10 @@
 * http://www.opensource.org/licenses/apache2.0.php.
 *
 *************************************************************************/
-REGISTER spatialhadoop-2.4.jar;
-REGISTER pigeon-0.2.1.jar;
-REGISTER esri-geometry-api-1.2.jar;
-REGISTER jts-1.8.jar;
+REGISTER spatialhadoop-2.4.3-SNAPSHOT.jar;
+REGISTER pigeon-0.2.2.jar;
+REGISTER esri-geometry-api-2.2.4.jar;
+REGISTER jts-core-1.18.1.jar;
 
 IMPORT 'osmx.pig';
 
