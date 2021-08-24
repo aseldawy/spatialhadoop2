@@ -45,6 +45,9 @@ import edu.umn.cs.spatialHadoop.util.Parallel.RunnableRange;
  */
 public class LocalSampler {
 
+  private LocalSampler() {
+  }
+
   /**
    * Read a random sample of up-to count from the input files.
    * @param files

@@ -21,10 +21,13 @@ import org.apache.hadoop.fs.PathFilter;
 
 /**
  * A bunch of helper functions used with NASA datasets (e.g. MODIS)
- * 
+ *
  * @author ibrahimsabek
  */
 public final class NASADatasetUtil {
+
+	private NASADatasetUtil() {
+	}
 
 	public static String extractDateStringFromFileStatus(FileStatus fileStatus) {
 		return NASADatasetUtil.extractDateStringFromPath(fileStatus.getPath());
